@@ -26,12 +26,16 @@ struct ContextBuilderTests {
         )
     }
 
+    /// The listing the builder saw, so tests can talk about files by path.
+    private var lastEntries: [SourceEntry] = []
+
     private func context(_ paths: [String], profile: MappingProfile? = nil,
                          history: [ContextHistoryMatch] = [], states: [String: SourceEntryState] = [:]) throws
         -> ProjectContext
     {
         let selected = try profile ?? MappingProfile.projectArchive()
         let entries = paths.map { entry($0, state: states[$0] ?? .present) }
+        lastEntries = entries
         return ContextBuilder.build(
             ContextBuilderInput(scopeID: scopeID, profile: selected, entries: entries, history: history),
             revision: 1, builtAt: Date(timeIntervalSince1970: 1_800_000_000)
@@ -100,23 +104,26 @@ struct ContextBuilderTests {
             "项目乙/通用控制器_数据表.pdf",
             "项目甲/公告.pdf",
         ])
-        let shared = built.candidates.filter { $0.projectKey.contains("通用控制器") }
-            .flatMap(\.memberSourceIDs)
-        #expect(!shared.isEmpty)
-        for member in shared {
-            #expect(built.conflictedSourceIDs.contains(member),
-                    "a file inside two project directories must not silently pick one")
+        let duplicated = built.entries.filter { $0.relativePath.contains("通用控制器") }
+        #expect(duplicated.count == 2)
+        for member in duplicated {
+            #expect(built.conflictedSourceIDs.contains(member.id),
+                    "the same material under two projects must not silently pick one")
         }
+        // Both claims survive as their own candidates: refusing to choose means
+        // keeping both, not dropping one.
+        #expect(Set(built.candidates.map(\.projectKey)).isSuperset(of: ["项目甲", "项目乙"]))
     }
 
     @Test("vendor library leaves unaffiliated files unassigned instead of inventing a project")
     func vendorUnaffiliated() throws {
         let vendor = try MappingProfile.vendorLibrary()
         let built = try context(["厂商资料/产品D_数据表.pdf", "厂商资料/产品E_白皮书.pdf"], profile: vendor)
-        // Each directory still yields a structural candidate, but no file is
-        // forced to share a project it does not belong to.
-        #expect(built.candidates.allSatisfy { $0.memberSourceIDs.count <= 1 })
+        // Vendor Library has no project level: inventing one would fabricate a
+        // business fact, so every file is simply unaffiliated.
+        #expect(built.candidates.isEmpty)
         #expect(built.conflictedSourceIDs.isEmpty)
+        #expect(built.unassignedSourceIDs.count == 2)
     }
 
     @Test("missing and symlink entries are not clustered")
@@ -172,13 +179,13 @@ struct ContextBuilderTests {
         let plain = try context(paths)
         let match = ContextHistoryMatch(
             databaseID: UUID(uuidString: "00000000-0000-4000-8000-000000000099")!,
-            recordID: UUID(), projectName: "示例项目J", groupPath: ["2026", "示例项目J"], strength: .exactName
+            recordID: UUID(), projectName: "示例项目K", groupPath: ["2026", "示例项目K"], strength: .exactName
         )
         let aligned = try context(paths, history: [match])
         #expect(aligned.candidates.flatMap(\.memberSourceIDs) == plain.candidates.flatMap(\.memberSourceIDs))
         let candidate = try #require(aligned.candidates.first)
         #expect(candidate.basis.contains(.historyReference))
-        #expect(candidate.displayName == "示例项目J")
+        #expect(candidate.displayName == "示例项目K")
         #expect(candidate.confidence == .medium, "history may lift a directory-only guess, not confirm it")
     }
 

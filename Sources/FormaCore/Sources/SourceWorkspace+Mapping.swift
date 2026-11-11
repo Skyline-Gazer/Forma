@@ -52,6 +52,12 @@ extension SourceWorkspace {
     /// older manifest revision was decided from, and deleting them would break
     /// the foreign key those revisions rely on.
     public func recordEvidence(_ records: [EvidenceRecord], for sourceID: UUID) async throws {
+        // The parameter is the caller's claim about which file these rows
+        // describe. Rows carry their own source, so a mismatch means the caller
+        // is holding a stale entry: registering such rows under a different
+        // source than the caller asked for would make the registry answer an
+        // empty set for that source and silently push fields back to unknown.
+        guard records.allSatisfy({ $0.sourceID == sourceID }) else { throw FormaError.invalidSource }
         try await store.database.write { db in try MappingStore.recordEvidence(records, in: db) }
     }
 

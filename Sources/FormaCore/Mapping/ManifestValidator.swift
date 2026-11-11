@@ -345,7 +345,27 @@ public struct ManifestValidator: Sendable {
                                              evidenceIDs: conclusive.map(\.record.id)))
                 continue
             }
-            let inherited = conclusive.allSatisfy { $0.record.source == .sibling }
+            // Inheritance is only inheritance when the sibling relationship is
+            // the membership this file actually has. PLAN §5.3 makes confirmed
+            // membership a precondition, so a row pointing at another
+            // candidate's relationship is rejected instead of dressed up as an
+            // inherited value.
+            let candidates = Set(input.context.candidate(for: entry.id).map(\.id))
+            let siblings = conclusive.filter { $0.record.source == .sibling }
+            let inherited = !siblings.isEmpty
+                && conclusive.count == siblings.count
+                && siblings.allSatisfy { siblingsRow in
+                    guard let candidate = siblingsRow.record.contextCandidateID else { return false }
+                    return candidates.contains(candidate)
+                }
+            if conclusive.contains(where: { $0.record.source == .sibling }) && !inherited {
+                violations.append(ValidationViolation(code: "membership_mismatch",
+                                                      instancePath: "\(entry.relativePath)#\(field.rawValue)",
+                                                      detail: "Inherited evidence names a candidate this file does not belong to."))
+                outcomes.append(FieldOutcome(field: field, value: nil, status: .rejectedByPolicy,
+                                             evidenceIDs: conclusive.map(\.record.id)))
+                continue
+            }
             outcomes.append(FieldOutcome(field: field, value: value, status: inherited ? .inherited : .evidenced,
                                          evidenceIDs: conclusive.map(\.record.id)))
         }

@@ -419,6 +419,30 @@ struct ManifestValidatorTests {
         #expect(issuer?.value == nil, "a document-level field is never inherited")
     }
 
+    @Test("inherited evidence from another candidate is refused")
+    func inheritanceFromForeignCandidate() throws {
+        let harness = try archive()
+        // The sibling row exists and is usable, but it names a membership this
+        // file does not have: PLAN §5.3 makes confirmed membership a
+        // precondition of inheritance.
+        let foreign = try EvidenceRecord(
+            id: "ev_foreign", sourceID: fileID, snapshotRevision: 3, snapshotFingerprint: fingerprint,
+            source: .sibling, locator: nil, relativePath: "别的项目/公告.pdf",
+            excerpt: "inherited from 别的项目/公告.pdf: 示例项目_2026", extractionStatus: .ok,
+            extractorVersion: EvidenceRegistry.extractorVersion, createdAt: .now,
+            contextCandidateID: "c9"
+        )
+        var records = harness.registry[fileID] ?? []
+        records.append(foreign)
+        let answer = proposal(metadata: [.projectname: "示例项目_2026", .completionyear: "2026"],
+                             citations: citations([(.projectname, "ev_foreign"), (.completionyear, "ev_year"),
+                                                   (.documentcategory, "ev_category"), (.documenttype, "ev_type")]))
+        let result = validate(harness, answer: answer, evidenceOverride: [fileID: records])
+        #expect(result.report.allViolations.contains { $0.code == "membership_mismatch" })
+        #expect(result.entries[0].metadata[.projectname] == nil)
+        #expect(!result.entries[0].eligibleForAutoExecution)
+    }
+
     @Test("the validator never reports execution authority")
     func noExecutionAuthority() throws {
         let harness = try archive()

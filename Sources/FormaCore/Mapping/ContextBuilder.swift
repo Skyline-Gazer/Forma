@@ -44,17 +44,20 @@ public struct ContextBuilderInput: Sendable {
 
 /// Two-phase project context, per PLAN §6.1.
 ///
-/// Phase one groups files from directory structure, naming entities and
-/// adjacency, with no assumption about which path level names a project. Phase
-/// two aligns those groups with the profile vocabulary and any authorized
-/// historical records. Nothing here calls a model or a provider: the output is
-/// deterministic, so the same listing always produces the same context and a
-/// reviewer can reproduce any clustering decision from the input alone.
+/// Phase one decides which directory level is the *project* level and groups
+/// files there, splitting a shared directory by naming entity when it holds
+/// several projects. Phase two aligns the groups with the profile vocabulary
+/// and any authorized historical records. Nothing here calls a model or a
+/// provider: the output is deterministic, so the same listing always produces
+/// the same context and a reviewer can reproduce any clustering decision from
+/// the input alone.
 ///
-/// The cases the clustering has to satisfy are the ones the contract states: a
-/// project may own several subdirectories, one directory may hold several
-/// projects, the same vendor material may appear in two projects, and vendor
-/// documents may belong to no project at all.
+/// The project level is identified from the profile, not from a fixed depth: a
+/// directory whose name is one of the profile's categories (`01_招标文件`,
+/// `Datasheet`, …) is a filing level, so its parent is the project. That is what
+/// lets one project own several subdirectories, what keeps a customer or year
+/// directory from being mistaken for a project, and what makes a shared
+/// directory containing several projects splittable by file name.
 public enum ContextBuilder {
     /// Structural fingerprint: identities, paths and entry states only.
     ///
@@ -77,7 +80,8 @@ public enum ContextBuilder {
     public static func build(_ input: ContextBuilderInput, revision: Int, builtAt: Date = .now) -> ProjectContext {
         let files = input.entries.filter { $0.state == .present || $0.state == .held }
         let digest = inputDigest(scopeID: input.scopeID, profile: input.profile, entries: input.entries)
-        let groups = cluster(files)
+        let groups = cluster(files, profile: input.profile)
+        let present = Set(files.map(\.id))
 
         var candidates: [ContextCandidate] = []
         for group in groups.values.sorted(by: { $0.key < $1.key }) {
@@ -108,10 +112,17 @@ public enum ContextBuilder {
         for candidate in candidates {
             for member in candidate.memberSourceIDs { owners[member, default: []].insert(candidate.projectKey) }
         }
-        let present = Set(files.map(\.id))
-        let conflicted = Set(owners.compactMap { $0.value.count > 1 ? $0.key : nil }).intersection(present)
-        let covered = Set(candidates.flatMap(\.memberSourceIDs))
+        var conflicted = Set(owners.compactMap { $0.value.count > 1 ? $0.key : nil })
+        // The same material filed under two projects is the other way a claim
+        // can be contested: identical file names in different project
+        // directories mean two candidate memberships for one document, and
+        // choosing one silently is exactly the failure mode the profile exists
+        // to prevent.
+        if !input.profile.permitsUnaffiliatedDocuments {
+            for member in sameMaterialSourceIDs(files, groups: groups) { conflicted.insert(member) }
+        }
 
+        let covered = Set(candidates.flatMap(\.memberSourceIDs))
         return ProjectContext(
             revision: revision,
             scopeID: input.scopeID,
@@ -120,7 +131,7 @@ public enum ContextBuilder {
             inputDigest: digest,
             candidates: candidates,
             unassignedSourceIDs: present.subtracting(covered),
-            conflictedSourceIDs: conflicted,
+            conflictedSourceIDs: conflicted.intersection(present),
             builtAt: builtAt
         )
     }
@@ -159,61 +170,103 @@ public enum ContextBuilder {
         var confidence: DecisionConfidence
     }
 
-    /// Groups files, then resolves the two directions a project can spread.
+    /// Groups files at the project level.
     ///
-    /// 1. Every directory that holds files becomes a candidate, and so does each
-    ///    of its ancestors: a project with several subdirectories is one project
-    ///    seen at different levels, and the ancestor absorbs the descendants.
-    /// 2. A directory whose files split into two or more *disjoint* naming
-    ///    entities, each holding at least two files and together covering most
-    ///    of the directory, holds several projects. It is split by entity
-    ///    instead of absorbed, because merging it upward would silently merge
-    ///    the projects inside it.
-    /// 3. An entity that appears in two different directories joins them: the
-    ///    same project spread over separate folders is one candidate.
-    static func cluster(_ files: [SourceEntry]) -> [String: Group] {
+    /// A profile that permits unaffiliated documents (Vendor Library) produces
+    /// no project groups at all: filing vendor material under an invented
+    /// project would fabricate a business fact, and PLAN §5.2 says a vendor
+    /// file may legitimately have no project.
+    static func cluster(_ files: [SourceEntry], profile: MappingProfile) -> [String: Group] {
+        guard !profile.permitsUnaffiliatedDocuments else { return [:] }
         var groups: [String: Group] = [:]
-        let byDirectory = Dictionary(grouping: files) { parent(of: $0.relativePath) }
-        let entities = namingEntities(files)
-
-        for (directory, members) in byDirectory.sorted(by: { $0.key < $1.key }) {
-            guard !directory.isEmpty else { continue }
-            if let split = splitByEntity(members, entities: entities) {
-                for (token, tokenMembers) in split {
-                    merge(into: &groups, key: token, members: tokenMembers,
-                          basis: [.naming, .adjacency], confidence: .medium)
+        for file in files {
+            guard let key = projectKey(of: file, profile: profile) else { continue }
+            if var existing = groups[key] {
+                existing.members.insert(file.id)
+                groups[key] = existing
+            } else {
+                groups[key] = Group(key: key, members: [file.id], basis: [.directory, .adjacency],
+                                    confidence: .low)
+            }
+        }
+        // A project directory that actually holds several projects is split by
+        // naming entity, because the directory itself says nothing about which
+        // project a file belongs to.
+        var split: [String: Group] = [:]
+        for (key, group) in groups.sorted(by: { $0.key < $1.key }) {
+            let members = files.filter { group.members.contains($0.id) }
+            if let parts = splitByEntity(members, inside: group) {
+                for (token, tokenMembers) in parts {
+                    split[token] = Group(key: token, members: tokenMembers,
+                                         basis: [.naming, .adjacency], confidence: .medium)
                 }
-                continue
-            }
-            merge(into: &groups, key: directory, members: Set(members.map(\.id)),
-                  basis: [.directory, .adjacency], confidence: .low)
-            // Ancestors absorb this directory: the project level, not the
-            // subdirectory, is what a mapping decision belongs to.
-            var components = directory.split(separator: "/").map(String.init)
-            while components.count > 1 {
-                components.removeLast()
-                merge(into: &groups, key: components.joined(separator: "/"),
-                      members: Set(members.map(\.id)), basis: [.directory], confidence: .medium)
+                // Files the entities do not explain stay in the directory
+                // group rather than disappearing.
+                let explained = parts.reduce(Set<UUID>()) { $0.union($1.1) }
+                let rest = group.members.subtracting(explained)
+                if !rest.isEmpty {
+                    if var existing = split[key] {
+                        existing.members.formUnion(rest)
+                        split[key] = existing
+                    } else {
+                        split[key] = Group(key: key, members: rest, basis: group.basis, confidence: group.confidence)
+                    }
+                }
+            } else {
+                split[key] = group
             }
         }
-
-        // An entity shared across directories joins those directories.
-        let idToFile = Dictionary(uniqueKeysWithValues: files.map { ($0.id, $0) })
-        for (token, tokenMembers) in entities.sorted(by: { $0.key < $1.key }) where tokenMembers.count >= 2 {
-            let directories = Set(tokenMembers.compactMap { idToFile[$0].map { parent(of: $0.relativePath) } })
-            guard directories.count >= 2 else { continue }
-            merge(into: &groups, key: token, members: tokenMembers, basis: [.naming], confidence: .medium)
-        }
-
-        return absorb(groups)
+        return split.filter { !$0.value.members.isEmpty }
     }
 
-    /// Two disjoint entity sets inside one directory mean two projects there.
-    private static func splitByEntity(_ members: [SourceEntry], entities: [String: Set<UUID>])
-        -> [(String, Set<UUID>)]?
-    {
-        let ids = Set(members.map(\.id))
+    /// The deepest directory whose child segment is one of the profile's
+    /// categories. Nil means the file sits at the workspace root and cannot be
+    /// attributed to a project by structure alone.
+    static func projectKey(of file: SourceEntry, profile: MappingProfile) -> String? {
+        let segments = file.relativePath.split(separator: "/").map(String.init)
+        guard segments.count >= 2 else { return nil }
+        let directories = Array(segments.dropLast())
+        // Scan from the deepest directory upward: the first one whose child is
+        // a category level is the project.
+        for index in stride(from: directories.count - 1, through: 0, by: -1) {
+            let child = segments[index + 1]
+            if isCategoryLike(child, profile: profile) {
+                let key = directories[...index].joined(separator: "/")
+                return key.isEmpty ? nil : key
+            }
+        }
+        // No category signal: the immediate parent is the project, unless the
+        // file is already at the root.
+        let parent = directories.joined(separator: "/")
+        return parent.isEmpty ? nil : parent
+    }
+
+    /// True when a directory segment names a filing category rather than a
+    /// project. Matching is by normalized containment in either direction so
+    /// `招标` under a customer tree still reads as a category level, while a
+    /// project name that merely contains a category word does not.
+    static func isCategoryLike(_ segment: String, profile: MappingProfile) -> Bool {
+        let needle = normalize(segment)
+        guard needle.count >= 2 else { return false }
+        for category in profile.categories {
+            let name = normalize(category.identifier)
+            // Drop the numeric prefix (`01_招标文件` -> `招标文件`) before
+            // comparing, so the label part is what matches.
+            let bare = name.replacingOccurrences(of: "^[0-9]+_", with: "", options: .regularExpression)
+            if bare.isEmpty { continue }
+            if needle == bare || needle == name || bare.contains(needle) || needle.contains(bare) { return true }
+        }
+        for type in profile.documentTypes {
+            if normalize(type.identifier) == needle { return true }
+        }
+        return false
+    }
+
+    /// Two disjoint naming entities inside one directory mean two projects.
+    private static func splitByEntity(_ members: [SourceEntry], inside group: Group) -> [(String, Set<UUID>)]? {
+        let ids = group.members
         guard ids.count >= 4 else { return nil }
+        let entities = namingEntities(members)
         let candidates = entities
             .filter { !$0.value.isDisjoint(with: ids) && $0.value.isSubset(of: ids) && $0.value.count >= 2 }
             .sorted { ($0.value.count, $0.key) > ($1.value.count, $1.key) }
@@ -230,46 +283,25 @@ public enum ContextBuilder {
         return chosen
     }
 
-    private static func merge(into groups: inout [String: Group], key: String, members: Set<UUID>,
-                              basis: [ContextCandidate.Basis], confidence: DecisionConfidence) {
-        if var existing = groups[key] {
-            existing.members.formUnion(members)
-            existing.basis.formUnion(basis)
-            if existing.confidence == .low, confidence != .low { existing.confidence = confidence }
-            groups[key] = existing
-        } else {
-            groups[key] = Group(key: key, members: members, basis: Set(basis), confidence: confidence)
+    /// Files whose name appears under two different project directories.
+    static func sameMaterialSourceIDs(_ files: [SourceEntry], groups: [String: Group]) -> Set<UUID> {
+        var stems: [String: Set<UUID>] = [:]
+        var owner: [UUID: String] = [:]
+        for (key, group) in groups {
+            for id in group.members { owner[id] = key }
         }
-    }
-
-    /// Drops a group whose members are entirely contained in another's, keeping
-    /// the broader key as the project. Ties keep the lexicographically smaller
-    /// key so the result does not depend on dictionary order.
-    static func absorb(_ input: [String: Group]) -> [String: Group] {
-        var groups = input
-        var changed = true
-        while changed {
-            changed = false
-            let keys = groups.keys.sorted()
-            for outer in keys {
-                guard let a = groups[outer] else { continue }
-                for inner in keys where inner != outer {
-                    guard let b = groups[inner], !b.members.isEmpty, b.members.isSubset(of: a.members) else { continue }
-                    if a.members == b.members, inner < outer { continue }
-                    groups.removeValue(forKey: inner)
-                    changed = true
-                    break
-                }
-                if changed { break }
-            }
+        for file in files {
+            let name = (file.relativePath as NSString).lastPathComponent
+            let stem = normalize((name as NSString).deletingPathExtension)
+            guard stem.count >= 2 else { continue }
+            stems[stem, default: []].insert(file.id)
         }
-        return groups.filter { !$0.value.members.isEmpty }
-    }
-
-    static func parent(of path: String) -> String {
-        let parts = path.split(separator: "/")
-        guard parts.count > 1 else { return "" }
-        return parts.dropLast().joined(separator: "/")
+        var conflicted: Set<UUID> = []
+        for (_, ids) in stems where ids.count >= 2 {
+            let owners = Set(ids.compactMap { owner[$0] })
+            if owners.count >= 2 { conflicted.formUnion(ids) }
+        }
+        return conflicted
     }
 
     /// Normalized naming entities with dates, version markers and copy suffixes
@@ -349,7 +381,7 @@ public enum ContextBuilder {
         key.split(separator: "/").last.map(String.init) ?? key
     }
 
-    private static func normalize(_ value: String) -> String {
+    static func normalize(_ value: String) -> String {
         value
             .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
                      locale: Locale(identifier: "en_US_POSIX"))
