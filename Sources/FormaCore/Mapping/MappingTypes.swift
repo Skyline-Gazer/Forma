@@ -639,7 +639,11 @@ public struct ManifestEntry: Codable, Sendable, Equatable {
     public let sourceVersion: Int
     public var relativePath: String
     public var state: DecisionState
-    public let target: ManifestTarget
+    /// Not `let`, unlike the identity fields above: the only writer is the
+    /// validator, and the shareable export has to rewrite the group path it
+    /// carries. A copy that redacted the relative path while leaving the target
+    /// intact would have redacted nothing that mattered.
+    public var target: ManifestTarget
     public var metadata: MetadataValues
     public var fields: [FieldOutcome]
     public var associations: [ManifestAssociation]

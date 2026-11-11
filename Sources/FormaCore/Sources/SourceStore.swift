@@ -171,6 +171,11 @@ struct SourceStore {
         // Mapping state arrives after the source tables it references, so the
         // foreign keys in `mapping-v1` can resolve against a migrated schema.
         MappingMigrations.register(into: &migrator)
+        // Corrections and case candidates reference manifests and sources, so
+        // they migrate last: a correction that could name a table that does not
+        // exist yet would leave a database whose schema cannot be created on a
+        // fresh machine.
+        MappingCorrectionMigrations.register(into: &migrator)
         try migrator.migrate(database)
         try database.write { db in
             try db.execute(sql: "UPDATE scans SET state = 'interrupted', finished_at = ? WHERE state = 'scanning'",
