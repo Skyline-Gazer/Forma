@@ -210,13 +210,14 @@ struct ProviderTransport: Sendable {
             }
     }
 
-    /// `Retry-After` is honoured only inside a bounded window: an unbounded wait
-    /// turns a rate limit into a task the user cannot cancel.
-    static func retryDelay(after response: HTTPURLResponse?, attempt: Int) -> TimeInterval? {
+    /// A bounded backoff for the single rate-limit retry. `Retry-After` is not
+    /// honoured here: `response` throws as soon as it sees the status, so the
+    /// headers never reach a caller, and carrying them would mean changing the
+    /// error contract that the probe's recorded diagnostics depend on. What
+    /// matters is that the wait stays bounded, so a rate limit cannot become a
+    /// task the user cannot cancel.
+    static func retryDelay(attempt: Int) -> TimeInterval? {
         guard attempt < 2 else { return nil }
-        if let header = response?.value(forHTTPHeaderField: "Retry-After"), let seconds = TimeInterval(header) {
-            return min(max(seconds, 0), 30)
-        }
         return attempt == 0 ? 1 : 4
     }
 

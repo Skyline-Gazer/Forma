@@ -137,10 +137,10 @@ struct MappingPromptTests {
             "张三": .person,
         ], salt: "workspace-salt")
         let text = try plan.redact(text: "客户甲有限公司向示例厂商乙采购，我方投标公司丙报价 1,234,567.89 元，联系人张三。")
-        #expect(text.contains("«客户1»"))
-        #expect(text.contains("«厂商1»"))
-        #expect(text.contains("«投标主体1»"))
-        #expect(text.contains("«人员1»"))
+        #expect(text.contains("«客户"), "the customer must be replaced: \(text)")
+        #expect(text.contains("«厂商"), "the vendor must be replaced: \(text)")
+        #expect(text.contains("«投标主体"), "the bidding entity must be replaced: \(text)")
+        #expect(text.contains("«人员"), "the person must be replaced: \(text)")
         #expect(text.contains("«金额"), "the amount must be replaced, got \(text)")
         for term in ["客户甲有限公司", "示例厂商乙", "我方投标公司丙", "张三", "1,234,567.89"] {
             #expect(!text.contains(term), "\(term) survived redaction")
@@ -226,8 +226,8 @@ struct MappingPromptTests {
         #expect(pack.selected(for: profile).count <= pack.cases.count)
     }
 
-    @Test("the salt decides which term gets which ordinal")
-    func ordinalsDependOnTheSalt() throws {
+    @Test("a label is derived from the term and the workspace salt")
+    func labelsDependOnTheSalt() throws {
         let names = (1...6).map { "客户名称\($0)" }
         let terms = Dictionary(uniqueKeysWithValues: names.map { ($0, RedactionPlan.Role.customer) })
         func numbering(_ salt: String) -> [String: String] {
@@ -237,11 +237,35 @@ struct MappingPromptTests {
         let first = numbering("workspace-a")
         #expect(Set(first.values).count == 6, "six customers need six distinct labels")
         #expect(first == numbering("workspace-a"), "the same salt must reproduce itself")
-        // If the salt were decorative, every workspace would number the same
-        // customer list identically - which is exactly what makes the labels
-        // reversible for anyone who can guess the list.
+        // A label that was a position in the caller's list, or a hash of the
+        // term alone, would let anyone holding the name list read the requests
+        // back into names. The salt is what makes that impossible.
         #expect(first != numbering("workspace-b"),
-                "a different salt must not reproduce the same numbering")
+                "a different salt must not reproduce the same labels")
+        #expect(first.values.allSatisfy { $0.hasPrefix("«客户") && $0.count > 4 },
+                "a label keeps its role and carries a salted code")
+    }
+
+    @Test("a field rule names the vocabulary its value must come from")
+    func fieldRulesCarryVocabularies() throws {
+        let profile = try MappingProfile.projectArchive()
+        let file = entry(sourceID, "示例项目_2026/01_招标/公告.pdf")
+        let data = try MappingPrompt.payload(profile: profile,
+                                             context: context(profile: profile, members: [file.id]),
+                                             casePack: try CasePack.shipped(),
+                                             batch: batch(file: file, evidence: []), redaction: .none)
+        let root = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let rules = try #require(root["field_rules"] as? [[String: Any]])
+        let byField = Dictionary(uniqueKeysWithValues: rules.map { ($0["identifier"] as? String ?? "", $0) })
+        // The system text tells the model to use only the profile's values; the
+        // rule that carries no vocabulary makes that instruction unverifiable.
+        let categories = try #require(byField["documentcategory"]?["allowed_values"] as? [String])
+        #expect(categories == profile.categories.map(\.identifier),
+                "the category rule must carry the profile's own enumeration")
+        let types = try #require(byField["documenttype"]?["allowed_values"] as? [String])
+        #expect(types == profile.documentTypes.map(\.identifier))
+        #expect((byField["projectname"]?["allowed_values"] as? [String])?.isEmpty == true,
+                "a free-text field has no vocabulary to name")
     }
 
     @Test("the payload bounds its evidence rows and reports what it left out")

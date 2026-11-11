@@ -78,27 +78,30 @@ public actor MappingEngine {
     private let casePack: CasePack
     private let answerer: any MappingAnswering
     private let workspace: SourceWorkspace
-    /// The registry write the bounded re-ask depends on. Split out from the
-    /// workspace actor only so a store that refuses a write can be exercised;
-    /// the ordinary initialiser binds it to the workspace, which is what every
-    /// real run uses.
-    private let recordEvidence: @Sendable (UUID, [EvidenceRecord]) async throws -> Void
-
-    public init(profile: MappingProfile, casePack: CasePack, answerer: any MappingAnswering,
-                workspace: SourceWorkspace) {
-        self.init(profile: profile, casePack: casePack, answerer: answerer, workspace: workspace) { id, records in
-            try await workspace.recordEvidence(records, for: id)
-        }
-    }
+    /// An override for the registry write the bounded re-ask depends on. It is
+    /// `nil` in every real run, where `register` writes through the workspace;
+    /// it exists because a store that refuses a write - disk full, database
+    /// locked - has no other reachable path to test.
+    private let registerOverride: (@Sendable (UUID, [EvidenceRecord]) async throws -> Void)?
 
     public init(profile: MappingProfile, casePack: CasePack, answerer: any MappingAnswering,
                 workspace: SourceWorkspace,
-                recordEvidence: @escaping @Sendable (UUID, [EvidenceRecord]) async throws -> Void) {
+                registerOverride: (@Sendable (UUID, [EvidenceRecord]) async throws -> Void)? = nil) {
         self.profile = profile
         self.casePack = casePack
         self.answerer = answerer
         self.workspace = workspace
-        self.recordEvidence = recordEvidence
+        self.registerOverride = registerOverride
+    }
+
+    /// Writes re-read evidence rows into the registry, or reports why it could
+    /// not be done.
+    private func register(_ id: UUID, _ records: [EvidenceRecord]) async throws {
+        if let registerOverride {
+            try await registerOverride(id, records)
+        } else {
+            try await workspace.recordEvidence(records, for: id)
+        }
     }
 
     public func run(_ request: MappingRunRequest) async -> MappingRunOutcome {
@@ -140,12 +143,11 @@ public actor MappingEngine {
             // evidence the registry will not accept is not used at all: the
             // entry keeps the hold it already has and the reason is recorded,
             // instead of a second answer being built on rows nothing can read
-            // back. A store that refuses a write - disk full, database locked -
-            // is a real failure mode, not a theoretical one.
+            // back.
             var registered: [UUID: [EvidenceRecord]] = [:]
             for (id, records) in extracted {
                 do {
-                    try await recordEvidence(id, records)
+                    try await register(id, records)
                     registered[id] = records
                 } catch {
                     failures[id] = error as? FormaError ?? .unavailable
@@ -193,9 +195,11 @@ public actor MappingEngine {
         var nextRef: Int
     }
 
-    /// Groups by candidate so a whole project is answered in one context, then
-    /// splits oversized groups. Splitting never drops a file: every entry lands
-    /// in exactly one batch, and all sub-batches of one project share the same
+    /// Groups files by the project key of the candidate that claims them, so one
+    /// project is answered in one context, then splits oversized groups. The
+    /// candidate's opaque id is attached to the batch for the prompt to issue as
+    /// `candidate_ref`. Splitting never drops a file: every entry lands in
+    /// exactly one batch, and all sub-batches of one project share the same
     /// versioned context.
     static func batches(from entries: [SourceEntry], context: ProjectContext, limit: Int,
                         state: inout BatchState) -> [MappingBatch] {

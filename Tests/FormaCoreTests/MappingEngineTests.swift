@@ -316,16 +316,15 @@ struct MappingEngineTests {
         // really does run. Without this, the assertions below could pass on a
         // path that was never reached.
         let control = MappingEngine(profile: fixture.profile, casePack: try CasePack.shipped(), answerer: answerer,
-                                    workspace: fixture.workspace) { _, _ in }
+                                    workspace: fixture.workspace, registerOverride: { _, _ in })
         let controlOutcome = await control.run(run)
         #expect(controlOutcome.requests > controlOutcome.batches,
                 "the bounded re-ask must be reachable for this test to mean anything")
         // Same run against a store that refuses writes - disk full, database
         // locked. The re-read rows cannot be cited, so they must not be used.
         let failing = MappingEngine(profile: fixture.profile, casePack: try CasePack.shipped(),
-                                    answerer: answerer, workspace: fixture.workspace) { _, _ in
-            throw FormaError.unavailable
-        }
+                                    answerer: answerer, workspace: fixture.workspace,
+                                    registerOverride: { _, _ in throw FormaError.unavailable })
         let outcome = await failing.run(run)
         // A re-read that cannot be stored must not become a citation: the
         // second pass does not happen, and the files it would have covered

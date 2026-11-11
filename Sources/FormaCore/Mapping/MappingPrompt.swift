@@ -62,7 +62,10 @@ public enum MappingPrompt {
     /// The evidence rows one request may carry. The entry count is bounded by
     /// the batch limit; this bounds the part that actually grows, and the
     /// payload reports how many rows it left out rather than hiding them.
-    public static let maximumEvidenceRows = 400
+    /// The number is set above what a full default batch produces - 100 files
+    /// at a handful of rows each - so ordinary runs are never truncated, and
+    /// the per-row excerpt bound keeps the worst case near a megabyte.
+    public static let maximumEvidenceRows = 2_000
 
     public static func system(profile: MappingProfile, casePack: CasePack) -> String {
         let blocks = [
@@ -188,6 +191,7 @@ public enum MappingPrompt {
                     "insufficient_evidence_sources": policy.insufficientEvidenceSources.map(\.rawValue),
                     "high_impact": policy.identifier.isHighImpact,
                     "rule": policy.rule,
+                    "allowed_values": allowedValues(for: policy.identifier, profile: profile),
                 ] as [String: Any]
             },
             "categories": profile.categories.map { ["identifier": $0.identifier, "meaning": $0.meaning] },
@@ -230,6 +234,19 @@ public enum MappingPrompt {
             },
         ]
         return try stableJSON(document)
+    }
+
+    /// The vocabulary a field may take, where one exists. `categories` and
+    /// `document_types` travel once as lists with meanings; a field rule names
+    /// its own vocabulary here, so "use only the profile's values" points at
+    /// something the model can check per field instead of a relation it has to
+    /// infer from two unrelated arrays.
+    static func allowedValues(for field: MetadataFieldID, profile: MappingProfile) -> [String] {
+        switch field {
+        case .documentcategory: profile.categories.map(\.identifier)
+        case .documenttype: profile.documentTypes.map(\.identifier)
+        default: []
+        }
     }
 
     /// A digest over the exact bytes sent, recorded with every run so a later

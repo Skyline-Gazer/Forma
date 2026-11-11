@@ -217,7 +217,7 @@ public struct ProviderMappingClient: Sendable {
             } catch let error as FormaError {
                 // A rate limit is retried once, here and nowhere else.
                 guard !rateLimitRetried, case .remoteStatus(let code) = error, code == 429,
-                      let delay = ProviderTransport.retryDelay(after: nil, attempt: 0) else { throw error }
+                      let delay = ProviderTransport.retryDelay(attempt: 0) else { throw error }
                 rateLimitRetried = true
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }

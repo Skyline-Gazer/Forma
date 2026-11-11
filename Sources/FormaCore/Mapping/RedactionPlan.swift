@@ -9,14 +9,13 @@ import Foundation
 /// distinct - a customer never collapses onto a vendor or a bidding entity -
 /// because those distinctions are exactly what the mapping has to reason about.
 ///
-/// A term label is `«<role><ordinal>»`, and the ordinal is assigned by the
-/// order the term's salted digest falls into, not by alphabet or input order.
-/// The same term set with the same salt therefore always produces the same
-/// labels, the label cannot be reversed into the term without the salt, and
-/// the numbering reveals nothing about how the caller happened to list its
-/// names. Amounts are labelled by a digest of the value itself, so two
-/// placeholders sharing a suffix really are the same number - which is the
-/// fact a mapping needs when a total appears in prose and in a table.
+/// A term label is `«<role><code>»`, where the code is the first four hex
+/// digits of the term's salted digest. The same term under the same salt always
+/// becomes the same label, a label carries nothing back into the term without
+/// the salt, and neither the caller's input order nor how many names share a
+/// role is revealed. Amounts use the same construction on the value, so two
+/// placeholders sharing a code really are the same number - the fact a mapping
+/// needs when one total appears in prose and again in a table.
 public struct RedactionPlan: Sendable {
     public enum Role: String, CaseIterable, Sendable {
         case customer, vendor, bidder, agent, person, project, amount, identifier
@@ -44,27 +43,37 @@ public struct RedactionPlan: Sendable {
 
     public init(terms: [String: Role], salt: String) {
         self.salt = salt
-        self.terms = Self.ordered(terms: terms, salt: salt)
-        var counters: [Role: Int] = [:]
+        self.terms = Self.ordered(terms: terms)
         var replacements: [String: String] = [:]
+        var taken: Set<String> = []
         for entry in self.terms {
-            counters[entry.role, default: 0] += 1
-            replacements[entry.term] = "«\(entry.role.label)\(counters[entry.role]!)»"
+            // A short code can collide; extend it deterministically rather than
+            // letting two different customers share one label, which would read
+            // to the model as one customer.
+            var seed = entry.term
+            var label = Self.label(role: entry.role, seed: seed, salt: salt)
+            while taken.contains(label) {
+                seed += "\u{1f}collision"
+                label = Self.label(role: entry.role, seed: seed, salt: salt)
+            }
+            taken.insert(label)
+            replacements[entry.term] = label
         }
         self.replacements = replacements
     }
 
-    /// Role first (so the inventory stays readable), then the salted digest of
-    /// the term. Hash ordering is what makes the ordinal carry no information
-    /// back to the caller's input order or to anyone who guesses the list.
-    private static func ordered(terms: [String: Role], salt: String) -> [(term: String, role: Role)] {
-        terms.map { (term: $0.key, role: $0.value, key: digest(of: "\(salt)\u{1f}\($0.key)")) }
-            .sorted {
-                if $0.role != $1.role { return $0.role.rawValue < $1.role.rawValue }
-                if $0.key != $1.key { return $0.key < $1.key }
-                return $0.term < $1.term
-            }
-            .map { (term: $0.term, role: $0.role) }
+    /// Role first, then the term, so two plans built from the same names always
+    /// produce the same labels. The label itself is a salted digest, not a
+    /// position in this list.
+    private static func ordered(terms: [String: Role]) -> [(term: String, role: Role)] {
+        terms.sorted {
+            if $0.value != $1.value { return $0.value.rawValue < $1.value.rawValue }
+            return $0.key < $1.key
+        }.map { (term: $0.key, role: $0.value) }
+    }
+
+    private static func label(role: Role, seed: String, salt: String) -> String {
+        "«\(role.label)\(digest(of: "\(salt)\u{1f}\(role.rawValue)\u{1f}\(seed)").prefix(4).uppercased())»"
     }
 
     private static func digest(of value: String) -> String {
@@ -121,8 +130,10 @@ public struct RedactionPlan: Sendable {
         return output
     }
 
-    /// UUIDs and 64-hex digests must never travel: they are record or content
-    /// identities the model has no business seeing.
+    /// Record and content identities must never travel: a UUID is a database
+    /// handle, a 64-hex string is a SHA-256, and any other run of 32 or more
+    /// hex digits is some such handle - all of them things the model has no
+    /// business seeing.
     private func replaceIdentifiers(in value: String) -> String {
         var output = value
         for pattern in [
@@ -147,15 +158,16 @@ public struct RedactionPlan: Sendable {
     /// cents, or is thousands-grouped with money words in front of it.
     private func replaceAmounts(in value: String) -> String {
         var output = value
-        for pattern in Self.amountPatterns {
-            guard let expression = try? NSRegularExpression(pattern: pattern) else { continue }
+        for entry in Self.amountPatterns {
+            guard let expression = try? NSRegularExpression(pattern: entry.pattern) else { continue }
             let range = NSRange(output.startIndex..., in: output)
             for match in expression.matches(in: output, range: range).reversed() {
                 guard let swift = Range(match.range, in: output) else { continue }
                 let text = String(output[swift])
                 // Never rewrite something an earlier pass already replaced.
                 if text.contains("«") { continue }
-                guard Self.looksLikeAmount(text, before: output[output.startIndex..<swift.lowerBound]) else {
+                if entry.needsContext,
+                   !Self.looksLikeAmount(text, before: output[output.startIndex..<swift.lowerBound]) {
                     continue
                 }
                 output.replaceSubrange(swift, with: amountLabel(for: text))
@@ -164,24 +176,29 @@ public struct RedactionPlan: Sendable {
         return output
     }
 
-    private static let amountPatterns = [
+    /// A pattern and the judgment its matches need. The first two forms carry
+    /// their money cue inside the match, so they are amounts by construction and
+    /// nothing else is consulted; only a bare thousands-grouped number has to be
+    /// judged by the words in front of it. Keeping the test per pattern means
+    /// "is this a price" exists once, not twice where it can drift.
+    private static let amountPatterns: [(pattern: String, needsContext: Bool)] = [
         // A currency symbol in front of the number.
-        #"(?<![0-9A-Za-z])(?:¥|￥|\$|人民币)\s*[0-9][0-9,]*(?:\.[0-9]+)?"#,
+        (#"(?<![0-9A-Za-z])(?:¥|￥|\$|人民币)\s*[0-9][0-9,]*(?:\.[0-9]+)?"#, false),
         // A number with an explicit unit. A bare `万` is not enough: 万象 and
         // 万达 are company names, and their digits must survive.
-        #"(?<![0-9A-Za-z.,\-/:«»])[0-9][0-9,]*(?:\.[0-9]{1,2})?\s*(?:万元|亿元|元)(?![0-9A-Za-z])"#,
+        (#"(?<![0-9A-Za-z.,\-/:«»])[0-9][0-9,]*(?:\.[0-9]{1,2})?\s*(?:万元|亿元|元)(?![0-9A-Za-z])"#, false),
         // Comma-grouped numbers, judged by the words in front of them. A
         // placeholder on either side means this number belongs to something the
         // plan already rewrote, so it is not evidence of a price.
-        #"(?<![0-9A-Za-z.,\-/:«»])[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?(?![0-9A-Za-z.,\-/:«»])"#,
+        (#"(?<![0-9A-Za-z.,\-/:«»])[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?(?![0-9A-Za-z.,\-/:«»])"#, true),
     ]
 
     private static let moneyCues = ["价", "金额", "报价", "费用", "预算", "税", "合计", "付款",
                                     "保证金", "中标", "成本", "人民币"]
 
     private static func looksLikeAmount(_ text: String, before context: Substring) -> Bool {
-        if text.contains(where: { $0 == "¥" || $0 == "￥" || $0 == "$" }) { return true }
-        if text.contains("元") || text.contains("人民币") { return true }
+        // Cents imply a price; a grouped number without them needs support from
+        // the words immediately in front of it.
         if text.contains(".") { return true }
         let window = String(context.suffix(16))
         return moneyCues.contains { window.contains($0) }
@@ -192,10 +209,7 @@ public struct RedactionPlan: Sendable {
     /// make the model read them as one amount, and would reset between the
     /// path and text entry points.
     private func amountLabel(for text: String) -> String {
-        let digits = String(text.filter { $0.isNumber })
-        var hasher = SHA256()
-        hasher.update(data: Data("\(salt)\u{1f}\u{1f}\u{1f}\(digits)".utf8))
-        return "«金额\(hasher.finalize().prefix(2).map { String(format: "%02X", $0) }.joined())»"
+        Self.label(role: .amount, seed: String(text.filter { $0.isNumber }), salt: salt)
     }
 
     /// A caller may ask whether a specific string would survive redaction, which

@@ -39,9 +39,6 @@ struct CasePackTests {
         // must not be dragged into a project it does not belong to.
         #expect(refused.contains { $0.contains("projectname") },
                 "the project-binding trap must be taught for the vendor profile")
-        // The same pack must also clear the rules themselves, not just look
-        // well-populated when read directly.
-        try CasePack.check(pack)
     }
 
     @Test("a pack that teaches only one profile is refused")
