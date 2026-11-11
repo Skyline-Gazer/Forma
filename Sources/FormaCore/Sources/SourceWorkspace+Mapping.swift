@@ -188,4 +188,63 @@ extension SourceWorkspace {
     public func providerCalls(runID: UUID) async throws -> [ProviderCall] {
         try await store.database.read { db in try MappingStore.providerCalls(runID: runID, in: db) }
     }
+
+    /// Applies a human correction and stores what it produced.
+    ///
+    /// The engine decides; this method only gathers the facts it needs - the
+    /// current listing, the current context revision and the registered rows -
+    /// and then persists the outcome. A rejected attempt is stored and changes
+    /// no revision: the review screen has to show the click that was refused,
+    /// while the manifest history must keep describing only decisions that were
+    /// actually made. Storing the new revision goes through `saveManifest`, so
+    /// the foreign key from a citation into `evidence_items` is still enforced
+    /// rather than trusted.
+    public func applyCorrection(to manifest: Manifest, sourceID: UUID, field: MetadataFieldID,
+                                correctedValue: String?, evidenceIDs: [String],
+                                origin: CorrectionRecord.Origin, scope: SourceScope,
+                                profile: MappingProfile) async throws -> CorrectionEngine.Applied {
+        let listing = try listing(scope)
+        let context = try await buildContext(scope: scope, profile: profile)
+        var evidence: [UUID: [EvidenceRecord]] = [:]
+        for entry in manifest.entries {
+            evidence[entry.sourceID] = try await evidenceRegistry(for: entry.sourceID)
+        }
+        let applied = CorrectionEngine(profile: profile).apply(
+            to: manifest, sourceID: sourceID, field: field, correctedValue: correctedValue,
+            evidenceIDs: evidenceIDs, origin: origin, context: context, evidence: evidence,
+            currentEntries: listing.entries)
+        try await store.database.write { db in
+            try MappingStore.insertCorrection(applied.correction, in: db)
+        }
+        guard applied.violations.isEmpty else { return applied }
+        _ = try await saveManifest(applied.manifest, scopeID: scope.id)
+        return applied
+    }
+
+    /// Every correction attempt against one manifest, verified or refused.
+    public func corrections(manifestID: UUID) async throws -> [CorrectionRecord] {
+        try await store.database.read { db in
+            try MappingStore.corrections(manifestID: manifestID, in: db)
+        }
+    }
+
+    /// Writes an export bundle outside the actor's own database, returning what
+    /// was written. The evidence rows are read here so the caller never has to
+    /// assemble a registry by hand and get a bundle that cites nothing.
+    public func exportManifest(_ manifest: Manifest, to directory: URL,
+                              redaction: RedactionPlan? = nil) async throws -> ManifestExport.Summary {
+        var records: [EvidenceRecord] = []
+        for entry in manifest.entries {
+            let cited = Set(entry.fields.flatMap(\.evidenceIDs))
+            records.append(contentsOf: (try await evidenceRegistry(for: entry.sourceID))
+                .filter { cited.contains($0.id) })
+        }
+        return try ManifestExport.export(manifest: manifest, evidence: records, to: directory,
+                                         redaction: redaction)
+    }
+
+    /// Re-checks a bundle with no provider, no Keychain and no source file.
+    public func revalidateExport(at url: URL) throws -> ManifestExport.Revalidation {
+        try ManifestExport.revalidate(at: url)
+    }
 }

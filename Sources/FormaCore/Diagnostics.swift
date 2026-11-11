@@ -52,6 +52,10 @@ public enum FormaError: Error, LocalizedError, Sendable, Equatable {
 public enum FormaDiagnostics {
     public enum Operation: String, Sendable {
         case openWorkspace, registerSource, scanSource, readEvidence, discoverMCP, providerProbe, saveCredential
+        /// A reviewer's decision being recorded. Named apart from `readEvidence`
+        /// because the log line is the only place that says a human click was
+        /// refused by policy rather than lost on input or output.
+        case applyCorrection
     }
 
     private static let logger = Logger(subsystem: "io.github.skyline-gazer.forma", category: "operations")
