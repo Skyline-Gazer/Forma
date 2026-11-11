@@ -387,7 +387,15 @@ final class WorkspaceModel: ObservableObject {
             if let stored = try await workspace.currentManifest(scope: scope, profile: profile) {
                 manifest = stored
                 outcome = nil
+                // Correction attempts live in the store, not in this session:
+                // without reading them back, a restart or a scope switch shows
+                // an empty list next to a manifest that does have a history, and
+                // a refused decision becomes invisible exactly when someone
+                // returns to look for it.
+                correctionHistory = try await workspace.corrections(manifestID: stored.envelope.manifestID)
                 notice = "Restored revision \(stored.envelope.revision) of manifest \(stored.envelope.manifestID.uuidString.lowercased()) from workspace storage."
+            } else {
+                correctionHistory = []
             }
             refreshRows()
         } catch {
@@ -742,6 +750,11 @@ final class WorkspaceModel: ObservableObject {
                 self.merge(loadedRecords)
                 self.manifest = loaded
                 self.outcome = nil
+                // A loaded bundle carries no local attempt history: those rows
+                // live in the store of whoever exported it, and showing this
+                // session's stale list beside a foreign manifest would
+                // attribute decisions to the wrong reviewer.
+                self.correctionHistory = []
                 self.bundleURL = bundle
                 self.revalidation = nil
                 self.notice = "Loaded revision \(loaded.envelope.revision.formatted()) from \(bundle.path) · "
