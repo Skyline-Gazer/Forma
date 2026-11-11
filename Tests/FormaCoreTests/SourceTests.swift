@@ -1,6 +1,7 @@
 import CryptoKit
 import Darwin
 import Foundation
+import GRDB
 import SQLite3
 import Testing
 import ZIPFoundation
@@ -228,8 +229,109 @@ struct SourceTests {
         #expect(throws: FormaError.invalidSource) { try SourcePath.normalize("valid/../../escape", caseSensitive: true) }
         #expect(throws: FormaError.invalidSource) { try SourcePath.normalize("nul\0name", caseSensitive: true) }
     }
-}
 
+    @Test func replacedFileUnderAnotherSpellingKeepsIdentityAndVersionsContent() async throws {
+        let fixture = try SourceFixture()
+        defer { fixture.cleanUp() }
+        let original = try fixture.write("first content", at: "Notes/Report.pdf")
+        let workspace = try SourceWorkspace(databaseURL: fixture.database)
+        let scope = try await workspace.register(fixture.root)
+        let stored = try #require(try await workspace.scan(scope).entries.first { $0.relativePath == "Notes/Report.pdf" })
+
+        // On a volume that folds spellings, a different-cased name is still the same
+        // registered relative path: reuse the ID, version the content, keep the file listed.
+        try FileManager.default.removeItem(at: original)
+        _ = try fixture.write("second content", at: "Notes/report.pdf")
+        let after = try await workspace.scan(scope)
+        let entry = try #require(after.entries.first { $0.id == stored.id })
+
+        #expect(entry.relativePath == "Notes/report.pdf")
+        #expect(entry.state == .present)
+        #expect(entry.sourceVersion == stored.sourceVersion + 1)
+        #expect(entry.snapshotRevision == stored.snapshotRevision + 1)
+        #expect(entry.snapshotFingerprint != stored.snapshotFingerprint)
+        #expect(after.entries.filter { $0.normalizedRelativePath == entry.normalizedRelativePath }.count == 1)
+        #expect(after.issues.isEmpty)
+        #expect(after.state == .complete)
+        #expect(try fixture.scalar("SELECT previous_path FROM path_history WHERE relative_path = 'Notes/report.pdf'")
+                == "Notes/Report.pdf")
+    }
+
+    // Two names that fold to one relative path must share one identity rule, not be
+    // silently merged: a normalizing volume stores one entry, while a volume that keeps
+    // both spellings hands the scanner two names for one folded key.
+    @Test func foldedSpellingsNormalizeToOneKeyAndNeverFabricateASecondIdentity() async throws {
+        let fixture = try SourceFixture()
+        defer { fixture.cleanUp() }
+        _ = try fixture.write("composed form", at: "Notes/Café.pdf")
+        _ = try fixture.write("decomposed form", at: "Notes/Cafe\u{301}.pdf")
+        let workspace = try SourceWorkspace(databaseURL: fixture.database)
+        let scope = try await workspace.register(fixture.root)
+        let listing = try await workspace.scan(scope)
+        let stored = try #require(listing.entries.first)
+
+        #expect(try SourcePath.normalize("Notes/Café.pdf", caseSensitive: false)
+                == SourcePath.normalize("Notes/Cafe\u{301}.pdf", caseSensitive: false))
+        // Exactly one on-disk spelling may claim the folded path; no second ID appears.
+        #expect(listing.entries.filter { $0.normalizedRelativePath == stored.normalizedRelativePath }.count == 1)
+        let spellings = try FileManager.default.contentsOfDirectory(atPath: fixture.root.appending(path: "Notes").path)
+        #expect(Set(spellings) == ["Café.pdf"] || spellings.count == 2)
+        if Set(spellings) == ["Café.pdf"] {
+            #expect(listing.state == .complete)
+            #expect(listing.issues.isEmpty)
+        } else {
+            #expect(listing.state == .incomplete)
+            #expect(listing.issues.filter { $0.reason == .pathCollision }.count == 2)
+            #expect(listing.entries.filter { $0.normalizedRelativePath == stored.normalizedRelativePath }.isEmpty)
+        }
+    }
+
+    // A folding volume can also report two spellings for one path Forma already knows.
+    // That ambiguity must hold the known entry instead of losing it or folding identities.
+    @Test func knownPathCollisionHoldsEntryAndMarksScanIncomplete() async throws {
+        let fixture = try SourceFixture()
+        defer { fixture.cleanUp() }
+        _ = try fixture.write("report body", at: "Notes/report.md")
+        let workspace = try SourceWorkspace(databaseURL: fixture.database)
+        let scope = try await workspace.register(fixture.root)
+        let known = try #require(try await workspace.scan(scope).entries.first)
+
+        let replacement = try SourceFileMetadata.read(
+            try fixture.write("different object", at: "Notes/Report.md"))
+        let result = SourceScanResult(
+            records: [SourceScanRecord(relativePath: "Notes/Report.md",
+                                       normalizedPath: known.normalizedRelativePath,
+                                       metadata: replacement, provider: .local, stableIdentity: nil)],
+            directories: ["Notes"],
+            issues: [.init(relativePath: "Notes/report.md", reason: .pathCollision),
+                     .init(relativePath: "Notes/Report.md", reason: .pathCollision)],
+            collisionPaths: [known.normalizedRelativePath]
+        )
+        let database = try DatabaseQueue(path: fixture.database.path)
+        let scanID = UUID()
+        let published = try await database.write { tx in
+            try tx.execute(sql: "INSERT INTO scans(id, scope_id, started_at, state) VALUES (?, ?, ?, 'scanning')",
+                           arguments: [scanID.sourceKey, scope.id.sourceKey, Date().timeIntervalSince1970])
+            return try SourceWorkspace.publish(result, scope: scope,
+                                               root: SourceStore.root(tx, id: scope.rootID), scanID: scanID, in: tx)
+        }
+        let entry = try #require(published.entries.first { $0.id == known.id })
+
+        #expect(entry.state == .held)
+        #expect(entry.snapshotRevision == known.snapshotRevision + 1)
+        #expect(published.state == .incomplete)
+        #expect(published.entries.count == 1)
+    }
+
+    @Test func workspaceStorageIsOwnerReadableOnly() throws {
+        let fixture = try SourceFixture()
+        defer { fixture.cleanUp() }
+        _ = try SourceWorkspace(databaseURL: fixture.database)
+        let mode = try FileManager.default.attributesOfItem(atPath: fixture.database.path)[.posixPermissions] as? NSNumber
+        #expect(mode.map { $0.uint16Value & 0o777 == 0o600 } == true)
+    }
+
+}
 private struct SourceFixture {
     let base: URL
     let root: URL

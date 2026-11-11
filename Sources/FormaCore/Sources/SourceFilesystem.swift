@@ -298,7 +298,10 @@ enum SourceFileScanner {
             do {
                 var metadata = try SourceFileMetadata.read(in: descriptor, name: name)
                 let url = SourcePath.url(root.url, appending: relative)
-                if !metadata.isSymlink, let cloudMetadata = try? SourceFileMetadata.read(url),
+                // The URL-based resource values call is only meaningful for a cloud
+                // root; a local tree must not pay one extra stat per entry.
+                if !metadata.isSymlink, root.isCloud,
+                   let cloudMetadata = try? SourceFileMetadata.read(url),
                    cloudMetadata.objectKey == metadata.objectKey {
                     metadata = cloudMetadata
                 }

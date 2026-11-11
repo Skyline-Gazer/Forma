@@ -53,6 +53,12 @@ enum XLSXEvidence {
         var items: [EvidenceItem] = []
         var remainingText = 32_000
         for (sheet, part) in worksheets {
+            // Once the text or cell budget is gone, parsing further worksheets can only
+            // inflate the container and discard every value, so stop with truncated.
+            guard remainingText > 0, items.count < workbookCellLimit else {
+                truncated = true
+                break
+            }
             do {
                 let reader = WorksheetReader(
                     sheet: sheet, shared: shared, cellLimit: min(cellsPerSheet, workbookCellLimit - items.count),
@@ -376,16 +382,18 @@ private final class WorksheetReader: OfficeXMLReader {
     }
 
     private static func columnNumber(_ coordinate: String, row: Int) -> Int? {
+        // Walk Unicode scalars, not UTF-8 bytes. Valid coordinates are ASCII; a non-ASCII
+        // reference must fail closed instead of leaving a byte-view index to slice a String.
+        let scalars = coordinate.unicodeScalars
+        var cursor = scalars.startIndex
         var column = 0
-        var end = coordinate.startIndex
-        let bytes = coordinate.utf8
-        while end != bytes.endIndex, (65...90).contains(bytes[end]) {
-            column = column * 26 + Int(bytes[end]) - 64
+        while cursor != scalars.endIndex, (65...90).contains(scalars[cursor].value) {
+            column = column * 26 + Int(scalars[cursor].value) - 64
             guard column <= 16_384 else { return nil }
-            bytes.formIndex(after: &end)
+            scalars.formIndex(after: &cursor)
         }
-        guard column > 0, rowNumber(coordinate[end...]) == row else { return nil }
-        return column
+        guard column > 0 else { return nil }
+        return rowNumber(coordinate[cursor...]) == row ? column : nil
     }
 
     private static func coordinate(column: Int, row: Int) -> String {

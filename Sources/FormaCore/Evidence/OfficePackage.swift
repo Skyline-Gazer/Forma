@@ -92,36 +92,33 @@ final class OfficePackage {
         }
         guard end + 22 + Int(data.word16(end + 20)) == data.count else { throw EvidenceFailure.corrupt }
         guard data.word16(end + 4) == 0, data.word16(end + 6) == 0 else { throw EvidenceFailure.unsupported }
-        var count = UInt64(data.word16(end + 10))
-        var size = UInt64(data.word32(end + 12))
-        var offset = UInt64(data.word32(end + 16))
-        var directoryEnd = end
-        if end >= 20, data.word32(end - 20) == 0x0706_4B50 {
-            // ZIPFoundation 0.9.20 reads the fixed-size ZIP64 record next to its locator.
-            let record = data.word64(end - 12)
-            guard end >= 76, record <= UInt64(end - 76),
-                  data.word32(Int(record)) == 0x0606_4B50 else { throw EvidenceFailure.corrupt }
-            guard record == UInt64(end - 76), data.word64(Int(record) + 4) == 44 else {
+        let count = UInt64(data.word16(end + 10))
+        let size = UInt64(data.word32(end + 12))
+        let offset = UInt64(data.word32(end + 16))
+        let directoryEnd = end
+        // ZIPFoundation 0.9.20 traps with an un-catchable Range precondition on ZIP64 input,
+        // both for an archive-level end-of-central-directory record and while extracting an
+        // entry whose sizes use the 0xFFFFFFFF placeholder (reproduced by ContainerBoundaryTests).
+        // Forma's input budget is 64 MiB, so no in-scope DOCX or XLSX needs ZIP64: reject every
+        // ZIP64 marker before the library is constructed. This keeps the failure an honest
+        // `unsupported` status instead of a crash inside a scan.
+        let zip64Locator = end >= 20 && data.word32(end - 20) == 0x0706_4B50
+        let zip64Record = end >= 76 && data.word32(end - 76) == 0x0606_4B50
+        guard data.word16(end + 8) == count, !zip64Locator, !zip64Record,
+              count != UInt64(UInt16.max), size != UInt64(UInt32.max), offset != UInt64(UInt32.max) else {
+            if zip64Locator || zip64Record || count == UInt64(UInt16.max)
+                    || size == UInt64(UInt32.max) || offset == UInt64(UInt32.max) {
                 throw EvidenceFailure.unsupported
             }
-            let start = Int(record)
-            guard data.word32(end - 16) == 0, data.word32(end - 4) == 1,
-                  data.word32(start + 16) == 0, data.word32(start + 20) == 0,
-                  data.word64(start + 24) == data.word64(start + 32) else { throw EvidenceFailure.corrupt }
-            count = data.word64(start + 32)
-            size = data.word64(start + 40)
-            offset = data.word64(start + 48)
-            directoryEnd = start
-        } else if data.word16(end + 8) != count {
             throw EvidenceFailure.corrupt
         }
         guard offset <= UInt64(directoryEnd), size == UInt64(directoryEnd) - offset else {
             throw EvidenceFailure.corrupt
         }
         guard count <= Self.entryLimit else { throw EvidenceFailure.budget }
-
         var cursor = Int(offset)
         var entries: [DirectoryEntry] = []
+        var regions: [(local: UInt64, end: UInt64)] = []
         entries.reserveCapacity(Int(count))
         for _ in 0..<Int(count) {
             guard directoryEnd - cursor >= 46, data.word32(cursor) == 0x0201_4B50 else {
@@ -137,22 +134,12 @@ final class OfficePackage {
             guard nameSize > 0, next <= directoryEnd, data.word16(cursor + 34) == 0 else {
                 throw EvidenceFailure.corrupt
             }
-            var uncompressed = UInt64(data.word32(cursor + 24))
-            var compressed = UInt64(data.word32(cursor + 20))
-            var local = UInt64(data.word32(cursor + 42))
-            if [uncompressed, compressed, local].contains(UInt64(UInt32.max)) {
-                let fields = try Self.zip64Values(data, in: (nameStart + nameSize)..<(next - commentSize))
-                var index = fields.startIndex
-                func resolve(_ value: UInt64) throws -> UInt64 {
-                    guard value == UInt32.max else { return value }
-                    guard index < fields.endIndex else { throw EvidenceFailure.corrupt }
-                    defer { index += 1 }
-                    return fields[index]
-                }
-                uncompressed = try resolve(uncompressed)
-                compressed = try resolve(compressed)
-                local = try resolve(local)
-                guard index == fields.endIndex else { throw EvidenceFailure.corrupt }
+            let uncompressed = UInt64(data.word32(cursor + 24))
+            let compressed = UInt64(data.word32(cursor + 20))
+            let local = UInt64(data.word32(cursor + 42))
+            if [uncompressed, compressed, local].contains(UInt64(UInt32.max))
+                || data.word16(cursor + 6) >= 45 {
+                throw EvidenceFailure.unsupported
             }
             guard local <= offset, offset - local >= 30, data.word32(Int(local)) == 0x0403_4B50 else {
                 throw EvidenceFailure.corrupt
@@ -164,41 +151,42 @@ final class OfficePackage {
             let localName = header + 30
             let contents = localName + localNameSize + Int(data.word16(header + 28))
             let method = data.word16(cursor + 10)
+            let dataEnd = UInt64(contents) + compressed
             guard localFlags == flags, data.word16(header + 8) == method,
                   contents <= Int(offset), localNameSize == nameSize,
                   data[localName..<(localName + nameSize)].elementsEqual(data[nameStart..<(nameStart + nameSize)]),
-                  compressed <= offset - UInt64(contents), method != 0 || compressed == uncompressed else {
+                  compressed <= offset - UInt64(contents), dataEnd <= offset,
+                  method != 0 || compressed == uncompressed else {
                 throw EvidenceFailure.corrupt
             }
             entries.append(DirectoryEntry(size: uncompressed, compressedSize: compressed, checksum: data.word32(cursor + 16)))
+            regions.append((local: local, end: dataEnd))
             cursor = next
+        }
+        // A central directory may claim a compressed span that runs into the next entry's
+        // local header. Stored data would then be read across that boundary with a CRC the
+        // writer chose, so each data region must end before the following local header.
+        let ordered = regions.sorted { $0.local < $1.local }
+        for pair in zip(ordered, ordered.dropFirst()) where pair.0.end > pair.1.local {
+            throw EvidenceFailure.corrupt
         }
         guard cursor == directoryEnd else { throw EvidenceFailure.corrupt }
         return entries
     }
 
-    private static func zip64Values(_ data: Data, in extra: Range<Int>) throws -> [UInt64] {
-        var cursor = extra.lowerBound
-        while extra.upperBound - cursor >= 4 {
-            let size = Int(data.word16(cursor + 2))
-            let start = cursor + 4
-            guard size <= extra.upperBound - start else { throw EvidenceFailure.corrupt }
-            if data.word16(cursor) == 1 {
-                guard size == 8 || size == 16 || size == 24 else { throw EvidenceFailure.corrupt }
-                return stride(from: start, to: start + size, by: 8).map { data.word64($0) }
-            }
-            cursor = start + size
-        }
-        throw EvidenceFailure.corrupt
-    }
 
+    // Field offsets below are the [MS-CFB] 2.2 Header and 2.3 Directory Entry layouts:
+    // sector shift at 30, total FAT sectors at 44, first directory sector at 48, DIFAT chain
+    // start at 68 and the first 109 DIFAT entries at 76. A directory entry name is UTF-16
+    // starting at its offset, with the byte count (including the terminating zero) at +64 and
+    // the object type at +66, where 2 is a stream.
     private static func containsOfficeEncryptionStreams(_ data: Data) -> Bool {
-        // Encrypted OOXML uses a Compound File Binary container instead of ZIP.
+        // Encrypted OOXML replaces the ZIP package with a Compound File Binary container.
         guard data.count >= 512, data.word16(28) == 0xFFFE else { return false }
         let version = data.word16(26)
-        let shift = data.word16(30)
-        guard (version == 3 && shift == 9) || (version == 4 && shift == 12) else { return false }
-        let sectorSize = 1 << Int(shift)
+        let sectorShift = data.word16(30)
+        guard (version == 3 && sectorShift == 9) || (version == 4 && sectorShift == 12) else { return false }
+        let sectorSize = 1 << Int(sectorShift)
         let sectorCount = data.count / sectorSize - 1
         guard sectorCount > 0 else { return false }
         func sectorOffset(_ sector: UInt32) -> Int? {
