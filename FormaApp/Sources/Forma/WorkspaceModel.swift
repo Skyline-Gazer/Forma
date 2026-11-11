@@ -912,17 +912,24 @@ final class WorkspaceModel: ObservableObject {
                 guard !Task.isCancelled else { return }
                 // A reviewer who switched source while the click was in flight
                 // must not have their decision written onto the screen they
-                // left: every other long task in this model checks that it is
-                // still describing the same scope before publishing results.
+                // left. The check has to follow each suspension, not just the
+                // first one: two more reads happen below, and a scope change
+                // during either would otherwise land another source's manifest,
+                // rows and attempt list on this screen.
                 guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
                 // Read back rather than trust the returned manifest: the store
                 // decides the revision number, and the screen must show what it
                 // actually wrote.
-                self.manifest = try await workspace.currentManifest(scope: scope, profile: profile)
-                    ?? applied.manifest
+                let current = try await workspace.currentManifest(scope: scope, profile: profile)
+                guard !Task.isCancelled, scope.id == selectedScopeID,
+                      profile.profileID == selectedProfileID else { return }
+                self.manifest = current ?? applied.manifest
                 self.draft = nil
                 refreshRows()
-                correctionHistory = try await workspace.corrections(manifestID: manifestID)
+                let attempts = try await workspace.corrections(manifestID: manifestID)
+                guard !Task.isCancelled, scope.id == selectedScopeID,
+                      profile.profileID == selectedProfileID else { return }
+                correctionHistory = attempts
                 correctionsLoaded = true
                 notice = applied.violations.isEmpty
                     ? "Correction recorded as revision \(applied.manifest.envelope.revision.formatted())."

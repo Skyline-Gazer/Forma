@@ -225,19 +225,30 @@ struct CorrectionPersistenceTests {
         defer { context.fixture.cleanUp() }
         let store = try SourceStore(url: context.fixture.database)
         let manifestID = context.manifest.envelope.manifestID
-        func claim() -> CorrectionRecord {
-            CorrectionRecord(manifestID: manifestID, manifestRevision: 1, producedRevision: 2,
-                             sourceID: context.sourceID, field: .completionyear, previousValue: "2026",
-                             correctedValue: "2027", evidenceIDs: [context.yearRow],
-                             snapshotFingerprint: "f", contextRevision: 1, origin: .manual,
-                             reviewState: .evidenceVerified)
+        // Two claims on one produced revision, different rows and different
+        // fields, so the only thing they share is the version they say they
+        // created. Both records are built outside the transactions: a value
+        // that a `@Sendable` write closure has to reach across a suspension
+        // boundary is exactly what the concurrency checks refuse, and a test
+        // that only compiles on one toolchain proves nothing.
+        let first = CorrectionRecord(id: UUID(), manifestID: manifestID, manifestRevision: 1,
+                                     producedRevision: 2, sourceID: context.sourceID, field: .completionyear,
+                                     previousValue: "2026", correctedValue: "2027", evidenceIDs: [context.yearRow],
+                                     snapshotFingerprint: "f", contextRevision: 1, origin: .manual,
+                                     reviewState: .evidenceVerified)
+        let second = CorrectionRecord(id: UUID(), manifestID: manifestID, manifestRevision: 1,
+                                      producedRevision: 2, sourceID: context.sourceID, field: .issuer,
+                                      previousValue: nil, correctedValue: "示例厂商乙",
+                                      evidenceIDs: [context.yearRow], snapshotFingerprint: "f",
+                                      contextRevision: 1, origin: .manual, reviewState: .evidenceVerified)
+        try await store.database.write { db in try MappingStore.insertCorrection(first, in: db) }
+        var refusal: (any Error)?
+        do {
+            try await store.database.write { db in try MappingStore.insertCorrection(second, in: db) }
+        } catch {
+            refusal = error
         }
-        try await store.database.write { db in try MappingStore.insertCorrection(claim(), in: db) }
-        var failure: (any Error)?
-        try await store.database.write { db in
-            do { try MappingStore.insertCorrection(claim(), in: db) } catch { failure = error }
-        }
-        #expect(failure != nil,
+        #expect(refusal != nil,
                 "one revision has at most one producing correction, and that is a constraint, not a habit")
     }
 }

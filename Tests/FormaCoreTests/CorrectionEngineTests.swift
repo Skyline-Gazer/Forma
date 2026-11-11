@@ -219,11 +219,11 @@ struct CorrectionEngineTests {
         let store = try SourceStore(url: fixture.database)
         let manifestID = UUID()
         try fixture.execute("""
-            INSERT INTO corrections (id, manifest_id, manifest_revision, supersedes_revision, source_id,
+            INSERT INTO corrections (id, manifest_id, manifest_revision, produced_revision, source_id,
                                      field, previous_value, corrected_value, evidence_ids,
                                      snapshot_fingerprint, context_revision, origin, review_state,
                                      case_candidate_id, created_at)
-            VALUES ('c_bad', '\(manifestID.uuidString.lowercased())', 2, 1, '\(file.id.sourceKey)',
+            VALUES ('c_bad', '\(manifestID.uuidString.lowercased())', 1, 2, '\(file.id.sourceKey)',
                     'thirteenth_field', NULL, 'x', '[]', '\(file.snapshotFingerprint)', 1,
                     'manual', 'pending', NULL, 1780000000)
             """)

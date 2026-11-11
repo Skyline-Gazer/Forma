@@ -134,10 +134,16 @@ struct SettingsView: View {
 
     private var redactionSection: some View {
         Section("Redaction terms") {
-            ForEach(model.redactionTerms.indices, id: \.self) { index in
+            // Bound by the row's own identity. `RedactionTerm` is Identifiable
+            // precisely so that deleting one row cannot renumber the bindings of
+            // the others: with array indices as identities, a removal leaves the
+            // enclosing ForEach holding a subscript that no longer exists, and
+            // the text fields of the surviving rows get re-parented to the wrong
+            // term.
+            ForEach($model.redactionTerms) { $term in
                 HStack(spacing: 8) {
-                    TextField("Term", text: $model.redactionTerms[index].term)
-                    Picker("Role", selection: $model.redactionTerms[index].role) {
+                    TextField("Term", text: $term.term)
+                    Picker("Role", selection: $term.role) {
                         ForEach(RedactionPlan.Role.allCases, id: \.self) { role in
                             Text(role.rawValue).tag(role)
                         }
@@ -149,7 +155,7 @@ struct SettingsView: View {
                     // a problem the plan never had, while leaving no way to
                     // remove a term that was typed by mistake.
                     Button {
-                        model.redactionTerms.remove(at: index)
+                        model.redactionTerms.removeAll { $0.id == term.id }
                     } label: {
                         Image(systemName: "minus.circle")
                     }

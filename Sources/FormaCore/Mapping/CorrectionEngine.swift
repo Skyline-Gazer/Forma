@@ -29,7 +29,9 @@ public struct CorrectionRecord: Codable, Sendable, Equatable {
     /// made `(manifest_id, manifest_revision)` name two different things, so a
     /// refusal recorded against R and the correction that later produced R+1
     /// were indistinguishable from two decisions about the same version.
-    public let producedRevision: Int?
+    /// Set by the store when the version is actually written, so a claim never
+    /// runs ahead of the revision it names.
+    public var producedRevision: Int?
     public let sourceID: UUID
     public let field: MetadataFieldID
     public let previousValue: String?

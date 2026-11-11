@@ -105,16 +105,23 @@ extension SourceWorkspace {
     /// Stores a manifest as the next revision. A caller cannot overwrite an
     /// existing revision by handing it the same number: the store decides.
     public func saveManifest(_ manifest: Manifest, scopeID: UUID) async throws -> Manifest {
-        try await store.database.write { db in
-            let revision = try MappingStore.nextManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
-            let stored = Manifest(envelope: manifest.envelope.rebased(to: revision), entries: manifest.entries,
-                                  report: manifest.report)
-            // `manifest_entry_evidence.evidence_id` carries a foreign key into
-            // `evidence_items`, so citing an unregistered row fails here rather
-            // than being discovered by re-querying after the fact.
-            try MappingStore.insertManifest(stored, scopeID: scopeID, in: db)
-            return stored
-        }
+        try await store.database.write { db in try Self.persist(manifest, scopeID: scopeID, in: db) }
+    }
+
+    /// Writes the next revision inside the caller's transaction.
+    ///
+    /// Split from `saveManifest` because a correction has two facts to record -
+    /// the version and the decision that produced it - and they must not be
+    /// separable on disk.
+    private static func persist(_ manifest: Manifest, scopeID: UUID, in db: Database) throws -> Manifest {
+        let revision = try MappingStore.nextManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
+        let stored = Manifest(envelope: manifest.envelope.rebased(to: revision), entries: manifest.entries,
+                              report: manifest.report)
+        // `manifest_entry_evidence.evidence_id` carries a foreign key into
+        // `evidence_items`, so citing an unregistered row fails here rather
+        // than being discovered by re-querying after the fact.
+        try MappingStore.insertManifest(stored, scopeID: scopeID, in: db)
+        return stored
     }
 
     public func currentManifest(scope: SourceScope, profile: MappingProfile) async throws -> Manifest? {
@@ -227,11 +234,30 @@ extension SourceWorkspace {
             to: manifest, sourceID: sourceID, field: field, correctedValue: correctedValue,
             evidenceIDs: evidenceIDs, origin: origin, context: context, evidence: evidence,
             currentEntries: listing.entries)
+        if applied.violations.isEmpty {
+            // The version and the decision that produced it are one unit of
+            // work. Written separately, a failed `saveManifest` would leave a
+            // corrections row claiming a revision that does not exist - and the
+            // unique index on that claim would then refuse the very retry that
+            // could have stored it.
+            let published = try await store.database.write { db -> (manifest: Manifest,
+                                                                    record: CorrectionRecord) in
+                let stored = try Self.persist(applied.manifest, scopeID: scope.id, in: db)
+                var record = applied.correction
+                record.producedRevision = stored.envelope.revision
+                try MappingStore.insertCorrection(record, in: db)
+                return (stored, record)
+            }
+            return CorrectionEngine.Applied(manifest: published.manifest, correction: published.record,
+                                            violations: [])
+        }
+        // A refused attempt records itself and publishes nothing. It names the
+        // revision the reviewer was looking at and no produced revision, which
+        // is why many attempts may share a target while no two may claim the
+        // same version they created.
         try await store.database.write { db in
             try MappingStore.insertCorrection(applied.correction, in: db)
         }
-        guard applied.violations.isEmpty else { return applied }
-        _ = try await saveManifest(applied.manifest, scopeID: scope.id)
         return applied
     }
 
