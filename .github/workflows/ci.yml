@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+# Fixed toolchain: macos-15 + Xcode 26.3 (Swift 6). Avoids `macos-latest` drift.
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: FormaCore tests
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: xcodebuild -version && swift --version && sw_vers
+      - name: Unit tests
+        run: swift test --parallel --force-resolved-versions
