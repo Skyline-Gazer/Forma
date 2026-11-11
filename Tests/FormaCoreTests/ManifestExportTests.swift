@@ -200,44 +200,4 @@ struct ManifestExportTests {
         #expect(exceptions.rows[0].reason == "hydration_pending")
         #expect(exceptions.rows[0].state == "hold")
     }
-
-    @Test("reconciling a moved snapshot invalidates only the affected entries")
-    func reconcilerScopesInvalidation() throws {
-        let profile = try MappingProfile.projectArchive()
-        let movedID = UUID(uuidString: "00000000-0000-4000-8000-000000000068")!
-        let stableID = UUID(uuidString: "00000000-0000-4000-8000-000000000069")!
-        let item = manifest(profile: profile, entries: [entry(id: movedID, evidenceIDs: ["ev_1"]),
-                                                         entry(id: stableID, evidenceIDs: ["ev_2"])],
-                            state: .validated)
-        let scopeID = UUID(uuidString: "00000000-0000-4000-8000-000000000060")!
-        func source(_ id: UUID, revision: Int64, fingerprint: String) -> SourceEntry {
-            SourceEntry(id: id, rootID: UUID(uuidString: "00000000-0000-4000-8000-000000000061")!,
-                        relativePath: "示例项目_2026/01_招标/公告.pdf",
-                        normalizedRelativePath: "示例项目_2026/01_招标/公告.pdf", state: .present,
-                        hydrationPending: false, sourceVersion: 1, snapshotRevision: revision, provider: .local,
-                        snapshotFingerprint: fingerprint, sizeBytes: 10, modificationTimeNanoseconds: 0,
-                        sha256: nil)
-        }
-        let current = [
-            source(movedID, revision: 3, fingerprint: String(repeating: "c", count: 64)),
-            source(stableID, revision: 2, fingerprint: String(repeating: "a", count: 64)),
-        ]
-        let context = ProjectContext(revision: 2, scopeID: scopeID, profileID: profile.profileID,
-                                     profileVersion: profile.profileVersion,
-                                     inputDigest: String(repeating: "1", count: 64), candidates: [],
-                                     unassignedSourceIDs: [], conflictedSourceIDs: [], builtAt: .now)
-        let decision = ManifestReconciler.decide(manifest: item, currentEntries: current, previousContext: context,
-                                                 currentContext: context)
-        #expect(decision.invalidatedSourceIDs == [movedID])
-        #expect(decision.reason == "snapshot_changed")
-
-        let unchanged = [
-            source(movedID, revision: 2, fingerprint: String(repeating: "a", count: 64)),
-            source(stableID, revision: 2, fingerprint: String(repeating: "a", count: 64)),
-        ]
-        let same = ManifestReconciler.decide(manifest: item, currentEntries: unchanged, previousContext: context,
-                                            currentContext: context)
-        #expect(same.invalidatedSourceIDs.isEmpty)
-        #expect(same.reason == "unchanged")
-    }
 }

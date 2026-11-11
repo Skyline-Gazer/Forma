@@ -7,7 +7,24 @@ import GRDB
 enum MappingCorrectionMigrations {
     static func register(into migrator: inout DatabaseMigrator) {
         migrator.registerMigration("mapping-corrections-v1") { db in
+            // `case_candidates` first: `corrections.case_candidate_id`
+            // references it. SQLite does not resolve a foreign key's target
+            // when the table is created, so the wrong order builds without
+            // complaint and only fails on the first write with
+            // `PRAGMA foreign_keys = ON` - which is exactly the kind of defect
+            // that shows up on a user's machine rather than in a schema test.
             try db.execute(sql: """
+                CREATE TABLE case_candidates (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    correction_ids BLOB NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('candidate','reviewed','accepted','rejected')),
+                    scenario TEXT NOT NULL,
+                    profiles BLOB NOT NULL,
+                    redaction_checked INTEGER NOT NULL,
+                    duplicate_of TEXT REFERENCES case_candidates(id),
+                    created_at REAL NOT NULL,
+                    reviewed_at REAL
+                );
                 CREATE TABLE corrections (
                     id TEXT PRIMARY KEY NOT NULL,
                     manifest_id TEXT NOT NULL,
@@ -29,17 +46,6 @@ enum MappingCorrectionMigrations {
                 );
                 CREATE INDEX corrections_manifest ON corrections(manifest_id, manifest_revision);
                 CREATE INDEX corrections_source ON corrections(source_id, field);
-                CREATE TABLE case_candidates (
-                    id TEXT PRIMARY KEY NOT NULL,
-                    correction_ids BLOB NOT NULL,
-                    status TEXT NOT NULL CHECK(status IN ('candidate','reviewed','accepted','rejected')),
-                    scenario TEXT NOT NULL,
-                    profiles BLOB NOT NULL,
-                    redaction_checked INTEGER NOT NULL,
-                    duplicate_of TEXT REFERENCES case_candidates(id),
-                    created_at REAL NOT NULL,
-                    reviewed_at REAL
-                );
                 """)
         }
     }

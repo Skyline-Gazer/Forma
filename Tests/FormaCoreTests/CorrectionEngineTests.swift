@@ -162,6 +162,47 @@ struct CorrectionEngineTests {
         #expect(applied.correction.reviewState == .rejected)
         #expect(applied.manifest.entries[0].metadata[.completionyear] == "2026",
                 "a refused correction changes nothing")
+        #expect(applied.manifest.envelope.revision == 1,
+                "a refused attempt must not publish a revision that supersedes the one it changed nothing in")
+        #expect(applied.manifest.envelope.supersedesRevision == nil)
+    }
+
+    @Test("a rejected attempt publishes nothing and keeps the old revision authoritative")
+    func rejectedAttemptPublishesNothing() throws {
+        let profile = try MappingProfile.projectArchive()
+        let original = manifest(profile, state: .hold)
+        let engine = CorrectionEngine(profile: profile)
+        // A citation that names no evidence at all: the value is an opinion.
+        let applied = engine.apply(to: original, sourceID: sourceID, field: .issuer,
+                                   correctedValue: "示例厂商乙", evidenceIDs: [], origin: .manual,
+                                   context: context(profile: profile), evidence: evidence(),
+                                   currentEntries: [source()])
+        #expect(applied.violations.contains { $0.code == "evidence_not_found" })
+        #expect(applied.correction.reviewState == .rejected)
+        #expect(applied.manifest.envelope.revision == original.envelope.revision)
+        #expect(applied.manifest.entries == original.entries)
+    }
+
+    @Test("a citation from another snapshot is not evidence for this one")
+    func staleSnapshotCitationRefused() throws {
+        let profile = try MappingProfile.projectArchive()
+        let engine = CorrectionEngine(profile: profile)
+        // The row exists and is usable; it describes revision 3 of the file,
+        // while the entry under correction is bound to revision 2 - the same
+        // binding the validator enforces for a model answer.
+        let stale = EvidenceRecord(id: "ev_year", sourceID: sourceID, snapshotRevision: 3,
+                                   snapshotFingerprint: String(repeating: "9", count: 64), source: .content,
+                                   locator: .pdf(page: 1, characterRange: 0..<12), relativePath: nil,
+                                   excerpt: "归档完成 2026 年", extractionStatus: .ok,
+                                   extractorVersion: EvidenceRegistry.extractorVersion, createdAt: .now)
+        let applied = engine.apply(to: manifest(profile, state: .hold), sourceID: sourceID,
+                                   field: .completionyear, correctedValue: "2027",
+                                   evidenceIDs: ["ev_year"], origin: .manual,
+                                   context: context(profile: profile), evidence: [sourceID: [stale]],
+                                   currentEntries: [source()])
+        #expect(applied.violations.contains { $0.code == "evidence_not_found" },
+                "violations: \(applied.violations.map(\.code))")
+        #expect(applied.manifest.entries[0].metadata[.completionyear] == "2026")
     }
 
     @Test("a stored row naming a field the enum cannot is refused on read")

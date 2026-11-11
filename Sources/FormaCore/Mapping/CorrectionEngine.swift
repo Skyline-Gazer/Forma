@@ -159,24 +159,47 @@ public struct CorrectionEngine: Sendable {
             // this source and this snapshot, or it is only an opinion. An empty
             // citation list is an opinion too: a value with nothing behind it is
             // exactly what a human click must not silently introduce.
-            let registry = Dictionary(uniqueKeysWithValues: (evidence[sourceID] ?? []).map { ($0.id, $0) })
-            let verified = evidenceIDs.filter { registry[$0]?.isUsable == true }
+            var registry: [String: EvidenceRecord] = [:]
+            for record in evidence[sourceID] ?? [] { registry[record.id] = record }
+            let target = manifest.entries[position]
+            let verified = evidenceIDs.filter { id in
+                guard let record = registry[id], record.isUsable, record.sourceID == sourceID else { return false }
+                // The same binding the validator insists on: a row from an older
+                // snapshot describes a file that is no longer the one in front of
+                // the reviewer, and accepting it would let a correction cite
+                // evidence the manifest cannot resolve.
+                return record.snapshotFingerprint == target.snapshotFingerprint
+                    && record.snapshotRevision == target.snapshotRevision
+            }
             if verified.count != Set(evidenceIDs).count || verified.isEmpty {
                 violations.append(ValidationViolation(code: "evidence_not_found", instancePath: field.rawValue,
-                                                      detail: "A corrected value must cite evidence that exists."))
+                                                      detail: "A corrected value must cite evidence that exists, "
+                                                            + "for this source and this snapshot."))
             }
         }
 
-        var entries = manifest.entries
-        if violations.isEmpty {
-            var metadata = entries[position].metadata
-            metadata[field] = correctedValue
-            entries[position].metadata = metadata
-            entries[position].setOutcome(FieldOutcome(field: field, value: correctedValue,
-                                                      status: correctedValue == nil ? .unknown : .evidenced,
-                                                      evidenceIDs: evidenceIDs))
-            entries[position].state = .mapped
+        guard violations.isEmpty else {
+            // A rejected attempt is recorded, not published. Issuing a revision
+            // that changes nothing would still supersede the manifest it
+            // corrects, and the audit trail would then show an edit that never
+            // happened - which is worse than showing the refusal.
+            return Applied(manifest: manifest, correction: CorrectionRecord(
+                manifestID: manifest.envelope.manifestID, manifestRevision: manifest.envelope.revision,
+                supersedesRevision: nil, sourceID: sourceID, field: field, previousValue: previous,
+                correctedValue: correctedValue, evidenceIDs: evidenceIDs,
+                snapshotFingerprint: manifest.entries[position].snapshotFingerprint,
+                contextRevision: context.revision, origin: origin, reviewState: .rejected
+            ), violations: violations)
         }
+
+        var entries = manifest.entries
+        var metadata = entries[position].metadata
+        metadata[field] = correctedValue
+        entries[position].metadata = metadata
+        entries[position].setOutcome(FieldOutcome(field: field, value: correctedValue,
+                                                  status: correctedValue == nil ? .unknown : .evidenced,
+                                                  evidenceIDs: evidenceIDs))
+        entries[position].state = .mapped
 
         var candidate = manifest
         candidate.envelope = ManifestEnvelope(
@@ -213,9 +236,11 @@ public struct CorrectionEngine: Sendable {
             previousValue: previous, correctedValue: correctedValue, evidenceIDs: evidenceIDs,
             snapshotFingerprint: manifest.entries[position].snapshotFingerprint,
             contextRevision: context.revision, origin: origin,
-            reviewState: violations.isEmpty ? .evidenceVerified : .rejected
+            // Only a correction that passed every rule above reaches this line:
+            // a rejected attempt returned earlier, with the manifest unchanged.
+            reviewState: .evidenceVerified
         )
-        return Applied(manifest: candidate, correction: correction, violations: violations)
+        return Applied(manifest: candidate, correction: correction, violations: [])
     }
 
     /// Turns a set of verified corrections into one candidate case, which starts
