@@ -653,15 +653,18 @@ final class WorkspaceModel: ObservableObject {
     /// because those rows are what makes an old manifest verifiable.
     private func merge(_ records: [EvidenceRecord]) {
         guard !records.isEmpty else { return }
-        // Both views are updated in place, source by source. Copying the whole
-        // dictionaries to write back one key cost every read and every run the
-        // size of everything cached so far, and the citation index does not
-        // need a full pass either: only the sources this batch touched can
-        // have changed. The two shapes of the same data are written in the same
-        // walk, so neither can keep a row the other has dropped.
+        // Updated in place, source by source: only the sources this batch
+        // touched can have changed. A citation id hashes its source id
+        // (`EvidenceRegistry.identifier`), so a row cannot live in two buckets;
+        // within one, the batch's rows are applied last, which makes "the
+        // newest read owns the id" a property of this loop rather than of
+        // dictionary ordering.
         for sourceID in Set(records.map(\.sourceID)) {
             var byID: [String: EvidenceRecord] = [:]
-            for record in (evidenceBySource[sourceID] ?? []) + records where record.sourceID == sourceID {
+            for record in evidenceBySource[sourceID] ?? [] where record.sourceID == sourceID {
+                byID[record.id] = record
+            }
+            for record in records where record.sourceID == sourceID {
                 byID[record.id] = record
             }
             let rows = byID.values.sorted { $0.id < $1.id }
@@ -1130,6 +1133,7 @@ final class WorkspaceModel: ObservableObject {
         let salt = redactionSalt
         let plan = redaction
         let contextRevision = context.revision
+        let casePackVersion = casePack.version
         preview = nil
         auxWork = Task {
             defer { auxWork = nil; if phase == .previewing { phase = .idle } }
@@ -1138,16 +1142,16 @@ final class WorkspaceModel: ObservableObject {
                 let rows = try await workspace.registeredEvidence(for: Set(listing.entries.map(\.id)))
                 let batches = MappingEngine.plannedBatches(from: listing.entries, context: context,
                                                           limit: limit, evidence: rows)
-                // The read suspends, and these inputs are editable while it
-                // does: only the provider picker is disabled during a preview,
-                // so the batch limit, the terms and the salt can be retyped,
-                // the toolbar can change source or profile, and `reload` can
-                // restore a different stored context. The case pack is not one
-                // of them - `restore` loads it once at launch - so it is not
-                // compared.
+                // The read suspends while every one of these can move: the
+                // toolbar switches source or profile, `reload` restores a
+                // different stored context, `restore` can still be assigning the
+                // case pack from launch, and the Settings fields - limit, terms,
+                // salt - are editable throughout (only the provider picker is
+                // disabled while a preview runs).
                 guard !Task.isCancelled, scope.id == selectedScopeID,
                       profile.profileID == selectedProfileID,
-                      contextRevision == self.context?.revision, limit == entryLimit,
+                      contextRevision == self.context?.revision,
+                      casePackVersion == self.casePack?.version, limit == entryLimit,
                       terms == redactionTerms, salt == redactionSalt else {
                     return
                 }

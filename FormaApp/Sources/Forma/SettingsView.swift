@@ -6,10 +6,10 @@ import SwiftUI
 /// connection advertises, and which CasePack a run would use.
 ///
 /// The preview is the whole point of this screen: what `previewEgress` shows is
-/// the system text, payload and digest the engine's own batch planner would
-/// produce from the registered evidence - not a receipt for the bytes a run
-/// sends, because a run re-reads file bodies before dispatch. It is shown
-/// before any consent is given and before anything is sent. Nothing here
+/// the system text, payload and digest of the *first* batch the engine's own
+/// planner would build from the registered evidence - not a receipt for the
+/// bytes a run sends, because a run re-reads file bodies before dispatch. It is
+/// shown before any consent is given and before anything is sent. Nothing here
 /// simulates a result: an absent key, a missing context or a blocked MCP query
 /// is reported with FormaCore's own reason.
 struct SettingsView: View {

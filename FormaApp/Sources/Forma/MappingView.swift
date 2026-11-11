@@ -513,14 +513,10 @@ struct MappingView: View {
         }
     }
 
-    /// One attempt, described by what it did to the version history.
-    ///
-    /// FormaCore writes two kinds of row: `evidenceVerified` with the revision
-    /// it just stored, and `rejected` with none. A verified row naming no
-    /// revision comes from a version 1 history in which two accepted attempts
-    /// both recorded the same revision they read; the migration credits the
-    /// claim to the earlier one and refuses to guess for the later. Anything
-    /// else was put in the table by something other than a review.
+    /// One attempt, described by what it did to the version history: a stored
+    /// decision names the revision it wrote, a refusal names the one it read
+    /// and wrote nothing. Any other pairing came from outside a review - or
+    /// from a version 1 history whose claim the migration could not attribute.
     private static func outcomeLine(_ record: CorrectionRecord) -> (text: String, color: Color) {
         switch (record.reviewState, record.producedRevision) {
         case (.evidenceVerified, let produced?):

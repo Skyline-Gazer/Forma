@@ -126,9 +126,14 @@ extension SourceWorkspace {
     ///
     /// Split from `saveManifest` because a correction has two facts to record -
     /// the version and the decision that produced it - and they must not be
-    /// separable on disk.
-    private static func persist(_ manifest: Manifest, scopeID: UUID, in db: Database) throws -> Manifest {
+    /// separable on disk. `expecting` is the revision the caller believes is
+    /// next; the number is read once here, so the check and the write cannot
+    /// disagree about which revision is being produced, and a caller working
+    /// from a version the store has moved past is refused with `sourceChanged`.
+    private static func persist(_ manifest: Manifest, scopeID: UUID, expecting: Int? = nil,
+                                in db: Database) throws -> Manifest {
         let revision = try MappingStore.nextManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
+        guard expecting == nil || expecting == revision else { throw FormaError.sourceChanged }
         let stored = Manifest(envelope: manifest.envelope.rebased(to: revision), entries: manifest.entries,
                               report: manifest.report)
         // `manifest_entry_evidence.evidence_id` carries a foreign key into
@@ -248,14 +253,13 @@ extension SourceWorkspace {
             // never stored would occupy the index and refuse the retry.
             let published = try await store.database.write { db -> (manifest: Manifest,
                                                                     record: CorrectionRecord) in
-                guard try MappingStore.nextManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
-                        == manifest.envelope.revision + 1 else { throw FormaError.sourceChanged }
-                let stored = try Self.persist(applied.manifest, scopeID: scope.id, in: db)
+                let stored = try Self.persist(applied.manifest, scopeID: scope.id,
+                                              expecting: manifest.envelope.revision + 1, in: db)
                 var record = applied.correction
                 record.producedRevision = stored.envelope.revision
-                // The number is assigned here, so the index cannot be
-                // violated by anything the guard allowed; it is the schema's
-                // last word on a store edited outside this code.
+                // The number came from the store one statement above, so the
+                // index can only be violated by a history written outside this
+                // code; it is the schema's last word, not a branch to handle.
                 try MappingStore.insertCorrection(record, in: db)
                 return (stored, record)
             }
