@@ -1,0 +1,140 @@
+import Foundation
+import GRDB
+
+/// Mapping-layer persistence on the one actor that owns the workspace database.
+///
+/// PLAN §10.2 keeps a single writer for state that later drives side effects, so
+/// the context, evidence registry, manifests and run records all go through
+/// `SourceWorkspace` rather than opening a second connection. These methods
+/// store and read what the mapping layer computed; none of them decides
+/// anything, and none of them can reach a DEVONthink client.
+extension SourceWorkspace {
+    /// Builds the two-phase context for a scope and stores it as a new revision
+    /// only when the inputs actually changed. An unchanged rescan therefore
+    /// reuses the stored revision instead of minting a new one.
+    public func buildContext(scope: SourceScope, profile: MappingProfile,
+                             history: [ContextHistoryMatch] = []) async throws -> ProjectContext {
+        let listing = try listing(scope)
+        let digest = ContextBuilder.inputDigest(scopeID: scope.id, profile: profile, entries: listing.entries)
+        if let stored = try await storedContext(scope: scope, profile: profile, inputDigest: digest) {
+            return stored
+        }
+        let revision = try await store.database.read { db in
+            try MappingStore.nextContextRevision(scopeID: scope.id, profile: profile, in: db)
+        }
+        let context = ContextBuilder.build(
+            ContextBuilderInput(scopeID: scope.id, profile: profile, entries: listing.entries, history: history),
+            revision: revision
+        )
+        try await store.database.write { db in
+            try MappingStore.insertContext(context, scopeID: scope.id, in: db)
+        }
+        return context
+    }
+
+    public func storedContext(scope: SourceScope, profile: MappingProfile, inputDigest: String) async throws
+        -> ProjectContext?
+    {
+        try await store.database.read { db in
+            try MappingStore.currentContext(scopeID: scope.id, profile: profile, inputDigest: inputDigest, in: db)
+        }
+    }
+
+    /// Replaces one file's evidence rows. Reading a file again invalidates its
+    /// previous excerpts by construction, so an older citation cannot resolve.
+    public func recordEvidence(_ records: [EvidenceRecord], for sourceID: UUID) async throws {
+        try await store.database.write { db in try MappingStore.replaceEvidence(records, for: sourceID, in: db) }
+    }
+
+    public func evidenceRegistry(for sourceID: UUID) async throws -> [EvidenceRecord] {
+        try await store.database.read { db in try MappingStore.evidence(for: sourceID, in: db) }
+    }
+
+    /// Reads a file and registers what was observed, returning the rows a
+    /// mapping request may cite.
+    public func captureEvidence(for entry: SourceEntry) async throws -> [EvidenceRecord] {
+        let capture = try await evidence(for: entry)
+        let records = try EvidenceRegistry.records(for: entry, capture: capture)
+        try await recordEvidence(records, for: entry.id)
+        return records
+    }
+
+    public func captureEvidence(for entries: [SourceEntry]) async throws -> [UUID: [EvidenceRecord]] {
+        var result: [UUID: [EvidenceRecord]] = [:]
+        for entry in entries {
+            result[entry.id] = try await captureEvidence(for: entry)
+            if Task.isCancelled { break }
+        }
+        return result
+    }
+
+    /// Stores a manifest as the next revision. A caller cannot overwrite an
+    /// existing revision by handing it the same number: the store decides.
+    public func saveManifest(_ manifest: Manifest, scopeID: UUID) async throws -> Manifest {
+        try await store.database.write { db in
+            let revision = try MappingStore.nextManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
+            let stored = Manifest(envelope: manifest.envelope.rebased(to: revision), entries: manifest.entries,
+                                  report: manifest.report)
+            try MappingStore.insertManifest(stored, scopeID: scopeID, in: db)
+            // Keep the cited evidence rows in the registry: an exported
+            // manifest that references rows which no longer exist is not
+            // re-checkable later.
+            let ids = Set(stored.entries.flatMap { entry in entry.fields.flatMap(\.evidenceIDs) })
+            if !ids.isEmpty {
+                let rows = try MappingStore.evidence(ids: ids, in: db)
+                // A saved manifest must not cite rows the registry does not
+                // hold, or the export could never be re-checked offline.
+                guard rows.count == ids.count else { throw FormaError.invalidOutput }
+            }
+            return stored
+        }
+    }
+
+    public func currentManifest(scope: SourceScope, profile: MappingProfile) async throws -> Manifest? {
+        try await store.database.read { db in
+            try MappingStore.latestManifest(scopeID: scope.id, profile: profile, in: db)
+        }
+    }
+
+    /// Invalidates exactly the entries whose facts moved, and reports whether
+    /// the rest may still be reused.
+    public func reconcile(scope: SourceScope, profile: MappingProfile) async throws
+        -> ManifestReconciler.Decision?
+    {
+        guard let manifest = try await currentManifest(scope: scope, profile: profile) else { return nil }
+        let listing = try listing(scope)
+        let digest = ContextBuilder.inputDigest(scopeID: scope.id, profile: profile, entries: listing.entries)
+        let context = try await storedContext(scope: scope, profile: profile, inputDigest: digest)
+            ?? ContextBuilder.build(ContextBuilderInput(scopeID: scope.id, profile: profile,
+                                                        entries: listing.entries),
+                                    revision: manifest.envelope.contextRevision)
+        let decision = ManifestReconciler.decide(manifest: manifest, currentEntries: listing.entries,
+                                                 currentContext: context)
+        guard !decision.invalidatedSourceIDs.isEmpty else { return decision }
+        try await store.database.write { db in
+            try MappingStore.invalidate(manifestID: manifest.envelope.manifestID,
+                                        revision: manifest.envelope.revision,
+                                        sourceIDs: decision.invalidatedSourceIDs, reason: decision.reason, in: db)
+        }
+        return decision
+    }
+
+    public func startMappingRun(_ run: MappingRun) async throws {
+        try await store.database.write { db in try MappingStore.startRun(run, in: db) }
+    }
+
+    public func finishMappingRun(id: UUID, state: MappingRun.State, batches: Int, error: FormaError?) async throws {
+        try await store.database.write { db in
+            try MappingStore.finishRun(id: id, state: state, batches: batches, error: error, finishedAt: .now,
+                                       in: db)
+        }
+    }
+
+    public func recordProviderCall(_ call: ProviderCall) async throws {
+        try await store.database.write { db in try MappingStore.recordProviderCall(call, in: db) }
+    }
+
+    public func providerCalls(runID: UUID) async throws -> [ProviderCall] {
+        try await store.database.read { db in try MappingStore.providerCalls(runID: runID, in: db) }
+    }
+}
