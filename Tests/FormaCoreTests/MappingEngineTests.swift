@@ -327,14 +327,18 @@ struct MappingEngineTests {
             throw FormaError.unavailable
         }
         let outcome = await failing.run(run)
-        // Only the entry whose re-read produced rows can hit the store, so the
-        // failure is reported for exactly that file.
-        let readable = try #require(fixture.entries.first { $0.relativePath.contains("01_招标") })
+        // A re-read that cannot be stored must not become a citation: the
+        // second pass does not happen, and the files it would have covered
+        // report the store failure instead of pretending an answer.
         #expect(outcome.requests == outcome.batches,
                 "a failed registration must not trigger a second ask, got \(outcome.requests)")
-        #expect(outcome.failures.keys.contains(readable.id),
-                "the store failure is recorded for the file it concerns, got \(outcome.failures)")
+        #expect(!outcome.failures.isEmpty, "the store failure must be reported, not swallowed")
+        #expect(Set(outcome.failures.keys).isSubset(of: Set(fixture.entries.map(\.id))),
+                "a failure must name a file in this run, got \(outcome.failures.keys)")
         #expect(outcome.failures.values.allSatisfy { $0 == .unavailable })
+        #expect(outcome.manifest.entries.filter { outcome.failures.keys.contains($0.sourceID) }
+                    .allSatisfy { $0.state == .hold },
+                "an entry whose re-read could not be stored keeps its hold")
         #expect(outcome.manifest.entries.allSatisfy { !$0.eligibleForAutoExecution })
     }
 

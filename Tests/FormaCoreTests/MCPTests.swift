@@ -35,7 +35,10 @@ keep_open() {
 }
 """#
 
-private func fake(_ script: String, timeout: Duration = .seconds(3), frameLimit: Int = 2 * 1024 * 1024) -> MCPConfiguration {
+/// The fixture peer is a `/bin/sh` process, and CI runners start one in well
+/// over a second under load, so the default budget is generous. A test that
+/// needs a timeout must create one deliberately - never by racing the clock.
+private func fake(_ script: String, timeout: Duration = .seconds(15), frameLimit: Int = 2 * 1024 * 1024) -> MCPConfiguration {
     MCPConfiguration(executable: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", peerPrelude + "\n" + script],
                      timeout: timeout, maximumFrameBytes: frameLimit)
 }
@@ -213,7 +216,7 @@ private func fake(_ script: String, timeout: Duration = .seconds(3), frameLimit:
     respond "$expired" '"late"'
     respond "$id" '"fresh"'
     keep_open
-    """#, timeout: .milliseconds(400)))
+    """#, timeout: .seconds(2)))
     await #expect(throws: FormaError.timeout) { try await transport.request("timeout") }
     let fresh = try await transport.request("valid")
     #expect(fresh == .string("fresh"))
