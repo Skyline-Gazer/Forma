@@ -646,12 +646,12 @@ final class WorkspaceModel: ObservableObject {
     /// because those rows are what makes an old manifest verifiable.
     private func merge(_ records: [EvidenceRecord]) {
         guard !records.isEmpty else { return }
-        // Updated in place, source by source: only the sources this batch
-        // touched can have changed. A citation id hashes its source id
-        // (`EvidenceRegistry.identifier`), so a row cannot live in two buckets;
-        // within one, the batch's rows are applied last, which makes "the
-        // newest read owns the id" a property of this loop rather than of
-        // dictionary ordering.
+        // Only the sources this batch touched are rebuilt; the rest of the
+        // cache is untouched. Order between two reads of the same source cannot
+        // matter: a citation id hashes the source id, the snapshot revision, the
+        // source and the locator (`EvidenceRegistry.identifier`), FormaCore never
+        // updates an evidence row in place, so every read of one id returns the
+        // same content and both views stay a union of stored rows.
         for sourceID in Set(records.map(\.sourceID)) {
             var byID: [String: EvidenceRecord] = [:]
             for record in evidenceBySource[sourceID] ?? [] where record.sourceID == sourceID {
@@ -1108,11 +1108,10 @@ final class WorkspaceModel: ObservableObject {
     /// before dispatch, so the excerpt shown here is what the registered rows
     /// produce, not a receipt for what a run will attach.
     ///
-    /// The inputs the request is built from - source, profile, context
-    /// revision, batch limit, redaction terms and salt - are read off the
-    /// panel at the click and compared with the panel again before anything is
-    /// published, so a preview cannot describe one request while the fields
-    /// beside it describe another.
+    /// The batch limit and the redaction plan are taken at the click, and
+    /// nothing is published unless the panel still describes that same request
+    /// when the evidence read returns - so a preview cannot show one request
+    /// while the fields beside it configure another.
     func previewEgress() {
         guard auxWork == nil else { return }
         guard let scope = selectedScope, let profile = selectedProfile, let context, let casePack,
@@ -1122,11 +1121,8 @@ final class WorkspaceModel: ObservableObject {
             return
         }
         let limit = entryLimit
-        let terms = redactionTerms
-        let salt = redactionSalt
         let plan = redaction
         let contextRevision = context.revision
-        let casePackVersion = casePack.version
         preview = nil
         auxWork = Task {
             defer { auxWork = nil; if phase == .previewing { phase = .idle } }
@@ -1135,17 +1131,18 @@ final class WorkspaceModel: ObservableObject {
                 let rows = try await workspace.registeredEvidence(for: Set(listing.entries.map(\.id)))
                 let batches = MappingEngine.plannedBatches(from: listing.entries, context: context,
                                                           limit: limit, evidence: rows)
-                // The read suspends while every one of these can move: the
-                // toolbar switches source or profile, `reload` restores a
-                // different stored context, `restore` can still be assigning the
-                // case pack from launch, and the Settings fields - limit, terms,
-                // salt - are editable throughout (only the provider picker is
-                // disabled while a preview runs).
+                // What must still hold is about the request, not about every
+                // field it was assembled from: the panel still shows this source
+                // and profile, the context the batch was planned against is still
+                // the stored one, and the redaction plan actually used is still
+                // the plan the settings describe - comparing the plan rather than
+                // the terms and salt behind it makes the check about the derived
+                // value. The case pack is not part of this: a click needs it
+                // non-nil, only `restore()` writes it, so it has already run.
                 guard !Task.isCancelled, scope.id == selectedScopeID,
                       profile.profileID == selectedProfileID,
                       contextRevision == self.context?.revision,
-                      casePackVersion == self.casePack?.version, limit == entryLimit,
-                      terms == redactionTerms, salt == redactionSalt else {
+                      limit == entryLimit, plan == redaction else {
                     return
                 }
                 guard let batch = batches.first else {

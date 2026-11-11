@@ -53,20 +53,14 @@ enum MappingCorrectionMigrations {
         }
     }
 
-    /// Splits version 1's one revision column - whose meaning depended on
-    /// `review_state` - into the revision a decision read and the revision it
-    /// wrote, and makes "one revision has one producing correction" a
-    /// constraint.
-    ///
-    /// Two filters, both load-bearing. `review_state = 'evidence_verified'` is
-    /// the half that says which rows published anything: the column allowed
-    /// `pending`, and a row in that state produced no revision, so crediting it
-    /// with one would invent an author for a version nobody wrote. The
-    /// `NOT EXISTS` keeps the last statement from failing: two accepted rows can
-    /// name the same revision they read, and `supersedes + 1` would hand both
-    /// the same claim, which a unique index refuses to be built over. Only the
-    /// earlier row is credited; the later stays unattributed rather than being
-    /// given a number that matches nothing.
+    /// Splits version 1's one revision column into the revision a decision read
+    /// and the revision it wrote, and makes one revision have one producing
+    /// correction. Two filters carry what the statements cannot say: only
+    /// `evidence_verified` rows published anything, so `pending` and refusals
+    /// are left alone; and two accepted rows can name the same revision they
+    /// read, which would give both the same successor and stop the unique index
+    /// from being built - so only the earlier row is credited, and the later is
+    /// left unattributed rather than given a number matching nothing.
     static let revisionSplitSQL = """
         ALTER TABLE corrections ADD COLUMN produced_revision INTEGER;
         UPDATE corrections SET produced_revision = supersedes_revision + 1

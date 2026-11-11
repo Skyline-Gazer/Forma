@@ -204,6 +204,23 @@ struct MappingPromptTests {
         #expect(!RedactionPlan(terms: ["某客户": .customer], salt: "s").isIdentity)
     }
 
+    @Test("two plans are equal only when they substitute the same text")
+    func planEquality() {
+        // The privacy preview decides whether to publish a request by comparing
+        // the plan it built at the click with the plan the settings describe
+        // now, so equality has to track substitution and nothing else: not the
+        // order the caller listed terms in, but certainly not a different salt,
+        // which changes every placeholder. An empty plan substitutes nothing, so
+        // its salt is not observable in a request either.
+        let one = RedactionPlan(terms: ["某客户": .customer, "示例项目_2026": .project], salt: "s")
+        let sameOrder = RedactionPlan(terms: ["示例项目_2026": .project, "某客户": .customer], salt: "s")
+        #expect(one == sameOrder, "term order is an input detail, not a substitution difference")
+        #expect(one != RedactionPlan(terms: ["某客户": .customer, "示例项目_2026": .project], salt: "other"))
+        #expect(one != RedactionPlan(terms: ["某客户": .customer], salt: "s"))
+        #expect(one != RedactionPlan.none)
+        #expect(RedactionPlan.none == RedactionPlan(terms: [:], salt: "anything"))
+    }
+
     @Test("the system prompt states the trust boundaries and the profile traps")
     func systemPromptContent() throws {
         let profile = try MappingProfile.projectArchive()
