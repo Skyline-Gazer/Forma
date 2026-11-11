@@ -137,11 +137,20 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var bundleURL: URL?
     @Published private(set) var casePack: CasePack?
     @Published private(set) var capabilities: DEVONthinkCapabilities?
-    @Published private(set) var preview: ProviderMappingClient.Preview?
-    /// Files in the previewed batch, and batches a run over this listing would
-    /// need. Both come from the engine's planning, not from the settings field.
-    @Published private(set) var previewedFileCount = 0
-    @Published private(set) var previewedBatchCount = 0
+    /// A request the engine planned for this listing: the bytes it would send
+    /// and the shape of the batch those bytes came from.
+    ///
+    /// One value rather than a payload plus two counters, because the counters
+    /// describe the batch the payload was built from. Kept apart, clearing the
+    /// preview could leave two numbers on screen describing a request that no
+    /// longer exists - and a count of files rendered as a fraction of batches
+    /// says nothing in either unit.
+    struct Preview {
+        let value: ProviderMappingClient.Preview
+        let fileCount: Int
+        let batchCount: Int
+    }
+    @Published private(set) var preview: Preview?
     @Published private(set) var leakedTerms: [String] = []
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var notice: String?
@@ -1111,19 +1120,25 @@ final class WorkspaceModel: ObservableObject {
                 let rows = try await workspace.registeredEvidence(for: Set(listing.entries.map(\.id)))
                 let batches = MappingEngine.plannedBatches(from: listing.entries, context: context,
                                                           limit: entryLimit, evidence: rows)
+                // The evidence read suspends, and a source switch during it
+                // would otherwise describe another listing's request as this
+                // panel's preview - the same rule every other long task here
+                // follows before it publishes anything.
+                guard !Task.isCancelled, scope.id == selectedScopeID,
+                      profile.profileID == selectedProfileID else { return }
                 guard let batch = batches.first else {
-                    if !Task.isCancelled { notice = "This listing has no file to preview." }
+                    notice = "This listing has no file to preview."
                     return
                 }
-                // The screen reports the batch it is describing and how many the
-                // whole listing would need, not the configured ceiling.
-                previewedFileCount = batch.entries.count
-                previewedBatchCount = batches.count
                 let plan = redaction
                 let value = try ProviderMappingClient.preview(profile: profile, context: context,
                                                               casePack: casePack, batch: batch, redaction: plan)
-                guard !Task.isCancelled else { return }
-                self.preview = value
+                guard !Task.isCancelled, scope.id == selectedScopeID,
+                      profile.profileID == selectedProfileID else { return }
+                // Payload and the batch it came from are assigned together: the
+                // counts mean nothing without the request they describe, and a
+                // preview cleared by another action must not leave them behind.
+                self.preview = Preview(value: value, fileCount: batch.entries.count, batchCount: batches.count)
                 self.leakedTerms = plan.isIdentity ? [] : plan.leaks(value.system + String(decoding: value.payload, as: UTF8.self))
             } catch {
                 if !Task.isCancelled { self.show(error, operation: .providerProbe, fallback: .incompatible) }

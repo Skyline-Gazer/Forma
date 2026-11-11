@@ -91,21 +91,25 @@ struct SettingsView: View {
                     Button("Cancel") { model.cancelAux() }
                 }
             }
-            Text("Shows the first batch a run would build from this listing and context — system text, payload, digest — planned by the same code the run uses, built locally, with no network access. A run re-reads a file whose rows are not stored yet, so a body excerpt can differ from an earlier capture.")
+            // Not "the exact bytes a run sends": a run re-captures each file's
+            // rows before dispatch, so this is the request the current stored
+            // evidence produces. The distinction decides whether a reviewer
+            // treats what they read as a receipt or as an estimate.
+            Text("Shows the first batch a run would build from this listing and context — system text, payload, digest. Planned by the same code a run uses, and assembled from the evidence already registered, but a run re-reads file bodies before sending, so a body excerpt here can differ from what a run would attach. Built locally, with no network access.")
                 .font(.caption).foregroundStyle(.secondary)
             if let preview = model.preview {
-                LabeledContent("Payload bytes", value: preview.byteCount.formatted())
-                LabeledContent("Request digest", value: preview.digest)
+                LabeledContent("Payload bytes", value: preview.value.byteCount.formatted())
+                LabeledContent("Request digest", value: preview.value.digest)
                     .font(.caption.monospaced())
                 LabeledContent("Redaction version", value: model.redaction.isIdentity ? "Identity (no terms)" : RedactionPlan.version)
-                LabeledContent("Files in previewed batch", value: "\(model.previewedFileCount.formatted()) of \(model.previewedBatchCount.formatted()) batches")
+                LabeledContent("Batch", value: "\(preview.fileCount.formatted()) files in this batch · \(preview.batchCount.formatted()) batches for the listing")
                     .help("The engine groups files by the candidate that claims them, so one batch is one candidate's slice and never simply the first \(model.entryLimit.formatted()) files of the listing")
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("System text").font(.caption).foregroundStyle(.secondary)
-                        Text(preview.system).font(.caption).textSelection(.enabled)
+                        Text(preview.value.system).font(.caption).textSelection(.enabled)
                         Text("Payload").font(.caption).foregroundStyle(.secondary)
-                        Text(Self.payloadExcerpt(preview))
+                        Text(Self.payloadExcerpt(preview.value))
                             .font(.caption.monospaced())
                             .textSelection(.enabled)
                     }
