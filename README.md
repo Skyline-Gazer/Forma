@@ -4,12 +4,14 @@
 
 Forma 是一款使用 Swift 6 / SwiftUI 开发的 macOS 原生应用，目标是将非标准目录、文件清单与文档内容转换为可验证的结构化 Manifest，并在后续阶段经 DEVONthink 官方 MCP 安全落地。
 
-> **当前状态：SPEC v0.1.1 已冻结；正在准备 PLAN。尚未进入软件实现阶段。**
+> **当前状态：SPEC 与 PLAN 已批准，Roadmap 和 Issues 已建立；尚未批准应用代码开发。**
 
 ## 文档入口
 
 - [冻结的产品与技术规范](docs/SPEC.md) — 唯一已批准的产品/架构基线
-- [PLAN 编制任务书](docs/PLAN_REQUEST.md) — 供 AI Agent 生成候选 PLAN
+- [已批准的 PLAN](docs/PLAN.md) — 技术实施阶段与验收契约
+- [实施 Roadmap](docs/ROADMAP.md) — Owner 决策、阶段依赖与 Epic/Feature Issues
+- [PLAN 编制任务书](docs/PLAN_REQUEST.md) — 规划过程归档
 - [Agent 约束](AGENTS.md) — 仓库权限与边界
 
 ## 确定的方向
