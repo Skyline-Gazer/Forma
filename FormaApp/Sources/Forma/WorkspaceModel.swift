@@ -1129,7 +1129,6 @@ final class WorkspaceModel: ObservableObject {
         let terms = redactionTerms
         let plan = redaction
         let contextRevision = context.revision
-        let casePackVersion = casePack.version
         // The engine plans the batch, so the membership, the refs and the
         // attached rows are what a run would produce. The listing is the whole
         // listing: this is the preview a Start run sends, while a reprocess
@@ -1144,15 +1143,15 @@ final class WorkspaceModel: ObservableObject {
                 let rows = try await workspace.registeredEvidence(for: Set(listing.entries.map(\.id)))
                 let batches = MappingEngine.plannedBatches(from: listing.entries, context: context,
                                                           limit: limit, evidence: rows)
-                // The read suspends. A source switch, a rebuilt context, a new
-                // case pack or an edited batch limit during it would leave this
-                // payload describing a request the panel no longer configures,
-                // so nothing is published unless every input still matches the
-                // snapshot taken above.
+                // The read suspends, and four of these inputs have writers
+                // that keep running while it does: the scope and profile from
+                // the toolbar, `reload`'s restore of the stored context, and
+                // the two Settings fields typed straight into this model. A new
+                // case pack is not one of them - `restore` loads it once at
+                // launch - so it is not compared.
                 guard !Task.isCancelled, scope.id == selectedScopeID,
                       profile.profileID == selectedProfileID,
                       contextRevision == self.context?.revision,
-                      casePackVersion == self.casePack?.version,
                       limit == entryLimit, terms == redactionTerms else {
                     return
                 }

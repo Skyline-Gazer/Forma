@@ -65,13 +65,4 @@ public enum FormaDiagnostics {
     public static func failure(_ operation: Operation, _ error: FormaError) {
         logger.error("operation=\(operation.rawValue, privacy: .public) code=\(error.code, privacy: .public)")
     }
-
-    /// A database constraint refused a write, named by the constraint. The
-    /// published `FormaError` vocabulary has no case for this and must not
-    /// grow one for a state no reviewer can cause, so the distinction lives
-    /// here instead: `storage` tells the caller something was refused, this
-    /// tells whoever reads the log which rule did it.
-    public static func constraintConflict(_ operation: Operation, _ constraint: String) {
-        logger.error("operation=\(operation.rawValue, privacy: .public) code=\(FormaError.storage.code, privacy: .public) constraint=\(constraint, privacy: .public)")
-    }
 }

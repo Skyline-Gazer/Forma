@@ -254,16 +254,14 @@ extension SourceWorkspace {
                 let stored = try Self.persist(applied.manifest, scopeID: scope.id, in: db)
                 var record = applied.correction
                 record.producedRevision = stored.envelope.revision
-                do {
-                    try MappingStore.insertCorrection(record, in: db)
-                } catch let error as DatabaseError where error.message?.contains("produced_revision") == true {
-                    // Two rows claiming one revision, which SQLite reports by
-                    // the indexed column. `.storage` stays the answer - the
-                    // published vocabulary gets no case for a state a reviewer
-                    // cannot cause - and the log names the constraint.
-                    FormaDiagnostics.constraintConflict(.applyCorrection, "corrections_produced")
-                    throw FormaError.storage
-                }
+                // The number is assigned here, so `corrections_produced`
+                // cannot be violated by anything the guard above allowed: a
+                // legacy claim always names a revision that exists, which is
+                // below `nextManifestRevision`. The index is a schema-level
+                // last resort for a store edited outside this code, and if it
+                // ever fires the constraint error travels unchanged, as it
+                // does for any other storage fault.
+                try MappingStore.insertCorrection(record, in: db)
                 return (stored, record)
             }
             return CorrectionEngine.Applied(manifest: published.manifest, correction: published.record,

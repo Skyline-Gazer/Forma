@@ -5,11 +5,13 @@ import SwiftUI
 /// machine, how paths and text are redacted first, what the DEVONthink
 /// connection advertises, and which CasePack a run would use.
 ///
-/// The preview is the whole point of this screen: `ProviderMappingClient.preview`
-/// returns the exact bytes one request would send, and it is shown before any
-/// consent is given and before anything is sent. Nothing here simulates a
-/// result: an absent key, a missing context or a blocked MCP query is reported
-/// with FormaCore's own reason.
+/// The preview is the whole point of this screen: what `previewEgress` shows is
+/// the system text, payload and digest the engine's own batch planner would
+/// produce from the registered evidence - not a receipt for the bytes a run
+/// sends, because a run re-reads file bodies before dispatch. It is shown
+/// before any consent is given and before anything is sent. Nothing here
+/// simulates a result: an absent key, a missing context or a blocked MCP query
+/// is reported with FormaCore's own reason.
 struct SettingsView: View {
     @ObservedObject var model: WorkspaceModel
     @State private var key = ""

@@ -516,9 +516,10 @@ struct MappingView: View {
     /// One attempt, described by what it did to the version history.
     ///
     /// FormaCore writes two kinds of row: `evidenceVerified` with the revision
-    /// it just stored, and `rejected` with none. A verified row that names no
-    /// revision comes from a version 1 history where two accepted attempts
-    /// claimed the same successor and the migration refused to guess; anything
+    /// it just stored, and `rejected` with none. A verified row naming no
+    /// revision comes from a version 1 history in which two accepted attempts
+    /// both recorded the same revision they read; the migration credits the
+    /// claim to the earlier one and refuses to guess for the later. Anything
     /// else was put in the table by something other than a review.
     private static func outcomeLine(_ record: CorrectionRecord) -> (text: String, color: Color) {
         switch (record.reviewState, record.producedRevision) {
@@ -530,9 +531,9 @@ struct MappingView: View {
             ("Refused by FormaCore · attempted against revision "
                 + "\(record.manifestRevision.formatted()) · published nothing", .orange)
         case (.evidenceVerified, nil):
-            ("Verified decision against revision \(record.manifestRevision.formatted()) - "
-                + "this workspace's version 1 history let two attempts claim the same "
-                + "successor, so which revision it wrote cannot be known", .orange)
+            ("Verified decision against revision \(record.manifestRevision.formatted()) - an older "
+                + "workspace let two attempts name the same revision they read, so which version "
+                + "this one wrote cannot be known", .orange)
         default:
             ("Row \(record.id) combines \(record.reviewState.rawValue) with "
                 + (record.producedRevision.map { "revision \($0.formatted())" } ?? "no produced revision")
