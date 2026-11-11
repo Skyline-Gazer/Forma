@@ -207,7 +207,7 @@ struct SourceTests {
         #expect(unsupported.sha256 == nil)
         let hashed = try await workspace.hash(for: entry)
         var zeros = SHA256()
-        var block = [UInt8](repeating: 0, count: 1024 * 1024)
+        let block = [UInt8](repeating: 0, count: 1024 * 1024)
         var remaining = EvidenceExtractor.maximumInputBytes + 1
         while remaining > 0 {
             let count = Int(min(remaining, Int64(block.count)))

@@ -12,7 +12,7 @@ extension SourceWorkspace {
         }, by: \.0)
         let newIdentities = Dictionary(grouping: result.records.compactMap(\.stableIdentity), by: { $0 })
         var used = Set<UUID>()
-        var issues = result.issues
+        let issues = result.issues
         var additions: [(UUID, SourceScanRecord)] = []
         var stats = [String: Int]()
         var fileCount = 0

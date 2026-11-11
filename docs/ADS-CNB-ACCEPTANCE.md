@@ -21,7 +21,9 @@
 | 发现回读 | 通道一：保留的 runner 日志打印结构化 JSON；通道二：`list-pull-reviews` + `list-pull-review-comments`（作者标记 `is_npc: true`）。第 1 轮评论投递失败（插件无法解析自身结果）已作为缺陷处理；第 3 轮起正文完整可读 | **PASS** |
 | 平台 AI 评审者能力 | 可读 PR 上下文与 diff、可创建评审对象与行内评论、可经 API 回读；**写权限未授予、未测试、未需要**；本工作区无该评审者提交的提交或 PR | **PASS（读取与评论）／NOT_APPLICABLE（写入）** |
 | Agent 修复回路 | 第 1 轮 2 条 → 修 `d20b513`；第 2 轮 `Max turns` 失败 → 预算与证据留存整改；第 3 轮 4 条（含 1 条真实脚本缺陷）→ 修 `887b1e7` 并本地执行十个结果状态 + 过期对照；第 4 轮 2 条（脚本会崩成 traceback、文档宣称强于代码）→ 修并合并。FormaCore 侧：8 条（1 critical）→ PR #31 逐条处置 → 复审 `passed` 0 发现 | **PASS**，PR #25 用满三轮自动 fix/re-review 上限 |
-| GitHub Actions | macOS runner 固定 `macos-15` + `DEVELOPER_DIR=/Applications/Xcode_26.3.app/…`；两个任务（`swift test` 与 App 构建）；PR #25/#27/#28/#30/#31/#32 全绿；权限 `contents: read`；无 artifacts 上传；CNB 侧零 build/test 阶段 | **PASS**，无重复 CI |
+| GitHub Actions | macOS runner 固定 `macos-15` + `DEVELOPER_DIR=/Applications/Xcode_26.3.app/…`；两个任务（`swift test` 与 App 构建）；PR #25/#27/#28/#30/#31/#32/#33 全绿；权限 `contents: read`；无 artifacts 上传；CNB 侧零 build/test 阶段 | **PASS**，无重复 CI；合并时机有一次记录见下 |
+
+**执行者失误记录：** 文档 PR #34 在 `FormaCore tests` 仍为 pending 时被合并（当时 `macOS app build` 已 `pass`）。事后读回：该 PR 运行 42961309948 与合并产生的 `dev` 推送运行 42961511789 的两个任务均为 `success`，因此集成结果本身有效，但合并时机不合规。根因是 `dev` 无必需状态检查，见 §3 第 2 项。
 | 安全评估 | 无密钥入库；token 只经 Authorization 头传递且日志中已脱敏；Actions 不暴露凭据给 PR；评审内容按不可信输入处理；写操作（合并、播种、评论）均由已认证 Agent 显式执行，未自动同步、未改远端或默认分支、未放宽权限 | **PASS**；建议项见 §3 |
 | 端到端 | 真实 PR（#25、#31）走通：GitHub PR → 精确 SHA 播种 CNB → AI 评审 → 结构化发现回读 → 关联 GitHub PR → 复现/修复/驳回 → Actions 校验 → 绑定新 head 的复审 → 合并；过期评审不被当作覆盖 | **PASS** |
 | 文档 | `docs/ADS-ADOPTION.md`（职责矩阵、镜像来源、逐轮台账、门禁语义、轮次上限）与本报告 | **PASS** |
@@ -38,7 +40,7 @@
 ## 3. 需要 Owner 决定的事项
 
 1. **是否为 PR #25 的最终整改提交授权一次额外 CNB 评审**（当前依据：四轮评审 + GitHub Actions + 本地执行验证，覆盖缺口已写入 `docs/ADS-ADOPTION.md`）。
-2. **是否把 `dev` 设为受保护分支并要求两个 Actions 检查**（不引入新评审门禁，仅把现有纪律平台化）。
+2. **是否把 `dev` 设为受保护分支并要求两个 Actions 检查**（不引入新评审门禁，仅把现有纪律平台化）。本轮已暴露该缺口的实际后果：文档 PR #34 在 `FormaCore tests` 仍为 pending 时被合并（当时 `macOS app build` 已 `pass`）；随后该 PR 运行（42961309948）与 `dev` 推送运行（42961511789）的两个任务均读回 `success`，因此集成结果有效，但**流程本身是失误**：没有必需状态检查时，合并时机只能靠执行者自律。此行为如实记录，不追认为合规。
 3. **是否授权一次 CNB 评审轮次以覆盖台账更正 PR #33**（纯文档，默认不申请额外轮次）。
 4. 三项 P0 现场验证仍缺环境：隔离 DEVONthink 测试库 UUID、Provider 凭据与首次外发授权、已授权 OneDrive 目录。
 5. 仓库当前 `allowed_actions: all` 且未强制 SHA pinning；若希望收紧，需要 Owner 明确授权后仅改 Actions 权限设置。
