@@ -50,7 +50,7 @@ struct ArtifactBoundsTests {
         let manifest = Manifest(envelope: envelope(profile: profile), entries: [entry])
         let data = try FormaJSON.encode(manifest)
         let violations = try ArtifactSchemaValidator.manifest.violations(data)
-        #expect(violations.isEmpty, "violations: \(violations.map(\.logSummary))")
+        #expect(violations.isEmpty, "violations: \(violations.map { $0.logSummary })")
         let decoded = try FormaJSON.decode(Manifest.self, from: data)
         let stored = decoded.entries[0]
         #expect(!stored.relativePath.hasPrefix("/"), "an absolute path must not survive into an artifact")

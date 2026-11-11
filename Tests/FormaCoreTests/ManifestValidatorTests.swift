@@ -435,8 +435,9 @@ struct ManifestValidatorTests {
         )
         let manifest = Manifest(envelope: envelope, entries: result.entries)
         let data = try FormaJSON.encode(manifest)
-        #expect(try ArtifactSchemaValidator.manifest.violations(data).isEmpty,
-                "a validated manifest must satisfy the artifact schema: \(try ArtifactSchemaValidator.manifest.violations(data))")
+        let violations = try ArtifactSchemaValidator.manifest.violations(data)
+        #expect(violations.isEmpty,
+                "a validated manifest must satisfy the artifact schema: \(violations.map { $0.logSummary })")
         #expect(manifest.envelope.grantsExecution == false)
     }
 }
