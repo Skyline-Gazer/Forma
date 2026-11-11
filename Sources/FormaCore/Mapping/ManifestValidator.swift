@@ -353,20 +353,30 @@ public struct ManifestValidator: Sendable {
     }
 
     /// Mechanically decidable agreement between a quoted excerpt and the value.
-    /// Exact equality is required for identity-like fields; longer text fields
-    /// accept a normalized containment so that a value lifted from a sentence is
-    /// still checkable.
+    ///
+    /// Each evidence kind states something different, so the comparison is
+    /// defined per kind instead of one loose rule:
+    /// - `content`, `filename`, `path`: the value appears in what was observed.
+    /// - `fs_metadata`: the value matches a recorded `key=value` term.
+    /// - `sibling`: the registry writes `inherited from <path>: <value>`, so the
+    ///   value is compared against the part after the marker. Inheritance has to
+    ///   be checkable, not merely permitted.
+    /// - `mcp`: the value equals what the authorized read-only query returned.
     private func quoteSupportsValue(_ value: String, _ records: [EvidenceRecord]) -> Bool {
         let needle = normalize(value)
         guard !needle.isEmpty else { return false }
         return records.contains { record in
             guard let text = record.excerpt else { return false }
-            let haystack = normalize(text)
             switch record.source {
-            case .filename, .path, .fsMetadata, .sibling, .mcp:
-                return haystack == needle || haystack.contains(needle)
-            case .content:
-                return haystack.contains(needle)
+            case .content, .filename, .path:
+                return normalize(text).contains(needle)
+            case .fsMetadata:
+                return normalize(text).split(separator: ";").contains { normalize(String($0)).contains(needle) }
+            case .sibling:
+                guard let marker = text.range(of: ": ") else { return normalize(text) == needle }
+                return normalize(String(text[marker.upperBound...])) == needle
+            case .mcp:
+                return normalize(text) == needle
             }
         }
     }

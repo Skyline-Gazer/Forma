@@ -191,8 +191,17 @@ enum MappingStore {
 
     // MARK: - Evidence registry
 
-    static func replaceEvidence(_ records: [EvidenceRecord], for sourceID: UUID, in db: Database) throws {
-        try db.execute(sql: "DELETE FROM evidence_items WHERE source_id = ?", arguments: [sourceID.sourceKey])
+    /// Registers what a read observed, without deleting what an earlier read
+    /// observed.
+    ///
+    /// A stored manifest cites evidence by id, and `manifest_entry_evidence`
+    /// carries a foreign key into `evidence_items`. Deleting the previous rows
+    /// therefore failed that constraint the moment a filed document was read
+    /// again, and even without the key it would have destroyed the only record
+    /// of what an older revision was decided from. Rows are keyed by source,
+    /// snapshot revision and locator, so history accumulates and a caller
+    /// selects the revision it means.
+    static func recordEvidence(_ records: [EvidenceRecord], in db: Database) throws {
         try insertEvidence(records, in: db)
     }
 
@@ -242,10 +251,25 @@ enum MappingStore {
         return result
     }
 
+    /// Every row ever registered for a source, oldest first by id. Audit and
+    /// offline revalidation read this; a mapping request must use the current
+    /// snapshot revision instead.
     static func evidence(for sourceID: UUID, in db: Database) throws -> [EvidenceRecord] {
         let rows = try Row.fetchAll(db, sql: """
             SELECT * FROM evidence_items WHERE source_id = ? ORDER BY id
             """, arguments: [sourceID.sourceKey])
+        return try rows.map { try Self.decodeEvidence($0) }
+    }
+
+    /// The rows that describe the file as it is now. Evidence from a superseded
+    /// snapshot is still in the table for audit, but it may not support a
+    /// current decision.
+    static func evidence(for sourceID: UUID, snapshotRevision: Int, in db: Database) throws
+        -> [EvidenceRecord]
+    {
+        let rows = try Row.fetchAll(db, sql: """
+            SELECT * FROM evidence_items WHERE source_id = ? AND snapshot_revision = ? ORDER BY id
+            """, arguments: [sourceID.sourceKey, snapshotRevision])
         return try rows.map { try Self.decodeEvidence($0) }
     }
 
@@ -398,14 +422,6 @@ enum MappingStore {
             sql: "UPDATE manifests SET state = 'invalidated' WHERE manifest_id = ? AND revision = ?",
             arguments: [manifestID.sourceKey, revision]
         )
-    }
-
-    /// Entries whose bound snapshot revision is no longer the current one.
-    static func staleEntries(in manifest: Manifest, currentRevisions: [UUID: Int]) -> [UUID] {
-        manifest.entries.compactMap { entry in
-            guard let current = currentRevisions[entry.sourceID] else { return entry.sourceID }
-            return current == entry.snapshotRevision ? nil : entry.sourceID
-        }
     }
 
     // MARK: - Runs and provider calls

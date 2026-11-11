@@ -48,14 +48,24 @@ extension SourceWorkspace {
         }
     }
 
-    /// Replaces one file's evidence rows. Reading a file again invalidates its
-    /// previous excerpts by construction, so an older citation cannot resolve.
+    /// Registers evidence for a source. Earlier rows stay: they are what an
+    /// older manifest revision was decided from, and deleting them would break
+    /// the foreign key those revisions rely on.
     public func recordEvidence(_ records: [EvidenceRecord], for sourceID: UUID) async throws {
-        try await store.database.write { db in try MappingStore.replaceEvidence(records, for: sourceID, in: db) }
+        try await store.database.write { db in try MappingStore.recordEvidence(records, in: db) }
     }
 
+    /// Every row registered for a source, including superseded snapshots.
     public func evidenceRegistry(for sourceID: UUID) async throws -> [EvidenceRecord] {
         try await store.database.read { db in try MappingStore.evidence(for: sourceID, in: db) }
+    }
+
+    /// The rows that describe the file at one snapshot revision: what a mapping
+    /// request may cite.
+    public func evidenceRegistry(for sourceID: UUID, snapshotRevision: Int) async throws -> [EvidenceRecord] {
+        try await store.database.read { db in
+            try MappingStore.evidence(for: sourceID, snapshotRevision: snapshotRevision, in: db)
+        }
     }
 
     /// Reads a file and registers what was observed, returning the rows a
@@ -121,13 +131,23 @@ extension SourceWorkspace {
                                     revision: manifest.envelope.contextRevision)
         let previous = try await storedContext(scope: scope, profile: profile,
                                                revision: manifest.envelope.contextRevision)
-        let decision = ManifestReconciler.decide(manifest: manifest, currentEntries: listing.entries,
+        let computed = ManifestReconciler.decide(manifest: manifest, currentEntries: listing.entries,
                                                  previousContext: previous, currentContext: context)
+        // An entry that is already invalidated stays invalidated. Reporting it
+        // again would make a no-op rescan look like fresh damage and would hide
+        // whether anything actually moved since the last reconciliation.
+        let already = Set(manifest.entries.filter { $0.state == .invalidated }.map { $0.sourceID })
+        let fresh = computed.invalidatedSourceIDs.subtracting(already)
+        let reason = fresh.isEmpty ? "already_invalidated"
+            : fresh == computed.invalidatedSourceIDs ? computed.reason : "\(computed.reason)_partially"
+        let decision = ManifestReconciler.Decision(invalidatedSourceIDs: fresh, reason: reason)
         guard !decision.invalidatedSourceIDs.isEmpty else { return decision }
+        let invalidated = decision.invalidatedSourceIDs
+        let why = decision.reason
         try await store.database.write { db in
             try MappingStore.invalidate(manifestID: manifest.envelope.manifestID,
                                         revision: manifest.envelope.revision,
-                                        sourceIDs: decision.invalidatedSourceIDs, reason: decision.reason, in: db)
+                                        sourceIDs: invalidated, reason: why, in: db)
         }
         return decision
     }

@@ -114,8 +114,9 @@ struct MappingStoreTests {
         #expect(loaded[0].locator == .pdf(page: 2, characterRange: 5..<20))
         #expect(loaded[0].contextCandidateID == "c7")
 
-        // Re-reading a file replaces its evidence set; a stale excerpt must not
-        // stay citable.
+        // Re-reading a file does not delete what the previous read observed:
+        // an older manifest revision cites those rows, and the foreign key into
+        // the registry is what makes a stored decision re-checkable.
         let replacement = EvidenceRecord(
             id: "ev_\(UUID().uuidString)", sourceID: entry.id,
             snapshotRevision: Int(entry.snapshotRevision) + 1, snapshotFingerprint: "f", source: .content,
@@ -124,14 +125,79 @@ struct MappingStoreTests {
             createdAt: Date(timeIntervalSince1970: 1_800_000_001)
         )
         try await setup.store.database.write { db in
-            try MappingStore.replaceEvidence([replacement], for: entry.id, in: db)
+            try MappingStore.recordEvidence([replacement], in: db)
         }
-        let after = try await setup.store.database.read { db in try MappingStore.evidence(for: entry.id, in: db) }
-        #expect(after == [replacement])
-        let missing = try await setup.store.database.read { db in
-            try MappingStore.evidence(ids: [record.id], in: db)
+        let history = try await setup.store.database.read { db in try MappingStore.evidence(for: entry.id, in: db) }
+        #expect(Set(history.map(\.id)) == Set([record.id, replacement.id]))
+        // The current-revision view is what a mapping request may cite, so the
+        // superseded excerpt is not offered as support for a new decision.
+        let current = try await setup.store.database.read { db in
+            try MappingStore.evidence(for: entry.id, snapshotRevision: Int(entry.snapshotRevision) + 1, in: db)
         }
-        #expect(missing.isEmpty)
+        #expect(current == [replacement])
+        let older = try await setup.store.database.read { db in
+            try MappingStore.evidence(for: entry.id, snapshotRevision: Int(entry.snapshotRevision), in: db)
+        }
+        #expect(older == [record])
+    }
+
+    @Test("re-reading a filed document does not break the stored manifest's citations")
+    func reReadAfterFilingKeepsHistory() async throws {
+        let setup = try await prepared()
+        defer { setup.fixture.cleanUp() }
+        let file = setup.entries[0]
+        let first = EvidenceRecord(id: "ev_first", sourceID: file.id, snapshotRevision: Int(file.snapshotRevision),
+                                   snapshotFingerprint: file.snapshotFingerprint, source: .content,
+                                   locator: .pdf(page: 1, characterRange: 0..<4), relativePath: nil,
+                                   excerpt: "旧正文", extractionStatus: .ok,
+                                   extractorVersion: EvidenceRegistry.extractorVersion, createdAt: .now)
+        let profile = try MappingProfile.projectArchive()
+        var outcome = FieldOutcome(field: .documentcategory, value: "01_招标文件", status: .evidenced,
+                                   evidenceIDs: ["ev_first"])
+        outcome = FieldOutcome(field: outcome.field, value: outcome.value, status: outcome.status,
+                               evidenceIDs: outcome.evidenceIDs)
+        let entry = ManifestEntry(
+            sourceID: file.id, snapshotFingerprint: file.snapshotFingerprint,
+            snapshotRevision: Int(file.snapshotRevision), sourceVersion: Int(file.sourceVersion),
+            relativePath: file.relativePath, state: .validated,
+            target: ManifestTarget(databaseName: "Project_Archive", groupPath: ["01_招标文件"], resolved: true),
+            fields: MetadataFieldID.allCases.map { field in
+                field == .documentcategory ? outcome : FieldOutcome(field: field, value: nil, status: .unknown)
+            }
+        )
+        let envelope = ManifestEnvelope(
+            manifestID: UUID(), revision: 1, supersedesRevision: nil, scopeID: setup.scope.id,
+            sourceRootID: file.rootID, profile: profile, casePack: ("forma-governance-cases", "1.0"),
+            modelProvider: "anthropic", modelID: nil, contextRevision: 1, promptVersion: "mapping.v1",
+            extractorVersion: EvidenceRegistry.extractorVersion, redactionVersion: nil,
+            inputDigest: String(repeating: "1", count: 64), contextDigest: String(repeating: "2", count: 64),
+            createdAt: .now, state: .validated
+        )
+        let manifest = Manifest(envelope: envelope, entries: [entry])
+        try await setup.store.database.write { db in
+            try MappingStore.insertEvidence([first], in: db)
+            try MappingStore.insertManifest(manifest, scopeID: setup.scope.id, in: db)
+        }
+        // The defect this guards: re-reading the same source used to delete the
+        // cited row and fail the foreign key, so no evidence could ever be
+        // refreshed for a document that had already been filed.
+        let refreshed = EvidenceRecord(id: "ev_second", sourceID: file.id,
+                                       snapshotRevision: Int(file.snapshotRevision) + 1,
+                                       snapshotFingerprint: "z", source: .content,
+                                       locator: .pdf(page: 1, characterRange: 0..<4), relativePath: nil,
+                                       excerpt: "新正文", extractionStatus: .ok,
+                                       extractorVersion: EvidenceRegistry.extractorVersion, createdAt: .now)
+        var failure: (any Error)?
+        do {
+            try await setup.store.database.write { db in try MappingStore.recordEvidence([refreshed], in: db) }
+        } catch {
+            failure = error
+        }
+        #expect(failure == nil, "registering new evidence must not break an older manifest")
+        let stillCitable = try await setup.store.database.read { db in
+            try MappingStore.evidence(ids: ["ev_first"], in: db)
+        }
+        #expect(stillCitable.count == 1, "the row an older manifest cites must remain resolvable")
     }
 
     @Test("evidence cannot name a source that does not exist")
