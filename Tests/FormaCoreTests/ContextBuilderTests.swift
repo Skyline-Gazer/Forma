@@ -15,7 +15,7 @@ struct ContextBuilderTests {
                        version: Int64 = 1, revision: Int64 = 1) -> SourceEntry {
         // Derived from the path itself, so a fixture identity is stable across
         // runs and across the two contexts a test compares.
-        let digest = Insecure.SHA1.hash(data: Data(path.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+        let digest = Insecure.SHA1.hash(data: Data(path.utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()
         let identity = UUID(uuidString: "00000000-0000-4000-8000-\(digest)")!
         return SourceEntry(
             id: identity, rootID: rootID, relativePath: path,
