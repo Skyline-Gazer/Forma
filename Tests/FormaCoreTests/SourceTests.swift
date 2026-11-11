@@ -189,6 +189,38 @@ struct SourceTests {
         #expect(try fixture.scalar("SELECT COUNT(*) FROM source_snapshots WHERE resource_identity_value IS NOT NULL") == "0")
     }
 
+
+    @Test func hashOnlyStreamsLargeFilesAndEvidenceRejectsUnsupportedFormats() async throws {
+        let fixture = try SourceFixture()
+        defer { fixture.cleanUp() }
+        let file = fixture.root.appendingPathComponent("large.BIN")
+        let descriptor = file.withUnsafeFileSystemRepresentation { path in path.map { open($0, O_CREAT | O_EXCL | O_RDWR, 0o600) } ?? -1 }
+        #expect(descriptor >= 0)
+        #expect(ftruncate(descriptor, EvidenceExtractor.maximumInputBytes + 1) == 0)
+        #expect(close(descriptor) == 0)
+        let workspace = try SourceWorkspace(databaseURL: fixture.database)
+        let scope = try await workspace.register(fixture.root)
+        let entry = try #require(try await workspace.scan(scope).entries.first)
+        let unsupported = try await workspace.evidence(for: entry)
+        #expect(unsupported.status == .unavailable)
+        #expect(unsupported.sha256 == nil)
+        let hashed = try await workspace.hash(for: entry)
+        var zeros = SHA256()
+        var block = [UInt8](repeating: 0, count: 1024 * 1024)
+        var remaining = EvidenceExtractor.maximumInputBytes + 1
+        while remaining > 0 {
+            let count = Int(min(remaining, Int64(block.count)))
+            block.withUnsafeBytes { bytes in zeros.update(bufferPointer: UnsafeRawBufferPointer(rebasing: bytes.prefix(count))) }
+            remaining -= Int64(count)
+        }
+        #expect(hashed.status == .ok)
+        #expect(hashed.items.isEmpty)
+        #expect(hashed.sha256 == sourceHex(zeros.finalize()))
+        #expect(hashed.entry.sha256 == hashed.sha256)
+        #expect(hashed.entry.sourceVersion == entry.sourceVersion)
+        #expect(hashed.entry.snapshotRevision == entry.snapshotRevision + 1)
+        #expect(try fixture.scalar("SELECT hash_strength FROM source_snapshots WHERE revision = 2") == "sha256")
+    }
     @Test func pathNormalizationUsesVolumeCaseSemanticsAndRejectsEscapes() throws {
         #expect(try SourcePath.normalize("./Folder//x/../Cafe\u{301}.PDF", caseSensitive: true) == "Folder/Café.PDF")
         #expect(try SourcePath.normalize("./Folder/Cafe\u{301}.PDF", caseSensitive: false) == "folder/café.pdf")

@@ -6,7 +6,6 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "FormaCore", targets: ["FormaCore"]),
-        .executable(name: "Forma", targets: ["FormaApp"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.8.0"),
@@ -17,7 +16,6 @@ let package = Package(
             .product(name: "GRDB", package: "GRDB.swift"),
             .product(name: "ZIPFoundation", package: "ZIPFoundation"),
         ]),
-        .executableTarget(name: "FormaApp", dependencies: ["FormaCore"], path: "FormaApp"),
         .testTarget(name: "FormaCoreTests", dependencies: [
             "FormaCore",
             .product(name: "ZIPFoundation", package: "ZIPFoundation"),

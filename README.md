@@ -4,7 +4,7 @@
 
 Forma 是一款使用 Swift 6 / SwiftUI 开发的 macOS 原生应用，目标是将非标准目录、文件清单与文档内容转换为可验证的结构化 Manifest，并在后续阶段经 DEVONthink 官方 MCP 安全落地。
 
-> **当前状态：Owner 已授权 P0/P1。开发集成分支为 `dev`。**
+> **当前状态：SPEC / PLAN / Roadmap 已批准；P0/P1 已获 Owner 授权实施，开发集成分支为 `dev`。**
 
 ## 文档入口
 
@@ -26,7 +26,7 @@ Forma 是一款使用 Swift 6 / SwiftUI 开发的 macOS 原生应用，目标是
 
 ## 本地开发
 
-- macOS 14+；标准工具链为 Xcode 26.3 与其内置 Swift 6。GitHub Actions 在 `macos-15` 执行单元测试和 App 构建。
+- macOS 14+；标准工具链为 Xcode 26.3（Swift 6）。GitHub Actions 在 `macos-15` 依次执行 Swift Package 单元测试与 macOS App 构建。仅有 Command Line Tools 的机器可以运行 `swift test`，但无法编译 SwiftUI App 目标。
 - 测试：`swift test --force-resolved-versions`。
 - 构建：`xcodebuild -project Forma.xcodeproj -scheme Forma -destination 'platform=macOS' -onlyUsePackageVersionsFromResolvedFile CODE_SIGNING_ALLOWED=NO build`。也可在 Xcode 打开 `Forma.xcodeproj` 并运行共享 `Forma` scheme。
 - 在 Workspace 选择本地或 OneDrive 目录后执行 **Scan**。清单与历史快照存入本机 SQLite，重启后可继续查看。选择 PDF、DOCX 或 XLSX 文件后使用 **Read Evidence** 查看定位片段。扫描只读取元数据。占位文件未就绪时，应用保留清单并报告状态。
