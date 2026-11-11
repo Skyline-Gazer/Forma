@@ -104,8 +104,8 @@ P2 was delivered in four code PRs, each mirrored to CNB for review before merge.
 | [#6](https://cnb.cool/KoolingMachine/Forma/-/pulls/6) | [#41](https://github.com/Skyline-Gazer/Forma/pull/41) Mapping Engine, transport reuse, CasePack, redaction | `db96396` → … → `f660f8b` | 11 | merged as `98c956d`; GitHub Actions `run 43020359230` covered the final head |
 | [#7](https://cnb.cool/KoolingMachine/Forma/-/pulls/7) | [#42](https://github.com/Skyline-Gazer/Forma/pull/42) Manifest export, offline revalidation, Correction Capture | `f1ce455` → `2fee989` → `99632a4` | 2 (`passed`, 0 critical) | merged as `09baffe`; GitHub Actions `run 43024661916` covered the final head |
 | [#8](https://cnb.cool/KoolingMachine/Forma/-/pulls/8) | [#43](https://github.com/Skyline-Gazer/Forma/pull/43) Native workspace, correction UI, export screens | `386aa0f` → `372f682` → `5ab9184` → `7e1de89` → `a2a1232` → `eb43197` → `f26247b` → `2582495` → `0d96330` → `df1a7c2` → `3885a57`* → `5d7aa43` → `eff5e79` → `e1630dc` → `4b4c1bf` → `ee872e6` → `74c6185` → `409eae8` → `865958b` → `c130895` → `743df66` → `bffed12` → `a5720c9` → `2538113` → `ecc8a30` → `b3084a4` → `7a00f03` → `74ab1d9` → `58f8a97` → `e839a1c` → `98cfdfc` → `4a2bfbd` → `659c490` → `520163e` → `576ce51` → `c9060f3` → `921808b` | 38 builds (37 verdicts), 14 critical | merged as 26a2c3b; GitHub Actions `run 43078381212` covered the final head |
-| [#9](https://cnb.cool/KoolingMachine/Forma/-/pulls/9) | [#44](https://github.com/Skyline-Gazer/Forma/pull/44) P2 acceptance report and this ledger | `cdacae5` | 1 build, `changes_requested`: 2 critical + 2 warning, **all in already-merged code** | open; findings fixed in #45 `094edd3` |
-| [#10](https://cnb.cool/KoolingMachine/Forma/-/pulls/10) | [#45](https://github.com/Skyline-Gazer/Forma/pull/45) Post-merge review follow-ups | `4adcb95` → `094edd3` | verdict pending | open |
+| [#9](https://cnb.cool/KoolingMachine/Forma/-/pulls/9) | [#44](https://github.com/Skyline-Gazer/Forma/pull/44) P2 acceptance report and this ledger | `cdacae5` → `65b9cdb` → follow-up heads | build 1 `changes_requested`: 2 critical + 2 warning, **all in already-merged code**; build 2: 4 documentation-fidelity findings (contradictory critical counts, a wrong section pointer, a row-count claim that did not match the table, README asserting delivery while ROADMAP still recorded P2 as unauthorised) | open; code findings fixed in #45, prose findings in the same branch |
+| [#10](https://cnb.cool/KoolingMachine/Forma/-/pulls/10) | [#45](https://github.com/Skyline-Gazer/Forma/pull/45) Post-merge review follow-ups | `4adcb95` → `094edd3` → `7573afe` → `2a29986` → `af147e8` | 4 builds: warning (progress keyed on shared phase), warning (same, second instance), **critical** (`Summary.missingEvidence` does not exist), then **approved** | merged as `63618ea`; GitHub Actions run 43090470052 (tests + macOS app build pass) |
 
 ### What the round counts mean
 
@@ -149,6 +149,14 @@ Both were reproduced against the current source before being fixed (#45 `094edd3
 warnings from the same build: the correction verifier scanned a source's whole evidence list once per cited
 id — undoing the batch read introduced beside it — and a failed history read after a recorded correction
 reported `notRead` while rendering a one-row list, which is a different claim.
+
+The same review read the *prose* of that documentation pull on its second build and returned four more
+defects, all of the "two sentences in one document disagree" kind: a sentence scoped in the author's head to
+two pulls that read anywhere else as the P2 total, a cross-reference to the wrong section (whose target also
+mis-described the round count it pointed at), a defect-table summary whose row arithmetic did not match the
+table, and a README that declared P2 delivered while ROADMAP's Owner authorization line still listed only P0
+and P1. None of these were code, and all of them would have been inherited as fact by whoever reads the
+report next; the report now carries one authoritative count line that every other count defers to.
 
 The lesson recorded for adoption decisions: round counts measure persistence, not coverage. A review that
 has spent thirty-eight builds on a state machine can still miss "this read returns a different entity than
