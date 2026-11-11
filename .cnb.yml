@@ -42,11 +42,8 @@
                 any committed file; public examples must be synthetic or redacted.
         - name: report-review-result
           script: |
-            echo "reviewed-source-sha=$CNB_PULL_REQUEST_SHA"
-            echo "reviewed-target-sha=$CNB_PULL_REQUEST_TARGET_SHA"
-            if [ -s ./code_review.json ]; then
-              python3 -c 'import json,sys;d=json.load(open("code_review.json"));print("status:",d["status"]);print("findings:",len(d["issues"]));[print(json.dumps(i,ensure_ascii=False)) for i in d["issues"]]'
-            else
-              echo "no structured review result produced; findings are unverified"
-              exit 1
-            fi
+            python3 scripts/report_cnb_review.py \
+              --result ./code_review.json \
+              --reviewed-sha "$CNB_PULL_REQUEST_SHA" \
+              --target-sha "$CNB_PULL_REQUEST_TARGET_SHA" \
+              --expect-sha "$CNB_PULL_REQUEST_SHA"

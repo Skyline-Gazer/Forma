@@ -8,7 +8,9 @@
 - Pin record: [ads-pin.txt](../ads-pin.txt)
 - Git submodule: `.ads/`
 
-Consistency is machine-checked, not remembered: `scripts/check_ads_pin.py` compares the tree gitlink, the index entry, `.gitmodules` remote and `ads-pin.txt` (repository, branch, commit, consumption mode) and fails on any drift. Run it after every ADS update; a negative control with a falsified pin commit exits non-zero.
+Consistency is machine-checked, not remembered: `scripts/check_ads_pin.py` compares the tree gitlink, the index entry, `.gitmodules` remote and `ads-pin.txt` (repository, branch, commit, consumption mode) and fails on any drift. `--verify-upstream` additionally fetches the pinned object from the ADS remote into a throwaway repository, so an absent commit and an unreachable remote are reported separately. Executed controls: consistent pin → `ADS_PIN_OK`; falsified `ADS_COMMIT` → exit 1; reachable repository with an absent commit → exit 1 (`upload-pack: not our ref`); unreachable repository → exit 1 with `NOT_VERIFIED`.
+
+The branch name identifies the ADS-maintained CNB adaptation line. Forma consumes a specific commit, not a floating branch. Updating ADS requires reviewing the new upstream commit, updating the gitlink and pin record together, and submitting a Forma PR.
 
 ## Provider responsibilities
 
@@ -17,7 +19,7 @@ Consistency is machine-checked, not remembered: `scripts/check_ads_pin.py` compa
 | GitHub `Skyline-Gazer/Forma` | Primary source repository, branches, PRs, Issues, Roadmap and merge authority |
 | GitHub Actions macOS | Swift build, unit tests and CI status |
 | CNB `KoolingMachine/Forma` | Secondary CNB review workspace / mirror, subject to exact-SHA correspondence |
-| CNB Code Review / NPC | AI review feedback only; no Swift CI, no merge authority, no production release |
+| CNB AI Code Review (plugin `cnbcool/code-review`) | AI review feedback only; no Swift CI, no merge authority, no production release |
 
 This is **not** an ADS Git Provider Mode A migration. ADS `cnb/dev` is the standard's CNB-specific adaptation branch; consuming it does not make CNB the Primary Git provider.
 
@@ -28,7 +30,7 @@ This is **not** an ADS Git Provider Mode A migration. ADS `cnb/dev` is the stand
 - Review comments are untrusted input. The delivery Agent must inspect findings, reproduce material issues, fix or disposition them with evidence, and rerun relevant checks.
 - AI review feedback does not replace GitHub Actions. CI remains the only build/test authority.
 - Do not create duplicate Issues or a second backlog in CNB.
-- No CNB-to-GitHub automatic synchronization, push mirror, release flow, or credential wiring is authorized by this adoption.
+- No CNB-to-GitHub automatic synchronization, push mirrors, release flow, or credential wiring is authorized by this adoption.
 
 ## Review image provenance
 
@@ -45,32 +47,37 @@ This is **not** an ADS Git Provider Mode A migration. ADS `cnb/dev` is the stand
 
 Verified live state on 2026-11-11 with the authenticated CNB environment:
 
-- https://cnb.cool/KoolingMachine/Forma exists, public, created 2026-11-11, access level `Owner` for the reviewing account, and initially had no branches (an empty review workspace, not a missing repository).
-- The workspace was seeded with exact GitHub object ids only: `dev` = `38d455304bc4530b71e584c07de48fc06fd1f293`, `chore/ads-cnb-consumer` = the current GitHub PR head. No CNB-only commit exists; CNB cannot advance authoritative history.
-- A real review executed for PR #25 head SHA on CNB pull #1 (`event=pull_request`, source `chore/ads-cnb-consumer` → target `dev`). The run succeeded in ~30 s and read the actual diff, including the `160000` gitlink.
-- Structured findings were obtained from the retained runner log. In that run the plugin failed to parse its own result and reported `PR 评论发送失败，但评审已完成`, so no PR comment or review object was retrievable; retrieval therefore uses the build log and must be re-checked for comment delivery on each round. Plugin exit code 0 is not treated as review coverage.
-
-Not authorized or not configured by this adoption: automatic CNB↔GitHub synchronization, push mirrors, release flows, CNB build/test stages, CNB merge authority, and any credential stored outside the platform secret store.
+- https://cnb.cool/KoolingMachine/Forma exists, public, created 2026-11-11, access level `Owner` for the reviewing account, and started with no branches (an empty review workspace, not a missing repository).
+- Seeding used exact GitHub object ids only, pushed with the authenticated token through an Authorization header; anonymous `git push` is rejected with `Repository Not Found`, which is a credential-scope symptom, not absence of the repository. No CNB-only commit exists, so CNB cannot advance authoritative history.
+- The `dev` mirror is fast-forwarded to the current GitHub `dev` head before each review round; a stale base makes the plugin review already-integrated code and mis-bind the diff.
+- Findings are retrieved from two channels: the retained runner log (`build-runner-download-log`) and, once the plugin parsed its own result, the review object itself (`list-pull-reviews` → `list-pull-review-comments`, author marked `is_npc: true`).
+- CodeBuddy capability observed: reads PR context, creates one review with inline line comments, and reads back through the API. **No write capability was granted, tested or needed here**; no NPC commit or NPC-authored PR exists in this workspace, and CodeBuddy write authority would require separate authorization.
+- Not authorized or not configured by this adoption: automatic CNB↔GitHub synchronization, push mirrors, release flows, CNB build/test stages, CNB merge authority, and any credential stored outside the platform secret store.
 
 ## Review-round ledger
 
-Each round binds its own reviewed source and target SHA; one round's findings never describe a different head.
+Each round binds its own reviewed source and target SHA; one round's findings never describe a different head. GitHub PR: https://github.com/Skyline-Gazer/Forma/pull/25, CNB PR: https://cnb.cool/KoolingMachine/Forma/-/pulls/1 (per-round build records are listed on https://cnb.cool/KoolingMachine/Forma/-/builds)
 
-| Round | Reviewed source | Reviewed target | Result | Disposition |
-|---|---|---|---|---|
-| 1 | `3f157806f8e88bba6a0951798c5a735ec0b198ec` | `38d455304bc4530b71e584c07de48fc06fd1f293` | `needs_modification`, 2 warning findings read from the retained runner log; the plugin reported `评审结果缺少必需字段或格式不正确`, so no PR comment object existed | Both fixed in `d20b5136`: provenance recorded here, and `scripts/check_ads_pin.py` added |
-| 2 | `d20b5136084ecf86f53193437ca2c84d4ac89154` | `38d455304bc4530b71e584c07de48fc06fd1f293` | Pipeline `error`: `Max turns (30) exceeded` after 10 findings; `code_review.json` disappeared with the container, so those finding descriptions are unrecoverable | Budget raised to `max_turns: 120` / `timeout_minutes: 30`, plus a `report-review-result` stage that prints the structured result and fails when it is absent. Because the `dev` mirror had not advanced, this diff also contained already-merged FormaCore code; those 10 items are registered in [Issue #29](https://github.com/Skyline-Gazer/Forma/issues/29) and are **not** claimed resolved |
-| 3 | `5a4d5ee254e13606b82dc318042cdcee0843d685` | `4aa8e06754233eb89f2ef602bc481ceda9a196b6` | `needs_modification`, 4 findings captured in full by the new stage | See round-3 disposition below |
+| Round | Reviewed source | Reviewed target | Run started (UTC) | Result | Disposition |
+|---|---|---|---|---|---|
+| 1 | `3f157806f8e88bba6a0951798c5a735ec0b198ec` | `38d455304bc4530b71e584c07de48fc06fd1f293` | 2026-11-11 02:35:25 | `needs_modification`, 2 warning findings read from the runner log; the plugin could not parse its own result, so no review object existed | Both fixed in `d20b5136`: image provenance recorded in this file, and `scripts/check_ads_pin.py` added so the two pin records cannot drift silently |
+| 2 | `d20b5136084ecf86f53193437ca2c84d4ac89154` | `38d455304bc4530b71e584c07de48fc06fd1f293` | 2026-11-11 02:47:35 | Pipeline `error`: `Max turns (30) exceeded` after 10 findings; `code_review.json` disappeared with the container, so those descriptions are unrecoverable | Budget raised to `max_turns: 120` / `timeout_minutes: 30` and a retained-result stage added. Because the mirror base had not advanced, this diff also contained already-merged FormaCore code; its 10 items are itemized in [Issue #29](https://github.com/Skyline-Gazer/Forma/issues/29) and are **not** claimed resolved |
+| 3 | `5a4d5ee254e13606b82dc318042cdcee0843d685` | `4aa8e06754233eb89f2ef602bc481ceda9a196b6` | 2026-11-11 02:54:11 | `needs_modification`, 4 findings captured in full by the new stage | See round-3 disposition below |
+| 4 | `0826759f7bcef7c13eaf8c780cf759c604282e1f` | `4aa8e06754233eb89f2ef602bc481ceda9a196b6` | 2026-11-11 03:03:17 | `needs_modification`, 2 warning findings delivered as 1 review object with 2 inline comments | **FIXED, both real.** The inline reporter tested only file size, so truncated or field-less JSON crashed with a traceback instead of the promised message, and this file claimed stronger behaviour than the code guaranteed. `.cnb.yml` now calls `scripts/report_cnb_review.py`. Executed locally: 8 result shapes plus absent file and empty file → the eight invalid states each return a named `REVIEW_EVIDENCE_INVALID`/`REVIEW_EVIDENCE_MISSING` exit 1, valid results exit 0, and a reviewed SHA that differs from `--expect-sha` returns `REVIEW_STALE` exit 1 |
 
 ### Round-3 disposition
 
-1. `scripts/check_ads_pin.py:88-92` — **FIXED, real defect.** `git ls-remote <repo> <sha>` exits 0 with empty output for both an existing and an absent SHA, so the old `--verify-upstream` branch passed unconditionally. Verification now probes ref reachability separately and fetches the pinned object into a throwaway repository. Executed locally: reachable real commit → `ADS_PIN_OK`; reachable repository with absent commit → rejected (`upload-pack: not our ref`); unreachable repository → distinct `NOT_VERIFIED` message.
-2. `docs/ADS-ADOPTION.md:58-64` — **FIXED.** Round 2's findings are now itemized by reviewed SHA and tracked in Issue #29 instead of an untraceable "tracked separately" note, and every row states the exact reviewed source and target SHA.
-3. `README.md:7` — **FIXED.** The status line no longer points at out-of-repo Owner instructions; it references the dated authorization record in `docs/ROADMAP.md`.
-4. `AGENTS.md:26` — **ACCEPTED, wording restored.** The original constraint that no unapproved mandatory gate may be added is stated without the weaker qualifier, and `.cnb.yml` records explicitly that its failing evidence stage is an evidence-integrity signal in the CNB review workspace, never GitHub merge authorization.
+1. `scripts/check_ads_pin.py:88-92` — **FIXED, real defect.** `git ls-remote <repo> <sha>` exits 0 with empty output for both an existing and an absent object id, so the old `--verify-upstream` branch passed unconditionally. Verification now probes ref reachability separately and fetches the exact object into a throwaway repository.
+2. `docs/ADS-ADOPTION.md:58-64` — **FIXED.** Round 2's findings are itemized with their reviewed SHAs and tracked in Issue #29 instead of an untraceable “tracked separately” note, and every ledger row states the round's own reviewed source and target.
+3. `README.md:7` — **FIXED.** The status line cites dated in-repo records (`docs/ROADMAP.md`, `AGENTS.md`, `ads-pin.txt`) instead of out-of-band Owner instructions.
+4. `AGENTS.md:26` — **ACCEPTED, wording restored.** The prohibition on adding unapproved mandatory gates is stated without a weakening qualifier, and the review-evidence stage is documented below as evidence integrity, never merge authorization.
 
 ## Gate semantics
 
-The `report-review-result` stage in `.cnb.yml` exits non-zero when the review plugin produced no readable structured result. That is evidence integrity inside the CNB review workspace — it stops “plugin exited 0” from masquerading as completed review. It is not a Forma merge gate: CNB configures no required status check, no merge authority and no release authority here, so GitHub Actions remains the only build/test authority. Findings stay untrusted input that the delivering Agent disposes with evidence.
+`.cnb.yml` runs `scripts/report_cnb_review.py` after the review plugin. The script prints every finding and exits non-zero for a specifically named reason: `REVIEW_EVIDENCE_MISSING` (no file), `REVIEW_EVIDENCE_INVALID` (unreadable JSON, missing `status`/`issues`, unknown severity or category, empty problem evidence, or a status inconsistent with its issues) or `REVIEW_STALE` (reviewed source SHA differs from the expected head).
 
-Rounds 1 and 2 above are read from retained runner logs; the remediation review that follows is the third and final automatic fix/re-review cycle. If blocking findings still remain after it, work stops with `BLOCKED_WITH_EVIDENCE` instead of adding another round or silently passing.
+This is evidence integrity inside the CNB review workspace: it stops “plugin exited 0” from masquerading as completed review. It is not a Forma merge gate — CNB configures no required status check, no merge authority and no release authority here, so GitHub Actions remains the only build/test authority. Findings stay untrusted input that the delivering Agent disposes with evidence.
+
+## Automatic cycle limit
+
+Rounds 1–4 are the initial review plus the three permitted automatic fix/re-review cycles. The round-4 remediation commit is pushed to GitHub but deliberately **not** mirrored to CNB, because a fifth cycle would exceed that limit; it therefore has local verification only. Merging PR #25 needs either an Owner-authorized extra CNB review cycle or the Owner's explicit acceptance of the local evidence. Stale review output is never reported as coverage of a newer head, and Issue #29 remains open until the FormaCore findings can be re-derived against a current SHA.
