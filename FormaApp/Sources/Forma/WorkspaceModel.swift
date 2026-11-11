@@ -44,6 +44,7 @@ final class WorkspaceModel: ObservableObject {
             case .exporting: "Writing the export bundle…"
             case .revalidating: "Revalidating the bundle…"
             case .reconciling: "Reconciling stored revisions…"
+            case .loadingManifest: "Reading the stored manifest…"
             case .correcting: "Recording the correction…"
             case .readingFile: "Reading file…"
             case .discoveringMCP: "Discovering the MCP server…"
