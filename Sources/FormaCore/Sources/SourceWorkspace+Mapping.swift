@@ -192,8 +192,9 @@ extension SourceWorkspace {
     /// Applies a human correction and stores what it produced.
     ///
     /// The engine decides; this method only gathers the facts it needs - the
-    /// current listing, the current context revision and the registered rows -
-    /// and then persists the outcome. A rejected attempt is stored and changes
+    /// current listing, the context revision the manifest cites and the
+    /// registered rows it may cite, then persists what the engine decided.
+    /// A rejected attempt is stored and changes
     /// no revision: the review screen has to show the click that was refused,
     /// while the manifest history must keep describing only decisions that were
     /// actually made. Storing the new revision goes through `saveManifest`, so
@@ -204,7 +205,17 @@ extension SourceWorkspace {
                                 origin: CorrectionRecord.Origin, scope: SourceScope,
                                 profile: MappingProfile) async throws -> CorrectionEngine.Applied {
         let listing = try listing(scope)
-        let context = try await buildContext(scope: scope, profile: profile)
+        // The correction is decided against the context the manifest was
+        // produced from, not against whatever the files look like at the moment
+        // someone clicks. Rebuilding here would write a new context revision as
+        // a side effect of a human edit, and would revalidate the edited entry
+        // against candidate sets that never generated the answer under review -
+        // so a correct fix could be refused for citing a candidate that this
+        // manifest never had.
+        guard let context = try await storedContext(scope: scope, profile: profile,
+                                                    revision: manifest.envelope.contextRevision) else {
+            throw FormaError.unavailable
+        }
         // One query for the whole manifest rather than one per entry: the
         // revalidation step resolves citations for every entry, so the rows for
         // all of them are genuinely needed, and a hundred-file scan would

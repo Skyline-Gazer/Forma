@@ -39,6 +39,11 @@ struct CorrectionPersistenceTests {
         let scope = try await workspace.register(fixture.root)
         let listing = try await workspace.scan(scope)
         let profile = try MappingProfile.projectArchive()
+        // The context a manifest was decided from has to exist in the store,
+        // because that is the context the correction is revalidated against.
+        // Building it here is what makes the fixture describe a real revision
+        // instead of inventing one.
+        let context = try await workspace.buildContext(scope: scope, profile: profile)
         let registered = try await workspace.captureEvidence(for: listing.entries)
         // Re-read the listing after capturing: registering a body can advance
         // the snapshot revision, and a manifest built from the pre-capture
@@ -74,9 +79,9 @@ struct CorrectionPersistenceTests {
                 manifestID: UUID(), revision: 1, supersedesRevision: nil, scopeID: scope.id,
                 sourceRootID: scope.rootID, profile: profile,
                 casePack: ("forma-governance-cases", "1.0"), modelProvider: "anthropic",
-                modelID: "fake", contextRevision: 1, promptVersion: MappingPrompt.version,
+                modelID: "fake", contextRevision: context.revision, promptVersion: MappingPrompt.version,
                 extractorVersion: EvidenceRegistry.extractorVersion, redactionVersion: nil,
-                inputDigest: String(repeating: "1", count: 64), contextDigest: String(repeating: "2", count: 64),
+                inputDigest: context.inputDigest, contextDigest: MappingEngine.contextDigest(context),
                 createdAt: .now, state: .draft
             ),
             entries: [ManifestEntry(
@@ -150,5 +155,35 @@ struct CorrectionPersistenceTests {
         let stored = try #require(await context.workspace.currentManifest(scope: context.scope,
                                                                         profile: context.profile))
         #expect(stored.entries[0].metadata[.completionyear] == "2026")
+    }
+
+    @Test("a correction never writes project context history")
+    func correctionLeavesContextHistoryAlone() async throws {
+        let context = try await prepared()
+        defer { context.fixture.cleanUp() }
+        // An unrelated file appears after the manifest was produced. Rebuilding
+        // the context at correction time - which is what this path used to do -
+        // would persist a new context revision behind a human click and judge
+        // the edited entry against candidate sets that never generated the
+        // answer under review, so a correct fix could be refused for citing a
+        // candidate this manifest never had.
+        let url = context.fixture.root.appendingPathComponent("示例项目_2026/01_招标/补充.pdf")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try makePDF(["示例项目_2026 补充说明"]).write(to: url)
+        _ = try await context.workspace.scan(context.scope)
+        let cited = context.manifest.envelope.contextRevision
+        let applied = try await context.workspace.applyCorrection(
+            to: context.manifest, sourceID: context.sourceID, field: .completionyear,
+            correctedValue: "2027", evidenceIDs: [context.yearRow], origin: .manual,
+            scope: context.scope, profile: context.profile)
+        #expect(applied.violations.isEmpty, "violations: \(applied.violations.map(\.code))")
+        #expect(try await context.workspace.storedContext(scope: context.scope, profile: context.profile,
+                                                          revision: cited + 1) == nil,
+                "a correction decides about a manifest, not an event in the context history")
+        let published = try #require(await context.workspace.currentManifest(scope: context.scope,
+                                                                            profile: context.profile))
+        #expect(published.envelope.contextRevision == cited,
+                "the published revision still answers the context revision it cites")
     }
 }
