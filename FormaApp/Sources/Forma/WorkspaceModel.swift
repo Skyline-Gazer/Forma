@@ -851,7 +851,7 @@ final class WorkspaceModel: ObservableObject {
             return
         }
         let plan = redactionTerms.isEmpty ? nil : redaction
-        let sourceIDs = Set(manifest.entries.map(\.id))
+        let sourceIDs = Set(manifest.entries.map(\.sourceID))
         phase = .exporting
         work = Task {
             defer { finishWork() }
@@ -987,6 +987,15 @@ final class WorkspaceModel: ObservableObject {
     }
 
     @Published var draft: CorrectionDraft?
+
+    /// The draft whose Record click is being written, or nil.
+    ///
+    /// Not `phase`, even though `phase` is `.correcting` during the same
+    /// window: one model-level phase is shared with scanning, mapping, export
+    /// and preview, and a cancelled write only returns it to `.idle` when its
+    /// task reaches its `defer`, which can be after the reviewer has opened
+    /// another field's sheet. Keying on the draft says which sheet is waiting.
+    @Published private(set) var recordingDraftID: String?
     @Published private(set) var correctionHistory: [CorrectionRecord] = []
     /// What `correctionHistory` currently describes.
     ///
@@ -1028,7 +1037,7 @@ final class WorkspaceModel: ObservableObject {
         // Cancelling while the write is in flight has to stop the write, not
         // just hide the sheet: the reviewer's next signal would otherwise be a
         // result notice for a decision they believe they abandoned.
-        if phase == .correcting { cancelWork() }
+        if recordingDraftID == draft?.id { cancelWork() }
         draft = nil
     }
 
@@ -1052,9 +1061,11 @@ final class WorkspaceModel: ObservableObject {
         let trimmed = draft.value.trimmingCharacters(in: .whitespacesAndNewlines)
         let citations = draft.citations.sorted()
         let manifestID = manifest.envelope.manifestID
+        let draftID = draft.id
         phase = .correcting
+        recordingDraftID = draftID
         work = Task {
-            defer { finishWork() }
+            defer { recordingDraftID = nil; finishWork() }
             do {
                 let applied = try await workspace.applyCorrection(
                     to: manifest, sourceID: draft.sourceID, field: draft.field,
@@ -1088,7 +1099,12 @@ final class WorkspaceModel: ObservableObject {
                 guard !Task.isCancelled, scope.id == selectedScopeID,
                       profile.profileID == selectedProfileID else { return }
                 self.manifest = applied.manifest
-                self.draft = nil
+                // Close the sheet this click came from, and only that one: the
+                // reviewer may have opened another field while this write was
+                // running, and clearing whatever draft is current would throw
+                // away a decision being typed now. `self.` is load-bearing -
+                // the bare `draft` above is this click's unwrapped draft.
+                if self.draft?.id == draftID { self.draft = nil }
                 refreshRows()
                 if let history = attempts {
                     correctionHistory = history

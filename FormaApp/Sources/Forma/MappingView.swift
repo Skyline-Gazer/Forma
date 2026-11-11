@@ -422,10 +422,11 @@ struct MappingView: View {
             HStack {
                 Button("Cancel") { model.cancelCorrection() }
                     .accessibilityIdentifier("cancel-correction")
-                if model.phase == .correcting {
+                if model.recordingDraftID == draft.id {
                     // A disabled button alone says nothing about a click that
                     // was accepted: the press looks ignored, so the reviewer
-                    // presses again. Say that the decision is being written.
+                    // presses again. Keyed on this draft rather than on the
+                    // model's phase, which another operation can hold.
                     ProgressView().controlSize(.small)
                     Text("Recording…").font(.caption).foregroundStyle(.secondary)
                         .accessibilityIdentifier("correction-progress")
