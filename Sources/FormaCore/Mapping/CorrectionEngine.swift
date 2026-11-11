@@ -159,11 +159,16 @@ public struct CorrectionEngine: Sendable {
             // this source and this snapshot, or it is only an opinion. An empty
             // citation list is an opinion too: a value with nothing behind it is
             // exactly what a human click must not silently introduce.
-            var registry: [String: EvidenceRecord] = [:]
-            for record in evidence[sourceID] ?? [] { registry[record.id] = record }
+            //
+            // The cited ids are looked up rather than the whole registry indexed:
+            // a correction cites a handful of rows, while a source's row list
+            // grows with every re-read, and building a dictionary of all of it to
+            // answer three lookups is work proportional to the wrong number.
+            let rows = evidence[sourceID] ?? []
             let target = manifest.entries[position]
             let verified = evidenceIDs.filter { id in
-                guard let record = registry[id], record.isUsable, record.sourceID == sourceID else { return false }
+                guard let record = rows.first(where: { $0.id == id }) else { return false }
+                guard record.isUsable, record.sourceID == sourceID else { return false }
                 // The same binding the validator insists on: a row from an older
                 // snapshot describes a file that is no longer the one in front of
                 // the reviewer, and accepting it would let a correction cite

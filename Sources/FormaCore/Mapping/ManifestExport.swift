@@ -35,13 +35,17 @@ public enum ManifestExport {
                 public let grantsExecution: Bool
     }
 
-    public static let manifestFile = "manifest.json"
-    public static let reportFile = "validation-report.json"
-    public static let exceptionsFile = "exceptions.json"
-    public static let evidenceFile = "evidence.json"
-    public static let versionsFile = "versions.json"
-    public static let digestsFile = "digests.json"
-    public static let redactedDirectory = "redacted"
+    // The bundle's on-disk names. Internal until a caller outside this module
+    // needs to open one by name: publishing a file-format convention before
+    // anything reads it is an API surface with no consumer, and the screen that
+    // will want them is a separate change that can widen exactly what it uses.
+    static let manifestFile = "manifest.json"
+    static let reportFile = "validation-report.json"
+    static let exceptionsFile = "exceptions.json"
+    static let evidenceFile = "evidence.json"
+    static let versionsFile = "versions.json"
+    static let digestsFile = "digests.json"
+    static let redactedDirectory = "redacted"
 
     /// Writes the bundle and returns exactly what was written.
     ///
