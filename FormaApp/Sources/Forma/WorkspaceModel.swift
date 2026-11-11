@@ -653,26 +653,21 @@ final class WorkspaceModel: ObservableObject {
     /// because those rows are what makes an old manifest verifiable.
     private func merge(_ records: [EvidenceRecord]) {
         guard !records.isEmpty else { return }
-        var copy = evidenceBySource
-        var index = recordsByID
+        // Both views are updated in place, source by source. Copying the whole
+        // dictionaries to write back one key cost every read and every run the
+        // size of everything cached so far, and the citation index does not
+        // need a full pass either: only the sources this batch touched can
+        // have changed. The two shapes of the same data are written in the same
+        // walk, so neither can keep a row the other has dropped.
         for sourceID in Set(records.map(\.sourceID)) {
             var byID: [String: EvidenceRecord] = [:]
-            for record in (copy[sourceID] ?? []) + records where record.sourceID == sourceID {
+            for record in (evidenceBySource[sourceID] ?? []) + records where record.sourceID == sourceID {
                 byID[record.id] = record
             }
             let rows = byID.values.sorted { $0.id < $1.id }
-            copy[sourceID] = rows
-            // The citation index is refreshed in the same walk as the view it
-            // indexes. Rebuilding it from a `didSet` meant every read and every
-            // run traversed all rows of all sources twice, once to merge and
-            // once to re-derive. Only the sources this batch touched can have
-            // changed, so only those are reindexed - and the two shapes of the
-            // same data are written together, so neither can keep a row the
-            // other has dropped.
-            for row in rows { index[row.id] = row }
+            evidenceBySource[sourceID] = rows
+            for row in rows { recordsByID[row.id] = row }
         }
-        evidenceBySource = copy
-        recordsByID = index
     }
 
     // MARK: - Mapping run
@@ -1134,8 +1129,10 @@ final class WorkspaceModel: ObservableObject {
         let plan = redaction
         let contextRevision = context.revision
         let casePackVersion = casePack.version
-        // The engine plans the batch; the entries are the whole listing, as a
-        // run hands the engine every row it has.
+        // The engine plans the batch, so the membership, the refs and the
+        // attached rows are what a run would produce. The listing is the whole
+        // listing: this is the preview a Start run sends, while a reprocess
+        // hands the engine only the files it selected.
         preview = nil
         auxWork = Task {
             defer { auxWork = nil; if phase == .previewing { phase = .idle } }

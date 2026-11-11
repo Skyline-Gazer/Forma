@@ -427,4 +427,40 @@ struct CorrectionPersistenceTests {
         #expect(history.compactMap(\.producedRevision).allSatisfy { $0 <= 2 },
                 "nothing may claim a revision that was never written")
     }
+
+    @Test("a correction whose revision is already claimed publishes nothing")
+    func preclaimedRevisionIsRefused() async throws {
+        let context = try await prepared()
+        defer { context.fixture.cleanUp() }
+        let current = try #require(await context.workspace.currentManifest(scope: context.scope,
+                                                                          profile: context.profile))
+        let next = current.envelope.revision + 1
+        // A row that already claims the revision this click is about to write.
+        // Only the version 1 migration or a hand-edited store leaves this
+        // state, so what is under test is the store refusing the write - and
+        // that the refusal is reported as the published storage failure rather
+        // than as the raw constraint error or as a reviewer's mistake.
+        try context.fixture.execute("""
+            INSERT INTO corrections (id, manifest_id, manifest_revision, produced_revision, source_id,
+                field, previous_value, corrected_value, evidence_ids, snapshot_fingerprint,
+                context_revision, origin, review_state, case_candidate_id, created_at)
+            VALUES ('\(UUID().sourceKey)', '\(current.envelope.manifestID.sourceKey)', \(current.envelope.revision), \(next),
+                '\(context.sourceID.sourceKey)', 'issuer', NULL, '示例厂商乙', X'5B5D', 'f', 1, 'manual',
+                'evidence_verified', NULL, 0);
+            """)
+        await #expect(throws: FormaError.storage) {
+            _ = try await context.workspace.applyCorrection(
+                to: current, sourceID: context.sourceID, field: .completionyear,
+                correctedValue: "2027", evidenceIDs: [context.yearRow], origin: .manual,
+                scope: context.scope, profile: context.profile)
+        }
+        // Both writes belong to the refused transaction: a rejected publish
+        // must not leave the new revision sitting in the store with no
+        // decision behind it, because the next honest click would then be
+        // refused by the row this one failed to write.
+        let after = try #require(await context.workspace.currentManifest(scope: context.scope,
+                                                                        profile: context.profile))
+        #expect(after.envelope.revision == current.envelope.revision,
+                "the manifest the constraint refused must not have been stored either")
+    }
 }

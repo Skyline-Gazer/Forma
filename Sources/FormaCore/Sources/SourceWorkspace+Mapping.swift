@@ -253,12 +253,24 @@ extension SourceWorkspace {
                 // that can tell the revision under review from a newer one.
                 guard try MappingStore.nextManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
                         == manifest.envelope.revision + 1 else { throw FormaError.sourceChanged }
-                // A collision after that check is the store holding a second
-                // claim on one revision, which `.storage` reports.
                 let stored = try Self.persist(applied.manifest, scopeID: scope.id, in: db)
                 var record = applied.correction
                 record.producedRevision = stored.envelope.revision
-                try MappingStore.insertCorrection(record, in: db)
+                do {
+                    try MappingStore.insertCorrection(record, in: db)
+                } catch let error as DatabaseError where error.message?.contains("produced_revision") == true {
+                    // Two rows claiming one revision. The published error
+                    // vocabulary has no case for an index conflict, and
+                    // inventing one for a state the reviewer cannot cause would
+                    // put a wrong promise in the contract, so this stays
+                    // `.storage`. What the constraint adds over that code is
+                    // the line in the log: an operator reading `storage` at
+                    // `applyCorrection` can tell a duplicated claim from a disk
+                    // that went away. SQLite names the indexed columns, not the
+                    // index, which is why the test is on the column.
+                    FormaDiagnostics.constraintConflict(.applyCorrection, "corrections_produced")
+                    throw FormaError.storage
+                }
                 return (stored, record)
             }
             return CorrectionEngine.Applied(manifest: published.manifest, correction: published.record,

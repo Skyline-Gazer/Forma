@@ -32,13 +32,6 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")
-        // No `onDisappear`. This panel used to clear the key field, reset the
-        // saved flag and cancel the auxiliary task when the tab changed hands.
-        // `auxWork` is one slot shared with the preview and the capability
-        // probes, so clicking to another tab stopped work that panel had never
-        // started, and the field holding a key mid-paste was wiped by
-        // navigation rather than by anything the reviewer asked for. Both
-        // actions have their own Cancel buttons.
     }
 
     // MARK: - Provider
@@ -97,7 +90,7 @@ struct SettingsView: View {
             // rows before dispatch, so this is the request the current stored
             // evidence produces. The distinction decides whether a reviewer
             // treats what they read as a receipt or as an estimate.
-            Text("Shows the first batch a run would build from this listing and context — system text, payload, digest. Planned by the same code a run uses, and assembled from the evidence already registered, but a run re-reads file bodies before sending, so a body excerpt here can differ from what a run would attach. Built locally, with no network access.")
+            Text("Shows the first batch a whole-listing run would build from this listing and context — system text, payload, digest. Planned by the same code a run uses, and assembled from the evidence already registered, but a run re-reads file bodies before sending, so a body excerpt here can differ from what a run would attach. Reprocessing selected exceptions sends only those files, so its first batch can be a different set of documents. Built locally, with no network access.")
                 .font(.caption).foregroundStyle(.secondary)
             if let preview = model.preview {
                 LabeledContent("Payload bytes", value: preview.value.byteCount.formatted())

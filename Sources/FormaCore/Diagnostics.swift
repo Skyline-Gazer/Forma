@@ -52,9 +52,13 @@ public enum FormaError: Error, LocalizedError, Sendable, Equatable {
 public enum FormaDiagnostics {
     public enum Operation: String, Sendable {
         case openWorkspace, registerSource, scanSource, readEvidence, discoverMCP, providerProbe, saveCredential
-        /// A reviewer's decision being recorded. Named apart from `readEvidence`
-        /// because the log line is the only place that says a human click was
-        /// refused by policy rather than lost on input or output.
+        /// A correction click that failed before FormaCore could judge it -
+        /// the store refused the write, or the manifest it was aimed at had
+        /// been superseded. Not a refusal: a decision FormaCore declined on the
+        /// evidence is a successful call whose row carries
+        /// `reviewState == .rejected`, and the review screen reads it from the
+        /// table, which is the audit trail. This case exists so a lost click and
+        /// a refused one are not the same line in the log.
         case applyCorrection
     }
 
@@ -62,5 +66,14 @@ public enum FormaDiagnostics {
 
     public static func failure(_ operation: Operation, _ error: FormaError) {
         logger.error("operation=\(operation.rawValue, privacy: .public) code=\(error.code, privacy: .public)")
+    }
+
+    /// A database constraint refused a write, named by the constraint. The
+    /// published `FormaError` vocabulary has no case for this and must not
+    /// grow one for a state no reviewer can cause, so the distinction lives
+    /// here instead: `storage` tells the caller something was refused, this
+    /// tells whoever reads the log which rule did it.
+    public static func constraintConflict(_ operation: Operation, _ constraint: String) {
+        logger.error("operation=\(operation.rawValue, privacy: .public) code=\(FormaError.storage.code, privacy: .public) constraint=\(constraint, privacy: .public)")
     }
 }
