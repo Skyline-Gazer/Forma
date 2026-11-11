@@ -244,9 +244,8 @@ extension SourceWorkspace {
             evidenceIDs: evidenceIDs, origin: origin, context: context, evidence: evidence,
             currentEntries: listing.entries)
         if applied.violations.isEmpty {
-            // Publish and record in one transaction: a row claiming a revision
-            // that was never written would occupy the unique index and make the
-            // retry refuse itself.
+            // Publish and record together: a row claiming a revision that was
+            // never stored would occupy the index and refuse the retry.
             let published = try await store.database.write { db -> (manifest: Manifest,
                                                                     record: CorrectionRecord) in
                 guard try MappingStore.nextManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
@@ -254,13 +253,9 @@ extension SourceWorkspace {
                 let stored = try Self.persist(applied.manifest, scopeID: scope.id, in: db)
                 var record = applied.correction
                 record.producedRevision = stored.envelope.revision
-                // The number is assigned here, so `corrections_produced`
-                // cannot be violated by anything the guard above allowed: a
-                // legacy claim always names a revision that exists, which is
-                // below `nextManifestRevision`. The index is a schema-level
-                // last resort for a store edited outside this code, and if it
-                // ever fires the constraint error travels unchanged, as it
-                // does for any other storage fault.
+                // The number is assigned here, so the index cannot be
+                // violated by anything the guard allowed; it is the schema's
+                // last word on a store edited outside this code.
                 try MappingStore.insertCorrection(record, in: db)
                 return (stored, record)
             }

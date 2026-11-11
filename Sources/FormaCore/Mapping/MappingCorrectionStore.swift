@@ -58,13 +58,11 @@ enum MappingCorrectionMigrations {
     /// wrote, and makes "one revision has one producing correction" a
     /// constraint.
     ///
-    /// The `NOT EXISTS` is what keeps the last statement from failing: version
-    /// 1 never checked that the revision under review was current, so two
-    /// accepted rows can name the same target and `supersedes + 1` would hand
-    /// both the same claim. Indexing over duplicates aborts the migration and
-    /// leaves an existing workspace unopenable, so only the earlier row is
-    /// credited and the later stays unattributed. Named, not inlined, so the
-    /// statements can be run against a table with rows in it.
+    /// The `NOT EXISTS` is what keeps the last statement from failing: two
+    /// accepted rows can name the same revision they read, and `supersedes + 1`
+    /// would then hand both the same claim, which a unique index refuses to be
+    /// built over. Only the earlier row is credited; the later stays
+    /// unattributed rather than being given a number that matches nothing.
     static let revisionSplitSQL = """
         ALTER TABLE corrections ADD COLUMN produced_revision INTEGER;
         UPDATE corrections SET produced_revision = supersedes_revision + 1

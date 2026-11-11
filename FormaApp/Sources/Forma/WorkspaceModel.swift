@@ -1112,11 +1112,11 @@ final class WorkspaceModel: ObservableObject {
     /// before dispatch, so the excerpt shown here is what the registered rows
     /// produce, not a receipt for what a run will attach.
     ///
-    /// The inputs are read off the panel at the click - the source, profile,
-    /// context revision, case pack, batch limit and redaction terms, which are
-    /// editable fields rather than anything durable - and compared with the
-    /// panel again before anything is published, so a preview cannot end up
-    /// describing one request while the fields beside it describe another.
+    /// The inputs the request is built from - source, profile, context
+    /// revision, batch limit, redaction terms and salt - are read off the
+    /// panel at the click and compared with the panel again before anything is
+    /// published, so a preview cannot describe one request while the fields
+    /// beside it describe another.
     func previewEgress() {
         guard auxWork == nil else { return }
         guard let scope = selectedScope, let profile = selectedProfile, let context, let casePack,
@@ -1127,32 +1127,28 @@ final class WorkspaceModel: ObservableObject {
         }
         let limit = entryLimit
         let terms = redactionTerms
+        let salt = redactionSalt
         let plan = redaction
         let contextRevision = context.revision
-        // The engine plans the batch, so the membership, the refs and the
-        // attached rows are what a run would produce. The listing is the whole
-        // listing: this is the preview a Start run sends, while a reprocess
-        // hands the engine only the files it selected.
         preview = nil
         auxWork = Task {
             defer { auxWork = nil; if phase == .previewing { phase = .idle } }
             self.phase = .previewing
             do {
-                // From storage rather than from whatever this session opened:
-                // the payload has to be the one a run would build.
                 let rows = try await workspace.registeredEvidence(for: Set(listing.entries.map(\.id)))
                 let batches = MappingEngine.plannedBatches(from: listing.entries, context: context,
                                                           limit: limit, evidence: rows)
-                // The read suspends, and four of these inputs have writers
-                // that keep running while it does: the scope and profile from
-                // the toolbar, `reload`'s restore of the stored context, and
-                // the two Settings fields typed straight into this model. A new
-                // case pack is not one of them - `restore` loads it once at
-                // launch - so it is not compared.
+                // The read suspends, and these inputs are editable while it
+                // does: only the provider picker is disabled during a preview,
+                // so the batch limit, the terms and the salt can be retyped,
+                // the toolbar can change source or profile, and `reload` can
+                // restore a different stored context. The case pack is not one
+                // of them - `restore` loads it once at launch - so it is not
+                // compared.
                 guard !Task.isCancelled, scope.id == selectedScopeID,
                       profile.profileID == selectedProfileID,
-                      contextRevision == self.context?.revision,
-                      limit == entryLimit, terms == redactionTerms else {
+                      contextRevision == self.context?.revision, limit == entryLimit,
+                      terms == redactionTerms, salt == redactionSalt else {
                     return
                 }
                 guard let batch = batches.first else {
@@ -1161,9 +1157,8 @@ final class WorkspaceModel: ObservableObject {
                 }
                 let value = try ProviderMappingClient.preview(profile: profile, context: context,
                                                               casePack: casePack, batch: batch, redaction: plan)
-                // Payload and the batch it came from are assigned together:
-                // the counts mean nothing without the request they describe.
-                // Nothing above suspended since the guard, so one check held.
+                // Payload and its counts are assigned together: a number with
+                // no request behind it is not evidence of anything.
                 self.preview = Preview(value: value, fileCount: batch.entries.count, batchCount: batches.count)
                 self.leakedTerms = plan.isIdentity ? [] : plan.leaks(value.system + String(decoding: value.payload, as: UTF8.self))
             } catch {
