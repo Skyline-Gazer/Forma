@@ -64,8 +64,8 @@ public struct ProviderProbe: Sendable {
     private let telemetry: ProviderProbeTelemetry?
 
     public init() {
-        self.init(session: ProviderTransport.makeSession(), keyStore: KeychainProviderKeyStore(),
-                  defaults: .standard)
+        self.init(session: ProviderTransport.makeSession(request: 30, resource: 30),
+                  keyStore: KeychainProviderKeyStore(), defaults: .standard)
     }
 
     init(session: URLSession, keyStore: any ProviderKeyStore, defaults: UserDefaults? = nil) {
@@ -122,6 +122,11 @@ public struct ProviderProbe: Sendable {
             result.output = try ProviderProbeOutput(validating: output)
         } catch is CancellationError {
             result.error = .cancelled
+        } catch let limited as ProviderTransport.RateLimited {
+            // The probe reports the status it was told. The wait belongs to the
+            // mapping path, and the recorded diagnostic stays a plain HTTP
+            // status for the settings screen and the acceptance report.
+            result.error = limited.asFormaError
         } catch let error as FormaError {
             result.error = error
         } catch let error as URLError {

@@ -232,6 +232,64 @@ struct ProviderTests {
         }
         #expect(result.error == expected)
     }
+
+    @Test("a rate limit buys exactly one retry and is then reported as the status")
+    func mappingRateLimitGetsOneRetry() async throws {
+        let key = "probe-test-\(UUID().uuidString)"
+        let stub = HTTPStub(response: .response(status: 429, body: Data(#"{"error":{"message":"slow down"}}"#.utf8),
+                                                 headers: ["Retry-After": "0"]))
+        ProbeURLProtocol.register(stub, for: key)
+        defer { ProbeURLProtocol.unregister(key) }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ProbeURLProtocol.self]
+        let client = ProviderMappingClient(session: URLSession(configuration: configuration),
+                                           keyStore: MemoryKeyStore(keys: [.openAI: key]))
+        let profile = try MappingProfile.projectArchive()
+        let sourceID = UUID()
+        let batch = MappingBatch(id: "b1", candidateID: "c1",
+                                 entries: [MappingEntryRef(ref: "e1", sourceID: sourceID,
+                                                            relativePath: "示例项目_2026/公告.pdf",
+                                                            sizeBytes: 1_024, extensionName: "pdf",
+                                                            hydrationPending: false, provider: "local")],
+                                 evidence: [])
+        let context = ProjectContext(
+            revision: 1, scopeID: UUID(), profileID: profile.profileID, profileVersion: profile.profileVersion,
+            inputDigest: String(repeating: "d", count: 64),
+            candidates: [ContextCandidate(id: "c1", projectKey: "示例项目_2026", displayName: nil,
+                                          basis: [.directory], memberSourceIDs: [sourceID], confidence: .low)],
+            unassignedSourceIDs: [], conflictedSourceIDs: [], builtAt: .now
+        )
+        let attempt = await client.map(provider: .openAI, model: "gpt-4o-mini", allowCloud: true, profile: profile,
+                                       context: context, casePack: try CasePack.shipped(), batch: batch,
+                                       redaction: .none)
+        #expect(attempt.requests == 2, "one rate limit must buy exactly one retry, got \(attempt.requests)")
+        #expect(stub.requests.count == 2, "the retry must really reach the stub again")
+        #expect(attempt.error == .remoteStatus(429),
+                "a second rate limit is reported as the status, not as a mystery")
+        #expect(attempt.proposal == nil)
+    }
+
+    @Test("Retry-After is read, bounded, and never guessed at")
+    func retryAfterIsParsedConservatively() throws {
+        func header(_ value: String?) -> HTTPURLResponse? {
+            var fields: [String: String] = [:]
+            if let value { fields["Retry-After"] = value }
+            return HTTPURLResponse(url: URL(string: "https://example.invalid")!, statusCode: 429,
+                                   httpVersion: "HTTP/1.1", headerFields: fields)
+        }
+        #expect(ProviderTransport.retryAfter(from: header("7")) == 7)
+        #expect(ProviderTransport.retryAfter(from: header(" 12 ")) == 12)
+        #expect(ProviderTransport.retryAfter(from: header("3600")) == 30,
+                "an unbounded wait would outlive the user's patience")
+        #expect(ProviderTransport.retryAfter(from: header("-5")) == 0)
+        #expect(ProviderTransport.retryAfter(from: header("Wed, 11 Nov 2026 12:00:00 GMT")) == nil,
+                "an HTTP-date is not guessed at, and the fixed backoff applies")
+        #expect(ProviderTransport.retryAfter(from: header(nil)) == nil)
+        #expect(ProviderTransport.retryDelay(retryAfter: 7, attempt: 0) == 7)
+        #expect(ProviderTransport.retryDelay(retryAfter: nil, attempt: 0) == 1)
+        #expect(ProviderTransport.retryDelay(retryAfter: nil, attempt: 1) == 4)
+        #expect(ProviderTransport.retryDelay(retryAfter: 7, attempt: 2) == nil)
+    }
 }
 
 private extension ProbeProvider {

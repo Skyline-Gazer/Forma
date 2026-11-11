@@ -315,16 +315,21 @@ struct MappingEngineTests {
         // Control first: with a registry that takes the write, the second pass
         // really does run. Without this, the assertions below could pass on a
         // path that was never reached.
-        let control = MappingEngine(profile: fixture.profile, casePack: try CasePack.shipped(), answerer: answerer,
-                                    workspace: fixture.workspace, registerOverride: { _, _ in })
+        let control = MappingEngine(profile: fixture.profile, casePack: try CasePack.shipped(),
+                                    answerer: answerer, workspace: fixture.workspace)
         let controlOutcome = await control.run(run)
         #expect(controlOutcome.requests > controlOutcome.batches,
                 "the bounded re-ask must be reachable for this test to mean anything")
-        // Same run against a store that refuses writes - disk full, database
-        // locked. The re-read rows cannot be cited, so they must not be used.
+        // Now make the registry refuse writes the way a full disk or a locked
+        // database does, and run the same request again. Rows that cannot be
+        // read back must not become citations.
+        try fixture.source.execute("""
+            CREATE TRIGGER forma_fixture_refuses_evidence_writes
+            BEFORE INSERT ON evidence_items
+            BEGIN SELECT RAISE(ABORT, 'fixture: the registry refuses writes'); END
+            """)
         let failing = MappingEngine(profile: fixture.profile, casePack: try CasePack.shipped(),
-                                    answerer: answerer, workspace: fixture.workspace,
-                                    registerOverride: { _, _ in throw FormaError.unavailable })
+                                    answerer: answerer, workspace: fixture.workspace)
         let outcome = await failing.run(run)
         // A re-read that cannot be stored must not become a citation: the
         // second pass does not happen, and the files it would have covered

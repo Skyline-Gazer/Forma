@@ -9,13 +9,15 @@ import Foundation
 /// distinct - a customer never collapses onto a vendor or a bidding entity -
 /// because those distinctions are exactly what the mapping has to reason about.
 ///
-/// A term label is `«<role><code>»`, where the code is the first four hex
+/// A term label is `«<role><code>»`, where the code is the first eight hex
 /// digits of the term's salted digest. The same term under the same salt always
 /// becomes the same label, a label carries nothing back into the term without
 /// the salt, and neither the caller's input order nor how many names share a
-/// role is revealed. Amounts use the same construction on the value, so two
-/// placeholders sharing a code really are the same number - the fact a mapping
-/// needs when one total appears in prose and again in a table.
+/// role is revealed. Eight hex digits put the first collision past a thousand
+/// names in one role, and a plan that does hit one extends the code rather than
+/// letting two customers share a label. Amounts use the same construction on the
+/// value, so two placeholders sharing a code really are the same number - the
+/// fact a mapping needs when one total appears in prose and again in a table.
 public struct RedactionPlan: Sendable {
     public enum Role: String, CaseIterable, Sendable {
         case customer, vendor, bidder, agent, person, project, amount, identifier
@@ -73,7 +75,7 @@ public struct RedactionPlan: Sendable {
     }
 
     private static func label(role: Role, seed: String, salt: String) -> String {
-        "«\(role.label)\(digest(of: "\(salt)\u{1f}\(role.rawValue)\u{1f}\(seed)").prefix(4).uppercased())»"
+        "«\(role.label)\(digest(of: "\(salt)\u{1f}\(role.rawValue)\u{1f}\(seed)").prefix(8).uppercased())»"
     }
 
     private static func digest(of value: String) -> String {
@@ -130,10 +132,14 @@ public struct RedactionPlan: Sendable {
         return output
     }
 
-    /// Record and content identities must never travel: a UUID is a database
-    /// handle, a 64-hex string is a SHA-256, and any other run of 32 or more
-    /// hex digits is some such handle - all of them things the model has no
-    /// business seeing.
+    /// Record and content identities must never travel. Three shapes cover them:
+    /// a UUID is a database handle; a run of exactly 64 hex digits is a SHA-256
+    /// snapshot fingerprint; and any other run of 32 or more hex digits is a
+    /// digest of some kind - SHA-1, a content hash, or an internal identifier
+    /// this program did not mint but should not forward either. The third rule is
+    /// deliberately blunt: a long hex business code is replaced too. That is the
+    /// safe direction, because such a code is a handle into somebody else's
+    /// system, and the model has no use for any of them.
     private func replaceIdentifiers(in value: String) -> String {
         var output = value
         for pattern in [
@@ -166,7 +172,7 @@ public struct RedactionPlan: Sendable {
                 let text = String(output[swift])
                 // Never rewrite something an earlier pass already replaced.
                 if text.contains("«") { continue }
-                if entry.needsContext,
+                if entry.cue == .before,
                    !Self.looksLikeAmount(text, before: output[output.startIndex..<swift.lowerBound]) {
                     continue
                 }
@@ -176,21 +182,26 @@ public struct RedactionPlan: Sendable {
         return output
     }
 
-    /// A pattern and the judgment its matches need. The first two forms carry
-    /// their money cue inside the match, so they are amounts by construction and
-    /// nothing else is consulted; only a bare thousands-grouped number has to be
-    /// judged by the words in front of it. Keeping the test per pattern means
-    /// "is this a price" exists once, not twice where it can drift.
-    private static let amountPatterns: [(pattern: String, needsContext: Bool)] = [
+    /// How a pattern knows it found a price. `inMatch` means the currency cue is
+    /// part of what the expression accepted, so nothing else is consulted;
+    /// `before` means the number carries no cue itself and the words in front of
+    /// it have to say it is money. Naming that in the type keeps the two
+    /// judgments from drifting apart when a pattern is edited.
+    private enum MoneyCue {
+        case inMatch
+        case before
+    }
+
+    private static let amountPatterns: [(pattern: String, cue: MoneyCue)] = [
         // A currency symbol in front of the number.
-        (#"(?<![0-9A-Za-z])(?:¥|￥|\$|人民币)\s*[0-9][0-9,]*(?:\.[0-9]+)?"#, false),
+        (#"(?<![0-9A-Za-z])(?:¥|￥|\$|人民币)\s*[0-9][0-9,]*(?:\.[0-9]+)?"#, .inMatch),
         // A number with an explicit unit. A bare `万` is not enough: 万象 and
         // 万达 are company names, and their digits must survive.
-        (#"(?<![0-9A-Za-z.,\-/:«»])[0-9][0-9,]*(?:\.[0-9]{1,2})?\s*(?:万元|亿元|元)(?![0-9A-Za-z])"#, false),
+        (#"(?<![0-9A-Za-z.,\-/:«»])[0-9][0-9,]*(?:\.[0-9]{1,2})?\s*(?:万元|亿元|元)(?![0-9A-Za-z])"#, .inMatch),
         // Comma-grouped numbers, judged by the words in front of them. A
         // placeholder on either side means this number belongs to something the
         // plan already rewrote, so it is not evidence of a price.
-        (#"(?<![0-9A-Za-z.,\-/:«»])[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?(?![0-9A-Za-z.,\-/:«»])"#, true),
+        (#"(?<![0-9A-Za-z.,\-/:«»])[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?(?![0-9A-Za-z.,\-/:«»])"#, .before),
     ]
 
     private static let moneyCues = ["价", "金额", "报价", "费用", "预算", "税", "合计", "付款",

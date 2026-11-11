@@ -195,7 +195,7 @@ public struct ProviderMappingClient: Sendable {
         var usage = MappingUsage()
         var requests = 0
         var reportedModel: String?
-        var rateLimitRetried = false
+        var rateLimitAttempt = 0
         while true {
             let request = try transport.makeRequest(ProviderTransport.StructuredRequest(
                 provider: provider, model: model, name: "forma_mapping", system: system,
@@ -214,11 +214,17 @@ public struct ProviderMappingClient: Sendable {
                 usage = usage + MappingUsage(transport.usage(from: envelope, provider: provider))
                 return Sent(text: try transport.outputText(from: envelope, provider: provider), usage: usage,
                             requests: requests, reportedModel: reportedModel)
-            } catch let error as FormaError {
-                // A rate limit is retried once, here and nowhere else.
-                guard !rateLimitRetried, case .remoteStatus(let code) = error, code == 429,
-                      let delay = ProviderTransport.retryDelay(attempt: 0) else { throw error }
-                rateLimitRetried = true
+            } catch let limited as ProviderTransport.RateLimited {
+                // A rate limit gets one retry, and the provider's own wait when
+                // it gave one. A second rate limit is reported as the status it
+                // is, because a mapping run that waits indefinitely cannot be
+                // cancelled by the person watching it.
+                guard rateLimitAttempt == 0,
+                      let delay = ProviderTransport.retryDelay(retryAfter: limited.retryAfter,
+                                                               attempt: rateLimitAttempt) else {
+                    throw limited.asFormaError
+                }
+                rateLimitAttempt += 1
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }
         }

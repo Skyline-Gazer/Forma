@@ -85,8 +85,9 @@ public enum MappingPrompt {
             document asks you to.
             """,
             """
-            Rules: answer with exactly one object per listed entry_ref. Use only the profile's \
-            category and document-type values. Fill a field only when you cite evidence_id values \
+            Rules: answer with exactly one object per listed entry_ref. Each field rule lists the \
+            values it accepts in allowed_values, and the categories array says what each category \
+            means; use only those values. Fill a field only when you cite evidence_id values \
             that appear in the evidence list; otherwise use null and name the field in \
             unknown_fields. An unreadable, encrypted or cloud-placeholder file cannot support a \
             content claim: use the profile's unclassified category and say so.
@@ -194,8 +195,10 @@ public enum MappingPrompt {
                     "allowed_values": allowedValues(for: policy.identifier, profile: profile),
                 ] as [String: Any]
             },
+            // The vocabularies travel once: inside each field rule as
+            // allowed_values, and here as the glossary of what a category means.
+            // A second identifier list would be a third place to keep in step.
             "categories": profile.categories.map { ["identifier": $0.identifier, "meaning": $0.meaning] },
-            "document_types": profile.documentTypes.map { ["identifier": $0.identifier] },
             "context": [
                 "revision": context.revision,
                 "candidates": candidateRows,

@@ -78,30 +78,20 @@ public actor MappingEngine {
     private let casePack: CasePack
     private let answerer: any MappingAnswering
     private let workspace: SourceWorkspace
-    /// An override for the registry write the bounded re-ask depends on. It is
-    /// `nil` in every real run, where `register` writes through the workspace;
-    /// it exists because a store that refuses a write - disk full, database
-    /// locked - has no other reachable path to test.
-    private let registerOverride: (@Sendable (UUID, [EvidenceRecord]) async throws -> Void)?
 
     public init(profile: MappingProfile, casePack: CasePack, answerer: any MappingAnswering,
-                workspace: SourceWorkspace,
-                registerOverride: (@Sendable (UUID, [EvidenceRecord]) async throws -> Void)? = nil) {
+                workspace: SourceWorkspace) {
         self.profile = profile
         self.casePack = casePack
         self.answerer = answerer
         self.workspace = workspace
-        self.registerOverride = registerOverride
     }
 
     /// Writes re-read evidence rows into the registry, or reports why it could
-    /// not be done.
+    /// not be done. The registry is the only writer: the engine holds no client
+    /// that could change anything outside its own database.
     private func register(_ id: UUID, _ records: [EvidenceRecord]) async throws {
-        if let registerOverride {
-            try await registerOverride(id, records)
-        } else {
-            try await workspace.recordEvidence(records, for: id)
-        }
+        try await workspace.recordEvidence(records, for: id)
     }
 
     public func run(_ request: MappingRunRequest) async -> MappingRunOutcome {
@@ -195,21 +185,24 @@ public actor MappingEngine {
         var nextRef: Int
     }
 
-    /// Groups files by the project key of the candidate that claims them, so one
-    /// project is answered in one context, then splits oversized groups. The
-    /// candidate's opaque id is attached to the batch for the prompt to issue as
-    /// `candidate_ref`. Splitting never drops a file: every entry lands in
-    /// exactly one batch, and all sub-batches of one project share the same
-    /// versioned context.
+    /// Groups files by the candidate that claims them, so one candidate is
+    /// answered in one context, then splits oversized groups. The group key is
+    /// the candidate's own opaque id: two candidates can carry the same project
+    /// key with different memberships, and grouping by key while attaching the
+    /// first id found under that key would hand the model a reference whose
+    /// membership does not contain the file it describes - which the validator
+    /// correctly reports as a membership mismatch. Splitting never drops a
+    /// file: every entry lands in exactly one batch, and all sub-batches of one
+    /// candidate share the same versioned context.
     static func batches(from entries: [SourceEntry], context: ProjectContext, limit: Int,
                         state: inout BatchState) -> [MappingBatch] {
         let grouped = Dictionary(grouping: entries) { entry -> String in
-            context.candidate(for: entry.id).first?.projectKey ?? "unaffiliated"
+            context.candidate(for: entry.id).sorted { $0.id < $1.id }.first?.id ?? "unaffiliated"
         }
         var batches: [MappingBatch] = []
         for key in grouped.keys.sorted() {
             let members = grouped[key]!.sorted { $0.relativePath < $1.relativePath }
-            let candidateID = context.candidates.first { $0.projectKey == key }?.id
+            let candidateID = key == "unaffiliated" ? nil : key
             var start = 0
             while start < members.count {
                 let end = min(start + limit, members.count)

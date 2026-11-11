@@ -16,6 +16,12 @@ struct CasePackTests {
         #expect(verified * 2 >= pack.cases.count)
     }
 
+    /// What the shipped artifact must contain, as opposed to what the rules
+    /// reject: the rules are tested by construction in `positivesOnlyRejected`,
+    /// `conflictKindIsRequired` and `singleProfilePackRejected`, each of which
+    /// builds a pack that clears every guard except the one under test. This
+    /// test would stay green if a guard were deleted, and that is the point -
+    /// it is the inventory check, not the enforcement check.
     @Test("both profiles and every counter-example kind are represented")
     func coverage() throws {
         let pack = try CasePack.shipped()

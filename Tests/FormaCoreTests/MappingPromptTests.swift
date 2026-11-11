@@ -237,13 +237,24 @@ struct MappingPromptTests {
         let first = numbering("workspace-a")
         #expect(Set(first.values).count == 6, "six customers need six distinct labels")
         #expect(first == numbering("workspace-a"), "the same salt must reproduce itself")
-        // A label that was a position in the caller's list, or a hash of the
-        // term alone, would let anyone holding the name list read the requests
-        // back into names. The salt is what makes that impossible.
-        #expect(first != numbering("workspace-b"),
-                "a different salt must not reproduce the same labels")
-        #expect(first.values.allSatisfy { $0.hasPrefix("«客户") && $0.count > 4 },
-                "a label keeps its role and carries a salted code")
+        // What is guaranteed, and what would break without the salt: a label is
+        // a role plus a salted code, so holding the name list is not enough to
+        // read a request back into names - the salt is required, and a different
+        // salt gives a different table. This does not claim the code is
+        // unguessable given the salt; with the salt, the mapping is reproducible
+        // by design, which is what makes an exported request auditable.
+        let other = numbering("workspace-b")
+        #expect(Set(first.values).isDisjoint(with: Set(other.values)),
+                "a different salt must not reproduce any label")
+        for (term, label) in first {
+            #expect(label.hasPrefix("«客户"), "a label keeps its role: \(label)")
+            let code = label.dropFirst("«客户".count).dropLast()
+            #expect(code.count == 8 && code.allSatisfy(\.isHexDigit),
+                    "a label carries a salted code, not a position: \(label)")
+            #expect(!term.components(separatedBy: .whitespaces).contains(String(code)),
+                    "a label must not be the term in another dress")
+            #expect(other[term] != label)
+        }
     }
 
     @Test("a field rule names the vocabulary its value must come from")

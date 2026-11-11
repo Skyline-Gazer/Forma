@@ -17,15 +17,31 @@ struct ProviderTransport: Sendable {
 
     let session: URLSession
 
-    static func makeSession() -> URLSession {
+    /// A probe is a 256-token request and answers or it does not; a mapping
+    /// batch is larger and slower. The two therefore keep separate budgets, and
+    /// the session is built from the same recipe so the redirect refusal, the
+    /// cookie-free posture and the credential storage are never a matter of
+    /// which call site created it.
+    static func makeSession(request: TimeInterval = 60, resource: TimeInterval = 120) -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpShouldSetCookies = false
         configuration.httpCookieStorage = nil
         configuration.urlCache = nil
         configuration.urlCredentialStorage = nil
-        configuration.timeoutIntervalForRequest = 60
-        configuration.timeoutIntervalForResource = 120
+        configuration.timeoutIntervalForRequest = request
+        configuration.timeoutIntervalForResource = resource
         return URLSession(configuration: configuration)
+    }
+
+    /// A rate limit is the one failure that carries instructions with it: the
+    /// provider says how long to wait. It is a distinct error rather than a
+    /// field on `FormaError.remoteStatus` because the probe's stored diagnostics
+    /// record the status alone, and that contract is what the acceptance report
+    /// and the settings screen read.
+    struct RateLimited: Error, Sendable {
+        let retryAfter: TimeInterval?
+
+        var asFormaError: FormaError { .remoteStatus(429) }
     }
 
     struct StructuredRequest: Sendable {
@@ -95,7 +111,7 @@ struct ProviderTransport: Sendable {
             switch http.statusCode {
             case 200...299: break
             case 401, 403: throw FormaError.unauthorized
-            case 429: throw FormaError.remoteStatus(429)
+            case 429: throw RateLimited(retryAfter: Self.retryAfter(from: http))
             default: throw FormaError.remoteStatus(http.statusCode)
             }
             guard http.expectedContentLength <= Int64(limit) else { throw FormaError.invalidResponse }
@@ -194,11 +210,22 @@ struct ProviderTransport: Sendable {
         return parsed
     }
 
+    /// A key only ever leaves as one bearer header, so this is a header-shape
+    /// check: printable ASCII with no CR or LF, non-empty, and no longer than
+    /// anything either provider issues. A longer or control-character-bearing
+    /// value is a paste error or a stored blob, not a credential, and it must
+    /// not reach the network or the logs.
     static func validKey(_ key: String) -> Bool {
         let bytes = key.utf8
         return !bytes.isEmpty && bytes.count <= 4_096 && bytes.allSatisfy { (33...126).contains($0) }
     }
 
+    /// The model id is sent in the body and written to the recorded diagnostics,
+    /// so it has to be unable to smuggle anything: the charset is the one both
+    /// providers actually use (`gpt-4o-mini`, `claude-sonnet-4-5`), the length
+    /// bound is generous, and a value that looks like a key is refused rather
+    /// than stored. Relaxing this needs a provider that ships ids outside that
+    /// alphabet, not just a wish for fewer rejections.
     static func validModelID(_ model: String) -> Bool {
         let bytes = model.utf8
         return !bytes.isEmpty && bytes.count <= 128 && !model.lowercased().hasPrefix("sk-")
@@ -210,14 +237,22 @@ struct ProviderTransport: Sendable {
             }
     }
 
-    /// A bounded backoff for the single rate-limit retry. `Retry-After` is not
-    /// honoured here: `response` throws as soon as it sees the status, so the
-    /// headers never reach a caller, and carrying them would mean changing the
-    /// error contract that the probe's recorded diagnostics depend on. What
-    /// matters is that the wait stays bounded, so a rate limit cannot become a
-    /// task the user cannot cancel.
-    static func retryDelay(attempt: Int) -> TimeInterval? {
+    /// `Retry-After`, accepted only inside a bounded window: an unbounded wait
+    /// turns a rate limit into a task the user cannot cancel. A delta-seconds
+    /// value is what both providers send; an HTTP-date is treated as absent
+    /// rather than guessed at, and the fixed backoff applies.
+    static func retryAfter(from response: HTTPURLResponse) -> TimeInterval? {
+        guard let header = response.value(forHTTPHeaderField: "Retry-After"),
+              let seconds = TimeInterval(header.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return nil
+        }
+        return min(max(seconds, 0), 30)
+    }
+
+    /// How long to wait before the single permitted retry.
+    static func retryDelay(retryAfter: TimeInterval?, attempt: Int) -> TimeInterval? {
         guard attempt < 2 else { return nil }
+        if let retryAfter { return retryAfter }
         return attempt == 0 ? 1 : 4
     }
 
