@@ -216,10 +216,12 @@ extension SourceWorkspace {
     /// listing, the context revision the manifest cites, the registered rows it
     /// may cite - and persists the outcome. A refused attempt is stored and
     /// changes no revision, so the review screen can show the click while the
-    /// version history keeps only decisions actually made. Publishing goes
-    /// through `persist`, so a citation's foreign key into `evidence_items` is
-    /// enforced rather than trusted, and a manifest the store has already moved
-    /// past is refused with `sourceChanged` inside the same transaction.
+    /// version history keeps only decisions actually made. Nothing checks here
+    /// that a citation is registered: the manifest is written by `persist`
+    /// inside the same transaction, so the foreign key into `evidence_items` is
+    /// the database's own rejection and arrives as `.storage`, not as a refusal
+    /// with a violation code. A manifest the store has already moved past is
+    /// refused with `sourceChanged`, also from inside that transaction.
     public func applyCorrection(to manifest: Manifest, sourceID: UUID, field: MetadataFieldID,
                                 correctedValue: String?, evidenceIDs: [String],
                                 origin: CorrectionRecord.Origin, scope: SourceScope,

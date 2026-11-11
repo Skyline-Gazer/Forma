@@ -292,8 +292,9 @@ final class WorkspaceModel: ObservableObject {
     var roleInventory: [RedactionPlan.Role: Int] { redaction.roles }
 
     /// Evidence rows this session has read, keyed by citation id: the review
-    /// screen resolves one per field chip per render. Derived from
-    /// `evidenceBySource` in its `didSet`, so the two cannot drift apart.
+    /// screen resolves one per field chip per render. `merge` writes it in the
+    /// same walk that rebuilds `evidenceBySource`, for the sources that batch
+    /// touched, so the two views of the same rows cannot drift apart.
     @Published private(set) var recordsByID: [String: EvidenceRecord] = [:]
 
     func record(for id: String) -> EvidenceRecord? { recordsByID[id] }
@@ -753,15 +754,21 @@ final class WorkspaceModel: ObservableObject {
             }
             self.evidenceFailures = unread
             if Task.isCancelled {
+                // Written before the store call, not after: the run is over
+                // when this line executes, and a suspension here would let the
+                // notice describe a panel somebody else had already started
+                // work in.
+                notice = "Cancelled during evidence capture · no provider request was made."
                 try? await self.workspace.finishMappingRun(id: run.id, state: .cancelled, batches: 0,
                                                            error: .cancelled)
-                notice = "Cancelled during evidence capture · no provider request was made."
                 return
             }
             self.merge(captured.values.flatMap { $0 })
             do {
                 try await self.workspace.startMappingRun(run)
             } catch {
+                // Only the panel this run belongs to may be told it failed.
+                guard scope.id == self.selectedScopeID, profile.profileID == self.selectedProfileID else { return }
                 self.show(error, operation: .providerProbe, fallback: .storage)
             }
             self.phase = .mapping
@@ -771,26 +778,30 @@ final class WorkspaceModel: ObservableObject {
                                                              allowCloud: consent, redaction: plan,
                                                              entryLimit: limit))
             if Task.isCancelled {
-                try? await self.workspace.finishMappingRun(id: run.id, state: .cancelled,
-                                                            batches: result.batches, error: .cancelled)
                 // A cancellation that arrives after `engine.run` has returned
                 // has already spent the provider requests it made, and the
                 // answers are still thrown away. That is the cheaper of two
                 // wrong options: storing them would publish a revision built
                 // from part of the listing and replace the complete one that
                 // is currently usable. The notice says so rather than letting
-                // "Cancelled" imply nothing was learned.
+                // "Cancelled" imply nothing was learned. It is written before
+                // the store call so no other action can claim the channel in
+                // between.
                 notice = "Run cancelled after \(result.batches.formatted()) batches. Answers that had already "
                     + "returned are recorded in the run history but not published: a revision is written only by "
                     + "a run that finished, and this one's would have replaced the complete revision with a partial one."
+                try? await self.workspace.finishMappingRun(id: run.id, state: .cancelled,
+                                                            batches: result.batches, error: .cancelled)
                 return
             }
             var stored = result.manifest
             do {
                 stored = try await self.workspace.saveManifest(result.manifest, scopeID: scope.id)
             } catch {
-                self.show(error, operation: .providerProbe, fallback: .invalidOutput)
-                notice = "FormaCore kept this result in memory only: the revision was not stored."
+                if scope.id == self.selectedScopeID, profile.profileID == self.selectedProfileID {
+                    self.show(error, operation: .providerProbe, fallback: .invalidOutput)
+                    notice = "FormaCore kept this result in memory only: the revision was not stored."
+                }
             }
             // FormaCore's own vocabulary: a run that returned completed. The
             // per-file provider failures stay in the outcome, where they are
@@ -854,6 +865,8 @@ final class WorkspaceModel: ObservableObject {
     /// rows so field chips resolve without a provider or a rescan.
     func loadBundle(from url: URL) {
         guard phase == .idle else { return }
+        let boundScope = selectedScopeID
+        let boundProfile = selectedProfileID
         let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
         let bundle = isDirectory ? url : url.deletingLastPathComponent()
         let manifestURL = isDirectory ? bundle.appendingPathComponent(ManifestExport.manifestFile) : url
@@ -872,7 +885,13 @@ final class WorkspaceModel: ObservableObject {
                 if FileManager.default.fileExists(atPath: evidenceURL.path) {
                     loadedRecords = try FormaJSON.decode([EvidenceRecord].self, from: Data(contentsOf: evidenceURL))
                 }
-                guard !Task.isCancelled else { return }
+                // The bundle's entries are combined with the current listing
+                // when rows are rebuilt, so this is only meaningful while the
+                // source selected at the click is still selected: a switch
+                // during the read would pair a foreign manifest with another
+                // source's rows and present the mixture as one table.
+                guard !Task.isCancelled, selectedScopeID == boundScope,
+                      selectedProfileID == boundProfile else { return }
                 self.merge(loadedRecords)
                 self.manifest = loaded
                 self.outcome = nil
@@ -916,7 +935,11 @@ final class WorkspaceModel: ObservableObject {
             defer { finishWork() }
             do {
                 let result = try ManifestExport.revalidate(at: bundleURL)
-                guard !Task.isCancelled else { return }
+                // The conclusion describes the bundle the click named. If a
+                // different bundle was opened while this one was being checked,
+                // hanging this verdict on it would report a file nobody asked
+                // about.
+                guard !Task.isCancelled, self.bundleURL == bundleURL else { return }
                 revalidation = result
                 notice = result.artifactConsistent
                     ? "Bundle is self-consistent · revision \(result.revision.formatted())."
@@ -948,12 +971,8 @@ final class WorkspaceModel: ObservableObject {
     /// What `correctionHistory` currently describes.
     ///
     /// An empty list means three different things depending on how it got
-    /// empty, and a single boolean could only name two of them: the reload
-    /// path set it only when a manifest was restored, the bundle path set it
-    /// while clearing rows that were never readable here, and the correction
-    /// path set it after its own write. Each of those read as "this manifest
-    /// has no attempts", which is a claim about the manifest rather than about
-    /// this machine.
+    /// empty, and a boolean could name two of them: not read yet, read from
+    /// this store, or belonging to a bundle whose history is on another machine.
     enum CorrectionHistoryState {
         /// Nothing has been read for the manifest now on screen.
         case notRead
@@ -989,11 +1008,9 @@ final class WorkspaceModel: ObservableObject {
     func applyCorrection() {
         guard phase == .idle, let manifest, let scope = selectedScope, let profile = selectedProfile,
               let draft else { return }
-        // The sheet holds the manifest it was opened against, and the selected
-        // source can change underneath it. Correcting a manifest that no longer
-        // belongs to the selected source would record a decision about one
-        // project while showing its result on another, so what is being
-        // corrected is identified against what is selected rather than assumed.
+        // What is being corrected is identified against what is selected: the
+        // sheet can outlive a source switch, and a decision about one project
+        // must not be shown as a result on another.
         guard manifest.envelope.scopeID == scope.id,
               manifest.envelope.profileID == profile.profileID,
               manifest.envelope.profileVersion == profile.profileVersion else {
@@ -1013,31 +1030,23 @@ final class WorkspaceModel: ObservableObject {
                     correctedValue: trimmed.isEmpty ? nil : trimmed, evidenceIDs: citations,
                     origin: .manual, scope: scope, profile: profile)
                 guard !Task.isCancelled else { return }
-                // A reviewer who switched source while the click was in flight
-                // must not have their decision written onto the screen they
-                // left, and the check has to follow each suspension rather than
-                // only the first one.
+                // A source switch while the click was in flight must not write
+                // the decision onto the screen the reviewer left; the check
+                // follows each suspension, not only the first.
                 guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
                 // The decision is in storage from here on, so nothing below can
-                // undo it: the two reads refine the screen, and a storage error
-                // during either used to conceal a correction that had already
-                // succeeded - no confirmation, the sheet still open, and the
-                // next click refused by the stale-base guard with a message
-                // about the source changing, caused by this write.
+                // undo it: the two reads only refine the screen, and an error
+                // in either used to conceal a correction that had succeeded.
                 var message = applied.violations.isEmpty
                     ? "Correction recorded as revision \(applied.manifest.envelope.revision.formatted())."
                     : "FormaCore refused this correction: \(applied.violations.map { $0.code }.joined(separator: " · ")). "
                         + "Nothing was changed, and the attempt is on the exceptions list."
-                // Both reads finish before a single line of state is written,
-                // and the ownership check sits between them: publishing in
-                // several steps let a scope change during a read land another
-                // source's manifest on this screen with this source's listing
-                // under it, and no later guard could take it back.
-                // Read separately rather than with `try?` on the call: these
-                // functions already answer optionally, and `try?` over them
-                // produces a nested optional that unwraps to the wrong thing -
-                // a failed read and a nil result would arrive as different
-                // shapes at the code below.
+                // Both reads finish before any state is written. Publishing in
+                // steps let a scope change during a read land another source's
+                // manifest here with this source's listing under it. The reads
+                // are explicit `do`/`catch` rather than `try?` because these
+                // calls already answer optionally: `try?` over them nests the
+                // optional, and a failure and a nil would look alike below.
                 var stored: Manifest?
                 do { stored = try await workspace.currentManifest(scope: scope, profile: profile) }
                 catch { stored = nil }
@@ -1048,9 +1057,9 @@ final class WorkspaceModel: ObservableObject {
                       profile.profileID == selectedProfileID else { return }
                 var shown = applied.manifest
                 if let stored = stored, stored.envelope.revision != applied.manifest.envelope.revision {
-                    // Something advanced the manifest between the write and
-                    // this read: the notice names both numbers rather than
-                    // letting the header show one and the audit trail another.
+                    // The manifest moved on between the write and this read:
+                    // the notice names both numbers instead of letting the
+                    // header show one and the audit trail another.
                     message = "Correction recorded as revision "
                         + "\(applied.manifest.envelope.revision.formatted()); the manifest has since advanced to revision "
                         + "\(stored.envelope.revision.formatted())."
@@ -1107,6 +1116,11 @@ final class WorkspaceModel: ObservableObject {
     /// "Describes" rather than "the exact bytes": a run re-reads file bodies
     /// before dispatch, so the excerpt shown here is what the registered rows
     /// produce, not a receipt for what a run will attach.
+    ///
+    /// Everything the request is built from is taken at the click and the
+    /// panel is compared with that snapshot before anything is published: this
+    /// is the egress consent surface, so a preview must not be allowed to
+    /// describe one request while the fields beside it describe another.
     func previewEgress() {
         guard auxWork == nil else { return }
         guard let scope = selectedScope, let profile = selectedProfile, let context, let casePack,
@@ -1115,6 +1129,11 @@ final class WorkspaceModel: ObservableObject {
             notice = "A preview needs a source, a profile and a stored project context."
             return
         }
+        let limit = entryLimit
+        let terms = redactionTerms
+        let plan = redaction
+        let contextRevision = context.revision
+        let casePackVersion = casePack.version
         // The engine plans the batch; the entries are the whole listing, as a
         // run hands the engine every row it has.
         preview = nil
@@ -1126,16 +1145,23 @@ final class WorkspaceModel: ObservableObject {
                 // the payload has to be the one a run would build.
                 let rows = try await workspace.registeredEvidence(for: Set(listing.entries.map(\.id)))
                 let batches = MappingEngine.plannedBatches(from: listing.entries, context: context,
-                                                          limit: entryLimit, evidence: rows)
-                // The read suspends; a source switch during it must not make
-                // another listing's request this panel's preview.
+                                                          limit: limit, evidence: rows)
+                // The read suspends. A source switch, a rebuilt context, a new
+                // case pack or an edited batch limit during it would leave this
+                // payload describing a request the panel no longer configures,
+                // so nothing is published unless every input still matches the
+                // snapshot taken above.
                 guard !Task.isCancelled, scope.id == selectedScopeID,
-                      profile.profileID == selectedProfileID else { return }
+                      profile.profileID == selectedProfileID,
+                      contextRevision == self.context?.revision,
+                      casePackVersion == self.casePack?.version,
+                      limit == entryLimit, terms == redactionTerms else {
+                    return
+                }
                 guard let batch = batches.first else {
                     notice = "This listing has no file to preview."
                     return
                 }
-                let plan = redaction
                 let value = try ProviderMappingClient.preview(profile: profile, context: context,
                                                               casePack: casePack, batch: batch, redaction: plan)
                 // Payload and the batch it came from are assigned together:
