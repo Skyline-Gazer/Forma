@@ -516,25 +516,25 @@ struct MappingView: View {
 
     /// One attempt, described by what it actually did to the version history.
     ///
-    /// `reviewState` has three values and `producedRevision` is nullable, so
-    /// neither a two-way test on the state nor a bare `manifestRevision` says
-    /// what happened: a refusal names the version it was aimed at and created
-    /// nothing, and a published decision names both.
+    /// Two shapes, because FormaCore writes two kinds of row: a refusal names
+    /// the version it was aimed at and published nothing, and a published
+    /// decision names both. Anything else is not a state to explain in
+    /// interface copy - `pending` is never stored by an apply, and a verified
+    /// row is inserted only after its revision was written - so an unlisted
+    /// combination says the row itself is wrong.
     private static func outcomeLine(_ record: CorrectionRecord) -> (text: String, color: Color) {
         switch (record.reviewState, record.producedRevision) {
         case (.rejected, _):
             ("Refused by FormaCore · attempted against revision "
                 + "\(record.manifestRevision.formatted()) · published nothing", .orange)
-        case (.pending, _):
-            ("Awaiting review · attempted against revision \(record.manifestRevision.formatted()) · "
-                + "replaced \(record.previousValue ?? "nothing")", .blue)
         case (.evidenceVerified, let produced?):
             ("Recorded at revision \(produced.formatted()), superseding "
                 + "\(record.manifestRevision.formatted()) · replaced \(record.previousValue ?? "nothing")",
              .secondary)
-        case (.evidenceVerified, nil):
-            ("Verified but published no revision · attempted against revision "
-                + "\(record.manifestRevision.formatted())", .red)
+        default:
+            ("Row \(record.id) carries a state FormaCore never writes ("
+                + "\(record.reviewState.rawValue) · produced \(record.producedRevision.map { $0.formatted() } ?? "nil"))",
+             .red)
         }
     }
 }

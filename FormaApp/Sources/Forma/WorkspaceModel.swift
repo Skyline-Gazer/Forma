@@ -979,24 +979,43 @@ final class WorkspaceModel: ObservableObject {
                 // during either would otherwise land another source's manifest,
                 // rows and attempt list on this screen.
                 guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
-                // Read back rather than trust the returned manifest: the store
-                // decides the revision number, and the screen must show what it
-                // actually wrote. Both reads happen before anything is
-                // published, because a guard placed after the writes it is
-                // meant to protect has already performed them.
-                let current = try await workspace.currentManifest(scope: scope, profile: profile)
-                let attempts = try await workspace.corrections(manifestID: manifestID)
-                guard !Task.isCancelled, scope.id == selectedScopeID,
-                      profile.profileID == selectedProfileID else { return }
-                self.manifest = current ?? applied.manifest
+                // The decision is in storage from here on, so the screen is
+                // built from what the engine returned and the two reads below
+                // only refine it. Reading first and publishing after meant a
+                // storage error during a harmless read-back concealed a
+                // correction that had already succeeded: no confirmation, the
+                // sheet still open, and the reviewer's next click was refused
+                // by the stale-base guard - with a message about the source
+                // changing, caused by their own write.
+                self.manifest = applied.manifest
                 self.draft = nil
-                correctionHistory = attempts
-                correctionHistoryState = .fromStore
                 refreshRows()
-                notice = applied.violations.isEmpty
+                var message = applied.violations.isEmpty
                     ? "Correction recorded as revision \(applied.manifest.envelope.revision.formatted())."
                     : "FormaCore refused this correction: \(applied.violations.map { $0.code }.joined(separator: " · ")). "
                         + "Nothing was changed, and the attempt is on the exceptions list."
+                var attempts = [applied.correction]
+                var historyWasRead = false
+                if let stored = try? await workspace.currentManifest(scope: scope, profile: profile),
+                   stored.envelope.revision != applied.manifest.envelope.revision {
+                    // Something advanced the manifest between the write and
+                    // this read. The notice names both numbers rather than
+                    // letting the header show one and the audit trail another.
+                    message = "Correction recorded as revision "
+                        + "\(applied.manifest.envelope.revision.formatted()); the manifest has since advanced to revision "
+                        + "\(stored.envelope.revision.formatted())."
+                    self.manifest = stored
+                    refreshRows()
+                }
+                if let history = try? await workspace.corrections(manifestID: manifestID) {
+                    attempts = history
+                    historyWasRead = true
+                }
+                guard !Task.isCancelled, scope.id == selectedScopeID,
+                      profile.profileID == selectedProfileID else { return }
+                correctionHistory = attempts
+                correctionHistoryState = historyWasRead ? .fromStore : .notRead
+                notice = message
             } catch {
                 if !Task.isCancelled { show(error, operation: .applyCorrection, fallback: .storage) }
             }
