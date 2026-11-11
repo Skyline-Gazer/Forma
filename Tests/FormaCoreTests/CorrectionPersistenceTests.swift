@@ -347,7 +347,7 @@ struct CorrectionPersistenceTests {
         // revision 2 out of revision 1; the refusal read revision 3 and
         // produced nothing.
         try fixture.execute("""
-            DELETE FROM grdb_database_migrations WHERE identifier = 'mapping-corrections-v2';
+            DELETE FROM grdb_migrations WHERE identifier = 'mapping-corrections-v2';
             DROP INDEX IF EXISTS corrections_produced;
             ALTER TABLE corrections DROP COLUMN produced_revision;
             ALTER TABLE corrections ADD COLUMN supersedes_revision INTEGER;
