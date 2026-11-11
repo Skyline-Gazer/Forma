@@ -48,7 +48,33 @@ enum MappingCorrectionMigrations {
                 CREATE INDEX corrections_source ON corrections(source_id, field);
                 """)
         }
+        migrator.registerMigration("mapping-corrections-v2") { db in
+            try db.execute(sql: revisionSplitSQL)
+        }
     }
+
+    /// Splits version 1's one revision column into the revision a decision read
+    /// and the revision it wrote. The `NOT EXISTS` is load-bearing: two accepted
+    /// rows can name the same revision they read, and indexing over the
+    /// duplicate successor that gives both would abort the migration outright.
+    static let revisionSplitSQL = """
+        ALTER TABLE corrections ADD COLUMN produced_revision INTEGER;
+        UPDATE corrections SET produced_revision = supersedes_revision + 1
+            WHERE supersedes_revision IS NOT NULL AND review_state = 'evidence_verified'
+              AND NOT EXISTS (SELECT 1 FROM corrections AS earlier
+                  WHERE earlier.manifest_id = corrections.manifest_id
+                    AND earlier.supersedes_revision = corrections.supersedes_revision
+                    AND earlier.review_state = 'evidence_verified'
+                    AND (earlier.created_at < corrections.created_at
+                         OR (earlier.created_at = corrections.created_at
+                             AND earlier.id < corrections.id)));
+        UPDATE corrections SET manifest_revision = supersedes_revision
+            WHERE supersedes_revision IS NOT NULL AND review_state = 'evidence_verified';
+        ALTER TABLE corrections DROP COLUMN supersedes_revision;
+        CREATE UNIQUE INDEX corrections_produced
+            ON corrections(manifest_id, produced_revision)
+            WHERE produced_revision IS NOT NULL;
+        """
 }
 
 extension MappingStore {
@@ -57,13 +83,13 @@ extension MappingStore {
     static func insertCorrection(_ correction: CorrectionRecord, in db: Database) throws {
         try db.execute(
             sql: """
-                INSERT INTO corrections (id, manifest_id, manifest_revision, supersedes_revision, source_id,
+                INSERT INTO corrections (id, manifest_id, manifest_revision, produced_revision, source_id,
                     field, previous_value, corrected_value, evidence_ids, snapshot_fingerprint,
                     context_revision, origin, review_state, case_candidate_id, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
             arguments: [correction.id.sourceKey, correction.manifestID.sourceKey, correction.manifestRevision,
-                        correction.supersedesRevision, correction.sourceID.sourceKey, correction.field.rawValue,
+                        correction.producedRevision, correction.sourceID.sourceKey, correction.field.rawValue,
                         correction.previousValue, correction.correctedValue,
                         try FormaJSON.encode(correction.evidenceIDs), correction.snapshotFingerprint,
                         correction.contextRevision, correction.origin.rawValue, correction.reviewState.rawValue,
@@ -86,7 +112,7 @@ extension MappingStore {
             let candidate: String? = row["case_candidate_id"]
             return CorrectionRecord(
                 id: try sourceUUID(row["id"]), manifestID: try sourceUUID(row["manifest_id"]),
-                manifestRevision: row["manifest_revision"], supersedesRevision: row["supersedes_revision"],
+                manifestRevision: row["manifest_revision"], producedRevision: row["produced_revision"],
                 sourceID: try sourceUUID(row["source_id"]), field: field,
                 previousValue: row["previous_value"], correctedValue: row["corrected_value"],
                 evidenceIDs: ids, snapshotFingerprint: row["snapshot_fingerprint"],

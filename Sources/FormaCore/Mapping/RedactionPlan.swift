@@ -19,7 +19,7 @@ import Foundation
 /// the same number, which is the fact a mapping needs when one total appears in
 /// prose and again in a table - and the collision risk over the number of
 /// distinct figures one batch can carry is under one in a hundred thousand.
-public struct RedactionPlan: Sendable {
+public struct RedactionPlan: Sendable, Equatable {
     public enum Role: String, CaseIterable, Sendable {
         case customer, vendor, bidder, agent, person, project, amount, identifier
 
@@ -94,6 +94,18 @@ public struct RedactionPlan: Sendable {
         var counts: [Role: Int] = [:]
         for entry in terms { counts[entry.role, default: 0] += 1 }
         return counts
+    }
+
+    /// Two plans substitute the same text when every resolved placeholder
+    /// agrees, and - where anything is substituted at all - when the salt
+    /// agrees too, because the salt is inside every placeholder. An empty plan
+    /// substitutes nothing, so no field of it is observable in a request and all
+    /// empty plans are the same plan. The ordered term list is derived from
+    /// these, so it cannot differ while they match: a caller holding a snapshot
+    /// compares plans rather than the fields the snapshot came from.
+    public static func == (lhs: RedactionPlan, rhs: RedactionPlan) -> Bool {
+        lhs.replacements == rhs.replacements
+            && (lhs.replacements.isEmpty || lhs.salt == rhs.salt)
     }
 
     public func redact(path: String) -> String {

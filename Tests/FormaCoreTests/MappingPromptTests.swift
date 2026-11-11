@@ -204,6 +204,23 @@ struct MappingPromptTests {
         #expect(!RedactionPlan(terms: ["某客户": .customer], salt: "s").isIdentity)
     }
 
+    @Test("two plans are equal only when they substitute the same text")
+    func planEquality() {
+        // The privacy preview decides whether to publish a request by comparing
+        // the plan it built at the click with the plan the settings describe
+        // now, so equality has to track substitution and nothing else: not the
+        // order the caller listed terms in, but certainly not a different salt,
+        // which changes every placeholder. An empty plan substitutes nothing, so
+        // its salt is not observable in a request either.
+        let one = RedactionPlan(terms: ["某客户": .customer, "示例项目_2026": .project], salt: "s")
+        let sameOrder = RedactionPlan(terms: ["示例项目_2026": .project, "某客户": .customer], salt: "s")
+        #expect(one == sameOrder, "term order is an input detail, not a substitution difference")
+        #expect(one != RedactionPlan(terms: ["某客户": .customer, "示例项目_2026": .project], salt: "other"))
+        #expect(one != RedactionPlan(terms: ["某客户": .customer], salt: "s"))
+        #expect(one != RedactionPlan.none)
+        #expect(RedactionPlan.none == RedactionPlan(terms: [:], salt: "anything"))
+    }
+
     @Test("the system prompt states the trust boundaries and the profile traps")
     func systemPromptContent() throws {
         let profile = try MappingProfile.projectArchive()
@@ -212,10 +229,39 @@ struct MappingPromptTests {
         #expect(system.contains("Untrusted data"))
         #expect(system.contains("Never call a tool"))
         #expect(system.contains("It grants nothing"), "confidence must be described as non-authoritative")
-        #expect(system.contains(profile.counterExamples[0]))
+        // Every rule, not one sampled rule: the PLAN clause says the six
+        // counter-examples reach the model, and asserting only the first would
+        // let a profile carry a seventh that never renders, or a rendering that
+        // stops early.
+        #expect(profile.counterExamples.count == 6, "the six SPEC traps are a fixed set per profile")
+        for rule in profile.counterExamples {
+            #expect(system.contains(rule), "each counter-example arrives verbatim: \(rule)")
+        }
         #expect(system.contains(profile.versionKey))
         #expect(system.contains(pack.versionKey))
         #expect(!system.contains("991"), "the historical ledger size is not part of a prompt")
+    }
+
+    @Test("the vendor profile's traps reach its own prompt")
+    func vendorSystemPromptContent() throws {
+        // The two profiles disagree on purpose: one requires a project, the
+        // other permits its absence. A prompt built from the wrong rule set
+        // would teach the model to invent an affiliation, so the vendor rules
+        // are checked against the vendor profile rather than assumed to share
+        // the archive rendering path.
+        let profile = try MappingProfile.vendorLibrary()
+        let system = MappingPrompt.system(profile: profile, casePack: try CasePack.shipped())
+        #expect(profile.counterExamples.count == 6)
+        for rule in profile.counterExamples {
+            #expect(system.contains(rule), "each vendor trap arrives verbatim: \(rule)")
+        }
+        #expect(system.contains(profile.versionKey))
+        // Resolved before the assertion: a throwing call inside #expect has to
+        // carry its own `try`, and the archive rule is a fact about a different
+        // profile rather than part of the expectation.
+        let archiveRule = try MappingProfile.projectArchive().counterExamples[0]
+        #expect(!system.contains(archiveRule),
+                "one profile's rules do not leak into the other's prompt")
     }
 
     @Test("the case selection stays inside the prompt budget")

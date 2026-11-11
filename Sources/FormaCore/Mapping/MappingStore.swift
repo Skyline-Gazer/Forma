@@ -254,6 +254,33 @@ enum MappingStore {
         return try rows.map { try Self.decodeEvidence($0) }
     }
 
+    /// Every row for a set of sources, in one pass.
+    ///
+    /// Revalidating a whole manifest needs the rows behind citations in every
+    /// entry, and asking per source turned one reviewer action into a query for
+    /// each file the scan found.
+    static func evidence(for sourceIDs: Set<UUID>, in db: Database) throws -> [UUID: [EvidenceRecord]] {
+        let keys = Array(sourceIDs).map(\.sourceKey).sorted()
+        var grouped: [UUID: [EvidenceRecord]] = [:]
+        guard !keys.isEmpty else { return grouped }
+        // Chunked rather than one `IN (...)`: SQLite bounds the number of
+        // statement parameters, and a manifest covers every file in a scan, so
+        // a large directory would otherwise turn a reviewer action into a
+        // failure that only appears at some four-digit file count.
+        for start in stride(from: 0, to: keys.count, by: 400) {
+            let slice = Array(keys[start..<min(start + 400, keys.count)])
+            let placeholders = Array(repeating: "?", count: slice.count).joined(separator: ",")
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT * FROM evidence_items WHERE source_id IN (\(placeholders)) ORDER BY source_id, id
+                """, arguments: StatementArguments(slice))
+            for row in rows {
+                let record = try Self.decodeEvidence(row)
+                grouped[record.sourceID, default: []].append(record)
+            }
+        }
+        return grouped
+    }
+
     /// The rows that describe the file as it is now. Evidence from a superseded
     /// snapshot is still in the table for audit, but it may not support a
     /// current decision.

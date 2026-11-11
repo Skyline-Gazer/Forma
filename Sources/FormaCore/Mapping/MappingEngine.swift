@@ -196,9 +196,15 @@ public actor MappingEngine {
         for key in grouped.keys.sorted() {
             let members = grouped[key]!.sorted { $0.relativePath < $1.relativePath }
             let candidateID = key == "unaffiliated" ? nil : key
+            // A limit below one would slice nothing and advance nothing, so the
+            // loop below would never terminate. The floor belongs here rather
+            // than in a caller's text field: this function is what decides how
+            // many files leave the machine, and it must not depend on the
+            // interface remembering to clamp.
+            let size = max(1, limit)
             var start = 0
             while start < members.count {
-                let end = min(start + limit, members.count)
+                let end = min(start + size, members.count)
                 let chunk = Array(members[start..<end])
                 start = end
                 let refs = chunk.map { entry -> MappingEntryRef in
@@ -228,6 +234,24 @@ public actor MappingEngine {
             return MappingBatch(id: batch.id, candidateID: batch.candidateID, entries: batch.entries,
                                 evidence: rows)
         }
+    }
+
+    /// The batches a run would build for these entries, from the same grouping,
+    /// ordering, per-candidate splitting and attached rows the run itself uses.
+    ///
+    /// A caller that wants to describe a request - the privacy preview, a cost
+    /// estimate - has to ask the engine rather than imitate it: the first pass
+    /// of `run` is this same `withEvidence(batches(...))` composition, so the
+    /// batch membership, the refs and the attached rows cannot drift from what
+    /// a run would produce. The limit is floored to at least one inside
+    /// `batches`, which is where both paths meet; a caller passing zero gets the
+    /// same plan a run with `entryLimit` zero would get rather than a loop that
+    /// never advances.
+    public static func plannedBatches(from entries: [SourceEntry], context: ProjectContext,
+                                      limit: Int, evidence: [UUID: [EvidenceRecord]]) -> [MappingBatch] {
+        var state = BatchState(nextRef: 1)
+        return withEvidence(batches(from: entries, context: context, limit: limit, state: &state),
+                            evidence: evidence)
     }
 
     // MARK: - Answers

@@ -52,6 +52,10 @@ public enum FormaError: Error, LocalizedError, Sendable, Equatable {
 public enum FormaDiagnostics {
     public enum Operation: String, Sendable {
         case openWorkspace, registerSource, scanSource, readEvidence, discoverMCP, providerProbe, saveCredential
+        /// A correction whose call threw - the store refused the write or the
+        /// manifest had been superseded. A refusal on the evidence is a
+        /// successful call, recorded as a `rejected` row in the table.
+        case applyCorrection
     }
 
     private static let logger = Logger(subsystem: "io.github.skyline-gazer.forma", category: "operations")

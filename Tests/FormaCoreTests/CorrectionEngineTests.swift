@@ -219,11 +219,11 @@ struct CorrectionEngineTests {
         let store = try SourceStore(url: fixture.database)
         let manifestID = UUID()
         try fixture.execute("""
-            INSERT INTO corrections (id, manifest_id, manifest_revision, supersedes_revision, source_id,
+            INSERT INTO corrections (id, manifest_id, manifest_revision, produced_revision, source_id,
                                      field, previous_value, corrected_value, evidence_ids,
                                      snapshot_fingerprint, context_revision, origin, review_state,
                                      case_candidate_id, created_at)
-            VALUES ('c_bad', '\(manifestID.uuidString.lowercased())', 2, 1, '\(file.id.sourceKey)',
+            VALUES ('c_bad', '\(manifestID.uuidString.lowercased())', 1, 2, '\(file.id.sourceKey)',
                     'thirteenth_field', NULL, 'x', '[]', '\(file.snapshotFingerprint)', 1,
                     'manual', 'pending', NULL, 1780000000)
             """)
@@ -267,7 +267,7 @@ struct CorrectionEngineTests {
     func rejectedProducesNothing() throws {
         let profile = try MappingProfile.projectArchive()
         let correction = CorrectionRecord(
-            manifestID: UUID(), manifestRevision: 2, supersedesRevision: 1, sourceID: sourceID, field: .issuer,
+            manifestID: UUID(), manifestRevision: 2, producedRevision: nil, sourceID: sourceID, field: .issuer,
             previousValue: nil, correctedValue: "示例品牌A", evidenceIDs: [], snapshotFingerprint: fingerprint,
             contextRevision: 2, origin: .manual, reviewState: .rejected
         )
@@ -304,7 +304,7 @@ struct CorrectionEngineTests {
         let candidate = CaseCandidate(correctionIDs: [], status: .candidate, scenario: "归档完成年证据",
                                       profiles: ["project-archive"], redactionChecked: false)
         let correction = CorrectionRecord(
-            manifestID: UUID(), manifestRevision: 2, supersedesRevision: 1, sourceID: file.id,
+            manifestID: UUID(), manifestRevision: 1, producedRevision: 2, sourceID: file.id,
             field: .completionyear, previousValue: nil, correctedValue: "2026", evidenceIDs: ["ev_1"],
             snapshotFingerprint: file.snapshotFingerprint, contextRevision: 1, origin: .manual,
             reviewState: .pending, caseCandidateID: candidate.id
@@ -343,7 +343,7 @@ struct CorrectionEngineTests {
         _ = try await workspace.scan(try await workspace.scopes()[0])
         let store = try SourceStore(url: fixture.database)
         let invented = CorrectionRecord(
-            manifestID: UUID(), manifestRevision: 1, supersedesRevision: nil, sourceID: UUID(),
+            manifestID: UUID(), manifestRevision: 1, producedRevision: nil, sourceID: UUID(),
             field: .issuer, previousValue: nil, correctedValue: nil, evidenceIDs: [],
             snapshotFingerprint: fingerprint, contextRevision: 1, origin: .manual
         )

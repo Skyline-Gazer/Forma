@@ -15,15 +15,53 @@ struct FormaApplication: App {
     var body: some Scene {
         Window("Forma", id: "workspace") {
             switch workspace {
-            case .success(let workspace): WorkspaceView(workspace: workspace)
+            case .success(let workspace): WorkspaceAreas(workspace: workspace)
             case .failure(let error):
                 ContentUnavailableView("Workspace unavailable", systemImage: "externaldrive.badge.exclamationmark", description: Text(error.localizedDescription))
             }
         }
-        .defaultSize(width: 1050, height: 640)
+        .defaultSize(width: 1180, height: 700)
 
         Settings {
             ProbesView()
+        }
+    }
+}
+
+/// The four workspace areas, all driven by one orchestration model so a scan, a
+/// context revision, a manifest and an export bundle stay the same objects in
+/// every tab instead of being recomputed per view.
+@MainActor
+private struct WorkspaceAreas: View {
+    @StateObject private var model: WorkspaceModel
+
+    init(workspace: SourceWorkspace) {
+        _model = StateObject(wrappedValue: WorkspaceModel(workspace: workspace))
+    }
+
+    var body: some View {
+        TabView {
+            WorkspaceView(model: model)
+                .tabItem { Label("Workspace", systemImage: "folder") }
+                .accessibilityIdentifier("area-workspace")
+            MappingView(model: model)
+                .tabItem { Label("Mapping", systemImage: "tablecells") }
+                .accessibilityIdentifier("area-mapping")
+            ExceptionsView(model: model)
+                .tabItem { Label("Exceptions", systemImage: "exclamationmark.triangle") }
+                .accessibilityIdentifier("area-exceptions")
+            SettingsView(model: model)
+                .tabItem { Label("Settings", systemImage: "slider.horizontal.3") }
+                .accessibilityIdentifier("area-settings")
+        }
+        // Cancellation belongs to the window root: a macOS TabView unmounts the
+        // tab you leave, and `work` is the one handle every long task shares.
+        .onDisappear { model.cancelAll() }
+        .task { await model.restore() }
+        .alert("Forma", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
+            Button("OK") { model.error = nil }
+        } message: {
+            Text(model.error?.localizedDescription ?? "")
         }
     }
 }

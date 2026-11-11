@@ -20,8 +20,16 @@ public struct CorrectionRecord: Codable, Sendable, Equatable {
 
     public let id: UUID
     public let manifestID: UUID
+    /// The revision this decision was applied to. Always the version the
+    /// reviewer was looking at, whether or not anything came of it.
     public let manifestRevision: Int
-    public let supersedesRevision: Int?
+    /// The revision this decision published, or `nil` when it published
+    /// nothing. Assigned by the store when the version is written, so a claim
+    /// cannot run ahead of the revision it names.
+    ///
+    /// Why this is not the same column as `manifestRevision`: see
+    /// `MappingCorrectionMigrations.revisionSplitSQL`.
+    public var producedRevision: Int?
     public let sourceID: UUID
     public let field: MetadataFieldID
     public let previousValue: String?
@@ -34,14 +42,14 @@ public struct CorrectionRecord: Codable, Sendable, Equatable {
     public let caseCandidateID: UUID?
     public let createdAt: Date
 
-    public init(id: UUID = UUID(), manifestID: UUID, manifestRevision: Int, supersedesRevision: Int?,
+    public init(id: UUID = UUID(), manifestID: UUID, manifestRevision: Int, producedRevision: Int?,
                 sourceID: UUID, field: MetadataFieldID, previousValue: String?, correctedValue: String?,
                 evidenceIDs: [String], snapshotFingerprint: String, contextRevision: Int, origin: Origin,
                 reviewState: ReviewState = .pending, caseCandidateID: UUID? = nil, createdAt: Date = .now) {
         self.id = id
         self.manifestID = manifestID
         self.manifestRevision = manifestRevision
-        self.supersedesRevision = supersedesRevision
+        self.producedRevision = producedRevision
         self.sourceID = sourceID
         self.field = field
         self.previousValue = previousValue
@@ -128,7 +136,7 @@ public struct CorrectionEngine: Sendable {
         guard let position = manifest.entries.firstIndex(where: { $0.sourceID == sourceID }) else {
             return Applied(manifest: manifest, correction: CorrectionRecord(
                 manifestID: manifest.envelope.manifestID, manifestRevision: manifest.envelope.revision,
-                supersedesRevision: nil, sourceID: sourceID, field: field, previousValue: nil,
+                producedRevision: nil, sourceID: sourceID, field: field, previousValue: nil,
                 correctedValue: correctedValue, evidenceIDs: evidenceIDs, snapshotFingerprint: "",
                 contextRevision: context.revision, origin: origin
             ), violations: [ValidationViolation(code: "entry_unknown", instancePath: sourceID.sourceKey,
@@ -190,7 +198,7 @@ public struct CorrectionEngine: Sendable {
             // happened - which is worse than showing the refusal.
             return Applied(manifest: manifest, correction: CorrectionRecord(
                 manifestID: manifest.envelope.manifestID, manifestRevision: manifest.envelope.revision,
-                supersedesRevision: nil, sourceID: sourceID, field: field, previousValue: previous,
+                producedRevision: nil, sourceID: sourceID, field: field, previousValue: previous,
                 correctedValue: correctedValue, evidenceIDs: evidenceIDs,
                 snapshotFingerprint: manifest.entries[position].snapshotFingerprint,
                 contextRevision: context.revision, origin: origin, reviewState: .rejected
@@ -236,8 +244,8 @@ public struct CorrectionEngine: Sendable {
         candidate.envelope.state = state
 
         let correction = CorrectionRecord(
-            manifestID: manifest.envelope.manifestID, manifestRevision: candidate.envelope.revision,
-            supersedesRevision: manifest.envelope.revision, sourceID: sourceID, field: field,
+            manifestID: manifest.envelope.manifestID, manifestRevision: manifest.envelope.revision,
+            producedRevision: candidate.envelope.revision, sourceID: sourceID, field: field,
             previousValue: previous, correctedValue: correctedValue, evidenceIDs: evidenceIDs,
             snapshotFingerprint: manifest.entries[position].snapshotFingerprint,
             contextRevision: context.revision, origin: origin,

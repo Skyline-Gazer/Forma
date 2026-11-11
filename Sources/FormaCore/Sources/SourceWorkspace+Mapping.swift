@@ -74,6 +74,20 @@ extension SourceWorkspace {
         }
     }
 
+    /// Every registered row for a set of sources, in one read.
+    ///
+    /// A caller that has to describe a batch - the privacy preview - needs the
+    /// rows for every file in it. Asking per file turned one reviewer action
+    /// into a query for each file, and a preview assembled from whatever a
+    /// session happened to open earlier describes a request the run would not
+    /// make.
+    public func registeredEvidence(for sourceIDs: Set<UUID>) async throws -> [UUID: [EvidenceRecord]] {
+        guard !sourceIDs.isEmpty else { return [:] }
+        return try await store.database.read { db in
+            try MappingStore.evidence(for: sourceIDs, in: db)
+        }
+    }
+
     /// Reads a file and registers what was observed, returning the rows a
     /// mapping request may cite.
     ///
@@ -105,16 +119,28 @@ extension SourceWorkspace {
     /// Stores a manifest as the next revision. A caller cannot overwrite an
     /// existing revision by handing it the same number: the store decides.
     public func saveManifest(_ manifest: Manifest, scopeID: UUID) async throws -> Manifest {
-        try await store.database.write { db in
-            let revision = try MappingStore.nextManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
-            let stored = Manifest(envelope: manifest.envelope.rebased(to: revision), entries: manifest.entries,
-                                  report: manifest.report)
-            // `manifest_entry_evidence.evidence_id` carries a foreign key into
-            // `evidence_items`, so citing an unregistered row fails here rather
-            // than being discovered by re-querying after the fact.
-            try MappingStore.insertManifest(stored, scopeID: scopeID, in: db)
-            return stored
-        }
+        try await store.database.write { db in try Self.persist(manifest, scopeID: scopeID, in: db) }
+    }
+
+    /// Writes the next revision inside the caller's transaction.
+    ///
+    /// Split from `saveManifest` because a correction has two facts to record -
+    /// the version and the decision that produced it - and they must not be
+    /// separable on disk. `expecting` is the revision the caller believes is
+    /// next; the number is read once here, so the check and the write cannot
+    /// disagree about which revision is being produced, and a caller working
+    /// from a version the store has moved past is refused with `sourceChanged`.
+    private static func persist(_ manifest: Manifest, scopeID: UUID, expecting: Int? = nil,
+                                in db: Database) throws -> Manifest {
+        let revision = try MappingStore.nextManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
+        guard expecting == nil || expecting == revision else { throw FormaError.sourceChanged }
+        let stored = Manifest(envelope: manifest.envelope.rebased(to: revision), entries: manifest.entries,
+                              report: manifest.report)
+        // `manifest_entry_evidence.evidence_id` carries a foreign key into
+        // `evidence_items`, so citing an unregistered row fails here rather
+        // than being discovered by re-querying after the fact.
+        try MappingStore.insertManifest(stored, scopeID: scopeID, in: db)
+        return stored
     }
 
     public func currentManifest(scope: SourceScope, profile: MappingProfile) async throws -> Manifest? {
@@ -187,5 +213,74 @@ extension SourceWorkspace {
 
     public func providerCalls(runID: UUID) async throws -> [ProviderCall] {
         try await store.database.read { db in try MappingStore.providerCalls(runID: runID, in: db) }
+    }
+
+    /// Applies a human correction and stores what it produced.
+    ///
+    /// The engine decides; this method gathers the facts it needs - the current
+    /// listing, the context revision the manifest cites, the registered rows it
+    /// may cite - and persists the outcome. A refused attempt is stored and
+    /// changes no revision, so the review screen can show the click while the
+    /// version history keeps only decisions actually made. Nothing checks here
+    /// that a citation is registered: the manifest is written by `persist`
+    /// inside the same transaction, so the foreign key into `evidence_items` is
+    /// the database's own rejection and arrives as `.storage`, not as a refusal
+    /// with a violation code. A manifest the store has already moved past is
+    /// refused with `sourceChanged`, also from inside that transaction.
+    public func applyCorrection(to manifest: Manifest, sourceID: UUID, field: MetadataFieldID,
+                                correctedValue: String?, evidenceIDs: [String],
+                                origin: CorrectionRecord.Origin, scope: SourceScope,
+                                profile: MappingProfile) async throws -> CorrectionEngine.Applied {
+        let listing = try listing(scope)
+        // Decided against the context the manifest cites. Rebuilding here would
+        // bump a context revision as a side effect of a human edit, and would
+        // judge the entry against candidates this manifest never had.
+        guard let context = try await storedContext(scope: scope, profile: profile,
+                                                    revision: manifest.envelope.contextRevision) else {
+            throw FormaError.unavailable
+        }
+        // Revalidation resolves citations for every entry, so the rows are read
+        // in one query rather than one round trip per file.
+        let evidence = try await store.database.read { db in
+            try MappingStore.evidence(for: Set(manifest.entries.map(\.sourceID)), in: db)
+        }
+        let applied = CorrectionEngine(profile: profile).apply(
+            to: manifest, sourceID: sourceID, field: field, correctedValue: correctedValue,
+            evidenceIDs: evidenceIDs, origin: origin, context: context, evidence: evidence,
+            currentEntries: listing.entries)
+        if applied.violations.isEmpty {
+            // Publish and record together: a row claiming a revision that was
+            // never stored would occupy the index and refuse the retry.
+            let published = try await store.database.write { db -> (manifest: Manifest,
+                                                                    record: CorrectionRecord) in
+                let stored = try Self.persist(applied.manifest, scopeID: scope.id,
+                                              expecting: manifest.envelope.revision + 1, in: db)
+                var record = applied.correction
+                // The engine guessed the successor; the store's number is the
+                // one that was written, and they can only differ if the guard
+                // above was wrong.
+                record.producedRevision = stored.envelope.revision
+                // The number came from the store one statement above, so the
+                // index can only be violated by a history written outside this
+                // code; it is the schema's last word, not a branch to handle.
+                try MappingStore.insertCorrection(record, in: db)
+                return (stored, record)
+            }
+            return CorrectionEngine.Applied(manifest: published.manifest, correction: published.record,
+                                            violations: [])
+        }
+        // A refusal names the revision it aimed at and produces nothing: many
+        // attempts may share a target, no two may claim one version.
+        try await store.database.write { db in
+            try MappingStore.insertCorrection(applied.correction, in: db)
+        }
+        return applied
+    }
+
+    /// Every correction attempt against one manifest, verified or refused.
+    public func corrections(manifestID: UUID) async throws -> [CorrectionRecord] {
+        try await store.database.read { db in
+            try MappingStore.corrections(manifestID: manifestID, in: db)
+        }
     }
 }
