@@ -8,13 +8,13 @@
 | PR | 内容 | 合并提交 | 合并前 GitHub Actions（macos-15 + Xcode 26.3） | CNB 评审轮次 |
 |---|---|---|---|---|
 | #38 | P2.1 双 Profile、版本化 Draft 2020-12 工件 Schema、12 字段契约、Schema 门禁与依赖选型 | `b24463e`（head `1a28bb2`） | tests、app build 均 `pass`（run 42988017585） | CNB pull #4：3 轮（`17929d7`/`ddc9045`/`bda8280`），发现全部修复；第 3 轮修复提交由 CI 验证，未触发第 4 轮评审 |
-| #39 | P2.2 Context Builder、P2.3 Evidence Registry、P2.5 Validator、mapping SQLite 迁移、reconcile | `ee9954c`（head `5c4e932`） | tests、app build 均 `pass`（run 42999561166） | CNB pull #5：4 轮（`e86f2ea` 1 critical+5 warning → `b78e270` 4 → `e924919` 3 → `5ccf3a0` 3），发现全部修复；第 4 轮属预算外，见 §5 |
+| #39 | P2.2 Context Builder、P2.3 Evidence Registry、P2.5 Validator、mapping SQLite 迁移、reconcile | `ee9954c`（head `5c4e932`） | tests、app build 均 `pass`（run 42999561166） | CNB pull #5：4 轮（`e86f2ea` 1 critical+5 warning → `b78e270` 4 → `e924919` 3 → `5ccf3a0` 3），发现全部修复；第 4 轮属预算外，见 §6「覆盖边界」 |
 | #40 | （stacked PR，基线分支被 squash 合并后自动关闭；由 #41 取代） | - | - | - |
 | #41 | P2.4 Provider 传输复用 + Mapping Engine + CasePack + Prompt/脱敏 | `98c956d`（head `f660f8b`） | tests、app build 均 `pass`（run 43020359230） | CNB pull #6：11 轮（1c+4w → 1c+2w → 1c+7w → 1c+9w+1i → 1c+9w+1i → 0c+4w+1i → 0c+0w → 1c+2w → 0c+3w → 0c+2w+2i → 0c+2w+2i），发现全部处理 |
 | #42 | P2.5 导出/离线重校验 + P2.7 Correction Capture 与候选案例 | `09baffe`（head `99632a4`） | tests、app build 均 `pass`（run 43024661916） | CNB pull #7：2 轮（1c+6w → 0c+2w，末轮 `passed`），发现全部处理 |
 | #43 | P2.6 原生工作界面 + P2.7 纠错落地路径 | 26a2c3b（head `921808b`） | tests、app build 均 `pass`（run 43078381212，最终测试数 213） | CNB pull #8：**38 次评审构建、37 次有效判定**（`3885a57` 因评审器输出缺字段判 `REVIEW_EVIDENCE_INVALID`，发现仍从 stage-2 日志读出并处理），累计 14 条 critical。最后四轮只命中注释冗余或复述前一轮已修项；发现全部处理或附证据说明不成立 |
-| #44 | P2 验收报告 + ADS 台账（本文档） | 待合并 | tests、app build 均 `pass`（run 43083387505） | CNB pull #9：1 次构建，`changes_requested`（2 critical+2 warning，全部针对**已合并代码**而非文档，见 §6 末条与 §9） |
-| #45 | #43 合并后遗留项：3 项注释/UI 反馈 + pull #9 的 4 项缺陷 | 待合并（head `094edd3`） | 首提交 tests、app build 均 `pass`（run 43084110419）；含第二提交的重跑待记录 | CNB pull #10：镜像 `094edd3`，评审结果待记录 |
+| #44 | P2 验收报告 + ADS 台账（本文档） | 本 PR 自身；SHA 与 run 由合并后的文档提交填入 | tests、app build 均 `pass`（run 43083387505 @`cdacae5`）；后续文档提交的重跑结果见合并后的填入值 | CNB pull #9：`cdacae5` 上 1 次构建 `changes_requested`（2 critical+2 warning，**全部针对已合并代码而非文档**，见 §6 末条与 §9）；代码修复合入 `dev` 后本分支重新镜像，其 diff 只剩文档 |
+| #45 | #43 合并后遗留项：3 项注释/界面反馈 + pull #9 的 4 项缺陷 + 整改自身的 3 项编译期缺陷 | `63618ea`（head `af147e8`） | tests、app build 均 `pass`（run 43090470052） | CNB pull #10：4 次构建（`4adcb95` 1w → `7573afe` 1w → `2a29986` 1c → `af147e8` **通过**）；第 3 次构建报出的正是自查已修的 `Summary.missingEvidence` 幻影字段 |
 
 注：#43 行原先列出逐次计数，完整 38 次链见 `docs/ADS-ADOPTION.md` 的 P2 台账；此处只保留汇总，避免同一串数字在两处失同步。
 
@@ -65,10 +65,11 @@
 
 ## 6. CNB 评审批次与发现处置
 
+- **P2 的 critical 权威计数（按 CNB pull）**：pull #4（#38）0 条、#5（#39）1 条、#6（#41）6 条、#7（#42）1 条、#8（#43）14 条、#9（#44，读的是已合并代码）2 条、#10（#45，读的是整改自身）1 条，合计 **25 条**。评审构建合计 64 次，其中 1 次（`3885a57`）因评审器输出缺 `severity` 判 `REVIEW_EVIDENCE_INVALID`，**有效判定 63 次**。下文各条按 pull 展开，§1 是同一组数字的另一种视图；任何一处与本条不一致时以本条为准并修另一处。
 见 `docs/ADS-ADOPTION.md` 的 P2 台账与 §1 表。要点：
 
-- 评审共发现 **1 条 critical**（重读已归档文件触发外键约束失败，导致证据永远无法刷新）与多条真实 warning：工件长度/数量上界只在 Schema 而不在构造、lint 对部分关键字形态放行、Profile 契约用 `else` 代表 Vendor、历史匹配用裸子串包含、失效判定与注释不一致、 reconcile 重复报告旧失效、死代码与无调用方的分支入口、注释描述与实现不符。全部 FIXED，并有对应回归测试或收紧后的断言。
-- **覆盖边界**：#38 的第 3 轮发现修复 commit 未触发第 4 轮评审（自动循环上限 3 轮），其验证依据为 GitHub Actions 与本地编译；#39 同理以其第 3 轮结果为准。该缺口在此登记，不追认为已评审通过。
+- **pull #4 与 #5（#38、#39）合计 1 条 critical**（重读已归档文件触发外键约束失败，导致证据永远无法刷新），另有以下真实 warning：工件长度/数量上界只在 Schema 而不在构造、lint 对部分关键字形态放行、Profile 契约用 `else` 代表 Vendor、历史匹配用裸子串包含、失效判定与注释不一致、 reconcile 重复报告旧失效、死代码与无调用方的分支入口、注释描述与实现不符。全部 FIXED，并有对应回归测试或收紧后的断言。
+- **覆盖边界**：#38 的第 3 轮修复提交未触发第 4 轮评审（自动循环上限 3 轮），验证依据是 GitHub Actions 与本地编译。#39 跑了 4 轮，第 4 轮在预算外，其修复提交同样只由 CI 验证。两处缺口在此登记，不追认为已评审通过。
 - **#41 评审轮数超出预期**：同一 PR 在 CNB 上跑了 11 轮（1 critical+4 warning → 1+2 → 1+7 → 1+9+1 → 1+9+1 → 0+4+1）。每轮都产出真实缺陷，其中三条属于生产语义错误而非风格问题：`candidate_ref` 与 projectKey 的错配（会让所有真实模型答案失去资格）、批次按 projectKey 分组却反查 candidateID（同一 key 多候选时挂错成员集合）、429 与 schema 修复共用一轮循环（一次限流吃掉修复额度）。这说明「一次集中复核」的预算假设对 AI 生成代码不成立；后续切片 PR 仍按同一流程执行，但验收报告按实际轮数记录，不把多轮评审当作异常。
 - **#43（CNB pull #8）跑了 38 次评审构建、37 次有效判定**（第 11 次 `3885a57` 因评审器输出缺 `severity` 被判 `REVIEW_EVIDENCE_INVALID`，发现仍从 stage-2 日志读出并处理，不计为有效判定），累计 14 条 critical。逐次计数与被评审 head 链见 `docs/ADS-ADOPTION.md` 的 P2 台账。趋势不是「风格收敛」而是**同一状态机被逐层追问到自洽**：第 1–10 次修数据与写入路径（scope 持久化双写、引擎缓存键与本体分离、纠正记录一列两义、发布与记录分两次写、stale-base 可覆盖新修订）；第 11–21 次修并发与生命周期（await 之后的归属校验、回读吞掉已成功的写入、tab 卸载取消共享任务句柄、restore 双趟 reload、UI 先写后校验）；第 22–35 次修**整改自身引入的问题**与迁移对真实旧库的适配；第 36–38 次只命中注释密度与文档准确性。
   - 第 22 次构建（`bffed12`）critical：`corrections_produced` 唯一索引在含「两行声称读过同一修订」的 v1 历史上会让 `CREATE UNIQUE INDEX` 失败、迁移中止，用户启动即 `Workspace unavailable` → 早者保留主张、晚者留空；新增测试先 rewind 一个由生产 store 建出的库、删除迁移记录再重开，让注册迁移真实执行。
@@ -101,7 +102,7 @@
 
 本地闭环（扫描 → 上下文 → 证据 → 校验 → Manifest → 导出 → 离线复核 → 纠正 → 界面）已实现并由 CI 验证；进入 P3 还需两项外部输入：真实 Provider 调用（凭据 + 授权）与 ≥150 条独立脱敏金标准。二者缺一时 P3 只能报告缺口，不能宣称质量验收。
 
-P3 的评审增加两类检查项，来源是 P2 漏网的缺陷形状（§6 末条、§9 后 11 行）：
+P3 的评审增加两类检查项，来源是 P2 漏网的缺陷形状（§6 末条、§9 第 50–60 行）：
 
 1. **每个存储查询的归属**：这次读的是不是调用者刚写的那一条，还是「该容器里最新的一条」；写路径的返回值是否被二次读取覆盖。
 2. **每个数据来源的身份**：界面/导出用的是持久化登记的数据，还是本次会话顺带缓存的数据；若不是同一集合，缺失时要显式说出而不是报告成功。
@@ -171,5 +172,5 @@ P3 的评审增加两类检查项，来源是 P2 漏网的缺陷形状（§6 末
 | 导出提示读取 `Summary.missingEvidence`（属 `Revalidation` 字段） | 同上：编译失败；且概念上把离线复核的结论当作导出即时可知的事实 | GitHub Actions macOS app build run 43089752867 |
 | 导出提示写成两分支插值字符串放在 `Task` 体内 | 类型检查超时导致 app target 失败 | GitHub Actions macOS app build run 43089234676 |
 
-前 15 项在所属 PR 合并前由测试与评审闭环处理；后 11 项在 #43 合并后发现，由 #45 修复：4 项改变运行时行为（写后又读、导出取会话缓存、每引用一次线性扫描、历史读失败的状态语义），2 项是注释与界面措辞，1 项是新增的进行指示——它本身又被 CNB #10 连续两轮判为缺陷，连带修掉「写入完成时清掉另一字段正在输入的草稿」，3 项是凭印象引用 FormaCore 类型成员造成的 app target 编译失败或类型检查超时。全部未进入 I1/I2，也未对 DEVONthink 做任何写操作。
+本表 60 行：第 1–49 行在所属 PR 合并前由测试与评审闭环处理；第 50–60 行（11 行）在 #43 合并后发现，全部由 #45 修复——其中 4 行改变运行时行为（写后又读、导出取会话缓存、每引用一次线性扫描、历史读失败的状态语义），3 行是注释与界面措辞（含被否掉一次又改对的那条进度指示），1 行是进度指示挂到全局 `phase` 且写入完成时清掉另一字段草稿，3 行是凭印象引用 FormaCore 类型成员造成的 app target 编译失败或类型检查超时。全部未进入 I1/I2，也未对 DEVONthink 做任何写操作。
 
