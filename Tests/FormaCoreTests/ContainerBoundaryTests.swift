@@ -10,8 +10,8 @@ import Testing
 struct ContainerBoundaryTests {
     @Test func plainArchiveEnumeratesEntriesInDirectoryOrder() throws {
         let package = try OfficePackage(ContainerBuilder.pair())
-        #expect(try package.contains("a.txt"))
-        #expect(try package.contains("b.txt"))
+        #expect(package.contains("a.txt"))
+        #expect(package.contains("b.txt"))
         #expect(try package.part("a.txt") == Data("AAAA".utf8))
         #expect(try package.part("b.txt") == Data("BBBB".utf8))
     }
