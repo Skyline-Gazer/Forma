@@ -23,10 +23,9 @@
             comment: true
             max_comments: 10
             min_confidence: medium
-            exclude_categories: "style,nit"
-            review_event: auto
-            timeout_minutes: 20
-            max_turns: 30
+            timeout_minutes: 30
+            max_turns: 120
+            # A documentation-only PR used 12 turns; FormaCore diffs need more.
             rules: |
               - Forma is a macOS Swift 6 / SwiftUI application; GitHub is the Primary
                 repository and GitHub Actions is the only build and test authority.
@@ -41,3 +40,13 @@
               - Reject stale review: findings must describe the current source SHA.
               - Do not require secrets, API keys, customer data or internal paths in
                 any committed file; public examples must be synthetic or redacted.
+        - name: report-review-result
+          script: |
+            echo "reviewed-source-sha=$CNB_PULL_REQUEST_SHA"
+            echo "reviewed-target-sha=$CNB_PULL_REQUEST_TARGET_SHA"
+            if [ -s ./code_review.json ]; then
+              python3 -c 'import json,sys;d=json.load(open("code_review.json"));print("status:",d["status"]);print("findings:",len(d["issues"]));[print(json.dumps(i,ensure_ascii=False)) for i in d["issues"]]'
+            else
+              echo "no structured review result produced; findings are unverified"
+              exit 1
+            fi

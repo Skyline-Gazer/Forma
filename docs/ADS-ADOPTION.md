@@ -51,3 +51,14 @@ Verified live state on 2026-11-11 with the authenticated CNB environment:
 - Structured findings were obtained from the retained runner log. In that run the plugin failed to parse its own result and reported `PR 评论发送失败，但评审已完成`, so no PR comment or review object was retrievable; retrieval therefore uses the build log and must be re-checked for comment delivery on each round. Plugin exit code 0 is not treated as review coverage.
 
 Not authorized or not configured by this adoption: automatic CNB↔GitHub synchronization, push mirrors, release flows, CNB build/test stages, CNB merge authority, and any credential stored outside the platform secret store.
+
+## Review-run observations (this repository)
+
+| Round | Source SHA | Result | Handling |
+|---|---|---|---|
+| 1 | `3f157806f8e88bba6a0951798c5a735ec0b198ec` | `needs_modification`, 2 warning findings in the runner log; comment delivery failed with `评审结果缺少必需字段或格式不正确` | Both findings fixed in `d20b5136`; delivery failure worked around by logging the structured result |
+| 2 | `d20b5136084ecf86f53193437ca2c84d4ac89154` | Pipeline `error`: `Max turns (30) exceeded` after 10 findings, so no result was retained | `max_turns` 120, `timeout_minutes` 30 and a `report-review-result` stage that fails loudly when no structured result exists |
+
+Round 2 evaluated `38d4553...d20b513` because the CNB `dev` mirror had not yet advanced to the GitHub `dev` head; the diff therefore also included already-integrated FormaCore code. Review bindings must use the current GitHub base SHA, so the mirror was fast-forwarded before round 3. Findings against integrated FormaCore code from that round are tracked separately and are not marked resolved here.
+
+Round 1 and round 2 evidence comes from the retained runner logs; plugin exit 0 is not treated as review coverage.
