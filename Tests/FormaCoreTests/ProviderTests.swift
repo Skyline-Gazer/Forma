@@ -130,7 +130,7 @@ struct ProviderTests {
     func capsResponseBody(withContentLength: Bool) async {
         let fixture = ProviderFixture(provider: .openAI) { _ in
             var body = ProbeProvider.openAI.successBody()
-            body.append(Data(repeating: 0x20, count: ProviderProbe.maximumResponseBytes + 1 - body.count))
+            body.append(Data(repeating: 0x20, count: ProviderTransport.maximumResponseBytes + 1 - body.count))
             return .response(
                 body: body,
                 headers: withContentLength ? ["Content-Length": String(body.count)] : [:]

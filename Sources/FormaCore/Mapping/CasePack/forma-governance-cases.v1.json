@@ -1,0 +1,1045 @@
+{
+  "schema_version": "1.0",
+  "id": "forma-governance-cases",
+  "version": "1.0",
+  "cases": [
+    {
+      "case_id": "pa-pos-tender-announcement-01",
+      "kind": "positive",
+      "scenario": "采购方委托代理机构在招标门户发布的招标公告，PDF 首页含委托方名称、招标编号与投标截止时间。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/01_招标/TENDER_招标公告_ZB-DEMO-2026-014.pdf",
+        "redacted_filename": "TENDER_招标公告_ZB-DEMO-2026-014.pdf",
+        "context_summary": "同一示例项目目录内有采购需求书与空白报价表附件；项目关联由来源目录与两份采购文件交叉证实，归档完成年 2026 来自已核实的归档事实记录。",
+        "citations": [
+          {"label": "正文-第1页-标题", "excerpt": "招标公告（示例）：受示例客户C研究院委托，对智慧园区智能化项目进行公开招标，招标编号 ZB-DEMO-2026-014。"},
+          {"label": "正文-第1页-落款", "excerpt": "发布人：示例采购代理D有限公司（公章占位）。投标截止时间：2026年3月18日 09:30。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "01_招标文件",
+        "document_type": "Tender Announcement",
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": "示例客户C研究院",
+          "biddeadline": "2026-03-18",
+          "tenderreference": "ZB-DEMO-2026-014",
+          "bsdcode": null,
+          "documentcategory": "01_招标文件",
+          "documenttype": "Tender Announcement",
+          "issuer": "示例采购代理D有限公司"
+        }
+      },
+      "why_not": [
+        "不是 05_报价与商务：公告本身不含单价、折扣或总价，只是采购方发布的采购信息。",
+        "不是 02_投标文件：公告由采购侧出具，投标主体的响应文件尚不存在。",
+        "bidderentity 留空：公告中没有任何投标主体证据，不得用后来的中标方回填。",
+        "endcustomer 取委托方而非发布人：代理机构是出具方，不得与最终客户混同。",
+        "biddeadline 归一化为 YYYY-MM-DD，依据是正文截止日期语句，而非文件名或修改时间。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "pa-pos-procurement-requirement-01",
+      "kind": "positive",
+      "scenario": "随招标发布的采购需求书，正文以技术规格要求为主，文中出现需求文件编号但无落款签章。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/01_招标/采购需求书_技术规格要求_v1.2.docx",
+        "redacted_filename": "采购需求书_技术规格要求_v1.2.docx",
+        "context_summary": "招标文件清单显示本需求书为 ZB-DEMO-2026-014 的组成附件；项目关联与归档完成年已由项目上下文记录核实。",
+        "citations": [
+          {"label": "正文-第1页", "excerpt": "采购需求书：智慧园区智能化项目技术规格要求共 4 章，使用单位为示例客户C研究院（合成文本）。"},
+          {"label": "正文-文头", "excerpt": "文件编号：XQ-DEMO-2026-07；编制单位：示例采购代理D有限公司。文末无署名与印章。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "01_招标文件",
+        "document_type": "Procurement Requirement",
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": "示例客户C研究院",
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "01_招标文件",
+          "documenttype": "Procurement Requirement",
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "tenderreference 留空：XQ-DEMO-2026-07 是需求文件编号，不是公告中的采购或招标编号。",
+        "issuer 留空：编制单位仅出现在文头，无落款或签章，不构成法律出具主体依据。",
+        "不是 04_技术资料与编制素材：本需求书由采购方发布并约束本项目，不是可复用编制素材。",
+        "不是 02_投标文件：无我方响应内容，投标主体字段因此留空。",
+        "biddeadline 留空：需求书未载截止日期，不得从同目录公告迁移。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "pa-pos-technical-bid-document-02",
+      "kind": "positive",
+      "scenario": "投标技术标章节文档，正文逐条对应本项目需求编号，落款为投标单位全称并带印章占位。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/02_投标/技术标_第3章_系统架构设计_v2.docx",
+        "redacted_filename": "技术标_第3章_系统架构设计_v2.docx",
+        "context_summary": "已核实的项目上下文记录给出投标主体、归属部门与销售负责人；本项目内部档案号 BSD-DEMO-0007 在同一记录的封面标注中被确认。",
+        "citations": [
+          {"label": "正文-第1页", "excerpt": "本章针对 ZB-DEMO-2026-014 项目需求书 3.2 条给出实现方案（合成内容）。内部档案号：BSD-DEMO-0007。"},
+          {"label": "正文-落款", "excerpt": "投标单位：示例集成商B有限公司（公章占位），2026年3月。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "02_投标文件",
+        "document_type": "Bid Document",
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": "示例集成商B有限公司",
+          "department": "示例交付部_智能系统",
+          "salesowner": "示例销售甲",
+          "endcustomer": "示例客户C研究院",
+          "biddeadline": null,
+          "tenderreference": "ZB-DEMO-2026-014",
+          "bsdcode": "BSD-DEMO-0007",
+          "documentcategory": "02_投标文件",
+          "documenttype": "Bid Document",
+          "issuer": "示例集成商B有限公司"
+        }
+      },
+      "why_not": [
+        "不是 04_技术资料与编制素材：正文逐条响应本项目需求，属于投标稿而非通用素材。",
+        "endcustomer 由正文与项目上下文共同指向的使用单位确认，不与出具方或投标主体混同。",
+        "biddeadline 留空：本文件未出现截止日期语句，落款的 2026年3月 不是截止日期证据。",
+        "bsdcode 取自已核实的内部档案号规则，不是从任何日期拼接推断。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "pa-pos-vendor-authorization-03",
+      "kind": "positive",
+      "scenario": "原厂针对具体招标编号出具的项目授权与售后承诺函，落款为法人全称并带印章占位。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/03_厂商支持/示例厂商A_项目授权函_ZB-DEMO-2026-014.pdf",
+        "redacted_filename": "示例厂商A_项目授权函_ZB-DEMO-2026-014.pdf",
+        "context_summary": "同一项目目录中存在已核验的招标公告，可交叉确认招标编号；本文件的归档判定仍以自身正文与落款为据，不迁移其他文件字段。",
+        "citations": [
+          {"label": "正文-第1页", "excerpt": "授权函：示例厂商A科技股份有限公司授权示例集成商B有限公司参加 ZB-DEMO-2026-014 项目投标，并提供原厂售后（合成文本）。"},
+          {"label": "正文-落款", "excerpt": "示例厂商A科技股份有限公司（公章占位），2026年2月20日。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "03_厂商支持文件",
+        "document_type": "Vendor Authorization",
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": "示例集成商B有限公司",
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": "ZB-DEMO-2026-014",
+          "bsdcode": null,
+          "documentcategory": "03_厂商支持文件",
+          "documenttype": "Vendor Authorization",
+          "issuer": "示例厂商A科技股份有限公司"
+        }
+      },
+      "why_not": [
+        "不是 05_报价与商务：授权函不含价格内容，尽管出现厂商名称。",
+        "不是 04_技术资料与编制素材：这是厂商对本项目的支持性承诺并绑定具体招标编号，不是通用素材。",
+        "issuer 为法人全称而非示例品牌A：签章给出法律主体，品牌名不等同出具方。",
+        "endcustomer 留空：本文件未声明最终客户，不从同目录招标公告补写以追求填写率。",
+        "department 与 salesowner 留空：厂商出具文件不涉及我方内部归属，不做跨文件继承。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "pa-pos-exclusive-provider-statement-03",
+      "kind": "positive",
+      "scenario": "厂商就本项目供货渠道出具的独家提供者声明，文件名带 BID_ 前缀，落款仅为事业部且无印章。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/03_厂商支持/BID_独家提供者声明_示例品牌A.docx",
+        "redacted_filename": "BID_独家提供者声明_示例品牌A.docx",
+        "context_summary": "声明针对 ZB-DEMO-2026-014 的指定产品系列；项目上下文与归档完成年已核实，但本文件自身缺少可确认的法律签署主体。",
+        "citations": [
+          {"label": "正文-第1页", "excerpt": "声明：在 ZB-DEMO-2026-014 项目中，示例品牌A XS-200 系列仅通过示例集成商B有限公司供货（合成表述）。"},
+          {"label": "正文-落款", "excerpt": "示例厂商A 智能产品事业部（无印章占位）。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "03_厂商支持文件",
+        "document_type": "Exclusive Provider Statement",
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": "ZB-DEMO-2026-014",
+          "bsdcode": null,
+          "documentcategory": "03_厂商支持文件",
+          "documenttype": "Exclusive Provider Statement",
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "不因 BID_ 前缀归入 02_投标文件：前缀是线索而非定论，正文是厂商对本项目渠道的声明。",
+        "不是 04_技术资料与编制素材：声明绑定具体招标编号，属于项目支持性文件。",
+        "issuer 留空：事业部落款且无印章，部门名称不等于法律出具主体。",
+        "bidderentity 留空：文中出现的渠道公司是被指名对象，本文件不证明投标行为本身。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "pa-pos-generic-whitepaper-04",
+      "kind": "positive",
+      "scenario": "项目目录内留存的通用厂商白皮书，面向行业场景论述，版权页给出法人全称与产品版本年。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/04_技术资料/BID_CONTENTS_白皮书_边缘智能参考架构.pdf",
+        "redacted_filename": "BID_CONTENTS_白皮书_边缘智能参考架构.pdf",
+        "context_summary": "来源目录与项目文件清单交叉证实本项目关联；归档完成年 2026 来自已核实的归档事实，与文档版本无关。",
+        "citations": [
+          {"label": "正文-第2页", "excerpt": "白皮书通篇为通用架构论述，未出现项目名称、招标编号或最终客户名称（合成核验结果）。"},
+          {"label": "正文-版权页", "excerpt": "© 示例厂商A科技股份有限公司（法人全称）。版本 V2024.1，发布日期 2024-11。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "04_技术资料与编制素材",
+        "document_type": "Whitepaper",
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "04_技术资料与编制素材",
+          "documenttype": "Whitepaper",
+          "issuer": "示例厂商A科技股份有限公司"
+        }
+      },
+      "why_not": [
+        "不因 BID_CONTENTS 前缀归入 02_投标文件：正文无任何项目响应内容，前缀线索在此不被推翻但也不定类。",
+        "completionyear 为 2026：V2024.1 与 2024-11 是产品版本信息，不得替代归档完成年。",
+        "tenderreference 留空：文档未出现采购或招标编号，不能从目录内其他文件继承。",
+        "不是 99_待分类：文档类型与出具主体都有正文依据，归类证据充分。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "pa-pos-standalone-quotation-05",
+      "kind": "positive",
+      "scenario": "渠道方独立出具的报价单，工作表已填写单价、折扣与总价（合成数值），页脚含报价有效期与盖章落款。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/05_报价/渠道报价单_示例品牌A_XS-200_2026-05.xlsx",
+        "redacted_filename": "渠道报价单_示例品牌A_XS-200_2026-05.xlsx",
+        "context_summary": "该报价独立于投标文件分册结构，由渠道直接发送给本项目采购负责人；项目关联与归档完成年已核实。",
+        "citations": [
+          {"label": "工作表-报价明细", "excerpt": "单价、折扣率、合价与总价列均已填写数值（合成数据，非真实价格），无空白占位行。"},
+          {"label": "工作表-页脚", "excerpt": "示例渠道E有限公司（公章占位）。报价有效期 2026-06-30，本报价不构成投标承诺。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "05_报价与商务",
+        "document_type": "Quotation",
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": null,
+          "department": null,
+          "salesowner": "示例销售甲",
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "05_报价与商务",
+          "documenttype": "Quotation",
+          "issuer": "示例渠道E有限公司"
+        }
+      },
+      "why_not": [
+        "是 05_报价与商务而非 02_投标文件：它不是投标分册的组成部分，而是独立渠道报价。",
+        "biddeadline 留空：2026-06-30 的语义是报价有效期，不是投标截止日期。",
+        "定类依据是工作表中的实际价格数值，而不是文件名里的“报价”二字。",
+        "bidderentity 留空：渠道报价不证明投标主体，不得把发件方当作投标人。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "vl-pos-datasheet-unaffiliated",
+      "kind": "positive",
+      "scenario": "厂商资料库中的产品数据表，仅以参数与型号为主，页面无法人署名或签章，同一材料被多个示例项目引用。",
+      "profiles": ["vendor-library"],
+      "input": {
+        "redacted_relative_path": "示例厂商资料库/示例品牌A/Datasheet/XS-200_产品数据表_R2.3.pdf",
+        "redacted_filename": "XS-200_产品数据表_R2.3.pdf",
+        "context_summary": "本库允许无项目归属的记录；该数据表同时服务两个示例项目，因此不绑定任何单一项目上下文。",
+        "citations": [
+          {"label": "正文-第1页", "excerpt": "型号 XS-200 参数表（示例品牌A 商标占位），未出现法人全称、地址落款或印章。"},
+          {"label": "正文-页脚", "excerpt": "文档编号 DS-DEMO-XS200-R2.3；无项目名称、招标编号或客户名称。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "Datasheet",
+        "document_type": "Datasheet",
+        "metadata": {
+          "projectname": null,
+          "completionyear": null,
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "Datasheet",
+          "documenttype": "Datasheet",
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "projectname 留空：通用厂商资料没有项目归属是正常状态，不得为满足其他 Profile 规则虚构项目。",
+        "issuer 留空：仅有品牌商标，缺少当前文件的署名或签章证据。",
+        "completionyear 留空：本库不要求归档完成年，版本号 R2.3 也不是该字段的证据。",
+        "不选 Specification Sheet：内容以参数与型号为主，而非限制条件论述。",
+        "不选 待分类：参数表结构清晰，文档类型证据充分。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "vendor-library-curator"}
+    },
+    {
+      "case_id": "vl-pos-specification-signed-issuer",
+      "kind": "positive",
+      "scenario": "厂商技术规格书，以技术规格与使用限制为主，版权页给出法人全称，可作为出具主体依据。",
+      "profiles": ["vendor-library"],
+      "input": {
+        "redacted_relative_path": "示例厂商资料库/示例品牌A/Specification/技术规格书_XS-200_R2.3.pdf",
+        "redacted_filename": "技术规格书_XS-200_R2.3.pdf",
+        "context_summary": "该文档存放于厂商资料库的品牌层次下；无项目关联是预期状态，出具主体由本文件自身证据确定。",
+        "citations": [
+          {"label": "正文-第2页版权", "excerpt": "© 示例厂商A科技股份有限公司（法人全称），合成地址与官方联系方式；无项目引用。"},
+          {"label": "正文-限制条件", "excerpt": "工作温度 0℃—40℃，供电冗余要求与安装环境限制条件清单（示例规格）。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "Specification Sheet",
+        "document_type": "Specification Sheet",
+        "metadata": {
+          "projectname": null,
+          "completionyear": null,
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "Specification Sheet",
+          "documenttype": "Specification Sheet",
+          "issuer": "示例厂商A科技股份有限公司"
+        }
+      },
+      "why_not": [
+        "不是 Whitepaper：以技术规格与限制条件为主，缺少方案性论述结构。",
+        "projectname 留空：文档未绑定任何项目，路径与文件名也不是该字段的证据。",
+        "不借用 Project Archive 的 04_技术资料与编制素材：本库使用自身文档类型 Group 枚举。",
+        "issuer 由版权页法人全称确认，而非由品牌名示例品牌A推断。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "vendor-library-curator"}
+    },
+    {
+      "case_id": "vl-pos-whitepaper-version-year-not-completion",
+      "kind": "positive",
+      "scenario": "厂商白皮书封面标注版本与发布年份，正文为通用技术论述；封面只出现品牌与营销部门名称。",
+      "profiles": ["vendor-library"],
+      "input": {
+        "redacted_relative_path": "示例厂商资料库/示例品牌A/Whitepaper/白皮书_智能边缘运维_V2024.1.pdf",
+        "redacted_filename": "白皮书_智能边缘运维_V2024.1.pdf",
+        "context_summary": "库内该层次无项目记录可继承；评审要求区分产品发布年与归档完成年，并禁止从品牌线索推断法律主体。",
+        "citations": [
+          {"label": "正文-封面", "excerpt": "示例品牌A 智能边缘运维白皮书，版本 V2024.1，2024 年发布（合成）。发布部门：市场与生态合作部。"},
+          {"label": "正文-全文核验", "excerpt": "未出现项目名称、招标编号、客户名称或法人全称落款。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "Whitepaper",
+        "document_type": "Whitepaper",
+        "metadata": {
+          "projectname": null,
+          "completionyear": null,
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "Whitepaper",
+          "documenttype": "Whitepaper",
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "completionyear 留空：产品发布年 2024 不等于归档完成年，也不得从版本号推断。",
+        "issuer 留空：品牌与市场部门名称不是法律出具主体的署名或签章依据。",
+        "projectname 留空：通用技术论述不绑定具体项目。",
+        "不是 Solution：无面向场景的组合方案结构，属技术论述长文。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "vendor-library-curator"}
+    },
+    {
+      "case_id": "vl-pos-solution-generic-multi-project",
+      "kind": "positive",
+      "scenario": "标注为通用版本、可按项目裁剪的厂商解决方案材料，标题含行业场景词但未绑定任何具体项目。",
+      "profiles": ["vendor-library"],
+      "input": {
+        "redacted_relative_path": "示例厂商资料库/示例品牌A/Solution/解决方案_智慧园区通用版_2026.pdf",
+        "redacted_filename": "解决方案_智慧园区通用版_2026.pdf",
+        "context_summary": "文件名中的行业场景词与某示例项目名称部分重叠；评审确认该词是场景名而非项目标识。",
+        "citations": [
+          {"label": "正文-第1页", "excerpt": "通用版本，可按项目裁剪；未列任何具体项目名称、招标编号或客户名称（合成）。"},
+          {"label": "正文-第6页", "excerpt": "典型场景：智慧园区、智慧楼宇（行业场景清单，非项目清单）。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "Solution",
+        "document_type": "Solution",
+        "metadata": {
+          "projectname": null,
+          "completionyear": null,
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "Solution",
+          "documenttype": "Solution",
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "projectname 留空：不得因文件名与项目名部分相同而建立归属；正文与路径都不是该字段的充分证据。",
+        "不是 Datasheet：以场景组合说明为主，无型号参数表结构。",
+        "issuer 留空：无落款法人全称或签章证据。",
+        "tenderreference 留空：材料未出现采购或招标编号。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "vendor-library-curator"}
+    },
+    {
+      "case_id": "vl-pos-activation-guide-deployment",
+      "kind": "positive",
+      "scenario": "产品许可证激活操作指南，属于操作性文档而非项目授权承诺，版权页含法人全称。",
+      "profiles": ["vendor-library"],
+      "input": {
+        "redacted_relative_path": "示例厂商资料库/示例品牌A/Guides/许可证激活操作指南_XS-200.pdf",
+        "redacted_filename": "许可证激活操作指南_XS-200.pdf",
+        "context_summary": "该指南被多个项目使用；库内按部署与配置指南归类，项目授权函不属于本库记录。",
+        "citations": [
+          {"label": "正文-步骤3", "excerpt": "在管理界面输入许可证密钥完成激活（示例步骤，不含任何真实密钥内容）。"},
+          {"label": "正文-版权页", "excerpt": "文档编号 UG-DEMO-ACT-01；© 示例厂商A科技股份有限公司（法人全称）。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "Deployment Guide",
+        "document_type": "Deployment Guide",
+        "metadata": {
+          "projectname": null,
+          "completionyear": null,
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "Deployment Guide",
+          "documenttype": "Deployment Guide",
+          "issuer": "示例厂商A科技股份有限公司"
+        }
+      },
+      "why_not": [
+        "不是项目支持性授权文件：本文件是操作性激活指南，不含对具体项目的授权或承诺表述。",
+        "不借用 Project Archive 的 04_技术资料与编制素材：跨库引用不改变本库记录语义。",
+        "projectname 留空：多项目共用的操作指南无项目归属。",
+        "completionyear 留空：本库不要求归档完成年，文档编号与版权页年份均非其证据。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "vendor-library-curator"}
+    },
+    {
+      "case_id": "pa-neg-blank-quotation-template-not-05",
+      "kind": "negative",
+      "scenario": "招标方随招标文件下发的空白报价表附件，表头齐全但单价、合价、总价单元格全部为空。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/01_招标/附件3_报价表模板_空白_ZB-DEMO-2026-014.xlsx",
+        "redacted_filename": "附件3_报价表模板_空白_ZB-DEMO-2026-014.xlsx",
+        "context_summary": "常见误判是按“报价”字样归入 05_报价与商务；本案例用于区分采购附件空白模板与实际独立报价。",
+        "citations": [
+          {"label": "工作表-报价表", "excerpt": "单价、合价、总价列全部为空，仅保留表头与“投标人按本项目需求自行填报”填写说明（合成）。"},
+          {"label": "工作表-说明行", "excerpt": "本表为招标文件附件，随招标公告下发；无出具单位落款或印章。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "01_招标文件",
+        "document_type": "Blank Procurement Template",
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": "ZB-DEMO-2026-014",
+          "bsdcode": null,
+          "documentcategory": "01_招标文件",
+          "documenttype": "Blank Procurement Template",
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "不是 05_报价与商务：05 要求已有实际单价、折扣或总价的独立报价，本表数值全部为空。",
+        "不是 04_技术资料与编制素材：这是招标方下发的采购附件，而非我方可复用编制素材。",
+        "文件名含“报价”不足以定类：定类依据是正文是否为已填写的实际报价。",
+        "issuer 留空：说明行提及下发但没有署名或签章依据。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "pa-neg-commercial-volume-not-05",
+      "kind": "negative",
+      "scenario": "投标文件中的商务分册，册首目录与编号表明其为投标组成部分，正文含资质与业绩清单而非独立报价。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/02_投标/商务标_第一册_资质与业绩.docx",
+        "redacted_filename": "商务标_第一册_资质与业绩.docx",
+        "context_summary": "常见误判是由“商务”二字推向 05_报价与商务；本案例用于固定商务分册归属 02 的判定链。",
+        "citations": [
+          {"label": "正文-册首目录", "excerpt": "第一部分 营业执照（示例占位）、第二部分 类似项目业绩清单、第三部分 投标承诺函（合成目录）。"},
+          {"label": "正文-第1页", "excerpt": "本册为 ZB-DEMO-2026-014 投标文件商务分册（示例表述），未列单价或总价明细。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "02_投标文件",
+        "document_type": "Commercial Volume",
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": "示例集成商B有限公司",
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": "ZB-DEMO-2026-014",
+          "bsdcode": null,
+          "documentcategory": "02_投标文件",
+          "documenttype": "Commercial Volume",
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "不是 05_报价与商务：商务分册属于投标文件结构，05 只收录独立报价与价格评估。",
+        "不因“商务”二字定类：判定依据是其作为投标分册的组成关系与编号声明。",
+        "documenttype 记为 Commercial Volume 而非 Price Volume：本册无价格明细结构。",
+        "issuer 留空：正文声明投标主体但没有法人签章落款，签署主体待补证据。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "pa-neg-filled-tech-response-table-not-04",
+      "kind": "negative",
+      "scenario": "已填报的技术响应表，逐行写明品牌型号、实际参数与满足或偏差结论，文件名带通用素材前缀。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/02_投标/BID_CONTENTS_技术响应表_已填报_示例品牌A.xlsx",
+        "redacted_filename": "BID_CONTENTS_技术响应表_已填报_示例品牌A.xlsx",
+        "context_summary": "常见误判是由 BID_CONTENTS 前缀机械归入 04_技术资料与编制素材；本案例固定“填报状态决定归属”的规则。",
+        "citations": [
+          {"label": "工作表-第12行", "excerpt": "需求“边缘网关不少于 8 路”对应响应“示例品牌A XS-200，8 路，满足”（合成）。"},
+          {"label": "工作表-偏差列", "excerpt": "3 条标注为正偏差，2 条为无偏差，全部数据行已填写，无空行占位。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "02_投标文件",
+        "document_type": "Technical Response Table",
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": "ZB-DEMO-2026-014",
+          "bsdcode": null,
+          "documentcategory": "02_投标文件",
+          "documenttype": "Technical Response Table",
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "不是 04_技术资料与编制素材：已填写品牌型号、实际参数与满足或偏差，构成投标响应内容。",
+        "前缀与目录名只是线索：正文的填报状态优先于文件命名约定。",
+        "issuer 与 bidderentity 留空：正文未出现签署主体，文件名中的品牌名不是法律主体证据。",
+        "不是 05_报价与商务：无价格列与金额，属于技术响应而非商务报价。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "pa-neg-blank-tech-response-template-not-02",
+      "kind": "negative",
+      "scenario": "同一前缀的技术响应表空白模板，响应与偏差列全部留空，备注声明可跨项目复用。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/04_技术资料/BID_CONTENTS_技术响应表模板_可复用.xlsx",
+        "redacted_filename": "BID_CONTENTS_技术响应表模板_可复用.xlsx",
+        "context_summary": "本案例与已填报响应表案例成对出现，用于验证同一前缀下按正文填报状态分流的判定。",
+        "citations": [
+          {"label": "工作表-响应列", "excerpt": "响应列与偏差列全部为空，含“请填写”提示行与空数据区（合成）。"},
+          {"label": "工作表-备注行", "excerpt": "本模板由示例集成商B有限公司技术组整理，可跨项目复用（示例表述）；非采购方下发附件。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "04_技术资料与编制素材",
+        "document_type": "Technical Response Table",
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "04_技术资料与编制素材",
+          "documenttype": "Technical Response Table",
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "不是 02_投标文件：未填报品牌型号与实际参数，不构成任何响应内容。",
+        "不是 01_招标文件：备注表明它是内部可复用素材，并非采购方随招标下发的附件模板。",
+        "tenderreference 留空：模板正文无招标编号，不能从同项目其他文件继承编号。",
+        "bidderentity 留空：整理部门名称不是投标主体证据。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "pa-neg-activation-guide-not-03",
+      "kind": "negative",
+      "scenario": "放在厂商支持目录内的许可证激活操作指南，正文只有激活步骤，无项目授权或售后承诺表述。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/03_厂商支持/示例品牌A_许可证激活操作指南.pdf",
+        "redacted_filename": "示例品牌A_许可证激活操作指南.pdf",
+        "context_summary": "常见误判是由目录位置与“许可证”字样推向 03_厂商支持文件；本案例区分项目授权与操作性指南。",
+        "citations": [
+          {"label": "正文-步骤1至6", "excerpt": "内容全部为在管理界面输入密钥并激活许可的步骤说明（合成），未出现任何项目名称或招标编号。"},
+          {"label": "正文-落款", "excerpt": "仅品牌标识“示例品牌A”，无法人全称、地址落款或印章。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "04_技术资料与编制素材",
+        "document_type": "License Activation Guide",
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "04_技术资料与编制素材",
+          "documenttype": "License Activation Guide",
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "不在 03_厂商支持文件：03 收录原厂对本项目的授权与承诺，本文件只有操作性步骤。",
+        "目录位置不是定论：正文缺少项目授权语义，位置线索被内容证据推翻。",
+        "issuer 留空：仅品牌标识，缺少法律主体署名或签章依据。",
+        "不是 99_待分类：文档类型明确，属于通用技术资料与编制素材。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "pa-neg-project-solution-not-vendor-library",
+      "kind": "negative",
+      "scenario": "针对本项目编制的投标方案终稿，封面含招标编号与逐条响应索引，容易被误当作厂商通用解决方案。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/02_投标/投标方案_智慧园区智能化系统_终稿.docx",
+        "redacted_filename": "投标方案_智慧园区智能化系统_终稿.docx",
+        "context_summary": "本案例验证跨 Profile 边界：项目定制投标稿不进入 Vendor Library 的 Solution 记录，跨库引用不改变其项目属性。",
+        "citations": [
+          {"label": "正文-封面", "excerpt": "ZB-DEMO-2026-014 项目投标方案（合成），附针对需求书条款的逐条响应索引表。"},
+          {"label": "正文-第2页", "excerpt": "交付范围为示例客户C研究院园区三个楼栋，含现场勘察结论（示例文本）。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "02_投标文件",
+        "document_type": "Solution",
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": "示例集成商B有限公司",
+          "department": null,
+          "salesowner": null,
+          "endcustomer": "示例客户C研究院",
+          "biddeadline": null,
+          "tenderreference": "ZB-DEMO-2026-014",
+          "bsdcode": null,
+          "documentcategory": "02_投标文件",
+          "documenttype": "Solution",
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "不映射为 Vendor Library 的 Solution：文件绑定具体招标编号与客户交付范围，是项目投标稿。",
+        "不是 04_技术资料与编制素材：内容为项目定制响应，不具备跨项目复用属性。",
+        "issuer 留空：封面是编制说明而非签署落款，投标主体已单独记录于 bidderentity。",
+        "biddeadline 留空：正文未出现截止日期语句，“终稿”日期不构成截止日期证据。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "vl-neg-generic-datasheet-no-projectname",
+      "kind": "negative",
+      "scenario": "厂商资料库中的数据表副本，文件名带项目字样，正文通篇无项目名称、招标编号或客户信息。",
+      "profiles": ["vendor-library"],
+      "input": {
+        "redacted_relative_path": "示例厂商资料库/示例品牌A/Datasheet/源自示例项目_2026_XS-300_数据表.pdf",
+        "redacted_filename": "源自示例项目_2026_XS-300_数据表.pdf",
+        "context_summary": "常见误判是按文件名中的项目字样写入 projectname；本案例确认无项目归属仍是正确结果。",
+        "citations": [
+          {"label": "正文-第1页", "excerpt": "型号 XS-300 参数表，正文未出现项目名称、招标编号、客户名称或交付条款（合成核验结果）。"},
+          {"label": "正文-页眉", "excerpt": "页眉含导出工具模板残留的目录字样，属导出痕迹而非项目绑定声明。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "Datasheet",
+        "document_type": "Datasheet",
+        "metadata": {
+          "projectname": null,
+          "completionyear": null,
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "Datasheet",
+          "documenttype": "Datasheet",
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "projectname 留空：文件名与路径中的项目字样不是该字段的证据，正文未声明项目绑定。",
+        "不因导出痕迹建立项目关联：同一数据表可服务多个项目。",
+        "不借用 Project Archive 的 04 分类：本库使用自身文档类型枚举。",
+        "issuer 留空：正文仅有品牌线索，无署名或签章依据。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "vendor-library-curator"}
+    },
+    {
+      "case_id": "pa-neg-brand-logo-not-issuer",
+      "kind": "negative",
+      "scenario": "项目目录内的产品彩页，整页宣传图文与品牌标识，历史标签曾把品牌名写入出具主体，正文无法人署名。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/04_技术资料/彩页_示例品牌A_XS系列.pdf",
+        "redacted_filename": "彩页_示例品牌A_XS系列.pdf",
+        "context_summary": "既有档案中存在未复核的自动标签 issuer=示例品牌A；本案例用于确认品牌名不等于法律出具主体。",
+        "citations": [
+          {"label": "正文-整页", "excerpt": "产品宣传图文与品牌标识，未出现法人全称、地址落款或印章（合成核验结果）。"},
+          {"label": "历史标签", "excerpt": "旧记录 issuer=示例品牌A，来源为自动抓取品牌名，未经人工核验。"}
+        ]
+      },
+      "expected": {
+        "state": "mapped",
+        "document_category": "04_技术资料与编制素材",
+        "document_type": "Brochure",
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "04_技术资料与编制素材",
+          "documenttype": "Brochure",
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "issuer 留空：品牌名是商标而非法律主体，历史自动标签不构成当前文件的署名或签章证据。",
+        "不因品牌名推断 bidderentity 或 endcustomer：彩页未涉及任何投标或客户角色。",
+        "不是 Datasheet：以宣传图文为主，缺少型号参数表结构。",
+        "不是 03_厂商支持文件：无对本项目的授权或承诺内容。"
+      ],
+      "evidence_level": "content_verified",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "xconflict-vendor-copy-vs-project-label",
+      "kind": "conflict",
+      "scenario": "同一 PDF 在项目档案与厂商资料库各有一份副本，项目侧仅有历史标签 04，厂商侧无标签；两侧类别与项目字段语义冲突。",
+      "profiles": ["project-archive", "vendor-library"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/04_技术资料/示例厂商资料库_白皮书_边缘智能参考架构.pdf",
+        "redacted_filename": "示例厂商资料库_白皮书_边缘智能参考架构.pdf",
+        "context_summary": "两份副本内容摘要一致；Project Archive 的项目级字段要求与 Vendor Library 的无项目归属语义无法在同一记录上并存，需使用方先确认目标库。",
+        "citations": [
+          {"label": "正文-第1页", "excerpt": "通用白皮书正文，未出现项目名称、招标编号或客户名称（合成）。"},
+          {"label": "历史标签", "excerpt": "项目侧旧记录 documentcategory=04_技术资料与编制素材，未经复核；厂商侧无任何标签。"}
+        ]
+      },
+      "expected": {
+        "state": "hold",
+        "document_category": null,
+        "document_type": null,
+        "metadata": {
+          "projectname": null,
+          "completionyear": null,
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": null,
+          "documenttype": null,
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "不能假设为共享记录：类别与项目字段在两个目标库语义不同，冲突时按规则新建独立记录。",
+        "document_category 留空：两个 Profile 的枚举不同，未确认目标库前任选一侧都构成误判。",
+        "不直接采用 99_待分类 或 待分类：本次评审要求先由使用方确认目标库，再按该库政策定类。",
+        "历史标签不自动成为参考答案：仅有标签证据而正文未复核，不足以支撑映射结论。",
+        "跨库去重不能替代语义判定：内容相同不代表记录归属相同。"
+      ],
+      "evidence_level": "historical_label_only",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "cross-library-arbitration-lead"}
+    },
+    {
+      "case_id": "pa-conflict-signatory-roles",
+      "kind": "conflict",
+      "scenario": "扫描件正文同时出现品牌、渠道与采购方三方名称，落款为事业部署名且无印章；出具主体与投标主体角色证据相互冲突。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/03_厂商支持/澄清函_事业部声明无印章.pdf",
+        "redacted_filename": "澄清函_事业部声明无印章.pdf",
+        "context_summary": "项目上下文已核实本项目投标主体，但本文件是否构成原厂承诺需法务人工判定；文件同时引用招标人名称。",
+        "citations": [
+          {"label": "正文-第1页", "excerpt": "“我司为示例品牌A 唯一授权渠道”，落款“示例品牌A 智能产品事业部”（无印章占位，合成）。"},
+          {"label": "正文-第2页", "excerpt": "引用条款中出现“招标人：示例客户C研究院”“投标人：示例集成商B有限公司”字样。"}
+        ]
+      },
+      "expected": {
+        "state": "hold",
+        "document_category": "99_待分类",
+        "document_type": null,
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "99_待分类",
+          "documenttype": null,
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "issuer 留空：事业部落款且无印章，部门名称不构成法律出具主体依据。",
+        "bidderentity 留空：文中投标人名称是引用他方文件条款，不是本文件的签署主体证据。",
+        "endcustomer 留空：招标人名称出现不等于本文件确认了最终客户角色。",
+        "不选 03_厂商支持文件：是否构成原厂承诺存在冲突证据，须人工与法务判定后定类。",
+        "tenderreference 留空：正文引用的条款编号不是本文件自身的采购或招标编号。"
+      ],
+      "evidence_level": "adjudication_pending",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "pa-refusal-filename-date-not-deadline",
+      "kind": "refusal",
+      "scenario": "图片型 PDF 无法只读抽取正文，文件名含 20260318，同目录其他文件的截止日期不可迁移到本文件。",
+      "profiles": ["project-archive"],
+      "input": {
+        "redacted_relative_path": "示例项目_2026_智慧园区智能化/02_投标/投标文件_20260318终稿.pdf",
+        "redacted_filename": "投标文件_20260318终稿.pdf",
+        "context_summary": "最小抽取仅确认文件为扫描图像，未获得可核验文本；一次针对性复判后仍缺正文证据，能力边界已记录。",
+        "citations": [
+          {"label": "抽取结果", "excerpt": "前 3 页均为扫描图像，未获得可核验文本；不声称正文已读取（能力边界记录）。"}
+        ]
+      },
+      "expected": {
+        "state": "hold",
+        "document_category": "99_待分类",
+        "document_type": null,
+        "metadata": {
+          "projectname": "示例项目_2026_智慧园区智能化",
+          "completionyear": "2026",
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "99_待分类",
+          "documenttype": null,
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "biddeadline 留空：文件名中的 20260318 与文件修改时间都不构成截止日期语义证据。",
+        "documenttype 留空：无法读取正文，不能凭扩展名或“终稿”字样确认细分类型。",
+        "不选 02_投标文件：目录位置只是线索，缺少正文依据时按 Profile 政策进入待分类并 hold。",
+        "projectname 与 completionyear 保留：二者来自已核实的项目上下文记录，不受本文件不可读影响。",
+        "不得从同目录已核验公告迁移截止日期：相似文件的元数据不是当前文件的证据。"
+      ],
+      "evidence_level": "filename_path_only",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "archive-governance-lead"}
+    },
+    {
+      "case_id": "vl-refusal-unsigned-manual-untyped",
+      "kind": "refusal",
+      "scenario": "厂商资料库中一份仅存封面的文档，封面有模糊产品字样与不关联的品牌标识，正文缺失且无版本信息。",
+      "profiles": ["vendor-library"],
+      "input": {
+        "redacted_relative_path": "示例厂商资料库/未知来源/技术资料_仅封面无署名.pdf",
+        "redacted_filename": "技术资料_仅封面无署名.pdf",
+        "context_summary": "该子目录没有历史标签可参考；抽取仅获得封面一行文字，既无参数表结构也无手册章节结构。",
+        "citations": [
+          {"label": "正文-封面", "excerpt": "“XX 系列 技术资料”（合成），无法人名称、地址落款、日期或印章。"}
+        ]
+      },
+      "expected": {
+        "state": "hold",
+        "document_category": "待分类",
+        "document_type": null,
+        "metadata": {
+          "projectname": null,
+          "completionyear": null,
+          "bidderentity": null,
+          "department": null,
+          "salesowner": null,
+          "endcustomer": null,
+          "biddeadline": null,
+          "tenderreference": null,
+          "bsdcode": null,
+          "documentcategory": "待分类",
+          "documenttype": null,
+          "issuer": null
+        }
+      },
+      "why_not": [
+        "issuer 留空：品牌标识与封面文字都不构成法律出具主体依据。",
+        "documenttype 留空：缺少正文结构证据，不能猜测 Datasheet 或 Product Manual。",
+        "不选 Brochure：仅“技术资料”字样不足以确认宣传材料属性。",
+        "待分类不表示获得自动执行资格：需补充正文证据后由人工复判。",
+        "不借用 Project Archive 的 99_待分类：本库按自身枚举使用“待分类”。"
+      ],
+      "evidence_level": "adjudication_pending",
+      "source_version": "governance-review-2026-11",
+      "review": {"status": "accepted", "redaction": "synthetic", "reviewer_role": "vendor-library-curator"}
+    }
+  ]
+}
