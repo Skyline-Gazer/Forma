@@ -56,19 +56,28 @@ enum MappingCorrectionMigrations {
         // two facts in two columns and makes "one revision has at most one
         // producing correction" a constraint instead of a convention.
         migrator.registerMigration("mapping-corrections-v2") { db in
-            try db.execute(sql: """
-                ALTER TABLE corrections ADD COLUMN produced_revision INTEGER;
-                UPDATE corrections SET produced_revision = supersedes_revision + 1
-                    WHERE supersedes_revision IS NOT NULL;
-                UPDATE corrections SET manifest_revision = supersedes_revision
-                    WHERE supersedes_revision IS NOT NULL;
-                ALTER TABLE corrections DROP COLUMN supersedes_revision;
-                CREATE UNIQUE INDEX corrections_produced
-                    ON corrections(manifest_id, produced_revision)
-                    WHERE produced_revision IS NOT NULL;
-                """)
+            try db.execute(sql: revisionSplitSQL)
         }
     }
+
+    /// The statements that split the one ambiguous column into two honest ones.
+    ///
+    /// Named rather than inlined because an existing database is the only place
+    /// the two `UPDATE`s do any work: a fresh one runs them over an empty table,
+    /// so without a test that shapes version 1 and fills it, the arithmetic that
+    /// decides which stored row created which revision would never be executed
+    /// before it met a reviewer's real history.
+    static let revisionSplitSQL = """
+        ALTER TABLE corrections ADD COLUMN produced_revision INTEGER;
+        UPDATE corrections SET produced_revision = supersedes_revision + 1
+            WHERE supersedes_revision IS NOT NULL;
+        UPDATE corrections SET manifest_revision = supersedes_revision
+            WHERE supersedes_revision IS NOT NULL;
+        ALTER TABLE corrections DROP COLUMN supersedes_revision;
+        CREATE UNIQUE INDEX corrections_produced
+            ON corrections(manifest_id, produced_revision)
+            WHERE produced_revision IS NOT NULL;
+        """
 }
 
 extension MappingStore {

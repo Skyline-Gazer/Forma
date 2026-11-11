@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Testing
 
 @testable import FormaCore
@@ -250,5 +251,69 @@ struct CorrectionPersistenceTests {
         }
         #expect(refusal != nil,
                 "one revision has at most one producing correction, and that is a constraint, not a habit")
+    }
+
+    @Test("an existing history is split without losing who produced what")
+    func legacyRowsSplitOntoTheNewColumns() throws {
+        // The two `UPDATE`s in the migration do nothing at all on a fresh
+        // database: version 1 creates the table, version 2 immediately splits a
+        // column of an empty one. Every other test in this suite therefore
+        // passes without ever executing the arithmetic that decides which
+        // stored row created which revision. This is that arithmetic, run
+        // against a database shaped like the version the migration expects to
+        // find - one accepted decision that produced revision 2, one refusal
+        // aimed at revision 3 that produced nothing.
+        // Every identifier here is in the shape the store writes: the row's own
+        // id is read back through the same decoder that would refuse a value it
+        // cannot parse, so inventing a readable label would fail on the read
+        // rather than test the split.
+        let manifestID = UUID()
+        let sourceID = UUID()
+        let acceptedID = UUID()
+        let refusedID = UUID()
+        let db = try DatabaseQueue()
+        try db.write { db in
+            try db.execute(sql: """
+                CREATE TABLE source_entries (id TEXT PRIMARY KEY NOT NULL);
+                CREATE TABLE case_candidates (id TEXT PRIMARY KEY NOT NULL);
+                CREATE TABLE corrections (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    manifest_id TEXT NOT NULL,
+                    manifest_revision INTEGER NOT NULL,
+                    supersedes_revision INTEGER,
+                    source_id TEXT NOT NULL REFERENCES source_entries(id),
+                    field TEXT NOT NULL,
+                    previous_value TEXT,
+                    corrected_value TEXT,
+                    evidence_ids BLOB NOT NULL,
+                    snapshot_fingerprint TEXT NOT NULL,
+                    context_revision INTEGER NOT NULL,
+                    origin TEXT NOT NULL,
+                    review_state TEXT NOT NULL,
+                    case_candidate_id TEXT REFERENCES case_candidates(id),
+                    created_at REAL NOT NULL
+                );
+                INSERT INTO source_entries (id) VALUES ('\(sourceID.sourceKey)');
+                INSERT INTO corrections (id, manifest_id, manifest_revision, supersedes_revision,
+                    source_id, field, previous_value, corrected_value, evidence_ids,
+                    snapshot_fingerprint, context_revision, origin, review_state,
+                    case_candidate_id, created_at)
+                VALUES ('\(acceptedID.sourceKey)', '\(manifestID.sourceKey)', 2, 1, '\(sourceID.sourceKey)',
+                        'completionyear', '2026', '2027', X'5B5D', 'f', 1, 'manual',
+                        'evidence_verified', NULL, 1),
+                       ('\(refusedID.sourceKey)', '\(manifestID.sourceKey)', 3, NULL, '\(sourceID.sourceKey)',
+                        'issuer', NULL, '示例厂商乙', X'5B5D', 'f', 1, 'manual',
+                        'rejected', NULL, 2);
+                """)
+        }
+        try db.write { db in try db.execute(sql: MappingCorrectionMigrations.revisionSplitSQL) }
+        let rows = try db.read { db in try MappingStore.corrections(manifestID: manifestID, in: db) }
+        #expect(rows.count == 2)
+        let accepted = try #require(rows.first { $0.reviewState == .evidenceVerified })
+        #expect(accepted.manifestRevision == 1 && accepted.producedRevision == 2,
+                "the row that created revision 2 must not end up calling 2 the version it read")
+        let refused = try #require(rows.first { $0.reviewState == .rejected })
+        #expect(refused.manifestRevision == 3 && refused.producedRevision == nil,
+                "a refusal targeted 3 and produced nothing, and the split has to say so")
     }
 }
