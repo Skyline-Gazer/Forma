@@ -121,15 +121,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var exceptions: [ExceptionRow] = []
     @Published private(set) var outcome: MappingRunOutcome?
     @Published private(set) var reconciliation: ManifestReconciler.Decision?
-    @Published private(set) var evidenceBySource: [UUID: [EvidenceRecord]] = [:] {
-        didSet {
-            // Rebuilt in one place, so the index cannot keep a row the
-            // per-source view has dropped.
-            var index: [String: EvidenceRecord] = [:]
-            for rows in evidenceBySource.values { for row in rows { index[row.id] = row } }
-            recordsByID = index
-        }
-    }
+    @Published private(set) var evidenceBySource: [UUID: [EvidenceRecord]] = [:]
     @Published private(set) var evidenceFailures: [UUID: FormaError] = [:]
     @Published private(set) var fileEvidence: SourceEvidence?
     @Published private(set) var exportSummary: ManifestExport.Summary?
@@ -656,14 +648,25 @@ final class WorkspaceModel: ObservableObject {
     private func merge(_ records: [EvidenceRecord]) {
         guard !records.isEmpty else { return }
         var copy = evidenceBySource
+        var index = recordsByID
         for sourceID in Set(records.map(\.sourceID)) {
             var byID: [String: EvidenceRecord] = [:]
             for record in (copy[sourceID] ?? []) + records where record.sourceID == sourceID {
                 byID[record.id] = record
             }
-            copy[sourceID] = byID.values.sorted { $0.id < $1.id }
+            let rows = byID.values.sorted { $0.id < $1.id }
+            copy[sourceID] = rows
+            // The citation index is refreshed in the same walk as the view it
+            // indexes. Rebuilding it from a `didSet` meant every read and every
+            // run traversed all rows of all sources twice, once to merge and
+            // once to re-derive. Only the sources this batch touched can have
+            // changed, so only those are reindexed - and the two shapes of the
+            // same data are written together, so neither can keep a row the
+            // other has dropped.
+            for row in rows { index[row.id] = row }
         }
         evidenceBySource = copy
+        recordsByID = index
     }
 
     // MARK: - Mapping run
@@ -1139,11 +1142,14 @@ final class WorkspaceModel: ObservableObject {
                 let plan = redaction
                 let value = try ProviderMappingClient.preview(profile: profile, context: context,
                                                               casePack: casePack, batch: batch, redaction: plan)
-                guard !Task.isCancelled, scope.id == selectedScopeID,
-                      profile.profileID == selectedProfileID else { return }
                 // Payload and the batch it came from are assigned together: the
                 // counts mean nothing without the request they describe, and a
                 // preview cleared by another action must not leave them behind.
+                // Nothing between the guard above and here suspends - the batch
+                // choice, the redaction plan and the preview build are all
+                // synchronous on this actor - so one check after the read is
+                // enough, and repeating it would imply the second one protects
+                // something.
                 self.preview = Preview(value: value, fileCount: batch.entries.count, batchCount: batches.count)
                 self.leakedTerms = plan.isIdentity ? [] : plan.leaks(value.system + String(decoding: value.payload, as: UTF8.self))
             } catch {

@@ -212,35 +212,28 @@ extension SourceWorkspace {
 
     /// Applies a human correction and stores what it produced.
     ///
-    /// The engine decides; this method only gathers the facts it needs - the
-    /// current listing, the context revision the manifest cites and the
-    /// registered rows it may cite, then persists what the engine decided.
-    /// A rejected attempt is stored and changes
-    /// no revision: the review screen has to show the click that was refused,
-    /// while the manifest history must keep describing only decisions that were
-    /// actually made. Storing the new revision goes through `saveManifest`, so
-    /// the foreign key from a citation into `evidence_items` is still enforced
-    /// rather than trusted.
+    /// The engine decides; this method gathers the facts it needs - the current
+    /// listing, the context revision the manifest cites, the registered rows it
+    /// may cite - and persists the outcome. A refused attempt is stored and
+    /// changes no revision, so the review screen can show the click while the
+    /// version history keeps only decisions actually made. Publishing goes
+    /// through `persist`, so a citation's foreign key into `evidence_items` is
+    /// enforced rather than trusted, and a manifest the store has already moved
+    /// past is refused with `sourceChanged` inside the same transaction.
     public func applyCorrection(to manifest: Manifest, sourceID: UUID, field: MetadataFieldID,
                                 correctedValue: String?, evidenceIDs: [String],
                                 origin: CorrectionRecord.Origin, scope: SourceScope,
                                 profile: MappingProfile) async throws -> CorrectionEngine.Applied {
         let listing = try listing(scope)
-        // The correction is decided against the context the manifest was
-        // produced from, not against whatever the files look like at the moment
-        // someone clicks. Rebuilding here would write a new context revision as
-        // a side effect of a human edit, and would revalidate the edited entry
-        // against candidate sets that never generated the answer under review -
-        // so a correct fix could be refused for citing a candidate that this
-        // manifest never had.
+        // Decided against the context the manifest cites. Rebuilding here would
+        // bump a context revision as a side effect of a human edit, and would
+        // judge the entry against candidates this manifest never had.
         guard let context = try await storedContext(scope: scope, profile: profile,
                                                     revision: manifest.envelope.contextRevision) else {
             throw FormaError.unavailable
         }
-        // One query for the whole manifest rather than one per entry: the
-        // revalidation step resolves citations for every entry, so the rows for
-        // all of them are genuinely needed, and a hundred-file scan would
-        // otherwise issue a hundred round trips behind a single click.
+        // Revalidation resolves citations for every entry, so the rows are read
+        // in one query rather than one round trip per file.
         let evidence = try await store.database.read { db in
             try MappingStore.evidence(for: Set(manifest.entries.map(\.sourceID)), in: db)
         }
@@ -249,31 +242,21 @@ extension SourceWorkspace {
             evidenceIDs: evidenceIDs, origin: origin, context: context, evidence: evidence,
             currentEntries: listing.entries)
         if applied.violations.isEmpty {
-            // The version and the decision that produced it are one unit of
-            // work. Written separately, a failed `saveManifest` would leave a
-            // corrections row claiming a revision that does not exist - and the
-            // unique index on that claim would then refuse the very retry that
-            // could have stored it.
+            // Version and decision are one unit of work: a failure between the
+            // two writes would leave a row claiming a revision that was never
+            // stored, and the unique index would then refuse the retry.
             let published = try await store.database.write { db -> (manifest: Manifest,
                                                                     record: CorrectionRecord) in
-                // The revision being corrected has to still be the current one.
-                // `persist` numbers whatever it is handed from the store, so
-                // without this check a decision made against revision 3 could
-                // be published as revision 5 while silently discarding what
-                // revision 4 decided - the newer version would exist, and
-                // nothing would say a reviewer had overwritten it. Comparing
-                // the store's next number with this manifest's own is what
-                // makes "you are correcting an older version" a refusal rather
-                // than an overwrite nobody was told about.
+                // The revision under review must still be current, or a
+                // decision made against revision 3 would be published over
+                // revision 4 and silently discard it; `persist` numbers from the
+                // store, so this is the only place that can tell the two apart.
                 guard try MappingStore.nextManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
                         == manifest.envelope.revision + 1 else { throw FormaError.sourceChanged }
-                // `produced_revision` is unique per manifest. Reaching a
-                // collision here cannot be a user mistake - this transaction
-                // assigns the number itself, after the check above - so it can
-                // only mean the store already holds a decision claiming it.
-                // FormaError's vocabulary is a published contract, and an
-                // inconsistent store is what `.storage` reports; the constraint
-                // text belongs in the diagnostic, not in a new error case.
+                // A collision after that check cannot be a user mistake: the
+                // number is assigned here. It means the store already holds a
+                // decision claiming it, which `.storage` reports - the error
+                // vocabulary is a published contract, so no new case for it.
                 let stored = try Self.persist(applied.manifest, scopeID: scope.id, in: db)
                 var record = applied.correction
                 record.producedRevision = stored.envelope.revision
@@ -283,10 +266,8 @@ extension SourceWorkspace {
             return CorrectionEngine.Applied(manifest: published.manifest, correction: published.record,
                                             violations: [])
         }
-        // A refused attempt records itself and publishes nothing. It names the
-        // revision the reviewer was looking at and no produced revision, which
-        // is why many attempts may share a target while no two may claim the
-        // same version they created.
+        // A refusal names the revision it aimed at and produces nothing: many
+        // attempts may share a target, no two may claim one version.
         try await store.database.write { db in
             try MappingStore.insertCorrection(applied.correction, in: db)
         }

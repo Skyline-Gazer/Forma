@@ -516,29 +516,25 @@ struct MappingView: View {
         }
     }
 
-    /// One attempt, described by what it actually did to the version history.
+    /// One attempt, described by what it did to the version history.
     ///
-    /// FormaCore writes two kinds of row: a refusal names the version it was
-    /// aimed at and published nothing, and a published decision names both.
-    /// `pending` is written by no current path, but a workspace created by an
-    /// earlier build can hold such rows - the column allows the value and the
-    /// migration only touches the revision numbers - so it is shown as what it
-    /// says rather than reported as a defect.
+    /// FormaCore writes two kinds of row: `evidenceVerified` with the revision
+    /// it just stored, and `rejected` with none. Anything else was put in the
+    /// table by something other than a review, and is reported as that rather
+    /// than given copy describing a state no apply produces.
     private static func outcomeLine(_ record: CorrectionRecord) -> (text: String, color: Color) {
         switch (record.reviewState, record.producedRevision) {
-        case (.rejected, _):
-            ("Refused by FormaCore · attempted against revision "
-                + "\(record.manifestRevision.formatted()) · published nothing", .orange)
-        case (.pending, _):
-            ("Awaiting evidence verification · attempted against revision "
-                + "\(record.manifestRevision.formatted()) · replaced \(record.previousValue ?? "nothing")",
-             .blue)
         case (.evidenceVerified, let produced?):
             ("Recorded at revision \(produced.formatted()), superseding "
                 + "\(record.manifestRevision.formatted()) · replaced \(record.previousValue ?? "nothing")",
              .secondary)
-        case (.evidenceVerified, nil):
-            ("Row \(record.id) claims a verified decision but names no revision it wrote", .red)
+        case (.rejected, _):
+            ("Refused by FormaCore · attempted against revision "
+                + "\(record.manifestRevision.formatted()) · published nothing", .orange)
+        default:
+            ("Row \(record.id) combines \(record.reviewState.rawValue) with "
+                + (record.producedRevision.map { "revision \($0.formatted())" } ?? "no produced revision")
+                + " - a combination no apply writes", .red)
         }
     }
 }

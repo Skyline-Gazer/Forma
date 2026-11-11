@@ -317,6 +317,72 @@ struct CorrectionPersistenceTests {
                 "a refusal targeted 3 and produced nothing, and the split has to say so")
     }
 
+    @Test("an existing version 1 history survives the registered migration")
+    func registeredMigrationSplitsAVersionOneHistory() async throws {
+        // `legacyRowsSplitOntoTheNewColumns` runs the statements against a
+        // hand-made table; this runs the migration the way an updater does. The
+        // difference is not cosmetic: `DROP COLUMN supersedes_revision` on the
+        // real `corrections` goes through SQLite's rebuild path while a foreign
+        // key from `case_candidates` and two indexes point at that table, and
+        // only the registered migrator exercises that ordering. A migration
+        // that broke there would leave every reviewer's existing workspace
+        // unopenable - `Workspace unavailable` on launch - while a test that
+        // only checks the SQL text stayed green.
+        let fixture = try SourceFixture()
+        defer { fixture.cleanUp() }
+        _ = try fixture.write("示例项目_2026 招标公告 归档完成 2027 年", at: "示例项目_2026/01_招标/公告.txt")
+        let workspace = try SourceWorkspace(databaseURL: fixture.database)
+        let scope = try await workspace.register(fixture.root)
+        let listing = try await workspace.scan(scope)
+        // A source row that really exists: `corrections.source_id` references
+        // `source_entries` and foreign keys are on, so an invented label would
+        // fail the insert for the wrong reason.
+        let sourceID = try #require(listing.entries.first).id
+        let manifestID = UUID()
+        let acceptedID = UUID()
+        let refusedID = UUID()
+
+        // Rewind to what version 1 left behind: one revision column whose
+        // meaning depended on `review_state`. The accepted row says it produced
+        // revision 2 out of revision 1; the refusal read revision 3 and
+        // produced nothing.
+        try fixture.execute("""
+            DELETE FROM grdb_database_migrations WHERE identifier = 'mapping-corrections-v2';
+            DROP INDEX IF EXISTS corrections_produced;
+            ALTER TABLE corrections DROP COLUMN produced_revision;
+            ALTER TABLE corrections ADD COLUMN supersedes_revision INTEGER;
+            INSERT INTO corrections (id, manifest_id, manifest_revision, supersedes_revision,
+                source_id, field, previous_value, corrected_value, evidence_ids,
+                snapshot_fingerprint, context_revision, origin, review_state,
+                case_candidate_id, created_at)
+            VALUES ('\(acceptedID.sourceKey)', '\(manifestID.sourceKey)', 2, 1, '\(sourceID.sourceKey)',
+                    'completionyear', '2026', '2027', X'5B5D', 'f', 1, 'manual',
+                    'evidence_verified', NULL, 1),
+                   ('\(refusedID.sourceKey)', '\(manifestID.sourceKey)', 3, NULL, '\(sourceID.sourceKey)',
+                    'issuer', NULL, '示例厂商乙', X'5B5D', 'f', 1, 'manual',
+                    'rejected', NULL, 2);
+            """)
+
+        // Reopening *is* the migration: the workspace registers and applies the
+        // pending version, so nothing here reruns the statements by hand.
+        let reopened = try SourceWorkspace(databaseURL: fixture.database)
+        let rows = try await reopened.corrections(manifestID: manifestID)
+        #expect(rows.count == 2)
+        let accepted = try #require(rows.first { $0.reviewState == .evidenceVerified })
+        #expect(accepted.manifestRevision == 1 && accepted.producedRevision == 2,
+                "the migrated history must still say which revision this decision wrote")
+        let refused = try #require(rows.first { $0.reviewState == .rejected })
+        #expect(refused.manifestRevision == 3 && refused.producedRevision == nil,
+                "a refusal keeps the version it was aimed at and gains none")
+        // Both halves of the migration have to survive: the index is what stops
+        // two rows claiming one revision on the next write, and the old column
+        // must be gone so no writer can reintroduce the ambiguity.
+        #expect(try fixture.scalar("SELECT count(*) FROM sqlite_master WHERE type = 'index' "
+                + "AND name = 'corrections_produced'") == "1")
+        #expect(try fixture.scalar("SELECT count(*) FROM pragma_table_info('corrections') "
+                + "WHERE name = 'supersedes_revision'") == "0")
+    }
+
     @Test("a correction built on a superseded revision is refused")
     func staleBaseIsRefused() async throws {
         let context = try await prepared()

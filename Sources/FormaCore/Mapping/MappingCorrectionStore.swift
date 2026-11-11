@@ -67,11 +67,16 @@ enum MappingCorrectionMigrations {
     /// "one revision has at most one producing correction" a constraint instead
     /// of a convention.
     ///
-    /// Named rather than inlined because an existing database is the only place
-    /// the two `UPDATE`s do any work: a fresh one runs them over an empty table,
-    /// so without a test that shapes version 1 and fills it, the arithmetic that
-    /// decides which stored row created which revision would never be executed
-    /// before it met a reviewer's real history.
+    /// Named rather than inlined so the two statements can be run against a
+    /// table that has rows in it: on a fresh database version 2 splits an empty
+    /// table, so the arithmetic that decides which stored row created which
+    /// revision would first run on a reviewer's real history. Two tests cover
+    /// it from different sides - `legacyRowsSplitOntoTheNewColumns` executes
+    /// these statements over a version 1 shaped table filled by hand, and
+    /// `registeredMigrationSplitsAVersionOneHistory` rewinds a database the
+    /// production store created and reopens it, which is what exercises the
+    /// registered migration, its ordering against `case_candidates`, and the
+    /// index and column changes rather than the text alone.
     static let revisionSplitSQL = """
         ALTER TABLE corrections ADD COLUMN produced_revision INTEGER;
         UPDATE corrections SET produced_revision = supersedes_revision + 1

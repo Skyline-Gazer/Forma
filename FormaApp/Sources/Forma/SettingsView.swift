@@ -32,11 +32,13 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")
-        .onDisappear {
-            key = ""
-            keySaved = false
-            model.cancelAux()
-        }
+        // No `onDisappear`. This panel used to clear the key field, reset the
+        // saved flag and cancel the auxiliary task when the tab changed hands.
+        // `auxWork` is one slot shared with the preview and the capability
+        // probes, so clicking to another tab stopped work that panel had never
+        // started, and the field holding a key mid-paste was wiped by
+        // navigation rather than by anything the reviewer asked for. Both
+        // actions have their own Cancel buttons.
     }
 
     // MARK: - Provider
