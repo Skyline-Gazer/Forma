@@ -33,6 +33,10 @@ public struct ArtifactSchema: Sendable {
     public let schemaVersion: String
     private let schema: JSONSchema
 
+    static let jsonTypes: Set<String> = [
+        "object", "array", "string", "number", "integer", "boolean", "null",
+    ]
+
     /// Keywords Forma authorizes. Anything else fails the load, which turns a
     /// silently ignored typo into a visible error.
     static let allowedKeywords: Set<String> = [
@@ -106,6 +110,38 @@ public struct ArtifactSchema: Sendable {
                     for (index, schema) in branches.enumerated() { try lint(schema, path: "\(childPath)/\(index)") }
                 } else {
                     try lint(child, path: childPath)
+                }
+            case "type":
+                // A mistyped `type` fails closed in the evaluator, but a
+                // misspelled type name would silently accept everything, so the
+                // vocabulary is checked here.
+                guard let kinds = child.arrayValue else {
+                    guard let name = child.stringValue, Self.jsonTypes.contains(name) else {
+                        throw FormaError.incompatible
+                    }
+                    break
+                }
+                guard !kinds.isEmpty,
+                      kinds.allSatisfy({ $0.stringValue.map(Self.jsonTypes.contains) == true }) else {
+                    throw FormaError.incompatible
+                }
+            case "pattern", "contentEncoding", "contentMediaType", "$id", "$schema", "$anchor",
+                 "$ref", "$dynamicRef", "$dynamicAnchor", "title", "description", "$comment":
+                guard child.stringValue != nil else { throw FormaError.incompatible }
+            case "minLength", "maxLength", "minItems", "maxItems", "minProperties", "maxProperties",
+                 "minContains", "maxContains", "minimum", "maximum", "multipleOf":
+                guard let number = child.intValue, number >= 0 else { throw FormaError.incompatible }
+            case "exclusiveMinimum", "exclusiveMaximum":
+                guard child.doubleValue != nil else { throw FormaError.incompatible }
+            case "uniqueItems", "deprecated", "readOnly", "writeOnly":
+                guard child.boolValue != nil else { throw FormaError.incompatible }
+            case "const":
+                // `const` accepts any JSON value, so only an absent payload (a
+                // keyword written as `"const": {}` by mistake) is a defect.
+                guard child.objectValue != nil || child.arrayValue != nil || child.stringValue != nil
+                    || child.intValue != nil || child.doubleValue != nil || child.boolValue != nil
+                    || child.isNull else {
+                    throw FormaError.incompatible
                 }
             default:
                 break

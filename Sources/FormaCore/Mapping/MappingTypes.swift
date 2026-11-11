@@ -13,6 +13,10 @@ import Foundation
 // a property rename that changes the wire format fails a schema test instead of
 // silently altering an artifact.
 //
+// The schemas bound both the length and the item count of every value that
+// crosses a boundary, and the constructors apply the same bounds, so a manifest
+// Forma builds cannot fail the schema Forma ships.
+//
 // Optional bookkeeping fields are absent rather than null when they have no
 // value, and the schemas do not require them: for those fields absence and null
 // say the same thing. The one place the distinction is a product requirement is
@@ -75,8 +79,17 @@ enum Bounded {
         String(value.prefix(limit))
     }
 
-    static func list(_ values: [String], _ limit: Int) -> [String] {
-        values.compactMap { text($0, limit) }
+    static func list(_ values: [String], _ limit: Int, count: Int? = nil) -> [String] {
+        let clipped = values.compactMap { text($0, limit) }
+        guard let count else { return clipped }
+        return Array(clipped.prefix(count))
+    }
+
+    /// The schemas bound how many items a field may carry as well as how long
+    /// each one is. A limit only the schema knows is a limit a future caller
+    /// will exceed, so the same bound is applied where the value is built.
+    static func items<T>(_ values: [T], _ count: Int) -> [T] {
+        Array(values.prefix(count))
     }
 
     /// Truncation without a minimum: the schema bounds the length but allows a
@@ -85,6 +98,39 @@ enum Bounded {
         guard let value else { return nil }
         return String(value.prefix(limit))
     }
+}
+
+/// Token counts a provider reported for one batch.
+public struct MappingUsage: Sendable, Equatable {
+    public var input: Int?
+    public var output: Int?
+    public var cacheRead: Int?
+    public var cacheCreation: Int?
+
+    public init(input: Int? = nil, output: Int? = nil, cacheRead: Int? = nil, cacheCreation: Int? = nil) {
+        self.input = input
+        self.output = output
+        self.cacheRead = cacheRead
+        self.cacheCreation = cacheCreation
+    }
+
+    public static func + (lhs: MappingUsage, rhs: MappingUsage) -> MappingUsage {
+        func add(_ a: Int?, _ b: Int?) -> Int? {
+            guard let a, let b else { return a ?? b }
+            return a + b
+        }
+        return MappingUsage(input: add(lhs.input, rhs.input), output: add(lhs.output, rhs.output),
+                            cacheRead: add(lhs.cacheRead, rhs.cacheRead),
+                            cacheCreation: add(lhs.cacheCreation, rhs.cacheCreation))
+    }
+}
+
+/// What a provider call resulted in, in the vocabulary the run log and the
+/// Exceptions view use. A provider failure and a schema failure are different
+/// things: only one of them is worth retrying.
+public enum MappingOutcome: String, Sendable, CaseIterable {
+    case ok, invalidOutput = "invalid_output", refused, truncated, network, timeout
+    case remoteStatus = "remote_status", cancelled, unauthorized, credentialMissing = "credential_missing"
 }
 
 // MARK: - Decision state
@@ -541,8 +587,8 @@ public struct FieldOutcome: Codable, Sendable, Equatable {
         self.field = field
         self.value = Bounded.clipped(value, 512)
         self.status = status
-        self.evidenceIDs = evidenceIDs
-        self.conflicts = Bounded.list(conflicts, 300)
+        self.evidenceIDs = Array(Bounded.items(evidenceIDs, 16))
+        self.conflicts = Bounded.list(conflicts, 300, count: 8)
     }
 }
 
@@ -564,7 +610,7 @@ public struct ManifestAssociation: Codable, Sendable, Equatable, Hashable {
         self.kind = kind
         self.sourceID = sourceID
         self.basis = Bounded.text(basis, 300) ?? "unspecified basis"
-        self.evidenceIDs = evidenceIDs
+        self.evidenceIDs = Array(Bounded.items(evidenceIDs, 16))
     }
 }
 
@@ -581,7 +627,7 @@ public struct ManifestTarget: Codable, Sendable, Equatable {
 
     public init(databaseName: String?, groupPath: [String], resolved: Bool) {
         self.databaseName = Bounded.clipped(databaseName, 128)
-        self.groupPath = groupPath.map { Bounded.required($0, 256) }
+        self.groupPath = Bounded.items(groupPath.map { Bounded.required($0, 256) }, 8)
         self.resolved = resolved
     }
 }
@@ -635,7 +681,7 @@ public struct ManifestEntry: Codable, Sendable, Equatable {
         self.fields = fields.isEmpty
             ? MetadataFieldID.allCases.map { FieldOutcome(field: $0, value: metadata[$0], status: .unknown) }
             : fields
-        self.associations = associations
+        self.associations = Bounded.items(associations, 64)
         self.eligibleForAutoExecution = eligibleForAutoExecution
         self.invalidatedReason = Bounded.text(invalidatedReason, 300)
         self.confidence = confidence

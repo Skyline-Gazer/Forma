@@ -154,19 +154,22 @@ public struct MappingProfile: Decodable, Sendable, Equatable {
         guard categories.contains(where: { $0.identifier.hasSuffix("待分类") }) else {
             throw FormaError.incompatible
         }
-        let project = fields[MetadataFieldID.projectname]!
-        let year = fields[MetadataFieldID.completionyear]!
+        // Cross-profile contract, true for any profile: the completion year is
+        // always a four-digit year, and a profile may only let documents stand
+        // without a project if it does not also demand a confirmed one.
+        guard fields[MetadataFieldID.completionyear]!.valueType == .year,
+              fields[MetadataFieldID.projectname]!.requiredForValidated != permitsUnaffiliatedDocuments
+        else { throw FormaError.incompatible }
+        // Profile-specific expectations are keyed on the profile's own identity
+        // rather than on "not the other one", so adding a third profile cannot be
+        // rejected by a rule written for Vendor Library.
         if profileID == ProjectArchiveContract.id {
             // SPEC §5.2.1: an unconfirmed project or an unverified completion
-            // year blocks archiving, so both are required for this profile.
-            guard project.requiredForValidated, year.requiredForValidated, year.valueType == .year,
-                  categories.map(\.identifier) == ProjectArchiveContract.categories,
-                  !permitsUnaffiliatedDocuments else { throw FormaError.incompatible }
-        } else {
-            // Vendor documents legitimately have no project; forcing one would
-            // fabricate a business fact.
-            guard !project.requiredForValidated, project.nullable,
-                  !year.requiredForValidated, permitsUnaffiliatedDocuments else { throw FormaError.incompatible }
+            // year blocks archiving, so both are required here.
+            guard fields[MetadataFieldID.projectname]!.requiredForValidated,
+                  fields[MetadataFieldID.completionyear]!.requiredForValidated,
+                  categories.map(\.identifier) == ProjectArchiveContract.categories
+            else { throw FormaError.incompatible }
         }
     }
 
