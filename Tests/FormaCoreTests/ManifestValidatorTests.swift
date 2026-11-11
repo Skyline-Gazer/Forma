@@ -37,8 +37,7 @@ struct ManifestValidatorTests {
                           type: String? = "Bid Document", metadata: [MetadataFieldID: String?] = [:],
                           citations: [EvidenceCitation] = [], unknown: [MetadataFieldID] = [],
                           conflicts: [ProposalConflict] = [],
-                          association: ProposalAssociation? = ProposalAssociation(candidateRef: "示例项目_2026",
-                                                                                  state: .confirmed),
+                          association: ProposalAssociation? = ProposalAssociation(candidateRef: "c1", state: .confirmed),
                           confidence: DecisionConfidence = .high) -> ProposalEntry {
         var slots = MetadataValues.allUnknown
         slots[.documentcategory] = category
@@ -238,7 +237,7 @@ struct ManifestValidatorTests {
         let answer = proposal(metadata: [.completionyear: "2026"],
                              citations: citations([(.completionyear, "ev_year"), (.documentcategory, "ev_category"),
                                                    (.documenttype, "ev_type")]),
-                             association: ProposalAssociation(candidateRef: "示例项目_2026", state: .unconfirmed))
+                             association: ProposalAssociation(candidateRef: "c1", state: .unconfirmed))
         let result = validate(harness, answer: answer)
         #expect(result.entries[0].metadata[.projectname] == nil)
         #expect(result.entries[0].state == .hold)
@@ -287,7 +286,7 @@ struct ManifestValidatorTests {
         let answer = proposal(metadata: [.projectname: "示例项目_2026", .completionyear: "2026"],
                              citations: citations([(.projectname, "ev_name"), (.completionyear, "ev_year"),
                                                    (.documentcategory, "ev_category"), (.documenttype, "ev_type")]),
-                             association: ProposalAssociation(candidateRef: "凭空项目", state: .confirmed))
+                             association: ProposalAssociation(candidateRef: "c9", state: .confirmed))
         let result = validate(harness, answer: answer)
         #expect(result.report.allViolations.contains { $0.code == "candidate_unknown" })
         #expect(result.entries[0].state == .hold)

@@ -130,7 +130,7 @@ struct ProviderTests {
     func capsResponseBody(withContentLength: Bool) async {
         let fixture = ProviderFixture(provider: .openAI) { _ in
             var body = ProbeProvider.openAI.successBody()
-            body.append(Data(repeating: 0x20, count: ProviderProbe.maximumResponseBytes + 1 - body.count))
+            body.append(Data(repeating: 0x20, count: ProviderTransport.maximumResponseBytes + 1 - body.count))
             return .response(
                 body: body,
                 headers: withContentLength ? ["Content-Length": String(body.count)] : [:]
@@ -231,6 +231,81 @@ struct ProviderTests {
         default: .network
         }
         #expect(result.error == expected)
+    }
+
+    /// Runs one mapping request against a stub that always answers with
+    /// `status`, and returns what the client reported about it.
+    private func mappingAttempt(status: Int, headers: [String: String] = [:]) async throws -> MappingAttempt {
+        let key = "probe-test-\(UUID().uuidString)"
+        let stub = HTTPStub(response: .response(status: status, body: Data(#"{"error":{"message":"stub"}}"#.utf8),
+                                                headers: headers))
+        ProbeURLProtocol.register(stub, for: key)
+        defer { ProbeURLProtocol.unregister(key) }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ProbeURLProtocol.self]
+        let client = ProviderMappingClient(session: URLSession(configuration: configuration),
+                                           keyStore: MemoryKeyStore(keys: [.openAI: key]))
+        let profile = try MappingProfile.projectArchive()
+        let sourceID = UUID()
+        let batch = MappingBatch(id: "b1", candidateID: "c1",
+                                 entries: [MappingEntryRef(ref: "e1", sourceID: sourceID,
+                                                            relativePath: "示例项目_2026/公告.pdf",
+                                                            sizeBytes: 1_024, extensionName: "pdf",
+                                                            hydrationPending: false, provider: "local")],
+                                 evidence: [])
+        let context = ProjectContext(
+            revision: 1, scopeID: UUID(), profileID: profile.profileID, profileVersion: profile.profileVersion,
+            inputDigest: String(repeating: "d", count: 64),
+            candidates: [ContextCandidate(id: "c1", projectKey: "示例项目_2026", displayName: nil,
+                                          basis: [.directory], memberSourceIDs: [sourceID], confidence: .low)],
+            unassignedSourceIDs: [], conflictedSourceIDs: [], builtAt: .now
+        )
+        return await client.map(provider: .openAI, model: "gpt-4o-mini", allowCloud: true, profile: profile,
+                                context: context, casePack: try CasePack.shipped(), batch: batch, redaction: .none)
+    }
+
+    @Test("a rate limit buys exactly one retry and is then reported as the status")
+    func mappingRateLimitGetsOneRetry() async throws {
+        let attempt = try await mappingAttempt(status: 429, headers: ["Retry-After": "0"])
+        #expect(attempt.requests == 2, "one rate limit must buy exactly one retry, got \(attempt.requests)")
+        #expect(attempt.rateLimitRetries == 1,
+                "the retry must be distinguishable from a repair round, got \(attempt.rateLimitRetries)")
+        #expect(attempt.error == .remoteStatus(429),
+                "a second rate limit is reported as the status, not as a mystery")
+        #expect(attempt.proposal == nil)
+    }
+
+    @Test("a failed request still reports the request it made")
+    func failedMappingStillCountsRequests() async throws {
+        // The report is the only place anyone can see that a provider was
+        // contacted. Counting only successes made a rate-limited or
+        // server-failed run look like it had never left the machine, which is
+        // the opposite of what the accounting is for.
+        let attempt = try await mappingAttempt(status: 500)
+        #expect(attempt.requests == 1, "one request was made, got \(attempt.requests)")
+        #expect(attempt.error == .remoteStatus(500))
+    }
+
+    @Test("Retry-After is read, bounded, and never guessed at")
+    func retryAfterIsParsedConservatively() throws {
+        func header(_ value: String?) -> HTTPURLResponse? {
+            var fields: [String: String] = [:]
+            if let value { fields["Retry-After"] = value }
+            return HTTPURLResponse(url: URL(string: "https://example.invalid")!, statusCode: 429,
+                                   httpVersion: "HTTP/1.1", headerFields: fields)
+        }
+        #expect(ProviderTransport.retryAfter(from: header("7")) == 7)
+        #expect(ProviderTransport.retryAfter(from: header(" 12 ")) == 12)
+        #expect(ProviderTransport.retryAfter(from: header("3600")) == 30,
+                "an unbounded wait would outlive the user's patience")
+        #expect(ProviderTransport.retryAfter(from: header("-5")) == 0)
+        #expect(ProviderTransport.retryAfter(from: header("Wed, 11 Nov 2026 12:00:00 GMT")) == nil,
+                "an HTTP-date is not guessed at, and the fixed backoff applies")
+        #expect(ProviderTransport.retryAfter(from: header(nil)) == nil)
+        #expect(ProviderTransport.retryDelay(retryAfter: 7) == 7)
+        #expect(ProviderTransport.retryDelay(retryAfter: nil) == 1)
+        #expect(ProviderTransport.retryDelay(retryAfter: 0) == 0,
+                "a provider that says do not wait is believed")
     }
 }
 

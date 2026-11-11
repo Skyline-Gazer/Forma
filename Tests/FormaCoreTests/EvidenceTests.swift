@@ -292,7 +292,9 @@ private func extract(_ data: Data, extension fileExtension: String) throws -> Ev
     return try EvidenceExtractor.extract(file: file, fileExtension: fileExtension)
 }
 
-private func makePDF(_ pages: [String?], password: String? = nil) throws -> Data {
+/// A one- or multi-page PDF with real text, shared across the suites that need
+/// a body the extractor can actually read.
+func makePDF(_ pages: [String?], password: String? = nil) throws -> Data {
     let storage = try #require(CFDataCreateMutable(nil, 0))
     let consumer = try #require(CGDataConsumer(data: storage))
     var bounds = CGRect(x: 0, y: 0, width: 400, height: 400)

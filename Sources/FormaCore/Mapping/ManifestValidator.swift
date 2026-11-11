@@ -135,7 +135,7 @@ public struct ManifestValidator: Sendable {
         var snapshotReason: String?
         var associationBlocking = false
         var associationReason: String?
-        var candidateKeys: [String] = []
+        var candidateIDs: [String] = []
     }
 
     private func evaluateSnapshot(_ entry: SourceEntry, answer: ProposalForEntry?, into outcome: inout EntryDecision,
@@ -417,8 +417,16 @@ public struct ManifestValidator: Sendable {
                                      into outcome: inout EntryDecision,
                                      violations: inout [ValidationViolation]) {
         let candidates = input.context.candidate(for: entry.id)
-        let keys = Set(candidates.map(\.projectKey))
-        outcome.candidateKeys = Array(keys).sorted()
+        // The model is shown `candidate_ref` as the candidate's opaque id, which
+        // is what the prompt issues and what the manifest association records.
+        // A project key is a directory-derived name that may carry a customer,
+        // so it is never something the model has to echo back, and never the
+        // value the program compares.
+        let ids = Set(candidates.map(\.id))
+        outcome.candidateIDs = ids.sorted()
+        // More than one candidate claims this file. That is a context problem,
+        // not a model problem, and no answer can settle it: the file goes to
+        // review, and the reference the model named is beside the point.
         if input.context.conflictedSourceIDs.contains(entry.id) {
             outcome.associationBlocking = true
             outcome.associationReason = "membership_conflict"
@@ -449,19 +457,20 @@ public struct ManifestValidator: Sendable {
                 }
                 return
             }
-            guard keys.contains(ref) else {
-                outcome.associationBlocking = true
-                outcome.associationReason = "candidate_unknown"
-                violations.append(ValidationViolation(code: "candidate_unknown", instancePath: ref,
-                                                      detail: "The candidate is not part of the current context for this file."))
-                return
-            }
-            if association.state == .confirmed, !candidates.contains(where: { $0.projectKey == ref }) {
-                outcome.associationBlocking = true
-                outcome.associationReason = "membership_mismatch"
-                violations.append(ValidationViolation(code: "membership_mismatch", instancePath: entry.relativePath,
-                                                      detail: "The confirmed candidate does not contain this source."))
-            }
+            guard !ids.contains(ref) else { return }
+            // Two different failures wear the same face at this point, and they
+            // must not: a reference that names nothing in the context is a
+            // malformed answer, while a reference to a real candidate that does
+            // not contain this file is the model putting a document in the wrong
+            // project. Collapsing them would let a wrong project read as a typo.
+            let known = input.context.candidates.contains { $0.id == ref }
+            outcome.associationBlocking = true
+            outcome.associationReason = known ? "membership_mismatch" : "candidate_unknown"
+            violations.append(ValidationViolation(
+                code: outcome.associationReason ?? "candidate_unknown", instancePath: ref,
+                detail: known
+                    ? "The named candidate does not contain this source."
+                    : "The candidate is not part of the current context for this file."))
         }
     }
 
@@ -492,7 +501,7 @@ public struct ManifestValidator: Sendable {
             snapshotRevision: Int(entry.snapshotRevision), sourceVersion: Int(entry.sourceVersion),
             relativePath: entry.relativePath, state: state, target: target, metadata: metadata,
             fields: fields,
-            associations: outcome.candidateKeys.map {
+            associations: outcome.candidateIDs.map {
                 ManifestAssociation(kind: .projectCandidate, sourceID: entry.id,
                                     basis: "context revision \(input.context.revision) candidate \($0)")
             },
