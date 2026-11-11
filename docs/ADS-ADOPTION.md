@@ -92,3 +92,75 @@ Findings about implementation code are reviewed against the code's own SHA pair,
 For PR #25, rounds 1–4 consumed the initial review plus the three permitted automatic fix/re-review cycles. The remediation commit after round 4 was deliberately **not** mirrored back as a fifth cycle: it carries local verification only (all ten result states plus the stale-head control), and that limitation was stated in the PR before merging. PR #25 was then integrated as a merge commit (`967b2e2`) on the strength of GitHub Actions on its final head plus the four reviewed rounds, with the coverage gap recorded here rather than presented as a passing review.
 
 Code findings were handled inside their own cycle budget: re-derive on the code SHA pair (CNB pull #2), fix or dismiss, then re-review the remediation head (CNB pull #3) before merging. Stale review output is never reported as coverage of a newer head, and a review whose structured result cannot be read back is reported as unrecoverable rather than silently passed.
+
+## FormaCore P2 review targets
+
+P2 was delivered in five code PRs (#38, #39, #41, #42, #43), each mirrored to CNB for review before merge, plus one documentation pull (#44) and one post-merge remediation pull (#45). Findings are untrusted input; each round's disposition is recorded here rather than in the review output alone.
+
+| CNB pull | GitHub PR | Reviewed source | Rounds | Result at merge |
+|---|---|---|---|---|
+| [#4](https://cnb.cool/KoolingMachine/Forma/-/pulls/4) | [#38](https://github.com/Skyline-Gazer/Forma/pull/38) Profiles, artifact schemas, schema gate | `17929d7` → `ddc9045` → `bda8280` → `1a28bb2` | 3 | merged as `b24463e`; GitHub Actions `run 42988017585` covered the final head |
+| [#5](https://cnb.cool/KoolingMachine/Forma/-/pulls/5) | [#39](https://github.com/Skyline-Gazer/Forma/pull/39) Context Builder, Evidence Registry, Manifest Validator, mapping storage | `e86f2ea` → `b78e270` → `e924919` → `5ccf3a0` → `f13b722` → `1253335` → `5c4e932` | 4 | merged as `ee9954c`; GitHub Actions `run 42999561166` covered the final head |
+| [#6](https://cnb.cool/KoolingMachine/Forma/-/pulls/6) | [#41](https://github.com/Skyline-Gazer/Forma/pull/41) Mapping Engine, transport reuse, CasePack, redaction | `db96396` → … → `f660f8b` | 11 | merged as `98c956d`; GitHub Actions `run 43020359230` covered the final head |
+| [#7](https://cnb.cool/KoolingMachine/Forma/-/pulls/7) | [#42](https://github.com/Skyline-Gazer/Forma/pull/42) Manifest export, offline revalidation, Correction Capture | `f1ce455` → `2fee989` → `99632a4` | 2 builds: build 1 `changes_requested` (1 critical + 6 warning), build 2 `passed` (0 critical) | merged as `09baffe`; GitHub Actions `run 43024661916` covered the final head |
+| [#8](https://cnb.cool/KoolingMachine/Forma/-/pulls/8) | [#43](https://github.com/Skyline-Gazer/Forma/pull/43) Native workspace, correction UI, export screens | `386aa0f` → `372f682` → `5ab9184` → `7e1de89` → `a2a1232` → `eb43197` → `f26247b` → `2582495` → `0d96330` → `df1a7c2` → `3885a57`* → `5d7aa43` → `eff5e79` → `e1630dc` → `4b4c1bf` → `ee872e6` → `74c6185` → `409eae8` → `865958b` → `c130895` → `743df66` → `bffed12` → `a5720c9` → `2538113` → `ecc8a30` → `b3084a4` → `7a00f03` → `74ab1d9` → `58f8a97` → `e839a1c` → `98cfdfc` → `4a2bfbd` → `659c490` → `520163e` → `576ce51` → `c9060f3` → `921808b` | 38 builds (37 valid verdicts = 报告所称「有效判定」，同一口径；其中 1 次 `REVIEW_EVIDENCE_INVALID`), 14 critical | merged as 26a2c3b; GitHub Actions `run 43078381212` covered the final head |
+| [#9](https://cnb.cool/KoolingMachine/Forma/-/pulls/9) | [#44](https://github.com/Skyline-Gazer/Forma/pull/44) P2 acceptance report and this ledger | `cdacae5` and every remediation push since | build 1 returned 2 critical + 2 warning, **all in already-merged code**; each later build returned documentation-fidelity findings (contradictory counts, a wrong section pointer, a row-count claim, a paraphrase of the Owner authorization line) that were individually reproduced and fixed. the build count is not tracked here; the convention and its single statement of why live in `docs/P2-ACCEPTANCE.md` §6 | code findings fixed in #45 (`63618ea`); prose findings in this pull; #44's merge SHA is not backfilled into a ledger that ships inside #44 |
+| [#10](https://cnb.cool/KoolingMachine/Forma/-/pulls/10) | [#45](https://github.com/Skyline-Gazer/Forma/pull/45) Post-merge review follow-ups | `4adcb95` → `094edd3` → `7573afe` → `2a29986` → `af147e8` | 4 builds, three findings and then approval: the progress indicator keyed on the shared phase (twice, at two heads) and a notice reading a member the export summary does not have; the reviewer output carried no per-finding severity labels, so none is claimed here | merged as `63618ea`; GitHub Actions run 43090470052 (tests + macOS app build pass) |
+
+### What the round counts mean
+
+PR #41 took eleven review rounds while PR #42 took two. The difference is not effort: #41 introduced the first code that consumed `ContextBuilder` output and `ManifestValidator` rules, and three of its findings exposed defects that had been *latent in already-merged code* — a `candidate_ref` semantics mismatch that would have stripped every real model answer of execution eligibility, a batching key that could attach a candidate not containing the file, and a shared loop in which a rate limit consumed the schema-repair budget. Each was fixed in the PR that surfaced it, with a test that fails if it returns.
+
+Two further classes of defect appeared only under CI and are recorded because they would otherwise be invisible:
+
+- An undeclared SwiftPM resource directory is not a build error. The bundle simply lacks the file, so every test loading the shipped CasePack threw, while a developer whose local scratch had baked an earlier build saw them pass.
+- A test double that produced an undecodable answer passed its assertions. `nil` assigned into `[String: Any?]` removes the key rather than storing a null, and the strict metadata decoder requires all twelve slots, so several engine tests had been asserting against "no answer at all" — including the invented-reference refusal and the bounded re-ask.
+
+### Coverage limits of this ledger
+
+Round counts are per CNB pull, and the automatic cycle budget is finite. Where a remediation commit was mirrored after a round limit was reached, GitHub Actions on that exact head is the verification, and the gap is stated rather than presented as a completed review. No P2 round output has been reused as coverage for a newer head.
+
+\* `3885a57` 的评审构建以 `REVIEW_EVIDENCE_INVALID` 结束（该轮输出里有一条发现缺少 `severity`），评审文本仍从 stage 日志中读出并处理；该 head 不计为一次有效判定。
+
+### Why #43 needed thirty-eight review builds
+
+The findings were not the same complaint repeated, and they arrived in four layers. Builds 1-10 fixed what the workspace writes: a persisted scope with two writers, an engine cache whose key and body were maintained apart, a corrections column that meant "produced" on one path and "targeted" on another, publishing and recording split across two transactions, and a correction that could be published on top of a revision it had never seen. Builds 11-21 fixed when a value is allowed to be believed: guards that ran after the writes they protected, read-backs that swallowed a successful write when they failed, tab-shaped `onDisappear` handlers cancelling a task handle shared by every long operation, and two reload passes racing at launch. Builds 22-35 fixed the remediation itself and the migration's contact with real history: the unique index that aborts the upgrade of a version 1 database holding two corrections that name the same revision they read (build 22, critical - every workspace that had been used twice would have failed to open); the same migration crediting a `pending` row with a revision it never published; the next-revision number read twice in one transaction; and an egress-consent preview that paired snapshotted bytes with the settings on screen. Builds 36-38 hit comment bulk only: notes that argued with the reader, narrated a replaced implementation, or duplicated a constraint stated three lines away.
+
+Six defects were found only by CI, and only because the machine cannot type-check the app target locally: an exhaustive `switch` over `Phase` missing a case, a stored property read in `init` before initialisation completed, references to members that do not exist (`SourceEntry.sourceID`, `ManifestEnvelope.profile`), `try?` applied to an already-optional return, an ownership guard naming a variable no enclosing scope bound, and a migration test deleting `grdb_database_migrations` where GRDB keeps `grdb_migrations`. GUI work in this repository is gated on the macOS app build, and that gate is stated as the verification rather than described as a local pass.
+
+### What a later pull found after thirty-eight builds on the earlier one
+
+The documentation pull #9 mirrors `review/p2-docs` against CNB `dev`, so its review diff contained the
+workspace code merged in #43. On its first build the reviewer returned two criticals that thirty-eight
+builds of that same code had not:
+
+- `applyCorrection` re-read "the current manifest for this scope and profile" after publishing, to detect a
+  revision that had moved on in the meantime. The query answers with the newest manifest of that pair, not
+  the one the click corrected, so a second manifest for the same scope and profile — mapping run B plus an
+  imported bundle manifest A — put B's header and entries on screen under a notice describing the revision
+  just written to A. The write already returns the manifest it stored; the second read was removed rather
+  than narrowed, because no read of "latest" can be made to mean "the one I wrote".
+- `export()` packaged `evidenceBySource`, the rows this session had opened, instead of the rows the manifest
+  cites. Exporting after `reload()` without clicking through every file produced a bundle whose
+  `evidence.json` was missing cited rows, which only contradicts itself under offline revalidation, on
+  another machine, after the success notice has been dismissed.
+
+Both were reproduced against the current source before being fixed (#45 `094edd3`), together with the two
+warnings from the same build: the correction verifier scanned a source's whole evidence list once per cited
+id — undoing the batch read introduced beside it — and a failed history read after a recorded correction
+reported `notRead` while rendering a one-row list, which is a different claim.
+
+The same review read the *prose* of that documentation pull on its second build and returned four more
+defects, all of the "two sentences in one document disagree" kind: a sentence scoped in the author's head to
+two pulls that read anywhere else as the P2 total, a cross-reference to the wrong section (whose target also
+mis-described the round count it pointed at), a defect-table summary whose row arithmetic did not match the
+table, and a README that declared P2 delivered while ROADMAP's Owner authorization line still listed only P0
+and P1. None of these were code, and all of them would have been inherited as fact by whoever reads the
+report next. The report now states one counting convention before any number - sums cover only the pulls
+whose review has closed - and lists components rather than totals that a reader cannot recompute.
+
+The lesson recorded for adoption decisions: round counts measure persistence, not coverage. A review that
+has spent thirty-eight builds on a state machine can still miss "this read returns a different entity than
+the caller means" and "this cache is being used as a source of record". Both shapes are recorded as review checks inside
+`docs/P2-ACCEPTANCE.md` §8, whose purpose is the P3 go/no-go judgement rather than a checklist of its own:
+two numbered items there name them, and nothing in that section is a standing review procedure.
