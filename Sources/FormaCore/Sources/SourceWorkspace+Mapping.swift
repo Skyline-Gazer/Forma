@@ -145,8 +145,19 @@ extension SourceWorkspace {
         // whether anything actually moved since the last reconciliation.
         let already = Set(manifest.entries.filter { $0.state == .invalidated }.map { $0.sourceID })
         let fresh = computed.invalidatedSourceIDs.subtracting(already)
-        let reason = fresh.isEmpty ? "already_invalidated"
-            : fresh == computed.invalidatedSourceIDs ? computed.reason : "\(computed.reason)_partially"
+        // Three distinct outcomes, and they must not be conflated: nothing
+        // moved, something moved that was already reported, and something
+        // genuinely new.
+        let reason: String
+        if computed.invalidatedSourceIDs.isEmpty {
+            reason = computed.reason
+        } else if fresh.isEmpty {
+            reason = "already_invalidated"
+        } else if fresh == computed.invalidatedSourceIDs {
+            reason = computed.reason
+        } else {
+            reason = "\(computed.reason)_partially"
+        }
         let decision = ManifestReconciler.Decision(invalidatedSourceIDs: fresh, reason: reason)
         guard !decision.invalidatedSourceIDs.isEmpty else { return decision }
         let invalidated = decision.invalidatedSourceIDs

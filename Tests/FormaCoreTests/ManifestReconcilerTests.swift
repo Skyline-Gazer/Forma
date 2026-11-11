@@ -66,47 +66,61 @@ struct ManifestReconcilerTests {
         #expect(value.reason == "unchanged")
     }
 
-    @Test("a new directory in another project invalidates only what moved")
+    @Test("a file that joins a project does not invalidate the existing ones")
+    func additionLeavesExistingDecisions() async throws {
+        let setup = try await prepared()
+        defer { setup.fixture.cleanUp() }
+        let stored = try await file(setup)
+        _ = try setup.fixture.write("clarification", at: "示例项目_2026/03_澄清/说明.pdf")
+        _ = try await setup.workspace.scan(setup.scope)
+        let decision = try #require(await setup.workspace.reconcile(scope: setup.scope, profile: setup.profile))
+        // The new file has no decision yet; nothing that was decided changed.
+        #expect(decision.invalidatedSourceIDs.isEmpty, "unexpected \(decision.reason)")
+        #expect(stored.entries.count == 2)
+    }
+
+    @Test("a filed file that moves to another project is invalidated alone")
     func membershipChangeIsScoped() async throws {
         let setup = try await prepared()
         defer { setup.fixture.cleanUp() }
         let stored = try await file(setup)
-        // A second project appears; the first project's membership is untouched.
-        _ = try setup.fixture.write("new project notice", at: "另一项目_2027/01_招标/公告.pdf")
+        let movedEntry = try #require(stored.entries.first { $0.relativePath.contains("技术标") })
+        // Move it under a different project directory, leaving its identity.
+        let source = setup.fixture.root.appendingPathComponent(movedEntry.relativePath)
+        let destination = setup.fixture.root.appendingPathComponent("另一项目_2027/02_投标/技术标.pdf")
+        try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: source, to: destination)
         _ = try await setup.workspace.scan(setup.scope)
         let decision = try #require(await setup.workspace.reconcile(scope: setup.scope, profile: setup.profile))
-        // The rebuilt context is stored, not fabricated: reconciliation must
-        // compare two real revisions.
+        // The rebuilt context must be stored, not fabricated: reconciliation
+        // compares two real revisions, and a manifest that cites a revision
+        // which no longer describes the workspace has to see a different one.
         let contextCount = try await setup.store.database.read { db -> Int in
             let row = try Row.fetchOne(db, sql: "SELECT COUNT(*) AS count FROM context_revisions")
             let count: Int = row?["count"] ?? 0
             return count
         }
-        #expect(contextCount == 2)
-        #expect(decision.invalidatedSourceIDs.isEmpty,
-                "an untouched project keeps its decisions, got \(decision.reason)")
-        // Now the existing project itself grows, which must invalidate exactly
-        // the file that joined it.
-        _ = try setup.fixture.write("clarification", at: "示例项目_2026/03_澄清/说明.pdf")
-        _ = try await setup.workspace.scan(setup.scope)
-        let moved = try #require(await setup.workspace.reconcile(scope: setup.scope, profile: setup.profile))
-        #expect(moved.reason == "membership_changed")
-        #expect(!moved.invalidatedSourceIDs.isEmpty)
-        let listing = try await setup.workspace.listing(setup.scope)
-        let stillValid = Set(listing.entries.map(\.id)).subtracting(moved.invalidatedSourceIDs)
-        #expect(!stillValid.isEmpty, "the entries that did not move stay usable")
-        #expect(stored.entries.count == 2)
+        #expect(contextCount >= 2, "a changed structure must be re-versioned")
+        #expect(decision.invalidatedSourceIDs == [movedEntry.sourceID],
+                "only the file that moved loses its decision, got \(decision.reason)")
+        #expect(decision.reason == "membership_changed")
     }
 
     @Test("a second pass does not re-report an invalidation already made")
     func invalidationIsReportedOnce() async throws {
         let setup = try await prepared()
         defer { setup.fixture.cleanUp() }
-        _ = try await file(setup)
-        _ = try setup.fixture.write("clarification", at: "示例项目_2026/03_澄清/说明.pdf")
+        let stored = try await file(setup)
+        let movedEntry = try #require(stored.entries.first { $0.relativePath.contains("技术标") })
+        let source = setup.fixture.root.appendingPathComponent(movedEntry.relativePath)
+        let destination = setup.fixture.root.appendingPathComponent("另一项目_2027/02_投标/技术标.pdf")
+        try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: source, to: destination)
         _ = try await setup.workspace.scan(setup.scope)
         let first = try #require(await setup.workspace.reconcile(scope: setup.scope, profile: setup.profile))
-        #expect(!first.invalidatedSourceIDs.isEmpty)
+        #expect(first.invalidatedSourceIDs == [movedEntry.sourceID])
         // Nothing further moved, so the second pass must say so instead of
         // presenting the same damage as new.
         let second = try #require(await setup.workspace.reconcile(scope: setup.scope, profile: setup.profile))
