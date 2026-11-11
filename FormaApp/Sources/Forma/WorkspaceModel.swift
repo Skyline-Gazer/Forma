@@ -189,14 +189,9 @@ final class WorkspaceModel: ObservableObject {
         }
     }
     /// Starts a reload for a value the reviewer changed, unless `restore()` is
-    /// assembling the launch state around it.
-    ///
-    /// Only the scheduling is suppressed, and only while restoring: persisting
-    /// the fallback identifier and invalidating the cached engine still happen
-    /// in the `didSet` above, because those are answers the next launch should
-    /// read. Two concurrent reloads, by contrast, both await and both write the
-    /// listing, context, manifest and attempts, so which set of values survives
-    /// depends on which read returned last rather than on anything stored.
+    /// still assembling launch state. Two reloads running together each write
+    /// the listing, context, manifest and attempts after their own suspensions,
+    /// so which set survives would depend on which read returned last.
     private func scheduleReload() {
         guard !isRestoring else { return }
         Task { await self.reload() }
@@ -374,11 +369,9 @@ final class WorkspaceModel: ObservableObject {
     // MARK: - Restore and loads
 
     func restore() async {
-        // Every identifier assigned below would otherwise schedule its own
-        // reload from `didSet`, and two of them running together both write the
-        // listing, context, manifest and attempt history after their own
-        // suspensions. `restore()` is the one caller that assembles launch
-        // state, so it reloads once, at the end.
+        // Assigning the launch state would otherwise schedule one reload per
+        // identifier; this is the only caller that suppresses them, and it
+        // reloads once, at the end.
         isRestoring = true
         defer { isRestoring = false }
         do {

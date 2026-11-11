@@ -58,23 +58,28 @@ enum MappingCorrectionMigrations {
     /// wrote, and makes "one revision has one producing correction" a
     /// constraint.
     ///
-    /// The `NOT EXISTS` is what keeps the last statement from failing: two
-    /// accepted rows can name the same revision they read, and `supersedes + 1`
-    /// would then hand both the same claim, which a unique index refuses to be
-    /// built over. Only the earlier row is credited; the later stays
-    /// unattributed rather than being given a number that matches nothing.
+    /// Two filters, both load-bearing. `review_state = 'evidence_verified'` is
+    /// the half that says which rows published anything: the column allowed
+    /// `pending`, and a row in that state produced no revision, so crediting it
+    /// with one would invent an author for a version nobody wrote. The
+    /// `NOT EXISTS` keeps the last statement from failing: two accepted rows can
+    /// name the same revision they read, and `supersedes + 1` would hand both
+    /// the same claim, which a unique index refuses to be built over. Only the
+    /// earlier row is credited; the later stays unattributed rather than being
+    /// given a number that matches nothing.
     static let revisionSplitSQL = """
         ALTER TABLE corrections ADD COLUMN produced_revision INTEGER;
         UPDATE corrections SET produced_revision = supersedes_revision + 1
-            WHERE supersedes_revision IS NOT NULL
+            WHERE supersedes_revision IS NOT NULL AND review_state = 'evidence_verified'
               AND NOT EXISTS (SELECT 1 FROM corrections AS earlier
                   WHERE earlier.manifest_id = corrections.manifest_id
                     AND earlier.supersedes_revision = corrections.supersedes_revision
+                    AND earlier.review_state = 'evidence_verified'
                     AND (earlier.created_at < corrections.created_at
                          OR (earlier.created_at = corrections.created_at
                              AND earlier.id < corrections.id)));
         UPDATE corrections SET manifest_revision = supersedes_revision
-            WHERE supersedes_revision IS NOT NULL;
+            WHERE supersedes_revision IS NOT NULL AND review_state = 'evidence_verified';
         ALTER TABLE corrections DROP COLUMN supersedes_revision;
         CREATE UNIQUE INDEX corrections_produced
             ON corrections(manifest_id, produced_revision)
