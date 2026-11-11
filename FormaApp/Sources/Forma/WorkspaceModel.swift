@@ -868,24 +868,18 @@ final class WorkspaceModel: ObservableObject {
                 guard !Task.isCancelled else { return }
                 exportSummary = summary
                 bundleURL = directory.appendingPathComponent(summary.manifestID, isDirectory: true)
-                notice = Self.exportNotice(summary)
+                // Stated as what happened, and no more: whether the bundle holds
+                // every row its manifest cites is answered when the bundle is
+                // revalidated, where absent ids surface as `evidence_not_found`.
+                // An export cannot assert that from its own return value, which
+                // counts files and a revision.
+                let files = summary.files.count.formatted()
+                let revision = summary.revision.formatted()
+                notice = "Exported \(files) files for revision \(revision)."
             } catch {
                 if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .storage) }
             }
         }
-    }
-
-    /// What an export says about itself. A missing row is stated, not swallowed:
-    /// the bundle would otherwise contradict its own manifest only when someone
-    /// else revalidates it offline. Its own function because a ternary of two
-    /// interpolated strings inside the `Task` above is more than the app
-    /// target's type-checker will resolve here.
-    private static func exportNotice(_ summary: ManifestExport.Summary) -> String {
-        let head = "Exported \(summary.files.count.formatted()) files for revision "
-            + "\(summary.revision.formatted())"
-        guard !summary.missingEvidence.isEmpty else { return head + "." }
-        return head + ", but \(summary.missingEvidence.count.formatted()) cited evidence rows are not "
-            + "registered in this store: revalidating this bundle offline will report it incomplete."
     }
 
     /// Reads a written bundle: the manifest for offline viewing and its evidence
@@ -1084,22 +1078,18 @@ final class WorkspaceModel: ObservableObject {
                 // follows each suspension, not only the first.
                 guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
                 // The decision is in storage from here on, so nothing below can
-                // undo it: the two reads only refine the screen, and an error
-                // in either used to conceal a correction that had succeeded.
-                var message = applied.violations.isEmpty
+                // undo it: what follows only refines the screen, and an error
+                // there used to conceal a correction that had succeeded.
+                let message = applied.violations.isEmpty
                     ? "Correction recorded as revision \(applied.manifest.envelope.revision.formatted())."
                     : "FormaCore refused this correction: \(applied.violations.map { $0.code }.joined(separator: " · ")). "
                         + "Nothing was changed, and the attempt is on the exceptions list."
-                // One read before any state is written, and it is the read that
-                // matters: the audit trail for the manifest just corrected. The
-                // published version itself is not re-fetched - `applyCorrection`
-                // returns the manifest the store wrote, and asking the store for
-                // "the current manifest of this scope and profile" can answer
-                // with a *different* manifest that happens to be newer, putting
-                // another listing on screen under a notice about this one.
-                // The read is an explicit `do`/`catch` rather than `try?`
-                // because it already answers optionally: `try?` over it nests
-                // the optional, and a failure and a nil would look alike below.
+                // The published manifest is not re-fetched. "The current manifest
+                // for this scope and profile" is a different question - it can
+                // answer with another manifest that happens to be newer - and
+                // `applyCorrection` already returns the one the store wrote. The
+                // history read is `do`/`catch` rather than `try?` because it
+                // already answers optionally, and the two would look alike below.
                 var attempts: [CorrectionRecord]?
                 do { attempts = try await workspace.corrections(manifestID: manifestID) }
                 catch { attempts = nil }
