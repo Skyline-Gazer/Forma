@@ -52,13 +52,11 @@ public enum FormaError: Error, LocalizedError, Sendable, Equatable {
 public enum FormaDiagnostics {
     public enum Operation: String, Sendable {
         case openWorkspace, registerSource, scanSource, readEvidence, discoverMCP, providerProbe, saveCredential
-        /// A correction click that failed before FormaCore could judge it -
-        /// the store refused the write, or the manifest it was aimed at had
-        /// been superseded. Not a refusal: a decision FormaCore declined on the
-        /// evidence is a successful call whose row carries
-        /// `reviewState == .rejected`, and the review screen reads it from the
-        /// table, which is the audit trail. This case exists so a lost click and
-        /// a refused one are not the same line in the log.
+        /// A correction that never reached a decision: the store refused the
+        /// write, or the manifest it was aimed at had been superseded. A
+        /// refusal on the evidence is a successful call whose row carries
+        /// `reviewState == .rejected`, recorded in the table the review screen
+        /// reads - this case exists so the two are not the same log line.
         case applyCorrection
     }
 

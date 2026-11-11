@@ -249,8 +249,6 @@ extension SourceWorkspace {
             // retry refuse itself.
             let published = try await store.database.write { db -> (manifest: Manifest,
                                                                     record: CorrectionRecord) in
-                // `persist` numbers from the store, so this is the only place
-                // that can tell the revision under review from a newer one.
                 guard try MappingStore.nextManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
                         == manifest.envelope.revision + 1 else { throw FormaError.sourceChanged }
                 let stored = try Self.persist(applied.manifest, scopeID: scope.id, in: db)
@@ -259,15 +257,10 @@ extension SourceWorkspace {
                 do {
                     try MappingStore.insertCorrection(record, in: db)
                 } catch let error as DatabaseError where error.message?.contains("produced_revision") == true {
-                    // Two rows claiming one revision. The published error
-                    // vocabulary has no case for an index conflict, and
-                    // inventing one for a state the reviewer cannot cause would
-                    // put a wrong promise in the contract, so this stays
-                    // `.storage`. What the constraint adds over that code is
-                    // the line in the log: an operator reading `storage` at
-                    // `applyCorrection` can tell a duplicated claim from a disk
-                    // that went away. SQLite names the indexed columns, not the
-                    // index, which is why the test is on the column.
+                    // Two rows claiming one revision, which SQLite reports by
+                    // the indexed column. `.storage` stays the answer - the
+                    // published vocabulary gets no case for a state a reviewer
+                    // cannot cause - and the log names the constraint.
                     FormaDiagnostics.constraintConflict(.applyCorrection, "corrections_produced")
                     throw FormaError.storage
                 }
