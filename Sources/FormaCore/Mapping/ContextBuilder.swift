@@ -195,7 +195,7 @@ public enum ContextBuilder {
         var split: [String: Group] = [:]
         for (key, group) in groups.sorted(by: { $0.key < $1.key }) {
             let members = files.filter { group.members.contains($0.id) }
-            if let parts = splitByEntity(members, inside: group) {
+            if let parts = splitByEntity(members, inside: group, profile: profile) {
                 for (token, tokenMembers) in parts {
                     split[token] = Group(key: token, members: tokenMembers,
                                          basis: [.naming, .adjacency], confidence: .medium)
@@ -216,7 +216,25 @@ public enum ContextBuilder {
                 split[key] = group
             }
         }
-        return split.filter { !$0.value.members.isEmpty }
+        // A group that sits inside another group's directory is the same
+        // project seen one level down: `示例项目C/补充材料` belongs to `示例项目C`.
+        var nested: [String: Group] = [:]
+        for (key, group) in split.sorted(by: { $0.key < $1.key }) {
+            let ancestors = split.keys.filter { $0 != key && key.hasPrefix("\($0)/") }.sorted { $0.count > $1.count }
+            let target = ancestors.first ?? key
+            if var existing = nested[target] {
+                existing.members.formUnion(group.members)
+                existing.basis.formUnion(group.basis)
+                if existing.confidence == .low, group.confidence != .low { existing.confidence = group.confidence }
+                nested[target] = existing
+            } else if target == key {
+                nested[target] = group
+            } else {
+                nested[target] = Group(key: target, members: group.members,
+                                       basis: group.basis.union([.directory]), confidence: group.confidence)
+            }
+        }
+        return nested.filter { !$0.value.members.isEmpty }
     }
 
     /// The deepest directory whose child segment is one of the profile's
@@ -246,28 +264,46 @@ public enum ContextBuilder {
     /// `招标` under a customer tree still reads as a category level, while a
     /// project name that merely contains a category word does not.
     static func isCategoryLike(_ segment: String, profile: MappingProfile) -> Bool {
-        let needle = normalize(segment)
+        let needle = strippingPrefix(normalize(segment))
         guard needle.count >= 2 else { return false }
         for category in profile.categories {
             let name = normalize(category.identifier)
-            // Drop the numeric prefix (`01_招标文件` -> `招标文件`) before
-            // comparing, so the label part is what matches.
-            let bare = name.replacingOccurrences(of: "^[0-9]+_", with: "", options: .regularExpression)
-            if bare.isEmpty { continue }
+            // A filing directory may be written in full (`01_招标文件`) or
+            // abbreviated (`01_招标`), so both sides lose the numeric prefix
+            // before the label part is compared.
+            let bare = strippingPrefix(name)
+            guard !bare.isEmpty else { continue }
             if needle == bare || needle == name || bare.contains(needle) || needle.contains(bare) { return true }
         }
         for type in profile.documentTypes {
             if normalize(type.identifier) == needle { return true }
+            // A clue is a fragment (`技术响应`), so containment in either
+            // direction counts; equality alone would miss `技术响应表`.
+            if type.clues.contains(where: {
+                let clue = normalize($0)
+                return clue.count >= 2 && (clue == needle || clue.contains(needle) || needle.contains(clue))
+            }) { return true }
         }
         return false
     }
 
+    private static func strippingPrefix(_ value: String) -> String {
+        value.replacingOccurrences(of: "^[0-9]+_", with: "", options: .regularExpression)
+    }
+
     /// Two disjoint naming entities inside one directory mean two projects.
-    private static func splitByEntity(_ members: [SourceEntry], inside group: Group) -> [(String, Set<UUID>)]? {
+    private static func splitByEntity(_ members: [SourceEntry], inside group: Group, profile: MappingProfile)
+        -> [(String, Set<UUID>)]?
+    {
         let ids = group.members
         guard ids.count >= 4 else { return nil }
         let entities = namingEntities(members)
+        // Tokens that name a document kind (`报价单`, `技术响应表`) say what the
+        // file is, not which project it belongs to: splitting on them would
+        // group every quotation in the archive together. Only tokens that are
+        // not part of the profile vocabulary can identify a project.
         let candidates = entities
+            .filter { !isCategoryLike($0.key, profile: profile) }
             .filter { !$0.value.isDisjoint(with: ids) && $0.value.isSubset(of: ids) && $0.value.count >= 2 }
             .sorted { ($0.value.count, $0.key) > ($1.value.count, $1.key) }
         var chosen: [(String, Set<UUID>)] = []
