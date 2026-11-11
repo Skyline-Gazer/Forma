@@ -239,7 +239,11 @@ struct MappingPromptTests {
             #expect(system.contains(rule), "each vendor trap arrives verbatim: \(rule)")
         }
         #expect(system.contains(profile.versionKey))
-        #expect(!system.contains(MappingProfile.projectArchive().counterExamples[0]),
+        // Resolved before the assertion: a throwing call inside #expect has to
+        // carry its own `try`, and the archive rule is a fact about a different
+        // profile rather than part of the expectation.
+        let archiveRule = try MappingProfile.projectArchive().counterExamples[0]
+        #expect(!system.contains(archiveRule),
                 "one profile's rules do not leak into the other's prompt")
     }
 
