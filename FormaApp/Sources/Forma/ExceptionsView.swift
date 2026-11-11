@@ -176,31 +176,6 @@ struct ExceptionsView: View {
                 Text("A reprocessed run covers only the selected files, so this revision's manifest lists those entries.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Correction attempts") {
-                // An empty list has two meanings, and only one of them is a
-                // fact about the manifest: nothing was ever attempted, versus
-                // the attempts not having been read back from storage yet.
-                if !model.correctionsLoaded {
-                    Text("Attempts for this manifest have not been read from storage yet.")
-                        .font(.caption).foregroundStyle(.secondary)
-                } else if model.correctionHistory.isEmpty {
-                    Text("No reviewer decision has been recorded for this manifest.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                // Refusals belong here as much as acceptances: a click FormaCore
-                // ruled out still happened, and hiding it would leave the
-                // revision history describing only the decisions that were right.
-                ForEach(model.correctionHistory, id: \.id) { record in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(record.field.rawValue) → \(record.correctedValue ?? "cleared")")
-                            .font(.caption)
-                        Text(Self.outcomeLine(record).text)
-                            .font(.caption2)
-                            .foregroundStyle(Self.outcomeLine(record).color)
-                    }
-                    .accessibilityIdentifier("correction-\(record.id)")
-                }
-            }
         }
     }
 
@@ -283,30 +258,6 @@ struct ExceptionsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(15)
             }
-        }
-    }
-
-    /// One attempt, described by what it actually did to the version history.
-    ///
-    /// `reviewState` has three values and `producedRevision` is nullable: the
-    /// old two-way test showed a `pending` row as though it had been published,
-    /// and a refused row quoted the revision it was aimed at as if it were the
-    /// revision it created.
-    private static func outcomeLine(_ record: CorrectionRecord) -> (text: String, color: Color) {
-        switch (record.reviewState, record.producedRevision) {
-        case (.rejected, _):
-            ("Refused by FormaCore · attempted against revision "
-                + "\(record.manifestRevision.formatted()) · published nothing", .orange)
-        case (.pending, _):
-            ("Awaiting review · attempted against revision \(record.manifestRevision.formatted()) · "
-                + "replaced \(record.previousValue ?? "nothing")", .blue)
-        case (.evidenceVerified, let produced?):
-            ("Recorded at revision \(produced.formatted()), superseding "
-                + "\(record.manifestRevision.formatted()) · replaced \(record.previousValue ?? "nothing")",
-             .secondary)
-        case (.evidenceVerified, nil):
-            ("Verified but published no revision · attempted against revision "
-                + "\(record.manifestRevision.formatted())", .red)
         }
     }
 }

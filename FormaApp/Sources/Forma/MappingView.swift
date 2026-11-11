@@ -142,6 +142,31 @@ struct MappingView: View {
                     Text("context \(manifest.envelope.contextDigest)").font(.caption2.monospaced())
                         .foregroundStyle(.secondary).textSelection(.enabled)
                 }
+                // A manifest's decision history belongs with the manifest it
+                // describes - and with the fields these decisions edited, which
+                // is this screen. Refusals are listed as plainly as
+                // acceptances: a click FormaCore ruled out still happened, and
+                // hiding it would leave the revision history describing only
+                // the decisions that were right.
+                Section("Correction attempts") {
+                    if !model.correctionsLoaded {
+                        Text("Attempts for this manifest have not been read from storage yet.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else if model.correctionHistory.isEmpty {
+                        Text("No reviewer decision has been recorded for this manifest.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    ForEach(model.correctionHistory, id: \.id) { record in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(record.field.rawValue) → \(record.correctedValue ?? "cleared")")
+                                .font(.caption)
+                            Text(Self.outcomeLine(record).text)
+                                .font(.caption2)
+                                .foregroundStyle(Self.outcomeLine(record).color)
+                        }
+                        .accessibilityIdentifier("correction-\(record.id)")
+                    }
+                }
                 Section("Validation") {
                     LabeledContent("Fully valid", value: manifest.report.isFullyValid ? "Yes" : "No")
                     LabeledContent("Entries", value: manifest.report.counts.entries.formatted())
@@ -481,6 +506,30 @@ struct MappingView: View {
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             Task { @MainActor in model.export(to: url) }
+        }
+    }
+
+    /// One attempt, described by what it actually did to the version history.
+    ///
+    /// `reviewState` has three values and `producedRevision` is nullable, so
+    /// neither a two-way test on the state nor a bare `manifestRevision` says
+    /// what happened: a refusal names the version it was aimed at and created
+    /// nothing, and a published decision names both.
+    private static func outcomeLine(_ record: CorrectionRecord) -> (text: String, color: Color) {
+        switch (record.reviewState, record.producedRevision) {
+        case (.rejected, _):
+            ("Refused by FormaCore · attempted against revision "
+                + "\(record.manifestRevision.formatted()) · published nothing", .orange)
+        case (.pending, _):
+            ("Awaiting review · attempted against revision \(record.manifestRevision.formatted()) · "
+                + "replaced \(record.previousValue ?? "nothing")", .blue)
+        case (.evidenceVerified, let produced?):
+            ("Recorded at revision \(produced.formatted()), superseding "
+                + "\(record.manifestRevision.formatted()) · replaced \(record.previousValue ?? "nothing")",
+             .secondary)
+        case (.evidenceVerified, nil):
+            ("Verified but published no revision · attempted against revision "
+                + "\(record.manifestRevision.formatted())", .red)
         }
     }
 }

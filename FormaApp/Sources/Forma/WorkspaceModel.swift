@@ -366,15 +366,23 @@ final class WorkspaceModel: ObservableObject {
         } catch {
             show(error, operation: .providerProbe, fallback: .unavailable)
         }
+        var repairedScope = false
         do {
             scopes = try await workspace.scopes()
             if scopes.contains(where: { $0.id == selectedScopeID }) == false {
                 selectedScopeID = scopes.first?.id
+                // Assigning the identifier already schedules a reload through
+                // `didSet`, which is also the only writer of that preference.
+                repairedScope = true
             }
         } catch {
             show(error, operation: .openWorkspace, fallback: .storage)
         }
-        await reload()
+        // One pass per launch. Two reloads running together both write the
+        // listing, the context, the manifest and the attempt history after
+        // their own suspensions, and which set of values ends up on screen is
+        // decided by which read returned last rather than by anything stored.
+        if !repairedScope { await reload() }
     }
 
     /// Reloads the listing plus whatever FormaCore has stored for this
@@ -409,17 +417,24 @@ final class WorkspaceModel: ObservableObject {
             guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
             context = stored
             contextIsStale = false
-            if let stored = try await workspace.currentManifest(scope: scope, profile: profile) {
-                manifest = stored
+            let current = try await workspace.currentManifest(scope: scope, profile: profile)
+            guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
+            if let current {
+                manifest = current
                 outcome = nil
                 // Correction attempts live in the store, not in this session:
                 // without reading them back, a restart or a scope switch shows
                 // an empty list next to a manifest that does have a history, and
                 // a refused decision becomes invisible exactly when someone
                 // returns to look for it.
-                correctionHistory = try await workspace.corrections(manifestID: stored.envelope.manifestID)
+                let attempts = try await workspace.corrections(manifestID: current.envelope.manifestID)
+                // The attempts are read after the manifest, and a scope switch
+                // in between would otherwise attach another source's audit
+                // history to this one.
+                guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
+                correctionHistory = attempts
                 correctionsLoaded = true
-                notice = "Restored revision \(stored.envelope.revision) of manifest \(stored.envelope.manifestID.uuidString.lowercased()) from workspace storage."
+                notice = "Restored revision \(current.envelope.revision) of manifest \(current.envelope.manifestID.uuidString.lowercased()) from workspace storage."
             } else {
                 correctionHistory = []
                 correctionsLoaded = false
@@ -908,6 +923,17 @@ final class WorkspaceModel: ObservableObject {
     func applyCorrection() {
         guard phase == .idle, let manifest, let scope = selectedScope, let profile = selectedProfile,
               let draft else { return }
+        // The sheet holds the manifest it was opened against, and the selected
+        // source can change underneath it. Correcting a manifest that no longer
+        // belongs to the selected source would record a decision about one
+        // project while showing its result on another, so what is being
+        // corrected is identified against what is selected rather than assumed.
+        guard manifest.envelope.scopeID == scope.id,
+              manifest.envelope.profile.versionKey == profile.versionKey else {
+            self.draft = nil
+            notice = "That correction was opened against a different source or profile. Close the sheet and open it again."
+            return
+        }
         let trimmed = draft.value.trimmingCharacters(in: .whitespacesAndNewlines)
         let citations = draft.citations.sorted()
         let manifestID = manifest.envelope.manifestID
