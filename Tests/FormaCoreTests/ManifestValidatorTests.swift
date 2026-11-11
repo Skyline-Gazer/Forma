@@ -37,7 +37,7 @@ struct ManifestValidatorTests {
                           type: String? = "Bid Document", metadata: [MetadataFieldID: String?] = [:],
                           citations: [EvidenceCitation] = [], unknown: [MetadataFieldID] = [],
                           conflicts: [ProposalConflict] = [],
-                          association: ProposalAssociation(candidateRef: "c1", state: .confirmed),
+                          association: ProposalAssociation? = ProposalAssociation(candidateRef: "c1", state: .confirmed),
                           confidence: DecisionConfidence = .high) -> ProposalEntry {
         var slots = MetadataValues.allUnknown
         slots[.documentcategory] = category
