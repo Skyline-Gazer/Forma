@@ -54,11 +54,9 @@ enum MappingCorrectionMigrations {
     }
 
     /// Splits version 1's one revision column into the revision a decision read
-    /// and the revision it wrote. The `NOT EXISTS` is load-bearing: two
-    /// accepted rows can name the same revision they read, which would give
-    /// both the same successor and stop the unique index from being built, so
-    /// only the earlier row is credited and the later stays unattributed. The
-    /// `review_state` filter is the other: only that state published anything.
+    /// and the revision it wrote. The `NOT EXISTS` is load-bearing: two accepted
+    /// rows can name the same revision they read, and indexing over the
+    /// duplicate successor that gives both would abort the migration outright.
     static let revisionSplitSQL = """
         ALTER TABLE corrections ADD COLUMN produced_revision INTEGER;
         UPDATE corrections SET produced_revision = supersedes_revision + 1

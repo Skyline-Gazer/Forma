@@ -158,11 +158,9 @@ final class WorkspaceModel: ObservableObject {
     @Published var selectedScopeID: UUID? {
         didSet {
             guard oldValue != selectedScopeID else { return }
-            // The model is the only writer of this key. A view that mirrored it
-            // into @AppStorage on appear would race the fallback in `restore()`
-            // and persist a scope id that no longer exists, so every start had
-            // to repair it again - and switching scope then restarting could
-            // land on a different source than the one chosen.
+            // The model is the only writer of this key: a view mirroring it on
+            // appear would race the fallback in `restore()` and could persist a
+            // scope id that no longer exists.
             defaults.set(selectedScopeID?.uuidString, forKey: Keys.scope)
             listing = nil
             context = nil
@@ -195,10 +193,9 @@ final class WorkspaceModel: ObservableObject {
             scheduleReload()
         }
     }
-    /// Starts a reload for a value the reviewer changed, unless `restore()` is
-    /// still assembling launch state. Two reloads running together each write
-    /// the listing, context, manifest and attempts after their own suspensions,
-    /// so which set survives would depend on which read returned last.
+    /// Starts a reload, unless `restore()` is assembling launch state: two
+    /// reloads each write the listing, context, manifest and attempts after
+    /// their own suspensions, and the last read to return would decide.
     private func scheduleReload() {
         guard !isRestoring else { return }
         Task { await self.reload() }
@@ -653,13 +650,10 @@ final class WorkspaceModel: ObservableObject {
     /// because those rows are what makes an old manifest verifiable.
     private func merge(_ records: [EvidenceRecord]) {
         guard !records.isEmpty else { return }
-        // Only the sources this batch touched are rebuilt; the rest of the
-        // cache is untouched. Order between two reads of the same source cannot
-        // matter, because there is no "older copy" of a citation to lose: the id
-        // hashes the source id, snapshot revision, source and locator
-        // (`EvidenceRegistry.identifier`), and `MappingStore.insertEvidence`
-        // writes with `INSERT OR IGNORE`, so one id has one stored content and
-        // every read of it agrees.
+        // Only the sources this batch touched are rebuilt. Order between two
+        // reads cannot matter: `MappingStore.insertEvidence` writes with
+        // `INSERT OR IGNORE` over an id that hashes the source, snapshot
+        // revision, source and locator, so one id has one stored content.
         for sourceID in Set(records.map(\.sourceID)) {
             var byID: [String: EvidenceRecord] = [:]
             for record in evidenceBySource[sourceID] ?? [] where record.sourceID == sourceID {
@@ -1139,14 +1133,9 @@ final class WorkspaceModel: ObservableObject {
                 let rows = try await workspace.registeredEvidence(for: Set(listing.entries.map(\.id)))
                 let batches = MappingEngine.plannedBatches(from: listing.entries, context: context,
                                                           limit: limit, evidence: rows)
-                // What must still hold is about the request, not about every
-                // field it was assembled from: the panel still shows this source
-                // and profile, the context the batch was planned against is still
-                // the stored one, and the redaction plan actually used is still
-                // the plan the settings describe - comparing the plan rather than
-                // the terms and salt behind it makes the check about the derived
-                // value. The case pack is not part of this: a click needs it
-                // non-nil, only `restore()` writes it, so it has already run.
+                // Compared against the request the click built, not the fields
+                // behind it: same source, profile and stored context, same batch
+                // limit, same substitution.
                 guard !Task.isCancelled, scope.id == selectedScopeID,
                       profile.profileID == selectedProfileID,
                       contextRevision == self.context?.revision,
