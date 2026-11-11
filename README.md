@@ -4,7 +4,7 @@
 
 Forma 是一款使用 Swift 6 / SwiftUI 开发的 macOS 原生应用，目标是将非标准目录、文件清单与文档内容转换为可验证的结构化 Manifest，并在后续阶段经 DEVONthink 官方 MCP 安全落地。
 
-> **当前状态：SPEC / PLAN / Roadmap 已批准，ADS 以不可变 SHA 接入（见 [ads-pin.txt](ads-pin.txt) 与 [docs/ADS-ADOPTION.md](docs/ADS-ADOPTION.md)）。当前实施阶段与权限边界由 [AGENTS.md](AGENTS.md) 和 [docs/ROADMAP.md](docs/ROADMAP.md) 记录，不依赖仓库外的临时指令。**
+> **当前状态：P0/P1 实施中；核心扫描/身份/快照/证据与只读能力探针已进入 `dev`，GUI 与探针界面在对应 PR 中。**
 
 ## 文档入口
 
@@ -13,6 +13,23 @@ Forma 是一款使用 Swift 6 / SwiftUI 开发的 macOS 原生应用，目标是
 - [实施 Roadmap](docs/ROADMAP.md) — Owner 决策、阶段依赖与 Epic/Feature Issues
 - [PLAN 编制任务书](docs/PLAN_REQUEST.md) — 规划过程归档
 - [Agent 约束](AGENTS.md) — 仓库权限与边界
+
+## 构建与运行
+
+```bash
+# 核心库测试（GRDB / ZIPFoundation 版本按 Package.resolved 锁定）
+swift test --force-resolved-versions
+
+# macOS 原生 GUI（SwiftUI 宏需要完整 Xcode；仅有 Command Line Tools 的机器无法编译此目标）
+swift build --package-path FormaApp --product Forma
+.build/FormaApp/debug/Forma
+```
+
+工具链基线：macOS 14 部署目标，Swift 6 严格并发。GitHub Actions 在 `macos-15` + Xcode 26.3 固定环境执行核心测试与 App 构建。P0/P1 不做签名、公证与发布。
+
+使用方式：在 Workspace 选择本地或 OneDrive 目录 → **Scan** → 查看清单、统计与问题 → 选择文件后 **Read Evidence**（PDF/DOCX/XLSX 定位片段）或 **Compute SHA-256**（按需流式计算）。扫描仅读取元数据，不强制下载云端占位内容；状态与快照持久化在 Application Support 下的 SQLite，重启后继续可见。Settings 中的 **Connections** 提供 DEVONthink MCP 工具发现、隔离库只读核对与 Provider 探针（需 Keychain 凭据与当次外发授权）。
+
+普通 CI 不访问 DEVONthink、OneDrive 或真实 AI API；真实能力验证状态记录在 [P0 能力契约证据](docs/P0-CONTRACT-EVIDENCE.md)，Mock 结果不计为现场验证。
 
 ## 确定的方向
 
