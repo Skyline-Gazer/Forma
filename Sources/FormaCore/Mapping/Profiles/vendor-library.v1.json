@@ -1,0 +1,177 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "vendor-library",
+  "profile_version": "1.0",
+  "display_name": "Vendor Library",
+  "target": {
+    "kind": "symbolic",
+    "database_name": null,
+    "database_uuid": null,
+    "group_template": ["{documentcategory}"],
+    "note": "目标为独立 DEVONthink 数据库，具体库与品牌层次留待 V6 现场确认；在此之前 Forma 只生成符号目标，不创建数据库或 Group。品牌是 Manifest 的语义属性，不新增 Custom Metadata 字段。"
+  },
+  "permits_unaffiliated_documents": true,
+  "grants_execution": false,
+  "categories": [
+    {"identifier": "Datasheet", "meaning": "产品数据表：以参数、型号与能力为主的单页或多页产品说明。"},
+    {"identifier": "Specification Sheet", "meaning": "规格书：以技术规格与限制条件为主的说明文件。"},
+    {"identifier": "Whitepaper", "meaning": "白皮书：技术论述或方案性长文，不绑定具体项目。"},
+    {"identifier": "Solution", "meaning": "解决方案材料：面向场景的组合说明。"},
+    {"identifier": "Brochure", "meaning": "彩页与宣传材料。"},
+    {"identifier": "Deployment Guide", "meaning": "部署、实施或配置指南。"},
+    {"identifier": "Product Manual", "meaning": "产品手册与使用说明。"},
+    {"identifier": "待分类", "meaning": "文档类型证据不足或类别冲突时使用；不表示获得自动执行资格。"}
+  ],
+  "document_types": [
+    {"identifier": "Datasheet", "clues": ["datasheet", "产品参数", "规格表"]},
+    {"identifier": "Specification Sheet", "clues": ["specification", "spec sheet", "规格书"]},
+    {"identifier": "Whitepaper", "clues": ["whitepaper", "白皮书"]},
+    {"identifier": "Solution", "clues": ["solution", "解决方案"]},
+    {"identifier": "Brochure", "clues": ["brochure", "彩页", "宣传"]},
+    {"identifier": "Deployment Guide", "clues": ["deployment", "install", "部署指南"]},
+    {"identifier": "Product Manual", "clues": ["manual", "user guide", "手册"]}
+  ],
+  "case_pack": {"id": "forma-governance-cases", "version": "1.0"},
+  "counter_examples": [
+    "通用厂商资料允许 projectname 为空；不得为满足 Project Archive 规则而虚构项目名称。",
+    "同一厂商材料可以服务多个项目；在 Vendor Library 中它仍是一条无项目归属的记录。",
+    "品牌名不等于法律出具主体：没有当前文件的署名或签章证据时 issuer 留空。",
+    "原厂项目授权函属于 Project Archive 的 03_厂商支持文件；产品授权或激活操作指南属于厂商资料。",
+    "Vendor 材料不必强行映射到 04_技术资料与编制素材，跨 Profile 引用必须遵守目的库与记录语义。",
+    "归档完成年不是产品发布年：Vendor Library 不要求 completionyear，也不得从版本年推断。"
+  ],
+  "fields": [
+    {
+      "identifier": "projectname",
+      "level": "project",
+      "value_type": "text",
+      "required_for_validated": false,
+      "nullable": true,
+      "allowed_evidence_sources": ["content", "mcp"],
+      "insufficient_evidence_sources": ["filename", "path", "sibling"],
+      "rule": "通用厂商文档没有项目归属是正常状态；只有当前文件自身明确绑定项目时才可填写。",
+      "native_type_status": "unverified"
+    },
+    {
+      "identifier": "completionyear",
+      "level": "project",
+      "value_type": "year",
+      "required_for_validated": false,
+      "nullable": true,
+      "allowed_evidence_sources": ["content", "mcp"],
+      "insufficient_evidence_sources": ["filename", "path", "fs_metadata", "sibling"],
+      "rule": "Vendor Library 不要求归档完成年；产品版本年与发布日期不构成该字段证据。",
+      "native_type_status": "unverified"
+    },
+    {
+      "identifier": "bidderentity",
+      "level": "project",
+      "value_type": "text",
+      "required_for_validated": false,
+      "nullable": true,
+      "allowed_evidence_sources": ["content", "mcp"],
+      "insufficient_evidence_sources": ["filename", "path", "sibling"],
+      "rule": "厂商资料不继承任何项目的投标主体；除非当前文件本身明确声明。",
+      "native_type_status": "unverified"
+    },
+    {
+      "identifier": "department",
+      "level": "project",
+      "value_type": "text",
+      "required_for_validated": false,
+      "nullable": true,
+      "allowed_evidence_sources": ["content", "mcp"],
+      "insufficient_evidence_sources": ["filename", "path", "sibling"],
+      "rule": "不继承项目组织上下文；未知留空。",
+      "native_type_status": "unverified"
+    },
+    {
+      "identifier": "salesowner",
+      "level": "project",
+      "value_type": "text",
+      "required_for_validated": false,
+      "nullable": true,
+      "allowed_evidence_sources": ["content", "mcp"],
+      "insufficient_evidence_sources": ["filename", "path", "sibling"],
+      "rule": "不继承项目负责人；未知留空。",
+      "native_type_status": "unverified"
+    },
+    {
+      "identifier": "endcustomer",
+      "level": "project",
+      "value_type": "text",
+      "required_for_validated": false,
+      "nullable": true,
+      "allowed_evidence_sources": ["content", "mcp"],
+      "insufficient_evidence_sources": ["filename", "path", "sibling"],
+      "rule": "厂商通用材料的最终客户通常不可确定；不得把厂商或代理当客户。",
+      "native_type_status": "unverified"
+    },
+    {
+      "identifier": "biddeadline",
+      "level": "project",
+      "value_type": "date_text",
+      "required_for_validated": false,
+      "nullable": true,
+      "allowed_evidence_sources": ["content", "mcp"],
+      "insufficient_evidence_sources": ["filename", "path", "fs_metadata", "sibling"],
+      "rule": "单行文本 YYYY-MM-DD；厂商材料中的版本日期、发布日期不构成投标截止日期。",
+      "native_type_status": "unverified"
+    },
+    {
+      "identifier": "tenderreference",
+      "level": "project",
+      "value_type": "text",
+      "required_for_validated": false,
+      "nullable": true,
+      "allowed_evidence_sources": ["content", "mcp"],
+      "insufficient_evidence_sources": ["filename", "path", "sibling"],
+      "rule": "只有确认是采购或招标编号时填写；产品型号与内部料号不是招标编号。",
+      "native_type_status": "unverified"
+    },
+    {
+      "identifier": "bsdcode",
+      "level": "project",
+      "value_type": "text",
+      "required_for_validated": false,
+      "nullable": true,
+      "allowed_evidence_sources": ["content", "mcp"],
+      "insufficient_evidence_sources": ["filename", "path", "fs_metadata", "sibling"],
+      "rule": "必须确认 BSD 属于内部编号或指定规则；不得从日期或型号拼造。",
+      "native_type_status": "unverified"
+    },
+    {
+      "identifier": "documentcategory",
+      "level": "document",
+      "value_type": "category",
+      "required_for_validated": true,
+      "nullable": false,
+      "allowed_evidence_sources": ["content", "filename", "path", "sibling"],
+      "insufficient_evidence_sources": ["filename", "path"],
+      "rule": "使用 Vendor Library 自身的文档类型 Group 枚举；证据不足时使用“待分类”，不借用 Project Archive 的 04 分类。",
+      "native_type_status": "unverified"
+    },
+    {
+      "identifier": "documenttype",
+      "level": "document",
+      "value_type": "document_type",
+      "required_for_validated": false,
+      "nullable": true,
+      "allowed_evidence_sources": ["content", "filename"],
+      "insufficient_evidence_sources": [],
+      "rule": "细分文档类型必须落在本 Profile 的类型枚举内；与文档用途分别保存。",
+      "native_type_status": "unverified"
+    },
+    {
+      "identifier": "issuer",
+      "level": "document",
+      "value_type": "text",
+      "required_for_validated": false,
+      "nullable": true,
+      "allowed_evidence_sources": ["content", "filename", "path", "sibling", "mcp"],
+      "insufficient_evidence_sources": ["filename", "path", "sibling"],
+      "rule": "可识别厂商品牌线索，但法律出具主体需要当前文件的署名、签章或其他明确依据；证据不足时留空。",
+      "native_type_status": "unverified"
+    }
+  ]
+}

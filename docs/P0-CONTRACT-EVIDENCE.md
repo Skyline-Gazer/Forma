@@ -46,3 +46,32 @@
 ## 测试替身
 
 `MCPTests` 使用真实 stdio 子进程假对端（换行分帧 JSON-RPC、stderr 分离、乱序与超时注入），`ProviderTests` 使用 `URLProtocol` 假传输。两者均不访问外部服务，其结果只证明客户端契约与错误分类，不记为真实 MCP/Provider 现场验证。
+
+## 依赖选型：Draft 2020-12 JSON Schema 实现
+
+PLAN §3 与 §12 要求为工件校验选定一个成熟 Swift JSON Schema 实现并锁定版本，且明确不得用 Codable 解码代替 Schema 验证。P0 未引入该依赖，本轮以真实构建探针固定。
+
+| 候选 | 结论 | 依据 |
+|---|---|---|
+| `ajevans99/swift-json-schema` `0.14.2`（MIT，产品 `JSONSchema`） | **不采用** | 关键字覆盖本身满足要求，但其清单声明 swift-syntax 依赖；进入依赖图后本机 Command Line Tools 无法解析 swift-testing 的 `TestingMacros` 插件，`swift test` 直接编译失败 |
+| `objecthub/swift-dynamicjson` `2.0.1`（Apache-2.0，产品 `DynamicJSON`） | **采用** | 零传递依赖、`.macOS(.v14)`、Swift 6 语言模式、Draft 2020-12 完整词表；与 GRDB 7.8.0 + ZIPFoundation 0.9.20 + 资源包同图构建并通过全部单测 |
+| `kylef/JSONSchema.swift` | 不采用 | 上游 README 自述 2019-09/2020-12 支持不完整，2022 年后无发布，仅 Swift 5 模式 |
+| `mattt/JSONSchema`、`kevinhermawan/swift-json-schema` | 不采用 | 只提供 Schema 模型，不做实例校验，等于没有验证 |
+
+复现控制（同一台机器、同一 Command Line Tools 6.4）：最小包 A = 仅 `swift-json-schema` → swift-testing 测试可编译；最小包 B = GRDB + ZIPFoundation + `swift-json-schema` + 资源 → `plugin for module 'TestingMacros' not found`；最小包 C = GRDB + ZIPFoundation + `swift-dynamicjson` + 资源 → 通过。因此结论是依赖图组合触发，不是 Forma 代码差异。
+
+**顺带登记的既有工具链缺陷：** 即便采用 C 组合，本机 `swift test` 仍会间歇性出现同一 `TestingMacros` 插件解析失败（同一命令重跑即恢复），与 P1 报告记录的现象一致。本轮采用「全新 scratch 路径 + 失败重试」作为本地验证方式，CI（Xcode 26.3）仍是唯一权威构建环境。
+
+采用 DynamicJSON 后仍存在的规范陷阱，已在 `ArtifactSchemaValidator` 内以加载期规则封堵，并有对应测试：
+
+1. 未知关键字按规范被忽略。拼错的 `additionalProperties` 会静默留下开放对象，因此加载时按关键字白名单遍历 Schema；`properties` 存在而 `additionalProperties` 不为 `false` 的 Schema 一律拒绝加载。
+2. `format` 在 2020-12 默认只是注解，且只有固定名称会被断言。Forma 的工件 Schema 禁用 `format`，改用始终断言的 `pattern`；dialect 仍以 `validateFormat` 装载，避免规则静默失效。
+3. `"required": "name"` 这类畸形取值会被求值为空需求列表而放行，因此 `required`/`enum`/`properties` 的形态在加载期显式检查。
+4. 该库未公开元 Schema 校验入口，故上述形态检查由 Forma 侧规则承担；这一限制记录于此，不当作已通过元 Schema 验证。
+
+本地实测：引入 `swift-json-schema` 时 `swift package resolve` 42.2s 且解析出 swift-collections、swift-syntax；改用 DynamicJSON 后依赖图仅 3 个 checkout。
+
+## 失误记录
+
+1. 早期一次文档 PR 在检查仍为 pending 时合并（已在 `docs/ADS-CNB-ACCEPTANCE.md` 记录，后续 PR 改为「两个检查全绿才合并」）。
+2. 依赖调研子代理曾声称上游 README 含注入文本；直接抓取 `ajevans99/swift-json-schema` 与 `objecthub/swift-dynamicjson` 的 README 复核后确认不存在该内容，故不作为事实采纳。
