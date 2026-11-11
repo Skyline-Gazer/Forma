@@ -28,7 +28,7 @@ final class WorkspaceModel: ObservableObject {
         case reconciling
         case loadingManifest
         case correcting
-        case discoveringMCP
+        case readingFile
         case previewing
 
         var isBusy: Bool { self != .idle }
@@ -43,8 +43,8 @@ final class WorkspaceModel: ObservableObject {
             case .exporting: "Writing the export bundle…"
             case .revalidating: "Revalidating the bundle…"
             case .reconciling: "Reconciling stored revisions…"
-            case .loadingManifest: "Reading the stored manifest…"
             case .correcting: "Recording the correction…"
+            case .readingFile: "Reading file…"
             case .discoveringMCP: "Discovering the MCP server…"
             case .previewing: "Building the request preview…"
             }
@@ -577,9 +577,13 @@ final class WorkspaceModel: ObservableObject {
         exportSummary = nil
         revalidation = nil
         phase = .capturingEvidence(done: 0, total: targets.count)
-        let run = MappingRun.new(scopeID: scope.id, profile: profile, contextRevision: context.revision,
-                                 casePack: casePack, modelProvider: provider.rawValue, modelID: model,
-                                 promptVersion: MappingPrompt.version)
+        // The run identity records the versions that produced it, so a report
+        // can say which profile, context, case pack and model answered. The
+        // case pack is present whenever an engine could be built at all.
+        let run = MappingRun(scopeID: scope.id, profile: profile, contextRevision: context.revision,
+                             casePackVersion: casePack?.version ?? "unversioned",
+                             modelProvider: provider.rawValue, modelID: model,
+                             promptVersion: MappingPrompt.version)
         work = Task {
             defer {
                 finishWork()
@@ -847,7 +851,7 @@ final class WorkspaceModel: ObservableObject {
         } catch {
             let safe = error as? FormaError ?? .storage
             FormaDiagnostics.failure(.saveCredential, safe)
-            error = safe
+            self.error = safe
             notice = nil
             return false
         }
@@ -938,7 +942,7 @@ final class WorkspaceModel: ObservableObject {
         }
         let failures = outcome?.failures ?? [:]
         rows = manifest.entries.map { entry in
-            MappingRow(sourceID: entry.sourceID, entry: entry, source: entry(with: entry.sourceID),
+            MappingRow(sourceID: entry.sourceID, entry: entry, source: self.entry(with: entry.sourceID),
                        failure: failures[entry.sourceID],
                        candidates: context?.candidate(for: entry.sourceID) ?? [])
         }

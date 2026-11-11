@@ -32,7 +32,7 @@ struct CorrectionPersistenceTests {
         let scope = try await workspace.register(fixture.root)
         let listing = try await workspace.scan(scope)
         let profile = try MappingProfile.projectArchive()
-        let registered = try await workspace.captureEvidence(listing.entries)
+        let registered = try await workspace.captureEvidence(for: listing.entries)
         let entry = try #require(listing.entries.first)
         let rows = registered[entry.id] ?? []
         // The row a completionyear citation may point at: it carries the year in
