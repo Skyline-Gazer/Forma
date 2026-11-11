@@ -240,10 +240,13 @@ public actor MappingEngine {
     /// ordering, per-candidate splitting and attached rows the run itself uses.
     ///
     /// A caller that wants to describe a request - the privacy preview, a cost
-    /// estimate - has to ask the engine rather than imitate it. The first pass
-    /// above is `withEvidence(batches(from:context:limit:state:))` over the
-    /// request's entries; this is that same composition, so a preview cannot
-    /// drift from the payload it claims to show.
+    /// estimate - has to ask the engine rather than imitate it: the first pass
+    /// of `run` is this same `withEvidence(batches(...))` composition, so the
+    /// batch membership, the refs and the attached rows cannot drift from what
+    /// a run would produce. The limit is floored to at least one inside
+    /// `batches`, which is where both paths meet; a caller passing zero gets the
+    /// same plan a run with `entryLimit` zero would get rather than a loop that
+    /// never advances.
     public static func plannedBatches(from entries: [SourceEntry], context: ProjectContext,
                                       limit: Int, evidence: [UUID: [EvidenceRecord]]) -> [MappingBatch] {
         var state = BatchState(nextRef: 1)

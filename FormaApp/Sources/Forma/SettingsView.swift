@@ -98,12 +98,14 @@ struct SettingsView: View {
                 LabeledContent("Payload bytes", value: preview.value.byteCount.formatted())
                 LabeledContent("Request digest", value: preview.value.digest)
                     .font(.caption.monospaced())
-                LabeledContent("Redaction version", value: model.redaction.isIdentity ? "Identity (no terms)" : RedactionPlan.version)
+                LabeledContent("Redaction applied", value: preview.isIdentityRedaction
+                                                            ? "Identity (no terms)" : RedactionPlan.version)
                 LabeledContent("Files in previewed batch", value: preview.fileCount.formatted())
                 LabeledContent("Batches for this listing", value: preview.batchCount.formatted())
                     .help("The engine groups files by the candidate that claims them, so one batch is one "
-                        + "candidate's slice and never simply the first \(model.entryLimit.formatted()) files "
+                        + "candidate's slice and never simply the first \(preview.entryLimit.formatted()) files "
                         + "of the listing")
+                LabeledContent("Limit used by this preview", value: preview.entryLimit.formatted())
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("System text").font(.caption).foregroundStyle(.secondary)

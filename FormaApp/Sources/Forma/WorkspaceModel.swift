@@ -141,6 +141,13 @@ final class WorkspaceModel: ObservableObject {
         let value: ProviderMappingClient.Preview
         let fileCount: Int
         let batchCount: Int
+        /// What the request was configured with at the click. These are shown
+        /// beside the payload instead of the live fields, because the payload
+        /// does not change when a field does: after a preview appears, reading
+        /// the current values would pair one request's bytes with another
+        /// request's settings.
+        let entryLimit: Int
+        let isIdentityRedaction: Bool
     }
     @Published private(set) var preview: Preview?
     @Published private(set) var leakedTerms: [String] = []
@@ -648,10 +655,11 @@ final class WorkspaceModel: ObservableObject {
         guard !records.isEmpty else { return }
         // Only the sources this batch touched are rebuilt; the rest of the
         // cache is untouched. Order between two reads of the same source cannot
-        // matter: a citation id hashes the source id, the snapshot revision, the
-        // source and the locator (`EvidenceRegistry.identifier`), FormaCore never
-        // updates an evidence row in place, so every read of one id returns the
-        // same content and both views stay a union of stored rows.
+        // matter, because there is no "older copy" of a citation to lose: the id
+        // hashes the source id, snapshot revision, source and locator
+        // (`EvidenceRegistry.identifier`), and `MappingStore.insertEvidence`
+        // writes with `INSERT OR IGNORE`, so one id has one stored content and
+        // every read of it agrees.
         for sourceID in Set(records.map(\.sourceID)) {
             var byID: [String: EvidenceRecord] = [:]
             for record in evidenceBySource[sourceID] ?? [] where record.sourceID == sourceID {
@@ -1151,9 +1159,12 @@ final class WorkspaceModel: ObservableObject {
                 }
                 let value = try ProviderMappingClient.preview(profile: profile, context: context,
                                                               casePack: casePack, batch: batch, redaction: plan)
-                // Payload and its counts are assigned together: a number with
-                // no request behind it is not evidence of anything.
-                self.preview = Preview(value: value, fileCount: batch.entries.count, batchCount: batches.count)
+                // Payload, its counts and the configuration it was built under
+                // are assigned together: a number with no request behind it is
+                // not evidence of anything, and a request without the settings
+                // that produced it cannot be checked by whoever reads it.
+                self.preview = Preview(value: value, fileCount: batch.entries.count, batchCount: batches.count,
+                                       entryLimit: limit, isIdentityRedaction: plan.isIdentity)
                 self.leakedTerms = plan.isIdentity ? [] : plan.leaks(value.system + String(decoding: value.payload, as: UTF8.self))
             } catch {
                 if !Task.isCancelled { self.show(error, operation: .providerProbe, fallback: .incompatible) }
