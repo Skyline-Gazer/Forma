@@ -1093,10 +1093,16 @@ final class WorkspaceModel: ObservableObject {
         }
     }
 
-    /// Builds the exact bytes one request would send, without sending anything.
+    /// Describes the request a run would build from the stored evidence,
+    /// without sending anything.
+    ///
+    /// "Describes" rather than "the exact bytes": a run re-reads file bodies
+    /// before dispatch, so the excerpt shown here is what the registered rows
+    /// produce, not a receipt for what a run will attach.
     func previewEgress() {
         guard auxWork == nil else { return }
-        guard let profile = selectedProfile, let context, let casePack, let listing else {
+        guard let scope = selectedScope, let profile = selectedProfile, let context, let casePack,
+              let listing else {
             error = .unavailable
             notice = "A preview needs a source, a profile and a stored project context."
             return
