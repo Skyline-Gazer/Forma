@@ -168,10 +168,16 @@ struct SourceStore {
                 );
                 """)
         }
+        // Mapping state arrives after the source tables it references, so the
+        // foreign keys in `mapping-v1` can resolve against a migrated schema.
+        MappingMigrations.register(into: &migrator)
         try migrator.migrate(database)
         try database.write { db in
             try db.execute(sql: "UPDATE scans SET state = 'interrupted', finished_at = ? WHERE state = 'scanning'",
                            arguments: [Date().timeIntervalSince1970])
+            // A run that never reached a terminal state cannot be resumed: the
+            // engine must not attach a manifest to an unfinished run.
+            try MappingStore.markInterruptedRuns(in: db)
         }
     }
 

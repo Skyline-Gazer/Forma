@@ -224,7 +224,7 @@ struct ArtifactSchemaTests {
         }
         let violations = try ArtifactSchemaValidator.proposal.violations(data)
         #expect(violations.contains { $0.instancePath.contains("confidence") },
-                "an unknown confidence value must be located, got \(violations.map(\.logSummary))")
+                "an unknown confidence value must be located, got \(violations.map { $0.logSummary })")
         #expect(violations.contains { $0.instancePath.hasSuffix("/entries/0") || $0.instancePath.contains("reasoning") })
     }
 

@@ -4,7 +4,9 @@ import GRDB
 import Security
 
 public actor SourceWorkspace {
-    private let store: SourceStore
+    /// Internal so the mapping persistence extension can reach the one
+    /// database connection this actor owns.
+    let store: SourceStore
     private var scanInProgress = false
     private var readInProgress = false
 

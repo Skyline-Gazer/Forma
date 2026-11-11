@@ -108,7 +108,7 @@ struct MetadataValuesTests {
         let data = try FormaJSON.encode(manifest, pretty: true)
         let violations = try ArtifactSchemaValidator.manifest.violations(data)
         #expect(violations.isEmpty,
-                "a program-built manifest must satisfy the exported artifact schema: \(violations.map(\.logSummary))")
+                "a program-built manifest must satisfy the exported artifact schema: \(violations.map { $0.logSummary })")
         #expect(try FormaJSON.decode(Manifest.self, from: data) == manifest)
     }
 
