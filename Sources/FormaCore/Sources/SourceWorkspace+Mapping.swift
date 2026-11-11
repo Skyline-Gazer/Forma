@@ -256,6 +256,9 @@ extension SourceWorkspace {
                 let stored = try Self.persist(applied.manifest, scopeID: scope.id,
                                               expecting: manifest.envelope.revision + 1, in: db)
                 var record = applied.correction
+                // The engine guessed the successor; the store's number is the
+                // one that was written, and they can only differ if the guard
+                // above was wrong.
                 record.producedRevision = stored.envelope.revision
                 // The number came from the store one statement above, so the
                 // index can only be violated by a history written outside this

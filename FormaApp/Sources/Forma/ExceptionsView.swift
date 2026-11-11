@@ -120,9 +120,7 @@ struct ExceptionsView: View {
         guard let manifest = model.manifest else {
             return "There is no manifest yet. Run the mapping engine, or open an exported bundle in the Mapping area."
         }
-        // One binding, so the two numbers compared here are certainly from the
-        // same manifest: chained optionals would let a missing value on one
-        // side compare equal to a missing value on the other.
+        // Both numbers come off one binding, so they describe the same manifest.
         if manifest.report.counts.validated == manifest.entries.count {
             return "FormaCore validated every entry in this revision."
         }

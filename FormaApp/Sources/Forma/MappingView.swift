@@ -533,7 +533,7 @@ struct MappingView: View {
         default:
             ("Row \(record.id) combines \(record.reviewState.rawValue) with "
                 + (record.producedRevision.map { "revision \($0.formatted())" } ?? "no produced revision")
-                + " - a combination no apply writes", .red)
+                + " - not a pairing FormaCore's review flow writes", .red)
         }
     }
 }
