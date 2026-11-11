@@ -52,13 +52,25 @@ Verified live state on 2026-11-11 with the authenticated CNB environment:
 
 Not authorized or not configured by this adoption: automatic CNB↔GitHub synchronization, push mirrors, release flows, CNB build/test stages, CNB merge authority, and any credential stored outside the platform secret store.
 
-## Review-run observations (this repository)
+## Review-round ledger
 
-| Round | Source SHA | Result | Handling |
-|---|---|---|---|
-| 1 | `3f157806f8e88bba6a0951798c5a735ec0b198ec` | `needs_modification`, 2 warning findings in the runner log; comment delivery failed with `评审结果缺少必需字段或格式不正确` | Both findings fixed in `d20b5136`; delivery failure worked around by logging the structured result |
-| 2 | `d20b5136084ecf86f53193437ca2c84d4ac89154` | Pipeline `error`: `Max turns (30) exceeded` after 10 findings, so no result was retained | `max_turns` 120, `timeout_minutes` 30 and a `report-review-result` stage that fails loudly when no structured result exists |
+Each round binds its own reviewed source and target SHA; one round's findings never describe a different head.
 
-Round 2 evaluated `38d4553...d20b513` because the CNB `dev` mirror had not yet advanced to the GitHub `dev` head; the diff therefore also included already-integrated FormaCore code. Review bindings must use the current GitHub base SHA, so the mirror was fast-forwarded before round 3. Findings against integrated FormaCore code from that round are tracked separately and are not marked resolved here.
+| Round | Reviewed source | Reviewed target | Result | Disposition |
+|---|---|---|---|---|
+| 1 | `3f157806f8e88bba6a0951798c5a735ec0b198ec` | `38d455304bc4530b71e584c07de48fc06fd1f293` | `needs_modification`, 2 warning findings read from the retained runner log; the plugin reported `评审结果缺少必需字段或格式不正确`, so no PR comment object existed | Both fixed in `d20b5136`: provenance recorded here, and `scripts/check_ads_pin.py` added |
+| 2 | `d20b5136084ecf86f53193437ca2c84d4ac89154` | `38d455304bc4530b71e584c07de48fc06fd1f293` | Pipeline `error`: `Max turns (30) exceeded` after 10 findings; `code_review.json` disappeared with the container, so those finding descriptions are unrecoverable | Budget raised to `max_turns: 120` / `timeout_minutes: 30`, plus a `report-review-result` stage that prints the structured result and fails when it is absent. Because the `dev` mirror had not advanced, this diff also contained already-merged FormaCore code; those 10 items are registered in [Issue #29](https://github.com/Skyline-Gazer/Forma/issues/29) and are **not** claimed resolved |
+| 3 | `5a4d5ee254e13606b82dc318042cdcee0843d685` | `4aa8e06754233eb89f2ef602bc481ceda9a196b6` | `needs_modification`, 4 findings captured in full by the new stage | See round-3 disposition below |
 
-Round 1 and round 2 evidence comes from the retained runner logs; plugin exit 0 is not treated as review coverage.
+### Round-3 disposition
+
+1. `scripts/check_ads_pin.py:88-92` — **FIXED, real defect.** `git ls-remote <repo> <sha>` exits 0 with empty output for both an existing and an absent SHA, so the old `--verify-upstream` branch passed unconditionally. Verification now probes ref reachability separately and fetches the pinned object into a throwaway repository. Executed locally: reachable real commit → `ADS_PIN_OK`; reachable repository with absent commit → rejected (`upload-pack: not our ref`); unreachable repository → distinct `NOT_VERIFIED` message.
+2. `docs/ADS-ADOPTION.md:58-64` — **FIXED.** Round 2's findings are now itemized by reviewed SHA and tracked in Issue #29 instead of an untraceable "tracked separately" note, and every row states the exact reviewed source and target SHA.
+3. `README.md:7` — **FIXED.** The status line no longer points at out-of-repo Owner instructions; it references the dated authorization record in `docs/ROADMAP.md`.
+4. `AGENTS.md:26` — **ACCEPTED, wording restored.** The original constraint that no unapproved mandatory gate may be added is stated without the weaker qualifier, and `.cnb.yml` records explicitly that its failing evidence stage is an evidence-integrity signal in the CNB review workspace, never GitHub merge authorization.
+
+## Gate semantics
+
+The `report-review-result` stage in `.cnb.yml` exits non-zero when the review plugin produced no readable structured result. That is evidence integrity inside the CNB review workspace — it stops “plugin exited 0” from masquerading as completed review. It is not a Forma merge gate: CNB configures no required status check, no merge authority and no release authority here, so GitHub Actions remains the only build/test authority. Findings stay untrusted input that the delivering Agent disposes with evidence.
+
+Rounds 1 and 2 above are read from retained runner logs; the remediation review that follows is the third and final automatic fix/re-review cycle. If blocking findings still remain after it, work stops with `BLOCKED_WITH_EVIDENCE` instead of adding another round or silently passing.

@@ -4,7 +4,7 @@
 
 Forma 是一款使用 Swift 6 / SwiftUI 开发的 macOS 原生应用，目标是将非标准目录、文件清单与文档内容转换为可验证的结构化 Manifest，并在后续阶段经 DEVONthink 官方 MCP 安全落地。
 
-> **当前状态：SPEC / PLAN / Roadmap 已批准；ADS 已按不可变 SHA 接入。P0/P1 开发授权以 Owner 当前指令为准。**
+> **当前状态：SPEC / PLAN / Roadmap 已批准，ADS 以不可变 SHA 接入（见 [ads-pin.txt](ads-pin.txt) 与 [docs/ADS-ADOPTION.md](docs/ADS-ADOPTION.md)）。当前实施阶段与权限边界由 [AGENTS.md](AGENTS.md) 和 [docs/ROADMAP.md](docs/ROADMAP.md) 记录，不依赖仓库外的临时指令。**
 
 ## 文档入口
 

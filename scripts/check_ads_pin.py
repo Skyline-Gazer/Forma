@@ -9,8 +9,10 @@ can be wired into CI without becoming a second build system.
 from __future__ import annotations
 import argparse
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 
 GITLINK = re.compile(r"^160000 commit ([0-9a-f]{40})\t(\S+)$")
 PIN_KEYS = ("ADS_REPOSITORY", "ADS_BRANCH", "ADS_COMMIT", "ADS_CONSUMPTION")
@@ -37,6 +39,46 @@ def read_pin(path: str) -> dict[str, str]:
     return values
 
 
+def last_line(text: str, fallback: str) -> str:
+    lines = [line for line in text.splitlines() if line.strip()]
+    return lines[-1] if lines else fallback
+
+
+def verify_upstream(pin: dict[str, str]) -> None:
+    """Prove the pinned commit object actually exists in the ADS remote.
+
+    `git ls-remote <repo> <sha>` exits 0 with empty output for any SHA because a
+    raw object id is not a ref, so it cannot prove existence. Probe ref
+    reachability first (to separate transport failure from absence), then fetch
+    exactly that object into a throwaway repository.
+    """
+    repository, commit = pin["ADS_REPOSITORY"], pin["ADS_COMMIT"]
+    probe = subprocess.run(["git", "ls-remote", repository], capture_output=True, text=True, check=False)
+    if probe.returncode != 0:
+        raise SystemExit(
+            "ADS_PIN_CHECK: upstream verification NOT_VERIFIED (ADS remote unreachable): "
+            + last_line(probe.stderr, "ls-remote failed")
+        )
+    workspace = tempfile.mkdtemp(prefix="ads-pin-verify-")
+    try:
+        init = subprocess.run(["git", "init", "-q", workspace], capture_output=True, text=True, check=False)
+        fetch = None
+        if init.returncode == 0:
+            fetch = subprocess.run(
+                ["git", "-C", workspace, "fetch", "-q", "--depth", "1", repository, commit],
+                capture_output=True, text=True, check=False,
+            )
+        present = fetch is not None and fetch.returncode == 0 and subprocess.run(
+            ["git", "-C", workspace, "cat-file", "-e", f"{commit}^{{commit}}"],
+            capture_output=True, check=False,
+        ).returncode == 0
+        if not present:
+            detail = last_line(fetch.stderr, "object absent") if fetch else last_line(init.stderr, "git init failed")
+            raise SystemExit(f"ADS_PIN_CHECK: pinned ADS commit is not reachable upstream: {detail}")
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--commit", default="HEAD", help="commit whose tree is checked")
@@ -44,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pin-file", default="ads-pin.txt")
     parser.add_argument("--expect-branch", default="cnb/dev")
     parser.add_argument("--verify-upstream", action="store_true",
-                        help="also ask the ADS remote whether the pinned commit exists")
+                        help="fetch the pinned object from the ADS remote to prove it exists")
     args = parser.parse_args(argv)
 
     pin = read_pin(args.pin_file)
@@ -81,15 +123,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"ADS_PIN_CHECK: index entry {index.split()[1]} != tree gitlink {gitlink}")
 
     if args.verify_upstream:
-        probe = subprocess.run(
-            ["git", "ls-remote", pin["ADS_REPOSITORY"], pin["ADS_COMMIT"]],
-            capture_output=True, text=True, check=False,
-        )
-        if probe.returncode != 0 or pin["ADS_COMMIT"] not in (probe.stdout + probe.stderr):
-            # A full object id is not a ref name, so absence is not proof of
-            # invalidity; only a transport failure is reported as a hard error.
-            if probe.returncode != 0:
-                raise SystemExit(f"ADS_PIN_CHECK: cannot reach ADS remote: {probe.stderr.strip()}")
+        verify_upstream(pin)
 
     print(f"ADS_PIN_OK: {args.path} gitlink == ads-pin.txt == {gitlink} ({pin['ADS_BRANCH']})")
     return 0

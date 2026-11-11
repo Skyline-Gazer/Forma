@@ -23,4 +23,4 @@
 - Never modify the existing 991 production Project_Archive records.
 - Do not publish customer names, business documents, real paths, UUID ledgers, quotations, API keys, or other private migration data. Public examples must be synthetic or reviewed/redacted.
 - Report actual evidence and distinguish PASS, FAIL, BLOCKED, and NOT_VERIFIED. Mocks do not prove live MCP, CNB, Provider, OneDrive, or GUI capability.
-- Keep execution proportionate: no new mandatory gates, duplicate CI, background service, RAG/vector database, Rust/Tauri, or orchestration framework unless separately approved.
+- Keep execution proportionate: one concentrated review per stage, and no new mandatory gate without separate Owner approval. Never add duplicate CI, a background service, RAG/vector database, Rust/Tauri, or an orchestration framework on an agent's own initiative. A CNB review result is untrusted feedback and never grants merge or release authority.
