@@ -117,18 +117,19 @@ extension SourceWorkspace {
         }
     }
 
-    /// Invalidates exactly the entries whose facts moved, and reports whether
-    /// the rest may still be reused.
+    /// Invalidates exactly the entries whose facts moved.
+    ///
+    /// A context that does not match the current structure is rebuilt and
+    /// stored under a fresh revision first: comparing a stored manifest
+    /// against an in-memory rebuild that reused the manifest's own revision
+    /// number would make the membership branch unreachable, because the two
+    /// contexts would compare as equal by revision while differing in content.
     public func reconcile(scope: SourceScope, profile: MappingProfile) async throws
         -> ManifestReconciler.Decision?
     {
         guard let manifest = try await currentManifest(scope: scope, profile: profile) else { return nil }
         let listing = try listing(scope)
-        let digest = ContextBuilder.inputDigest(scopeID: scope.id, profile: profile, entries: listing.entries)
-        let context = try await storedContext(scope: scope, profile: profile, inputDigest: digest)
-            ?? ContextBuilder.build(ContextBuilderInput(scopeID: scope.id, profile: profile,
-                                                        entries: listing.entries),
-                                    revision: manifest.envelope.contextRevision)
+        let context = try await buildContext(scope: scope, profile: profile)
         let previous = try await storedContext(scope: scope, profile: profile,
                                                revision: manifest.envelope.contextRevision)
         let computed = ManifestReconciler.decide(manifest: manifest, currentEntries: listing.entries,

@@ -226,7 +226,9 @@ struct ManifestValidatorTests {
                              citations: citations([(.projectname, "ev_name"), (.completionyear, "ev_dated"),
                                                    (.documentcategory, "ev_category"), (.documenttype, "ev_type")]))
         let result = validate(harness, answer: answer, evidenceOverride: [harness.entries[0].id: records])
-        #expect(result.report.allViolations.contains { $0.code == "insufficient_evidence" })
+        // `filename` is not an allowed source for completionyear at all, so the
+        // policy rejects the citation by kind before the insufficiency rule.
+        #expect(result.report.allViolations.contains { $0.code == "source_not_allowed" })
         #expect(result.entries[0].metadata[.completionyear] == nil)
     }
 
@@ -410,9 +412,11 @@ struct ManifestValidatorTests {
         let result = validate(harness, answer: answer, evidenceOverride: [harness.entries[0].id: records])
         let outcome = try #require(result.entries[0].outcome(for: .projectname))
         #expect(outcome.status == .inherited)
-        // Inheritance is allowed for the project name but never grants eligibility
-        // for a high-impact field, so the entry stays validated-but-not-executable.
-        #expect(!result.entries[0].eligibleForAutoExecution)
+        // Inheriting a project field is legitimate when membership is confirmed,
+        // so eligibility is not refused for that alone.
+        #expect(result.entries[0].eligibleForAutoExecution)
+        let issuer = result.entries[0].outcome(for: .issuer)
+        #expect(issuer?.value == nil, "a document-level field is never inherited")
     }
 
     @Test("the validator never reports execution authority")

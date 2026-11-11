@@ -210,22 +210,15 @@ enum MappingStore {
             let locator = try record.locator.map { try FormaJSON.encode($0) }
             try db.execute(
                 sql: """
-                    INSERT INTO evidence_items (id, source_id, snapshot_revision, snapshot_fingerprint, source,
-                        locator, relative_path, excerpt, extraction_status, extractor_version, created_at,
-                        context_candidate_id)
+                    -- An evidence id is derived from source, snapshot revision
+                    -- and locator, so re-registering the same read is a no-op
+                    -- and a different read always produces a different id.
+                    -- Nothing is rewritten in place: an older manifest's
+                    -- citation must keep resolving to what was observed then.
+                    INSERT OR IGNORE INTO evidence_items (id, source_id, snapshot_revision, snapshot_fingerprint,
+                        source, locator, relative_path, excerpt, extraction_status, extractor_version,
+                        created_at, context_candidate_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        source_id = excluded.source_id,
-                        snapshot_revision = excluded.snapshot_revision,
-                        snapshot_fingerprint = excluded.snapshot_fingerprint,
-                        source = excluded.source,
-                        locator = excluded.locator,
-                        relative_path = excluded.relative_path,
-                        excerpt = excluded.excerpt,
-                        extraction_status = excluded.extraction_status,
-                        extractor_version = excluded.extractor_version,
-                        created_at = excluded.created_at,
-                        context_candidate_id = excluded.context_candidate_id
                     """,
                 arguments: [record.id, record.sourceID.sourceKey, record.snapshotRevision,
                             record.snapshotFingerprint, record.source.rawValue, locator, record.relativePath,
@@ -391,8 +384,11 @@ enum MappingStore {
         return (stored ?? 0) + 1
     }
 
-    /// Marks the named entries of a revision unusable. Entries not listed keep
-    /// their state, which is what "only the affected items" means.
+    /// Marks entries unusable in one revision.
+    ///
+    /// A non-nil, non-empty set touches exactly those entries and leaves every
+    /// other entry's state alone; nil or empty means the whole revision is
+    /// unusable, which is what a profile, schema or case-pack change requires.
     static func invalidate(manifestID: UUID, revision: Int, sourceIDs: Set<UUID>?, reason: String,
                            in db: Database) throws {
         if let sourceIDs, !sourceIDs.isEmpty {

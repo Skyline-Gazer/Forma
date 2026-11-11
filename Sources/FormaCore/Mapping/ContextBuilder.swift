@@ -44,12 +44,17 @@ public struct ContextBuilderInput: Sendable {
 
 /// Two-phase project context, per PLAN §6.1.
 ///
-/// Phase one clusters files from directory structure, naming entities and
+/// Phase one groups files from directory structure, naming entities and
 /// adjacency, with no assumption about which path level names a project. Phase
-/// two aligns those clusters with the profile vocabulary and any authorized
+/// two aligns those groups with the profile vocabulary and any authorized
 /// historical records. Nothing here calls a model or a provider: the output is
 /// deterministic, so the same listing always produces the same context and a
 /// reviewer can reproduce any clustering decision from the input alone.
+///
+/// The cases the clustering has to satisfy are the ones the contract states: a
+/// project may own several subdirectories, one directory may hold several
+/// projects, the same vendor material may appear in two projects, and vendor
+/// documents may belong to no project at all.
 public enum ContextBuilder {
     /// Structural fingerprint: identities, paths and entry states only.
     ///
@@ -72,17 +77,14 @@ public enum ContextBuilder {
     public static func build(_ input: ContextBuilderInput, revision: Int, builtAt: Date = .now) -> ProjectContext {
         let files = input.entries.filter { $0.state == .present || $0.state == .held }
         let digest = inputDigest(scopeID: input.scopeID, profile: input.profile, entries: input.entries)
-        let clusters = mergedClusters(files)
+        let groups = cluster(files)
 
-        // Phase two: authorized history may name and strengthen a candidate.
-        // It never decides membership, and a match is recorded as a reference
-        // rather than substituted for evidence.
         var candidates: [ContextCandidate] = []
-        for cluster in clusters.sorted(by: { $0.key < $1.key }) {
-            guard !cluster.members.isEmpty else { continue }
-            let matches = input.history.filter { relates($0, to: cluster) }
-            var basis = Set(cluster.basis)
-            var confidence = cluster.confidence
+        for group in groups.values.sorted(by: { $0.key < $1.key }) {
+            guard !group.members.isEmpty else { continue }
+            let matches = input.history.filter { relates($0, to: group) }
+            var basis = group.basis
+            var confidence = group.confidence
             if !matches.isEmpty {
                 basis.insert(.historyReference)
                 // History corroborates a structural candidate; it does not turn
@@ -90,25 +92,25 @@ public enum ContextBuilder {
                 if confidence == .low, matches.contains(where: { $0.strength == .exactName }) { confidence = .medium }
             }
             candidates.append(ContextCandidate(
-                id: candidateID(profile: input.profile, key: cluster.key, members: cluster.members),
-                projectKey: cluster.key,
-                displayName: displayName(for: cluster, matches: matches),
+                id: candidateID(profile: input.profile, key: group.key, members: group.members),
+                projectKey: group.key,
+                displayName: displayName(for: group, matches: matches),
                 basis: basis.sorted { $0.rawValue < $1.rawValue },
-                memberSourceIDs: cluster.members,
+                memberSourceIDs: group.members,
                 confidence: confidence
             ))
         }
 
-        // A file claimed by two candidates that did not merge is a genuine
-        // disagreement about project membership. Both claims are kept and the
-        // file is reported as conflicted; nothing picks a winner by confidence.
+        // A file claimed by two surviving groups is a genuine disagreement about
+        // project membership. Both claims stay and the file is reported as
+        // conflicted; nothing picks a winner by confidence.
         var owners: [UUID: Set<String>] = [:]
         for candidate in candidates {
             for member in candidate.memberSourceIDs { owners[member, default: []].insert(candidate.projectKey) }
         }
-        let conflicted = Set(owners.compactMap { $0.value.count > 1 ? $0.key : nil })
-        let covered = Set(candidates.flatMap(\.memberSourceIDs))
         let present = Set(files.map(\.id))
+        let conflicted = Set(owners.compactMap { $0.value.count > 1 ? $0.key : nil }).intersection(present)
+        let covered = Set(candidates.flatMap(\.memberSourceIDs))
 
         return ProjectContext(
             revision: revision,
@@ -118,7 +120,7 @@ public enum ContextBuilder {
             inputDigest: digest,
             candidates: candidates,
             unassignedSourceIDs: present.subtracting(covered),
-            conflictedSourceIDs: conflicted.intersection(present),
+            conflictedSourceIDs: conflicted,
             builtAt: builtAt
         )
     }
@@ -150,68 +152,118 @@ public enum ContextBuilder {
 
     // MARK: - Phase one
 
-    /// Internal so the clustering rules can be tested directly.
-    struct Cluster {
+    struct Group {
         let key: String
         var members: Set<UUID>
         var basis: Set<ContextCandidate.Basis>
         var confidence: DecisionConfidence
     }
 
-    /// Directory and naming candidates, merged where they clearly describe the
-    /// same project and kept apart where they genuinely disagree.
-    private static func mergedClusters(_ files: [SourceEntry]) -> [Cluster] {
-        var clusters: [Cluster] = []
+    /// Groups files, then resolves the two directions a project can spread.
+    ///
+    /// 1. Every directory that holds files becomes a candidate, and so does each
+    ///    of its ancestors: a project with several subdirectories is one project
+    ///    seen at different levels, and the ancestor absorbs the descendants.
+    /// 2. A directory whose files split into two or more *disjoint* naming
+    ///    entities, each holding at least two files and together covering most
+    ///    of the directory, holds several projects. It is split by entity
+    ///    instead of absorbed, because merging it upward would silently merge
+    ///    the projects inside it.
+    /// 3. An entity that appears in two different directories joins them: the
+    ///    same project spread over separate folders is one candidate.
+    static func cluster(_ files: [SourceEntry]) -> [String: Group] {
+        var groups: [String: Group] = [:]
         let byDirectory = Dictionary(grouping: files) { parent(of: $0.relativePath) }
-        for (directory, members) in byDirectory.sorted(by: { $0.key < $1.key }) where !directory.isEmpty {
-            clusters.append(Cluster(key: directory, members: Set(members.map(\.id)),
-                                    basis: [.directory, .adjacency], confidence: .low))
+        let entities = namingEntities(files)
+
+        for (directory, members) in byDirectory.sorted(by: { $0.key < $1.key }) {
+            guard !directory.isEmpty else { continue }
+            if let split = splitByEntity(members, entities: entities) {
+                for (token, tokenMembers) in split {
+                    merge(into: &groups, key: token, members: tokenMembers,
+                          basis: [.naming, .adjacency], confidence: .medium)
+                }
+                continue
+            }
+            merge(into: &groups, key: directory, members: Set(members.map(\.id)),
+                  basis: [.directory, .adjacency], confidence: .low)
+            // Ancestors absorb this directory: the project level, not the
+            // subdirectory, is what a mapping decision belongs to.
+            var components = directory.split(separator: "/").map(String.init)
+            while components.count > 1 {
+                components.removeLast()
+                merge(into: &groups, key: components.joined(separator: "/"),
+                      members: Set(members.map(\.id)), basis: [.directory], confidence: .medium)
+            }
         }
-        // A naming entity that appears in two or more files joins a project
-        // that is spread across directories, or splits a directory that holds
-        // several projects.
-        for (entity, members) in namingEntities(files).sorted(by: { $0.key < $1.key }) where members.count >= 2 {
-            clusters.append(Cluster(key: entity, members: members, basis: [.naming], confidence: .medium))
+
+        // An entity shared across directories joins those directories.
+        let idToFile = Dictionary(uniqueKeysWithValues: files.map { ($0.id, $0) })
+        for (token, tokenMembers) in entities.sorted(by: { $0.key < $1.key }) where tokenMembers.count >= 2 {
+            let directories = Set(tokenMembers.compactMap { idToFile[$0].map { parent(of: $0.relativePath) } })
+            guard directories.count >= 2 else { continue }
+            merge(into: &groups, key: token, members: tokenMembers, basis: [.naming], confidence: .medium)
         }
-        return reconcile(clusters)
+
+        return absorb(groups)
     }
 
-    /// Merges candidates that are two views of one project: one member set
-    /// contains the other, or they share most of the smaller set. A candidate
-    /// that shares only part of its members with a different candidate is left
-    /// alone, because that is the disagreement the interface must show.
-    static func reconcile(_ input: [Cluster]) -> [Cluster] {
-        var working = input.sorted { $0.members.count > $1.members.count }
-        var index = 0
-        while index < working.count {
-            var other = index + 1
-            while other < working.count {
-                let a = working[index].members
-                let b = working[other].members
-                let overlap = a.intersection(b)
-                let smaller = min(a.count, b.count)
-                let sameProject = !overlap.isEmpty && (overlap.count == smaller || overlap.count * 2 >= smaller)
-                if sameProject {
-                    // Keep the more specific key: a directory path names the
-                    // location, an entity token names the content, and the
-                    // larger member set is the safer scope.
-                    let keep = a.count >= b.count ? index : other
-                    let drop = keep == index ? other : index
-                    working[keep].members.formUnion(working[drop].members)
-                    working[keep].basis.formUnion(working[drop].basis)
-                    if working[keep].confidence == .low { working[keep].confidence = working[drop].confidence }
-                    working.remove(at: drop)
-                    if drop < index { index -= 1 }
-                    if drop == index { break }
-                    continue
-                }
-                other += 1
-            }
-            index += 1
+    /// Two disjoint entity sets inside one directory mean two projects there.
+    private static func splitByEntity(_ members: [SourceEntry], entities: [String: Set<UUID>])
+        -> [(String, Set<UUID>)]?
+    {
+        let ids = Set(members.map(\.id))
+        guard ids.count >= 4 else { return nil }
+        let candidates = entities
+            .filter { !$0.value.isDisjoint(with: ids) && $0.value.isSubset(of: ids) && $0.value.count >= 2 }
+            .sorted { ($0.value.count, $0.key) > ($1.value.count, $1.key) }
+        var chosen: [(String, Set<UUID>)] = []
+        var taken: Set<UUID> = []
+        for (token, set) in candidates {
+            guard set.isDisjoint(with: taken) else { continue }
+            chosen.append((token, set))
+            taken.formUnion(set)
         }
-        // Two directory candidates where one is the ancestor of the other and
-        // the ancestor adds nothing new collapse into the descendant.
-        return working.filter { !$0.members.isEmpty }
+        // Only a real split: at least two disjoint groups covering most of the
+        // directory. Otherwise the naming overlap is noise, not two projects.
+        guard chosen.count >= 2, taken.count * 3 >= ids.count * 2 else { return nil }
+        return chosen
+    }
+
+    private static func merge(into groups: inout [String: Group], key: String, members: Set<UUID>,
+                              basis: [ContextCandidate.Basis], confidence: DecisionConfidence) {
+        if var existing = groups[key] {
+            existing.members.formUnion(members)
+            existing.basis.formUnion(basis)
+            if existing.confidence == .low, confidence != .low { existing.confidence = confidence }
+            groups[key] = existing
+        } else {
+            groups[key] = Group(key: key, members: members, basis: Set(basis), confidence: confidence)
+        }
+    }
+
+    /// Drops a group whose members are entirely contained in another's, keeping
+    /// the broader key as the project. Ties keep the lexicographically smaller
+    /// key so the result does not depend on dictionary order.
+    static func absorb(_ input: [String: Group]) -> [String: Group] {
+        var groups = input
+        var changed = true
+        while changed {
+            changed = false
+            let keys = groups.keys.sorted()
+            for outer in keys {
+                guard let a = groups[outer] else { continue }
+                for inner in keys where inner != outer {
+                    guard let b = groups[inner], !b.members.isEmpty, b.members.isSubset(of: a.members) else { continue }
+                    if a.members == b.members, inner < outer { continue }
+                    groups.removeValue(forKey: inner)
+                    changed = true
+                    break
+                }
+                if changed { break }
+            }
+        }
+        return groups.filter { !$0.value.members.isEmpty }
     }
 
     static func parent(of path: String) -> String {
@@ -261,35 +313,35 @@ public enum ContextBuilder {
     /// length. With bare substring matching, a one-character directory name
     /// would "match" every history project containing that character, and the
     /// interface would then display a guessed name as if it were confirmed.
-    static func relates(_ match: ContextHistoryMatch, to cluster: Cluster) -> Bool {
+    static func relates(_ match: ContextHistoryMatch, to group: Group) -> Bool {
         let target = normalize(match.projectName)
         guard !target.isEmpty else { return false }
-        let keyForms = [normalize(cluster.key), normalize(lastSegment(cluster.key))]
+        let keyForms = [normalize(group.key), normalize(lastSegment(group.key))]
         if keyForms.contains(target) { return true }
-        let targetTokens = Set(tokens(match.projectName))
+        let targetTokens = Set(nameTokens(match.projectName))
         guard !targetTokens.isEmpty else { return false }
-        let keyTokens = Set(tokens(cluster.key))
-        return keyTokens.contains { $0.count >= minimumTokenLength && targetTokens.contains($0) }
+        let groupTokens = Set(nameTokens(group.key))
+        return groupTokens.contains { $0.count >= minimumTokenLength && targetTokens.contains($0) }
     }
 
     /// The shortest token that may support a non-exact historical match.
     static let minimumTokenLength = 3
 
-    private static func tokens(_ value: String) -> [String] {
-        value.components(separatedBy: CharacterSet(charactersIn: "/_-\u{2013}\u{2014} .\u{00b7}+ ,\u{ff0c}()\u{ff08}\u{ff09}[]\u{3010}\u{3011}"))
+    private static func nameTokens(_ value: String) -> [String] {
+        value.components(separatedBy: CharacterSet(charactersIn: "/_-–— .·+ ,，()（）[]【】"))
             .map { normalize($0) }
             .filter { !$0.isEmpty && $0.count >= minimumTokenLength }
     }
 
-    private static func displayName(for cluster: Cluster, matches: [ContextHistoryMatch]) -> String? {
+    private static func displayName(for group: Group, matches: [ContextHistoryMatch]) -> String? {
         // Only a name equal to the structural key may replace the label.
         // Anything weaker is a hint about membership, not a title, and showing
         // it as the project name would present a guess as a fact.
-        let keyForms = Set([cluster.key, lastSegment(cluster.key)].map(normalize))
+        let keyForms = Set([group.key, lastSegment(group.key)].map(normalize))
         if let exact = matches.first(where: {
             $0.strength == .exactName && keyForms.contains(normalize($0.projectName))
         }) { return exact.projectName }
-        let segment = lastSegment(cluster.key)
+        let segment = lastSegment(group.key)
         return segment.isEmpty ? nil : segment
     }
 
@@ -299,7 +351,8 @@ public enum ContextBuilder {
 
     private static func normalize(_ value: String) -> String {
         value
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
+                     locale: Locale(identifier: "en_US_POSIX"))
             .replacingOccurrences(of: " ", with: "")
     }
 
@@ -314,8 +367,4 @@ public enum ContextBuilder {
         }
         return "c" + String(hasher.finalize().hexadecimalDigest.prefix(16))
     }
-}
-
-extension Digest {
-    var hexadecimalDigest: String { map { String(format: "%02x", $0) }.joined() }
 }
