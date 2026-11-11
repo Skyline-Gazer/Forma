@@ -67,12 +67,26 @@ enum MappingCorrectionMigrations {
     /// "one revision has at most one producing correction" a constraint instead
     /// of a convention.
     ///
-    /// Named rather than inlined so the two statements can be run against a
-    /// table that has rows in it: on a fresh database version 2 splits an empty
-    /// table, so the arithmetic that decides which stored row created which
-    /// revision would first run on a reviewer's real history. Two tests cover
-    /// it from different sides - `legacyRowsSplitOntoTheNewColumns` executes
-    /// these statements over a version 1 shaped table filled by hand, and
+    /// The `NOT EXISTS` in the first `UPDATE` is what keeps the last statement
+    /// from failing. Version 1 never checked that the revision under review was
+    /// still current, so a history can hold two accepted rows that both say
+    /// they read revision 1 - one of them really produced 2, the other was
+    /// written later and produced some higher number that the old column never
+    /// recorded. Computing `supersedes + 1` for both gives both the claim on 2,
+    /// and `CREATE UNIQUE INDEX` over duplicates is an error: the migration
+    /// would abort and the workspace would refuse to open, which is a worse
+    /// outcome than one row that does not know which version it wrote. The
+    /// earlier row keeps the computed claim, because it is the one whose
+    /// arithmetic can be true; the later is left with no produced revision and
+    /// the review screen says so, rather than being handed a number that
+    /// matches nothing.
+    ///
+    /// Named rather than inlined so the statements can be run against a table
+    /// that has rows in it: on a fresh database version 2 splits an empty table,
+    /// so the arithmetic and the collision rule would first run on a reviewer's
+    /// real history. Two tests cover it from different sides -
+    /// `legacyRowsSplitOntoTheNewColumns` executes these statements over a
+    /// version 1 shaped table filled by hand, and
     /// `registeredMigrationSplitsAVersionOneHistory` rewinds a database the
     /// production store created and reopens it, which is what exercises the
     /// registered migration, its ordering against `case_candidates`, and the
@@ -80,7 +94,13 @@ enum MappingCorrectionMigrations {
     static let revisionSplitSQL = """
         ALTER TABLE corrections ADD COLUMN produced_revision INTEGER;
         UPDATE corrections SET produced_revision = supersedes_revision + 1
-            WHERE supersedes_revision IS NOT NULL;
+            WHERE supersedes_revision IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM corrections AS earlier
+                  WHERE earlier.manifest_id = corrections.manifest_id
+                    AND earlier.supersedes_revision = corrections.supersedes_revision
+                    AND (earlier.created_at < corrections.created_at
+                         OR (earlier.created_at = corrections.created_at
+                             AND earlier.id < corrections.id)));
         UPDATE corrections SET manifest_revision = supersedes_revision
             WHERE supersedes_revision IS NOT NULL;
         ALTER TABLE corrections DROP COLUMN supersedes_revision;

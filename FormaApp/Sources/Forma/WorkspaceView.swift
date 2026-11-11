@@ -86,10 +86,12 @@ struct WorkspaceView: View {
             }
         }
         .task(id: model.selectedScopeID) {
+            // Only this view's own selections. The model's `didSet` for the
+            // same value already drops the listing, the manifest, the
+            // evidence and the draft; a second copy of that cleanup here would
+            // be a second owner of state this view does not hold.
             selectedFile = nil
             selectedCluster = nil
-            model.clearFileEvidence()
-            // The model persists this itself; reading it back here was the race.
         }
         .onChange(of: selectedFile) { _, _ in model.clearFileEvidence() }
     }

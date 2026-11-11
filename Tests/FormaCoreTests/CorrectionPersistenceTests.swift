@@ -341,11 +341,16 @@ struct CorrectionPersistenceTests {
         let manifestID = UUID()
         let acceptedID = UUID()
         let refusedID = UUID()
+        let collidingID = UUID()
 
         // Rewind to what version 1 left behind: one revision column whose
         // meaning depended on `review_state`. The accepted row says it produced
-        // revision 2 out of revision 1; the refusal read revision 3 and
-        // produced nothing.
+        // revision 2 out of revision 1; the refusal read revision 3 and produced
+        // nothing. The third row is the case that mattered: version 1 never
+        // checked that the revision under review was current, so a second
+        // accepted row can claim it read revision 1 as well, one decision
+        // after the first - and computing `target + 1` for both would put two
+        // rows in front of the unique index claiming to have written revision 2.
         try fixture.execute("""
             DELETE FROM grdb_migrations WHERE identifier = 'mapping-corrections-v2';
             DROP INDEX IF EXISTS corrections_produced;
@@ -360,20 +365,31 @@ struct CorrectionPersistenceTests {
                     'evidence_verified', NULL, 1),
                    ('\(refusedID.sourceKey)', '\(manifestID.sourceKey)', 3, NULL, '\(sourceID.sourceKey)',
                     'issuer', NULL, '示例厂商乙', X'5B5D', 'f', 1, 'manual',
-                    'rejected', NULL, 2);
+                    'rejected', NULL, 2),
+                   ('\(collidingID.sourceKey)', '\(manifestID.sourceKey)', 4, 1, '\(sourceID.sourceKey)',
+                    'projectname', '示例项目_2026', '示例项目_2027', X'5B5D', 'f', 1, 'manual',
+                    'evidence_verified', NULL, 3);
             """)
 
         // Reopening *is* the migration: the workspace registers and applies the
         // pending version, so nothing here reruns the statements by hand.
         let reopened = try SourceWorkspace(databaseURL: fixture.database)
         let rows = try await reopened.corrections(manifestID: manifestID)
-        #expect(rows.count == 2)
-        let accepted = try #require(rows.first { $0.reviewState == .evidenceVerified })
-        #expect(accepted.manifestRevision == 1 && accepted.producedRevision == 2,
+        #expect(rows.count == 3)
+        let accepted = try #require(rows.first { $0.id == acceptedID })
+        #expect(accepted.reviewState == .evidenceVerified
+                && accepted.manifestRevision == 1 && accepted.producedRevision == 2,
                 "the migrated history must still say which revision this decision wrote")
         let refused = try #require(rows.first { $0.reviewState == .rejected })
         #expect(refused.manifestRevision == 3 && refused.producedRevision == nil,
                 "a refusal keeps the version it was aimed at and gains none")
+        // The later duplicate is not given a number that matches nothing: it
+        // keeps the revision it says it read and loses the claim it never
+        // recorded, which is what the review screen then reports.
+        let colliding = try #require(rows.first { $0.id == collidingID })
+        #expect(colliding.reviewState == .evidenceVerified
+                && colliding.manifestRevision == 1 && colliding.producedRevision == nil,
+                "two accepted rows aimed at one revision must not both claim its successor")
         // Both halves of the migration have to survive: the index is what stops
         // two rows claiming one revision on the next write, and the old column
         // must be gone so no writer can reintroduce the ambiguity.

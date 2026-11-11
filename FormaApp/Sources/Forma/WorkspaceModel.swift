@@ -169,6 +169,7 @@ final class WorkspaceModel: ObservableObject {
             correctionHistory = []
             correctionHistoryState = .notRead
             draft = nil
+            clearFileEvidence()
             refreshRows()
             scheduleReload()
         }
@@ -453,7 +454,6 @@ final class WorkspaceModel: ObservableObject {
                 guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
                 correctionHistory = attempts
                 correctionHistoryState = .fromStore
-                notice = "Restored revision \(current.envelope.revision) of manifest \(current.envelope.manifestID.uuidString.lowercased()) from workspace storage."
             } else {
                 correctionHistory = []
                 correctionHistoryState = .notRead
@@ -617,6 +617,11 @@ final class WorkspaceModel: ObservableObject {
     /// Drops the file detail panel's evidence and stops its read. The registry
     /// keeps its rows: FormaCore owns them until a re-read replaces them.
     func clearFileEvidence() {
+        // Nothing to retire when no read is in flight and no detail is shown.
+        // The model clears this on a source switch and the view clears it when
+        // the selection changes, and the two can fire for the same click; the
+        // guard keeps the second one from bumping the generation for no reason.
+        guard fileEvidence != nil || fileWork != nil || fileReadInFlight else { return }
         // Retire the generation before touching the handle, so the cancelled
         // task recognises its own cleanup as stale.
         fileRead += 1
@@ -1110,29 +1115,20 @@ final class WorkspaceModel: ObservableObject {
             notice = "A preview needs a source, a profile and a stored project context."
             return
         }
-        // Ask the engine what it would send instead of imitating it: a run
-        // groups files by the candidate that claims them and splits oversized
-        // groups, so a preview built by prefixing the sorted listing would
-        // describe a request no run ever makes - different membership,
-        // different refs, no attached rows. The entries are the whole listing
-        // for the same reason: `runMapping` hands the engine every row it has.
+        // The engine plans the batch; the entries are the whole listing, as a
+        // run hands the engine every row it has.
         preview = nil
         auxWork = Task {
             defer { auxWork = nil; if phase == .previewing { phase = .idle } }
             self.phase = .previewing
             do {
-                // The rows come from storage, not from whatever this session
-                // happened to open. Reading them here is what makes the first
-                // batch's payload the one a run would build: a preview
-                // assembled out of memory could show a batch with no evidence
-                // at all, which is not a request any run sends.
+                // From storage rather than from whatever this session opened:
+                // the payload has to be the one a run would build.
                 let rows = try await workspace.registeredEvidence(for: Set(listing.entries.map(\.id)))
                 let batches = MappingEngine.plannedBatches(from: listing.entries, context: context,
                                                           limit: entryLimit, evidence: rows)
-                // The evidence read suspends, and a source switch during it
-                // would otherwise describe another listing's request as this
-                // panel's preview - the same rule every other long task here
-                // follows before it publishes anything.
+                // The read suspends; a source switch during it must not make
+                // another listing's request this panel's preview.
                 guard !Task.isCancelled, scope.id == selectedScopeID,
                       profile.profileID == selectedProfileID else { return }
                 guard let batch = batches.first else {
@@ -1142,14 +1138,9 @@ final class WorkspaceModel: ObservableObject {
                 let plan = redaction
                 let value = try ProviderMappingClient.preview(profile: profile, context: context,
                                                               casePack: casePack, batch: batch, redaction: plan)
-                // Payload and the batch it came from are assigned together: the
-                // counts mean nothing without the request they describe, and a
-                // preview cleared by another action must not leave them behind.
-                // Nothing between the guard above and here suspends - the batch
-                // choice, the redaction plan and the preview build are all
-                // synchronous on this actor - so one check after the read is
-                // enough, and repeating it would imply the second one protects
-                // something.
+                // Payload and the batch it came from are assigned together:
+                // the counts mean nothing without the request they describe.
+                // Nothing above suspended since the guard, so one check held.
                 self.preview = Preview(value: value, fileCount: batch.entries.count, batchCount: batches.count)
                 self.leakedTerms = plan.isIdentity ? [] : plan.leaks(value.system + String(decoding: value.payload, as: UTF8.self))
             } catch {
