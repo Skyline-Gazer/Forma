@@ -14,7 +14,9 @@
 | #31 | CNB 评审发现的 ZIP 容器与身份契约整改 | `ee13ee8` | tests 1m33s、app build 2m3s `pass`（run 42958955100，head `9ac3f09`）；同一 head 的 CNB 评审结论 `passed`，0 发现 |
 | #32 | P0/P1 验收报告与文档索引 | `f8499a1` | tests 1m23s、app build 1m11s `pass`（run 42960026866） |
 | #33 | CNB 评审台账更正（真实运行时间与 FormaCore 复审记录） | `42dda09` | tests 1m26s、app build 1m22s `pass`（run 42960728974） |
-| #34 | ADS 消费者接入与 CNB 评审验收报告（docs/ADS-CNB-ACCEPTANCE.md） | 本 PR 合并提交 | tests 1m29s、app build 1m6s `pass`（run 42961011990） |
+| #34 | ADS 消费者接入与 CNB 评审验收报告（docs/ADS-CNB-ACCEPTANCE.md） | `08ef473` | tests 1m29s、app build 1m6s `pass`（run 42961011990） |
+| #35 | 变异告警清零并记录一次合并时机失误 | `5e30f78` | tests 1m17s、app build 1m4s `pass`（run 42962242980） |
+| #36 | 去除非抛错调用上的冗余 `try` 标记 | `ab1118e` | tests 1m20s、app build 1m35s `pass`（run 42962720514） |
 
 工程与依赖：Swift 6（`swiftLanguageModes: [.v6]`）、macOS 14 部署目标、GRDB 7.8.0 与 ZIPFoundation 0.9.20 以 `exact` 锁定并提交 `Package.resolved`。GUI 是独立的 SwiftPM 可执行包，`FormaApp/.build` 不进入根包测试图，因此仅有 Command Line Tools 的机器仍可运行核心测试。
 
