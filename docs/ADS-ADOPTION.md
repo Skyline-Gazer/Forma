@@ -8,7 +8,7 @@
 - Pin record: [ads-pin.txt](../ads-pin.txt)
 - Git submodule: `.ads/`
 
-The branch name identifies the ADS-maintained CNB adaptation line. Forma consumes a specific commit, not a floating branch. Updating ADS requires reviewing the new upstream commit, updating the gitlink and pin record together, and submitting a Forma PR.
+Consistency is machine-checked, not remembered: `scripts/check_ads_pin.py` compares the tree gitlink, the index entry, `.gitmodules` remote and `ads-pin.txt` (repository, branch, commit, consumption mode) and fails on any drift. Run it after every ADS update; a negative control with a falsified pin commit exits non-zero.
 
 ## Provider responsibilities
 
@@ -30,6 +30,24 @@ This is **not** an ADS Git Provider Mode A migration. ADS `cnb/dev` is the stand
 - Do not create duplicate Issues or a second backlog in CNB.
 - No CNB-to-GitHub automatic synchronization, push mirror, release flow, or credential wiring is authorized by this adoption.
 
+## Review image provenance
+
+`.cnb.yml` pins `cnbcool/code-review:v1.22.2` (never `latest`). Observed 2026-11-11 against the official upstream plugin repository `cnb/plugins/cnbcool/code-review`:
+
+| Record | Value |
+|---|---|
+| Plugin tag | `v1.22.2` → tag object `60e9c0daa01f41af1cc3912d811598ff3966befe`, peeled commit `01592d48220ddceae630aac1e4818d749c3f68ed` |
+| Resolved image digest | `sha256:d0af9a2e683488e2424d42d3e0bffe478c87b37d44903d4f5b8b2288480704eb` (`docker pull` output during the Forma review run) |
+| Newer upstream tags present | `v1.23.0`, `v1.23.1` — not adopted; moving the pin requires review in a Forma PR |
+| Tag mutability | Tags in the plugin repository can be re-pointed, so the digest above is the adoption record, not an assumption that a tag is immutable |
+
 ## CNB repository access status
 
-The Owner-designated CNB repository is https://cnb.cool/KoolingMachine/Forma. Its live branch, PR, pipeline, and permission state must be verified using the authenticated CNB environment before configuring review automation. A GitHub API 404 for this non-GitHub host is not evidence that the CNB repository is absent. Do not claim CNB integration is live until a real PR review is executed and its SHA-bound result is read back.
+Verified live state on 2026-11-11 with the authenticated CNB environment:
+
+- https://cnb.cool/KoolingMachine/Forma exists, public, created 2026-11-11, access level `Owner` for the reviewing account, and initially had no branches (an empty review workspace, not a missing repository).
+- The workspace was seeded with exact GitHub object ids only: `dev` = `38d455304bc4530b71e584c07de48fc06fd1f293`, `chore/ads-cnb-consumer` = the current GitHub PR head. No CNB-only commit exists; CNB cannot advance authoritative history.
+- A real review executed for PR #25 head SHA on CNB pull #1 (`event=pull_request`, source `chore/ads-cnb-consumer` → target `dev`). The run succeeded in ~30 s and read the actual diff, including the `160000` gitlink.
+- Structured findings were obtained from the retained runner log. In that run the plugin failed to parse its own result and reported `PR 评论发送失败，但评审已完成`, so no PR comment or review object was retrievable; retrieval therefore uses the build log and must be re-checked for comment delivery on each round. Plugin exit code 0 is not treated as review coverage.
+
+Not authorized or not configured by this adoption: automatic CNB↔GitHub synchronization, push mirrors, release flows, CNB build/test stages, CNB merge authority, and any credential stored outside the platform secret store.

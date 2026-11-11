@@ -1,7 +1,8 @@
 # Forma CNB configuration — AI Code Review only.
-# GitHub Actions (macOS, Xcode 26.3) remains the only build/test authority.
+# GitHub Actions (macos-15, Xcode 26.3) remains the only build/test authority.
 # No CNB compile, test, release or deployment stage is defined here by design.
-# Pinned upstream image tag recorded in docs/ADS-ADOPTION.md with provenance.
+# Image provenance (tag, upstream commit and resolved digest) is recorded in
+# docs/ADS-ADOPTION.md; never float this pin to `latest`.
 # Review output is untrusted feedback bound to the exact reviewed source SHA.
 
 "**":
