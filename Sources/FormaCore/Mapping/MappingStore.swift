@@ -260,16 +260,23 @@ enum MappingStore {
     /// entry, and asking per source turned one reviewer action into a query for
     /// each file the scan found.
     static func evidence(for sourceIDs: Set<UUID>, in db: Database) throws -> [UUID: [EvidenceRecord]] {
-        guard !sourceIDs.isEmpty else { return [:] }
         let keys = Array(sourceIDs).map(\.sourceKey).sorted()
-        let placeholders = Array(repeating: "?", count: keys.count).joined(separator: ",")
-        let rows = try Row.fetchAll(db, sql: """
-            SELECT * FROM evidence_items WHERE source_id IN (\(placeholders)) ORDER BY source_id, id
-            """, arguments: StatementArguments(keys))
         var grouped: [UUID: [EvidenceRecord]] = [:]
-        for row in rows {
-            let record = try Self.decodeEvidence(row)
-            grouped[record.sourceID, default: []].append(record)
+        guard !keys.isEmpty else { return grouped }
+        // Chunked rather than one `IN (...)`: SQLite bounds the number of
+        // statement parameters, and a manifest covers every file in a scan, so
+        // a large directory would otherwise turn a reviewer action into a
+        // failure that only appears at some four-digit file count.
+        for start in stride(from: 0, to: keys.count, by: 400) {
+            let slice = Array(keys[start..<min(start + 400, keys.count)])
+            let placeholders = Array(repeating: "?", count: slice.count).joined(separator: ",")
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT * FROM evidence_items WHERE source_id IN (\(placeholders)) ORDER BY source_id, id
+                """, arguments: StatementArguments(slice))
+            for row in rows {
+                let record = try Self.decodeEvidence(row)
+                grouped[record.sourceID, default: []].append(record)
+            }
         }
         return grouped
     }
