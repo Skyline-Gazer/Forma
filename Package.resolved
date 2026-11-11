@@ -1,5 +1,5 @@
 {
-  "originHash" : "646b3b333328ebf90e43d34f7753bbd3897d1b3e94fea1805dae377b28d00b84",
+  "originHash" : "70daa47d37c0c0c5d9da60232b8a2cfaf77eac1d9efc526503429bc4a6188d39",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "18497b68fdbb3a09528d260a0a0e1e7e61c8c53d",
         "version" : "7.8.0"
+      }
+    },
+    {
+      "identity" : "swift-dynamicjson",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/objecthub/swift-dynamicjson",
+      "state" : {
+        "revision" : "2a850f5b33d847e5244c2eeb180de91d8fafe100",
+        "version" : "2.0.1"
       }
     },
     {

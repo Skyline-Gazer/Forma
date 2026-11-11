@@ -11,6 +11,15 @@
       }
     },
     {
+      "identity" : "swift-dynamicjson",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/objecthub/swift-dynamicjson",
+      "state" : {
+        "revision" : "2a850f5b33d847e5244c2eeb180de91d8fafe100",
+        "version" : "2.0.1"
+      }
+    },
+    {
       "identity" : "zipfoundation",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/weichsel/ZIPFoundation.git",

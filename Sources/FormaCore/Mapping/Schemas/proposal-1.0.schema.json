@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forma.local/schemas/proposal-1.0.schema.json",
+  "title": "Forma Mapping Proposal 1.0 (model output)",
+  "description": "The only shape a provider may return. Every object is closed, so a model that invents source_id, sha256, a DEVONthink UUID, an absolute path, an execution flag or a tool call fails here instead of reaching storage. Category and document-type vocabularies are profile data, so this schema bounds their shape only; membership is checked by the Manifest Validator against the selected profile.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "batch_id", "entries"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "batch_id": {"$ref": "#/$defs/ref"},
+    "entries": {"type": "array", "minItems": 1, "maxItems": 200, "items": {"$ref": "#/$defs/entry"}}
+  },
+  "$defs": {
+    "ref": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+    "fieldIdentifier": {
+      "enum": [
+        "projectname", "completionyear", "bidderentity", "department", "salesowner",
+        "endcustomer", "biddeadline", "tenderreference", "bsdcode",
+        "documentcategory", "documenttype", "issuer"
+      ]
+    },
+    "textValue": {"type": ["string", "null"], "maxLength": 512},
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entry_ref", "project_association", "document_category", "document_type",
+        "metadata", "evidence", "unknown_fields", "conflicts", "confidence", "reasoning"
+      ],
+      "properties": {
+        "entry_ref": {"$ref": "#/$defs/ref"},
+        "project_association": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["candidate_ref", "state"],
+          "properties": {
+            "candidate_ref": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+            "state": {"enum": ["confirmed", "unconfirmed", "conflict"]}
+          }
+        },
+        "document_category": {"type": ["string", "null"], "minLength": 1, "maxLength": 64},
+        "document_type": {"type": ["string", "null"], "minLength": 1, "maxLength": 64},
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "projectname", "completionyear", "bidderentity", "department", "salesowner",
+            "endcustomer", "biddeadline", "tenderreference", "bsdcode",
+            "documentcategory", "documenttype", "issuer"
+          ],
+          "properties": {
+            "projectname": {"$ref": "#/$defs/textValue"},
+            "completionyear": {"type": ["string", "null"], "pattern": "^[0-9]{4}$"},
+            "bidderentity": {"$ref": "#/$defs/textValue"},
+            "department": {"$ref": "#/$defs/textValue"},
+            "salesowner": {"$ref": "#/$defs/textValue"},
+            "endcustomer": {"$ref": "#/$defs/textValue"},
+            "biddeadline": {"type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+            "tenderreference": {"$ref": "#/$defs/textValue"},
+            "bsdcode": {"$ref": "#/$defs/textValue"},
+            "documentcategory": {"type": ["string", "null"], "minLength": 1, "maxLength": 64},
+            "documenttype": {"type": ["string", "null"], "minLength": 1, "maxLength": 64},
+            "issuer": {"$ref": "#/$defs/textValue"}
+          }
+        },
+        "evidence": {
+          "type": "array", "maxItems": 64, "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["field", "evidence_id"],
+            "properties": {
+              "field": {"$ref": "#/$defs/fieldIdentifier"},
+              "evidence_id": {"$ref": "#/$defs/ref"}
+            }
+          }
+        },
+        "unknown_fields": {
+          "type": "array", "maxItems": 12, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/fieldIdentifier"}
+        },
+        "conflicts": {
+          "type": "array", "maxItems": 12, "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["field", "detail"],
+            "properties": {
+              "field": {"$ref": "#/$defs/fieldIdentifier"},
+              "detail": {"type": "string", "minLength": 4, "maxLength": 300}
+            }
+          }
+        },
+        "confidence": {"enum": ["low", "medium", "high"]},
+        "reasoning": {"type": "string", "minLength": 4, "maxLength": 600}
+      }
+    }
+  }
+}
