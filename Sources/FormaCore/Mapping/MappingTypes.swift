@@ -15,7 +15,6 @@ import Foundation
 public enum FormaJSON {
     public static func encoder(pretty: Bool = false) -> JSONEncoder {
         let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
         encoder.dateEncodingStrategy = .formatted(Self.timestamp)
         if pretty { encoder.outputFormatting = [.prettyPrinted, .sortedKeys] }
         else { encoder.outputFormatting = [.sortedKeys] }
@@ -24,7 +23,6 @@ public enum FormaJSON {
 
     public static func decoder() -> JSONDecoder {
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
         decoder.dateDecodingStrategy = .formatted(Self.timestamp)
         return decoder
     }
@@ -84,6 +82,10 @@ public struct ValidationViolation: Codable, Sendable, Equatable, Hashable {
     public let code: String
     public let instancePath: String
     public let detail: String
+
+    enum CodingKeys: String, CodingKey {
+        case code, instancePath = "instance_path", detail
+    }
 
     public init(code: String, instancePath: String = "", detail: String) {
         self.code = code
@@ -165,6 +167,11 @@ public struct ContextCandidate: Codable, Sendable, Equatable, Hashable {
     public let memberSourceIDs: Set<UUID>
     public let confidence: DecisionConfidence
 
+    enum CodingKeys: String, CodingKey {
+        case id, projectKey = "project_key", displayName = "display_name", basis
+        case memberSourceIDs = "member_source_ids", confidence
+    }
+
     public init(id: String, projectKey: String, displayName: String?, basis: [Basis],
                 memberSourceIDs: Set<UUID>, confidence: DecisionConfidence) {
         self.id = id
@@ -198,6 +205,12 @@ public struct ProjectContext: Codable, Sendable, Equatable {
     /// Directories whose contents conflict about project membership.
     public let conflictedSourceIDs: Set<UUID>
     public let builtAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case revision, scopeID = "scope_id", profileID = "profile_id", profileVersion = "profile_version"
+        case inputDigest = "input_digest", candidates, unassignedSourceIDs = "unassigned_source_ids"
+        case conflictedSourceIDs = "conflicted_source_ids", builtAt = "built_at"
+    }
 
     public init(revision: Int, scopeID: UUID, profileID: String, profileVersion: String, inputDigest: String,
                 candidates: [ContextCandidate], unassignedSourceIDs: Set<UUID>, conflictedSourceIDs: Set<UUID>,
@@ -250,6 +263,13 @@ public struct EvidenceRecord: Codable, Sendable, Equatable {
     /// from instead of only pointing at another file.
     public let contextCandidateID: String?
 
+    enum CodingKeys: String, CodingKey {
+        case id, sourceID = "source_id", snapshotRevision = "snapshot_revision"
+        case snapshotFingerprint = "snapshot_fingerprint", source, locator, relativePath = "relative_path"
+        case excerpt, extractionStatus = "extraction_status", extractorVersion = "extractor_version"
+        case createdAt = "created_at", contextCandidateID = "context_candidate_id"
+    }
+
     public init(id: String, sourceID: UUID, snapshotRevision: Int, snapshotFingerprint: String,
                 source: EvidenceSource, locator: EvidenceLocator?, relativePath: String?, excerpt: String?,
                 extractionStatus: EvidenceStatus, extractorVersion: String, createdAt: Date,
@@ -280,6 +300,10 @@ public struct EvidenceCitation: Codable, Sendable, Equatable, Hashable {
     public let field: MetadataFieldID
     public let evidenceID: String
 
+    enum CodingKeys: String, CodingKey {
+        case field, evidenceID = "evidence_id"
+    }
+
     public init(field: MetadataFieldID, evidenceID: String) {
         self.field = field
         self.evidenceID = evidenceID
@@ -296,6 +320,10 @@ public struct ProposalAssociation: Codable, Sendable, Equatable {
     public let candidateRef: String?
     public let state: State
 
+    enum CodingKeys: String, CodingKey {
+        case candidateRef = "candidate_ref", state
+    }
+
     public init(candidateRef: String?, state: State) {
         self.candidateRef = candidateRef
         self.state = state
@@ -305,6 +333,10 @@ public struct ProposalAssociation: Codable, Sendable, Equatable {
 public struct ProposalConflict: Codable, Sendable, Equatable, Hashable {
     public let field: MetadataFieldID
     public let detail: String
+
+    enum CodingKeys: String, CodingKey {
+        case field, detail
+    }
 
     public init(field: MetadataFieldID, detail: String) {
         self.field = field
@@ -323,6 +355,12 @@ public struct ProposalEntry: Codable, Sendable, Equatable {
     public let conflicts: [ProposalConflict]
     public let confidence: DecisionConfidence
     public let reasoning: String
+
+    enum CodingKeys: String, CodingKey {
+        case entryRef = "entry_ref", projectAssociation = "project_association"
+        case documentCategory = "document_category", documentType = "document_type"
+        case metadata, evidence, unknownFields = "unknown_fields", conflicts, confidence, reasoning
+    }
 
     public init(entryRef: String, projectAssociation: ProposalAssociation?, documentCategory: String?,
                 documentType: String?, metadata: MetadataValues, evidence: [EvidenceCitation],
@@ -345,6 +383,10 @@ public struct MappingProposal: Codable, Sendable, Equatable {
     public let schemaVersion: String
     public let batchID: String
     public let entries: [ProposalEntry]
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version", batchID = "batch_id", entries
+    }
 
     public init(schemaVersion: String = "1.0", batchID: String, entries: [ProposalEntry]) {
         self.schemaVersion = schemaVersion
@@ -381,6 +423,18 @@ public struct ManifestEnvelope: Codable, Sendable, Equatable {
     /// Constant false in the Prototype: eligibility is a policy simulation and
     /// no serialized manifest may claim authority to write.
     public let grantsExecution: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case manifestID = "manifest_id", revision, supersedesRevision = "supersedes_revision"
+        case scopeID = "scope_id", sourceRootID = "source_root_id", profileID = "profile_id"
+        case profileVersion = "profile_version", schemaVersion = "schema_version"
+        case casePackID = "case_pack_id", casePackVersion = "case_pack_version"
+        case modelProvider = "model_provider", modelID = "model_id", contextRevision = "context_revision"
+        case promptVersion = "prompt_version", extractorVersion = "extractor_version"
+        case redactionVersion = "redaction_version", inputDigest = "input_digest"
+        case contextDigest = "context_digest", createdAt = "created_at", state
+        case grantsExecution = "grants_execution"
+    }
 
     public enum ManifestState: String, Codable, Sendable {
         case draft, validated, partiallyValidated = "partially_validated", invalidated
@@ -437,6 +491,10 @@ public struct FieldOutcome: Codable, Sendable, Equatable {
     public var evidenceIDs: [String]
     public var conflicts: [String]
 
+    enum CodingKeys: String, CodingKey {
+        case field, value, status, evidenceIDs = "evidence_ids", conflicts
+    }
+
     public init(field: MetadataFieldID, value: String?, status: Status, evidenceIDs: [String] = [],
                 conflicts: [String] = []) {
         self.field = field
@@ -457,6 +515,10 @@ public struct ManifestAssociation: Codable, Sendable, Equatable, Hashable {
     public let basis: String
     public let evidenceIDs: [String]
 
+    enum CodingKeys: String, CodingKey {
+        case kind, sourceID = "source_id", basis, evidenceIDs = "evidence_ids"
+    }
+
     public init(kind: Kind, sourceID: UUID, basis: String, evidenceIDs: [String] = []) {
         self.kind = kind
         self.sourceID = sourceID
@@ -468,6 +530,10 @@ public struct ManifestAssociation: Codable, Sendable, Equatable, Hashable {
 public struct ManifestTarget: Codable, Sendable, Equatable {
     public let databaseName: String?
     public let groupPath: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case databaseName = "database_name", groupPath = "group_path", resolved
+    }
     /// False while any template placeholder is unresolved; an unresolved target
     /// can never be eligible.
     public let resolved: Bool
@@ -497,6 +563,14 @@ public struct ManifestEntry: Codable, Sendable, Equatable {
     public var confidence: DecisionConfidence?
     public var providerReasoning: String?
 
+    enum CodingKeys: String, CodingKey {
+        case sourceID = "source_id", snapshotFingerprint = "snapshot_fingerprint"
+        case snapshotRevision = "snapshot_revision", sourceVersion = "source_version"
+        case relativePath = "relative_path", state, target, metadata, fields, associations
+        case eligibleForAutoExecution = "eligible_for_auto_execution"
+        case invalidatedReason = "invalidated_reason", confidence, providerReasoning = "provider_reasoning"
+    }
+
     public init(sourceID: UUID, snapshotFingerprint: String, snapshotRevision: Int, sourceVersion: Int,
                 relativePath: String, state: DecisionState, target: ManifestTarget,
                 metadata: MetadataValues = .allUnknown, fields: [FieldOutcome] = [],
@@ -511,7 +585,12 @@ public struct ManifestEntry: Codable, Sendable, Equatable {
         self.state = state
         self.target = target
         self.metadata = metadata
-        self.fields = fields
+        // Every entry states all twelve slots: an absent slot would be
+        // indistinguishable from "never considered", and the exported schema
+        // requires the full set.
+        self.fields = fields.isEmpty
+            ? MetadataFieldID.allCases.map { FieldOutcome(field: $0, value: metadata[$0], status: .unknown) }
+            : fields
         self.associations = associations
         self.eligibleForAutoExecution = eligibleForAutoExecution
         self.invalidatedReason = invalidatedReason
@@ -534,6 +613,10 @@ public struct Manifest: Codable, Sendable, Equatable {
     public var envelope: ManifestEnvelope
     public var entries: [ManifestEntry]
     public var report: ValidationReport
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version", envelope, entries, report = "validation_report"
+    }
 
     public init(schemaVersion: String = "1.0", envelope: ManifestEnvelope, entries: [ManifestEntry],
                 report: ValidationReport = ValidationReport()) {
@@ -625,4 +708,213 @@ struct MetadataFieldKey: CodingKey, Hashable {
         self.stringValue = stringValue
     }
     init?(intValue: Int) { nil }
+}
+
+// MARK: - Explicit artifact encoding
+//
+// Swift omits an optional property whose value is nil, but the artifact schemas
+// require every slot to be present: an explicit null means "unknown" while a
+// missing key means a malformed document. These encoders write the null.
+
+extension ManifestEnvelope {
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(manifestID.sourceKey, forKey: .manifestID)
+        try container.encode(revision, forKey: .revision)
+        try container.encode(supersedesRevision, forKey: .supersedesRevision)
+        try container.encode(scopeID.sourceKey, forKey: .scopeID)
+        try container.encode(sourceRootID.sourceKey, forKey: .sourceRootID)
+        try container.encode(profileID, forKey: .profileID)
+        try container.encode(profileVersion, forKey: .profileVersion)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(casePackID, forKey: .casePackID)
+        try container.encode(casePackVersion, forKey: .casePackVersion)
+        try container.encode(modelProvider, forKey: .modelProvider)
+        try container.encode(modelID, forKey: .modelID)
+        try container.encode(contextRevision, forKey: .contextRevision)
+        try container.encode(promptVersion, forKey: .promptVersion)
+        try container.encode(extractorVersion, forKey: .extractorVersion)
+        try container.encode(redactionVersion, forKey: .redactionVersion)
+        try container.encode(inputDigest, forKey: .inputDigest)
+        try container.encode(contextDigest, forKey: .contextDigest)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(state, forKey: .state)
+        try container.encode(grantsExecution, forKey: .grantsExecution)
+    }
+}
+
+extension ManifestEntry {
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(sourceID.sourceKey, forKey: .sourceID)
+        try container.encode(snapshotFingerprint, forKey: .snapshotFingerprint)
+        try container.encode(snapshotRevision, forKey: .snapshotRevision)
+        try container.encode(sourceVersion, forKey: .sourceVersion)
+        try container.encode(relativePath, forKey: .relativePath)
+        try container.encode(state, forKey: .state)
+        try container.encode(target, forKey: .target)
+        try container.encode(metadata, forKey: .metadata)
+        try container.encode(fields, forKey: .fields)
+        try container.encode(associations, forKey: .associations)
+        try container.encode(eligibleForAutoExecution, forKey: .eligibleForAutoExecution)
+        try container.encode(invalidatedReason, forKey: .invalidatedReason)
+        try container.encode(confidence, forKey: .confidence)
+        try container.encode(providerReasoning, forKey: .providerReasoning)
+    }
+}
+
+extension FieldOutcome {
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(field, forKey: .field)
+        try container.encode(value, forKey: .value)
+        try container.encode(status, forKey: .status)
+        try container.encode(evidenceIDs, forKey: .evidenceIDs)
+        try container.encode(conflicts, forKey: .conflicts)
+    }
+}
+
+extension ManifestTarget {
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(databaseName, forKey: .databaseName)
+        try container.encode(groupPath, forKey: .groupPath)
+        try container.encode(resolved, forKey: .resolved)
+    }
+}
+
+extension ProposalEntry {
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(entryRef, forKey: .entryRef)
+        try container.encode(projectAssociation, forKey: .projectAssociation)
+        try container.encode(documentCategory, forKey: .documentCategory)
+        try container.encode(documentType, forKey: .documentType)
+        try container.encode(metadata, forKey: .metadata)
+        try container.encode(evidence, forKey: .evidence)
+        try container.encode(unknownFields, forKey: .unknownFields)
+        try container.encode(conflicts, forKey: .conflicts)
+        try container.encode(confidence, forKey: .confidence)
+        try container.encode(reasoning, forKey: .reasoning)
+    }
+}
+
+extension ProposalAssociation {
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(candidateRef, forKey: .candidateRef)
+        try container.encode(state, forKey: .state)
+    }
+}
+
+extension ContextCandidate {
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(projectKey, forKey: .projectKey)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encode(basis, forKey: .basis)
+        try container.encode(memberSourceIDs.map { $0.sourceKey }.sorted(), forKey: .memberSourceIDs)
+        try container.encode(confidence, forKey: .confidence)
+    }
+}
+
+extension EvidenceRecord {
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(sourceID.sourceKey, forKey: .sourceID)
+        try container.encode(snapshotRevision, forKey: .snapshotRevision)
+        try container.encode(snapshotFingerprint, forKey: .snapshotFingerprint)
+        try container.encode(source, forKey: .source)
+        try container.encode(locator, forKey: .locator)
+        try container.encode(relativePath, forKey: .relativePath)
+        try container.encode(excerpt, forKey: .excerpt)
+        try container.encode(extractionStatus, forKey: .extractionStatus)
+        try container.encode(extractorVersion, forKey: .extractorVersion)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(contextCandidateID, forKey: .contextCandidateID)
+    }
+}
+
+extension ManifestEnvelope {
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        manifestID = try sourceUUID(container.decode(String.self, forKey: .manifestID))
+        revision = try container.decode(Int.self, forKey: .revision)
+        supersedesRevision = try container.decodeIfPresent(Int.self, forKey: .supersedesRevision)
+        scopeID = try sourceUUID(container.decode(String.self, forKey: .scopeID))
+        sourceRootID = try sourceUUID(container.decode(String.self, forKey: .sourceRootID))
+        profileID = try container.decode(String.self, forKey: .profileID)
+        profileVersion = try container.decode(String.self, forKey: .profileVersion)
+        schemaVersion = try container.decode(String.self, forKey: .schemaVersion)
+        casePackID = try container.decode(String.self, forKey: .casePackID)
+        casePackVersion = try container.decode(String.self, forKey: .casePackVersion)
+        modelProvider = try container.decode(String.self, forKey: .modelProvider)
+        modelID = try container.decodeIfPresent(String.self, forKey: .modelID)
+        contextRevision = try container.decode(Int.self, forKey: .contextRevision)
+        promptVersion = try container.decode(String.self, forKey: .promptVersion)
+        extractorVersion = try container.decode(String.self, forKey: .extractorVersion)
+        redactionVersion = try container.decodeIfPresent(String.self, forKey: .redactionVersion)
+        inputDigest = try container.decode(String.self, forKey: .inputDigest)
+        contextDigest = try container.decode(String.self, forKey: .contextDigest)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        state = try container.decode(ManifestState.self, forKey: .state)
+        grantsExecution = try container.decode(Bool.self, forKey: .grantsExecution)
+        // An artifact that claims execution authority is not a Forma manifest.
+        guard !grantsExecution else { throw FormaError.invalidOutput }
+    }
+}
+
+extension ManifestEntry {
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sourceID = try sourceUUID(container.decode(String.self, forKey: .sourceID))
+        snapshotFingerprint = try container.decode(String.self, forKey: .snapshotFingerprint)
+        snapshotRevision = try container.decode(Int.self, forKey: .snapshotRevision)
+        sourceVersion = try container.decode(Int.self, forKey: .sourceVersion)
+        relativePath = try container.decode(String.self, forKey: .relativePath)
+        state = try container.decode(DecisionState.self, forKey: .state)
+        target = try container.decode(ManifestTarget.self, forKey: .target)
+        metadata = try container.decode(MetadataValues.self, forKey: .metadata)
+        fields = try container.decode([FieldOutcome].self, forKey: .fields)
+        associations = try container.decode([ManifestAssociation].self, forKey: .associations)
+        eligibleForAutoExecution = try container.decode(Bool.self, forKey: .eligibleForAutoExecution)
+        invalidatedReason = try container.decodeIfPresent(String.self, forKey: .invalidatedReason)
+        confidence = try container.decodeIfPresent(DecisionConfidence.self, forKey: .confidence)
+        providerReasoning = try container.decodeIfPresent(String.self, forKey: .providerReasoning)
+    }
+}
+
+extension ContextCandidate {
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        projectKey = try container.decode(String.self, forKey: .projectKey)
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        basis = try container.decode([Basis].self, forKey: .basis)
+        // Membership is stored as sorted lowercase UUID strings and must come
+        // back as the same set or an invalidation comparison would be wrong.
+        let keys = try container.decode([String].self, forKey: .memberSourceIDs)
+        memberSourceIDs = try Set(keys.map { try sourceUUID($0) })
+        confidence = try container.decode(DecisionConfidence.self, forKey: .confidence)
+    }
+}
+
+extension EvidenceRecord {
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        sourceID = try sourceUUID(container.decode(String.self, forKey: .sourceID))
+        snapshotRevision = try container.decode(Int.self, forKey: .snapshotRevision)
+        snapshotFingerprint = try container.decode(String.self, forKey: .snapshotFingerprint)
+        source = try container.decode(EvidenceSource.self, forKey: .source)
+        locator = try container.decodeIfPresent(EvidenceLocator.self, forKey: .locator)
+        relativePath = try container.decodeIfPresent(String.self, forKey: .relativePath)
+        excerpt = try container.decodeIfPresent(String.self, forKey: .excerpt)
+        extractionStatus = try container.decode(EvidenceStatus.self, forKey: .extractionStatus)
+        extractorVersion = try container.decode(String.self, forKey: .extractorVersion)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        contextCandidateID = try container.decodeIfPresent(String.self, forKey: .contextCandidateID)
+    }
 }
