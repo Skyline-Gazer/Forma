@@ -48,49 +48,36 @@ enum MappingCorrectionMigrations {
                 CREATE INDEX corrections_source ON corrections(source_id, field);
                 """)
         }
-        // Version 1 left one column meaning two things, depending on a third;
-        // the statements that undo that, and the reason for each of them, are
-        // written once, on `revisionSplitSQL`.
         migrator.registerMigration("mapping-corrections-v2") { db in
             try db.execute(sql: revisionSplitSQL)
         }
     }
 
     /// The statements that split `corrections`' one ambiguous column into two
-    /// honest ones.
-    ///
-    /// Version 1 stored a single revision number whose meaning depended on
-    /// `review_state`: the revision produced on the accepted path, the revision
-    /// targeted on the refused one. Two rows for one manifest could then name
-    /// the same revision while describing different facts, and nothing in the
-    /// schema stopped it. This states the two facts in two columns and makes
-    /// "one revision has at most one producing correction" a constraint instead
-    /// of a convention.
+    /// honest ones: version 1 stored one revision number whose meaning depended
+    /// on `review_state` - the revision produced on the accepted path, the
+    /// revision targeted on the refused one - so two rows for one manifest
+    /// could name the same revision while describing different facts, and the
+    /// schema did not stop it. Here the two facts get two columns, and "one
+    /// revision has at most one producing correction" becomes a constraint.
     ///
     /// The `NOT EXISTS` in the first `UPDATE` is what keeps the last statement
     /// from failing. Version 1 never checked that the revision under review was
     /// still current, so a history can hold two accepted rows that both say
-    /// they read revision 1 - one of them really produced 2, the other was
-    /// written later and produced some higher number that the old column never
-    /// recorded. Computing `supersedes + 1` for both gives both the claim on 2,
-    /// and `CREATE UNIQUE INDEX` over duplicates is an error: the migration
-    /// would abort and the workspace would refuse to open, which is a worse
-    /// outcome than one row that does not know which version it wrote. The
-    /// earlier row keeps the computed claim, because it is the one whose
-    /// arithmetic can be true; the later is left with no produced revision and
-    /// the review screen says so, rather than being handed a number that
-    /// matches nothing.
+    /// they read revision 1: one really produced 2, the other was written later
+    /// and produced some higher number the old column never recorded. Computing
+    /// `supersedes + 1` for both hands both the claim on 2, and creating a
+    /// unique index over duplicates is an error - the migration would abort and
+    /// the workspace would refuse to open, which is worse than one row that
+    /// cannot say which version it wrote. The earlier row keeps the computed
+    /// claim, because it is the one whose arithmetic can be true; the later is
+    /// left unattributed.
     ///
-    /// Named rather than inlined so the statements can be run against a table
-    /// that has rows in it: on a fresh database version 2 splits an empty table,
-    /// so the arithmetic and the collision rule would first run on a reviewer's
-    /// real history. Two tests cover it from different sides -
-    /// `legacyRowsSplitOntoTheNewColumns` executes these statements over a
-    /// version 1 shaped table filled by hand, and
-    /// `registeredMigrationSplitsAVersionOneHistory` rewinds a database the
-    /// production store created and reopens it, which is what exercises the
-    /// registered migration, its ordering against `case_candidates`, and the
-    /// index and column changes rather than the text alone.
+    /// A named constant so the statements can be run against a table that has
+    /// rows in it: on a fresh database this splits an empty table, so nothing
+    /// would exercise the arithmetic and the collision rule until a reviewer's
+    /// real history met them.
+
     static let revisionSplitSQL = """
         ALTER TABLE corrections ADD COLUMN produced_revision INTEGER;
         UPDATE corrections SET produced_revision = supersedes_revision + 1

@@ -244,21 +244,17 @@ extension SourceWorkspace {
             evidenceIDs: evidenceIDs, origin: origin, context: context, evidence: evidence,
             currentEntries: listing.entries)
         if applied.violations.isEmpty {
-            // Version and decision are one unit of work: a failure between the
-            // two writes would leave a row claiming a revision that was never
-            // stored, and the unique index would then refuse the retry.
+            // Publish and record in one transaction: a row claiming a revision
+            // that was never written would occupy the unique index and make the
+            // retry refuse itself.
             let published = try await store.database.write { db -> (manifest: Manifest,
                                                                     record: CorrectionRecord) in
-                // The revision under review must still be current, or a
-                // decision made against revision 3 would be published over
-                // revision 4 and silently discard it; `persist` numbers from the
-                // store, so this is the only place that can tell the two apart.
+                // `persist` numbers from the store, so this is the only place
+                // that can tell the revision under review from a newer one.
                 guard try MappingStore.nextManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
                         == manifest.envelope.revision + 1 else { throw FormaError.sourceChanged }
-                // A collision after that check cannot be a user mistake: the
-                // number is assigned here. It means the store already holds a
-                // decision claiming it, which `.storage` reports - the error
-                // vocabulary is a published contract, so no new case for it.
+                // A collision after that check is the store holding a second
+                // claim on one revision, which `.storage` reports.
                 let stored = try Self.persist(applied.manifest, scopeID: scope.id, in: db)
                 var record = applied.correction
                 record.producedRevision = stored.envelope.revision
