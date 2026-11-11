@@ -239,11 +239,12 @@ public enum MappingPrompt {
         return try stableJSON(document)
     }
 
-    /// The vocabulary a field may take, where one exists. `categories` and
-    /// `document_types` travel once as lists with meanings; a field rule names
-    /// its own vocabulary here, so "use only the profile's values" points at
-    /// something the model can check per field instead of a relation it has to
-    /// infer from two unrelated arrays.
+    /// The vocabulary a field may take, where one exists. Each identifier
+    /// travels exactly once: inside the rule for the field that accepts it. The
+    /// category list is sent again below, but with the *meaning* of each entry,
+    /// which no rule carries - so "use only the profile's values" points at
+    /// something the model can check per field rather than at a relation it has
+    /// to infer from two unrelated arrays.
     static func allowedValues(for field: MetadataFieldID, profile: MappingProfile) -> [String] {
         switch field {
         case .documentcategory: profile.categories.map(\.identifier)

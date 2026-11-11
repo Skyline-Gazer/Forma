@@ -16,41 +16,51 @@ struct CasePackTests {
         #expect(verified * 2 >= pack.cases.count)
     }
 
-    /// What the shipped artifact must contain, as opposed to what the rules
-    /// reject: the rules are tested by construction in `positivesOnlyRejected`,
-    /// `conflictKindIsRequired` and `singleProfilePackRejected`, each of which
-    /// builds a pack that clears every guard except the one under test. This
-    /// test would stay green if a guard were deleted, and that is the point -
-    /// it is the inventory check, not the enforcement check.
-    @Test("both profiles and every counter-example kind are represented")
+    /// The shipped pair - pack and profiles - has to agree, and the agreement is
+    /// computed by production code (`CasePack.untaughtCategories`), not by string
+    /// matching written here. `positivesOnlyRejected`, `conflictKindIsRequired`
+    /// and `singleProfilePackRejected` cover the guards in `check` by
+    /// construction; `declaredTrapGapsAreReported` covers this one.
+    @Test("the shipped pack teaches the traps the shipped profiles declare")
     func coverage() throws {
         let pack = try CasePack.shipped()
-        let profiles = Set(pack.cases.flatMap(\.profiles))
-        #expect(profiles.contains(ProjectArchiveContract.id))
-        #expect(profiles.contains(VendorLibraryContract.id))
+        let profiles = [try MappingProfile.projectArchive(), try MappingProfile.vendorLibrary()]
         let kinds = Set(pack.cases.map(\.kind))
         for kind in [CasePack.Sample.Kind.positive, .negative, .conflict, .refusal] {
             #expect(kinds.contains(kind), "\(kind) must be taught")
         }
-        // Neither list below is invented by this test. The categories come from
-        // the Project Archive profile, which is the artifact SPEC §5.1 froze, and
-        // the field name comes from the field enum. A pack that stops teaching a
-        // declared trap fails here, and a profile that gains a category forces
-        // the pack to teach it too.
-        //
-        // The trap is the category a counter-example refuses, not the one a file
-        // lands in: a case that refuses 03_厂商支持文件 and files the document
-        // under 04 teaches exactly the thing that went wrong historically.
-        let refused = pack.cases.filter { $0.kind != .positive }.flatMap(\.whyNot)
+        #expect(CasePack.untaughtCategories(in: pack, profiles: profiles).isEmpty,
+                "a profile names a trap the pack never refuses")
+        try CasePack.check(pack, teaching: profiles)
+    }
+
+    @Test("a pack that stops refusing a declared trap is reported, not assumed")
+    func declaredTrapGapsAreReported() throws {
+        let pack = try CasePack.shipped()
         let archive = try MappingProfile.projectArchive()
-        for category in archive.categories.map(\.identifier) {
-            #expect(refused.contains { $0.contains(category) },
-                    "the profile declares \(category) but no counter-example refuses it")
+        // Every counter-example that refuses 03_厂商支持文件 loses that reason, so
+        // the profile still declares the trap and the pack no longer teaches it.
+        let category = "03_厂商支持文件"
+        var stripped: [CasePack.Sample] = []
+        for sample in pack.cases {
+            if sample.kind == .positive || !sample.whyNot.contains(where: { $0.contains(category) }) {
+                stripped.append(sample)
+            } else {
+                stripped.append(CasePack.Sample(
+                    caseID: sample.caseID, kind: sample.kind, scenario: sample.scenario,
+                    profiles: sample.profiles, input: sample.input, expected: sample.expected,
+                    whyNot: sample.whyNot.map { $0.replacingOccurrences(of: category, with: "该分类") },
+                    evidenceLevel: sample.evidenceLevel, sourceVersion: sample.sourceVersion,
+                    review: sample.review))
+            }
         }
-        // The Vendor Library trap pulls the other way: generic vendor material
-        // must not be dragged into a project it does not belong to.
-        #expect(refused.contains { $0.contains(MetadataFieldID.projectname.rawValue) },
-                "the project-binding trap must be taught for the vendor profile")
+        let gap = CasePack(schemaVersion: pack.schemaVersion, id: pack.id, version: pack.version, cases: stripped)
+        let missing = CasePack.untaughtCategories(in: gap, profiles: [archive])
+        #expect(missing[archive.profileID] == [category],
+                "the production check must name the trap that stopped being taught, got \(missing)")
+        #expect(throws: FormaError.incompatible) {
+            try CasePack.check(gap, teaching: [archive])
+        }
     }
 
     @Test("a pack that teaches only one profile is refused")

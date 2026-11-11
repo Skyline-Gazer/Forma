@@ -100,7 +100,7 @@ public actor MappingEngine {
         var state = BatchState(nextRef: 1)
         let first = Self.batches(from: request.entries, context: request.context, limit: request.entryLimit,
                                  state: &state)
-        for var batch in Self.withEvidence(first, evidence: evidence) {
+        for batch in Self.withEvidence(first, evidence: evidence) {
             let attempt = await answerer.answer(provider: request.provider, model: request.model,
                                                 allowCloud: request.allowCloud, profile: request.profile,
                                                 context: request.context, casePack: casePack, batch: batch,
@@ -108,7 +108,7 @@ public actor MappingEngine {
             requests += attempt.requests
             usage = usage + attempt.usage
             modelID = attempt.modelID ?? modelID
-            refused += merge(attempt: attempt, batch: &batch, into: &answers, failures: &failures)
+            refused += merge(attempt: attempt, batch: batch, into: &answers, failures: &failures)
             if Task.isCancelled { break }
         }
 
@@ -118,7 +118,7 @@ public actor MappingEngine {
         // One bounded re-ask: only entries that hold because no body evidence
         // exists yet, and only where reading the file is actually possible.
         let recoverable = Self.entriesNeedingEvidence(resolved, request: request, evidence: current)
-        if !recoverable.isEmpty, !Task.isCancelled {
+        if !Task.isCancelled, !recoverable.isEmpty {
             let extracted = await extractEvidence(for: recoverable)
             // Registering the re-read rows is not optional: the manifest this
             // pass produces cites them, and a citation the registry cannot
@@ -142,7 +142,7 @@ public actor MappingEngine {
                 var retryState = BatchState(nextRef: 1)
                 let retry = Self.batches(from: retryable, context: request.context, limit: request.entryLimit,
                                          state: &retryState)
-                for var batch in Self.withEvidence(retry, evidence: current) {
+                for batch in Self.withEvidence(retry, evidence: current) {
                     let attempt = await answerer.answer(provider: request.provider, model: request.model,
                                                         allowCloud: request.allowCloud, profile: request.profile,
                                                         context: request.context, casePack: casePack, batch: batch,
@@ -150,7 +150,7 @@ public actor MappingEngine {
                     requests += attempt.requests
                     usage = usage + attempt.usage
                     modelID = attempt.modelID ?? modelID
-                    refused += merge(attempt: attempt, batch: &batch, into: &answers, failures: &failures)
+                    refused += merge(attempt: attempt, batch: batch, into: &answers, failures: &failures)
                     if Task.isCancelled { break }
                 }
             }
@@ -233,7 +233,7 @@ public actor MappingEngine {
     // MARK: - Answers
 
     @discardableResult
-    private func merge(attempt: MappingAttempt, batch: inout MappingBatch, into answers: inout [UUID: ProposalForEntry],
+    private func merge(attempt: MappingAttempt, batch: MappingBatch, into answers: inout [UUID: ProposalForEntry],
                        failures: inout [UUID: FormaError]) -> Int {
         let refs = Dictionary(uniqueKeysWithValues: batch.entries.map { ($0.ref, $0.sourceID) })
         var refused = 0

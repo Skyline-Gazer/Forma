@@ -42,7 +42,7 @@ public struct RedactionPlan: Sendable {
 
     private let salt: String
     private let terms: [(term: String, role: Role)]
-    /// term → placeholder, resolved once so numbering is stable for the plan.
+    /// term → placeholder, resolved once so a plan and its preview never disagree.
     private let replacements: [String: String]
 
     public init(terms: [String: Role], salt: String) {
@@ -117,14 +117,16 @@ public struct RedactionPlan: Sendable {
         return output
     }
 
-    /// Record and content identities must never travel. Three shapes cover them:
-    /// a UUID is a database handle; a run of exactly 64 hex digits is a SHA-256
-    /// snapshot fingerprint; and any other run of 32 or more hex digits is a
-    /// digest of some kind - SHA-1, a content hash, or an internal identifier
-    /// this program did not mint but should not forward either. The third rule is
-    /// deliberately blunt: a long hex business code is replaced too. That is the
-    /// safe direction, because such a code is a handle into somebody else's
-    /// system, and the model has no use for any of them.
+    /// Record and content identities must never travel. Three shapes cover them,
+    /// and the order in the list below is load-bearing: a UUID is a database
+    /// handle, a run of exactly 64 hex digits is a SHA-256 snapshot fingerprint,
+    /// and any other run of 32 or more hex digits is some other digest - SHA-1, a
+    /// content hash, or an internal identifier this program did not mint but
+    /// should not forward either. The exact-64 rule has to run before the
+    /// open-ended one, or the open-ended rule consumes its input first and the
+    /// distinction survives only in this comment. The last rule is deliberately
+    /// blunt: a long hex business code is replaced too, because such a code is a
+    /// handle into somebody else's system and the model has no use for it.
     private func replaceIdentifiers(in value: String) -> String {
         var output = value
         for pattern in [
