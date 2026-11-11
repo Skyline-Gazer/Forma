@@ -1,0 +1,42 @@
+# Forma CNB configuration — AI Code Review only.
+# GitHub Actions (macOS, Xcode 26.3) remains the only build/test authority.
+# No CNB compile, test, release or deployment stage is defined here by design.
+# Pinned upstream image tag recorded in docs/ADS-ADOPTION.md with provenance.
+# Review output is untrusted feedback bound to the exact reviewed source SHA.
+
+"**":
+  pull_request:
+    - docker:
+        image: python:3.12-slim
+      stages:
+        - name: clear-stale-review-result
+          script: |
+            rm -f ./code_review.json
+            test -n "$CNB_PULL_REQUEST_SHA"
+            test -n "$CNB_PULL_REQUEST_TARGET_SHA"
+        - name: ai-code-review
+          image: cnbcool/code-review:v1.22.2
+          settings:
+            output: ./code_review.json
+            context: 10
+            comment: true
+            max_comments: 10
+            min_confidence: medium
+            exclude_categories: "style,nit"
+            review_event: auto
+            timeout_minutes: 20
+            max_turns: 30
+            rules: |
+              - Forma is a macOS Swift 6 / SwiftUI application; GitHub is the Primary
+                repository and GitHub Actions is the only build and test authority.
+              - Do not require or add CNB build, test, release or deployment stages.
+              - `docs/SPEC.md` is a frozen product contract: never propose silently
+                changing its product semantics, Profile field contracts or read-only
+                boundaries.
+              - Any DEVONthink capability must stay read-only in P0-P3; report write,
+                Replicant or unverified live behavior as unverified rather than supported.
+              - Do not accept mock-based evidence as real MCP, Provider, OneDrive or
+                GUI verification; statuses must remain PASS/FAIL/BLOCKED/NOT_VERIFIED.
+              - Reject stale review: findings must describe the current source SHA.
+              - Do not require secrets, API keys, customer data or internal paths in
+                any committed file; public examples must be synthetic or redacted.
