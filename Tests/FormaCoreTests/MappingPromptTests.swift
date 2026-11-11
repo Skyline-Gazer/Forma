@@ -141,7 +141,7 @@ struct MappingPromptTests {
         #expect(text.contains("«厂商1»"))
         #expect(text.contains("«投标主体1»"))
         #expect(text.contains("«人员1»"))
-        #expect(text.contains("«金额1»"))
+        #expect(text.contains("«金额"), "the amount must be replaced, got \(text)")
         for term in ["客户甲有限公司", "示例厂商乙", "我方投标公司丙", "张三", "1,234,567.89"] {
             #expect(!text.contains(term), "\(term) survived redaction")
         }
@@ -152,6 +152,50 @@ struct MappingPromptTests {
         #expect(plan.redact(path: "项目/\(uuid)/公告.pdf").contains("«标识»"))
         #expect(plan.roles[.customer] == 1)
         #expect(plan.leaks("含客户甲有限公司的路径").count == 1)
+    }
+
+    @Test("an amount label follows the value, not the call order")
+    func amountLabelsAreValueDerived() throws {
+        let plan = RedactionPlan.none
+        let prose = try plan.redact(text: "报价 1,234,567.89 元")
+        let table = try plan.redact(text: "表格合计 1,234,567.89 元")
+        let other = try plan.redact(text: "报价 980,000.00 元")
+        let first = try #require(amountLabel(in: prose))
+        // A total that appears in prose and again in a table is one fact the
+        // mapping has to be able to recognise; two labels for it would read as
+        // two different prices.
+        #expect(amountLabel(in: table) == first, "one figure must share one label: \(prose) / \(table)")
+        let second = try #require(amountLabel(in: other))
+        #expect(second != first, "different figures must not collapse onto one label")
+        #expect(!prose.contains("1,234,567.89"))
+    }
+
+    @Test("references, dates and versions are not amounts")
+    func identifiersSurviveAmountMatching() throws {
+        let plan = RedactionPlan.none
+        let text = try plan.redact(text: "招标编号 ZB-DEMO-2026-014，版本 v1.234，2026年3月15日截止，预算 1,200 万元")
+        #expect(text.contains("ZB-DEMO-2026-014"), "a tender reference must survive: \(text)")
+        #expect(text.contains("v1.234"), "a version must survive: \(text)")
+        #expect(text.contains("2026年3月15日"), "a date must survive: \(text)")
+        #expect(!text.contains("1,200"), "an explicit 万元 figure must be replaced: \(text)")
+    }
+
+    @Test("a grouped number is money only when the words around it say so")
+    func bareGroupedNumbersNeedACue() throws {
+        let plan = RedactionPlan.none
+        let priced = try plan.redact(text: "中标价 1,200,000 元整")
+        let cued = try plan.redact(text: "合计 1,200,000")
+        let uncued = try plan.redact(text: "档案流水号 1,200,000")
+        #expect(!priced.contains("1,200,000"))
+        #expect(!cued.contains("1,200,000"), "a money word in front makes it an amount: \(cued)")
+        #expect(uncued.contains("1,200,000"), "a bare serial number is not a price: \(uncued)")
+    }
+
+    /// The amount placeholder this plan produced, if any.
+    private func amountLabel(in value: String) -> String? {
+        guard let start = value.range(of: "«金额") else { return nil }
+        guard let end = value[start.upperBound...].range(of: "»") else { return nil }
+        return String(value[start.lowerBound..<end.upperBound])
     }
 
     @Test("an identity plan records that no redaction was applied")

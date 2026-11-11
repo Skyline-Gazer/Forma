@@ -9,9 +9,14 @@ import Foundation
 /// distinct - a customer never collapses onto a vendor or a bidding entity -
 /// because those distinctions are exactly what the mapping has to reason about.
 ///
-/// Placeholders are derived from the term and a per-workspace salt, so the same
-/// term always becomes the same label inside one workspace, and the label is
-/// not reversible into the term.
+/// A term label is `«<role><ordinal>»`, and the ordinal is assigned by the
+/// order the term's salted digest falls into, not by alphabet or input order.
+/// The same term set with the same salt therefore always produces the same
+/// labels, the label cannot be reversed into the term without the salt, and
+/// the numbering reveals nothing about how the caller happened to list its
+/// names. Amounts are labelled by a digest of the value itself, so two
+/// placeholders sharing a suffix really are the same number - which is the
+/// fact a mapping needs when a total appears in prose and in a table.
 public struct RedactionPlan: Sendable {
     public enum Role: String, CaseIterable, Sendable {
         case customer, vendor, bidder, agent, person, project, amount, identifier
@@ -39,12 +44,7 @@ public struct RedactionPlan: Sendable {
 
     public init(terms: [String: Role], salt: String) {
         self.salt = salt
-        // Deterministic ordering: role first, then the term, so two plans built
-        // from the same set of names produce identical labels.
-        self.terms = terms.sorted {
-            if $0.value != $1.value { return $0.value.rawValue < $1.value.rawValue }
-            return $0.key < $1.key
-        }.map { (term: $0.key, role: $0.value) }
+        self.terms = Self.ordered(terms: terms, salt: salt)
         var counters: [Role: Int] = [:]
         var replacements: [String: String] = [:]
         for entry in self.terms {
@@ -52,6 +52,23 @@ public struct RedactionPlan: Sendable {
             replacements[entry.term] = "«\(entry.role.label)\(counters[entry.role]!)»"
         }
         self.replacements = replacements
+    }
+
+    /// Role first (so the inventory stays readable), then the salted digest of
+    /// the term. Hash ordering is what makes the ordinal carry no information
+    /// back to the caller's input order or to anyone who guesses the list.
+    private static func ordered(terms: [String: Role], salt: String) -> [(term: String, role: Role)] {
+        terms.map { (term: $0.key, role: $0.value, key: digest(of: "\(salt)\u{1f}\($0.key)")) }
+            .sorted {
+                if $0.role != $1.role { return $0.role.rawValue < $1.role.rawValue }
+                if $0.key != $1.key { return $0.key < $1.key }
+                return $0.term < $1.term
+            }
+            .map { (term: $0.term, role: $0.role) }
+    }
+
+    private static func digest(of value: String) -> String {
+        SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     public static var none: RedactionPlan { RedactionPlan(terms: [:], salt: "forma-default-salt") }
@@ -116,31 +133,62 @@ public struct RedactionPlan: Sendable {
     /// Prices are the highest-sensitivity content in this corpus, and a blank
     /// template versus a filled quotation is a *structural* distinction, so the
     /// placeholder keeps the shape ("a number was here") rather than the value.
+    ///
+    /// Matching is deliberately narrow. A bare digit run is far more often a
+    /// tender reference (`ZB-DEMO-2026-014`), a date (`2026年3月`) or a version
+    /// (`v1.234`) than a price, and rewriting one of those into an amount
+    /// placeholder silently removes the very field the mapping was asked to
+    /// read. A number counts as money only when it carries a currency unit, has
+    /// cents, or is thousands-grouped with money words in front of it.
     private func replaceAmounts(in value: String) -> String {
-        var counter = 0
         var output = value
-        for pattern in [
-            #"(?:¥|￥|\$|人民币)\s?[0-9][0-9,]*(?:\.[0-9]+)?"#,
-            #"[0-9][0-9,]*(?:\.[0-9]{1,2})?\s*(?:元|万元|万)"#,
-            #"(?<![0-9])[0-9]{1,3}(?:,[0-9]{3})+(?![0-9])"#,
-        ] {
-            output = replaceMatches(of: pattern, in: output) { _ in
-                counter += 1
-                return "«金额\(counter)»"
+        for pattern in Self.amountPatterns {
+            guard let expression = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(output.startIndex..., in: output)
+            for match in expression.matches(in: output, range: range).reversed() {
+                guard let swift = Range(match.range, in: output) else { continue }
+                let text = String(output[swift])
+                // Never rewrite something an earlier pass already replaced.
+                if text.contains("«") { continue }
+                guard Self.looksLikeAmount(text, before: output[output.startIndex..<swift.lowerBound]) else {
+                    continue
+                }
+                output.replaceSubrange(swift, with: amountLabel(for: text))
             }
         }
         return output
     }
 
-    private func replaceMatches(of pattern: String, in value: String, _ transform: (String) -> String) -> String {
-        guard let expression = try? NSRegularExpression(pattern: pattern) else { return value }
-        let range = NSRange(value.startIndex..., in: value)
-        var output = value
-        for match in expression.matches(in: value, range: range).reversed() {
-            guard let swift = Range(match.range, in: value) else { continue }
-            output.replaceSubrange(swift, with: transform(String(value[swift])))
-        }
-        return output
+    private static let amountPatterns = [
+        // A currency symbol in front of the number.
+        #"(?<![0-9A-Za-z])(?:¥|￥|\$|人民币)\s*[0-9][0-9,]*(?:\.[0-9]+)?"#,
+        // A number with an explicit unit. A bare `万` is not enough: 万象 and
+        // 万达 are company names, and their digits must survive.
+        #"(?<![0-9A-Za-z.,\-/:])[0-9][0-9,]*(?:\.[0-9]{1,2})?\s*(?:万元|亿元|元)(?![0-9A-Za-z])"#,
+        // Comma-grouped numbers, judged by the words in front of them.
+        #"(?<![0-9A-Za-z.,\-/:])[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?(?![0-9A-Za-z.,\-/:])"#,
+    ]
+
+    private static let moneyCues = ["价", "金额", "报价", "费用", "预算", "税", "合计", "付款",
+                                    "保证金", "中标", "成本", "人民币"]
+
+    private static func looksLikeAmount(_ text: String, before context: Substring) -> Bool {
+        if text.contains(where: { $0 == "¥" || $0 == "￥" || $0 == "$" }) { return true }
+        if text.contains("元") || text.contains("人民币") { return true }
+        if text.contains(".") { return true }
+        let window = String(context.suffix(16))
+        return moneyCues.contains { window.contains($0) }
+    }
+
+    /// Same number, same label - in a path or a body, in this call or the next.
+    /// A per-call counter would let two different figures share one label and
+    /// make the model read them as one amount, and would reset between the
+    /// path and text entry points.
+    private func amountLabel(for text: String) -> String {
+        let digits = String(text.filter { $0.isNumber })
+        var hasher = SHA256()
+        hasher.update(data: Data("\(salt)\u{1f}\u{1f}\u{1f}\(digits)".utf8))
+        return "«金额\(hasher.finalize().prefix(2).map { String(format: "%02X", $0) }.joined())»"
     }
 
     /// A caller may ask whether a specific string would survive redaction, which

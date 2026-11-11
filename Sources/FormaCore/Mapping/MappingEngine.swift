@@ -78,13 +78,27 @@ public actor MappingEngine {
     private let casePack: CasePack
     private let answerer: any MappingAnswering
     private let workspace: SourceWorkspace
+    /// The registry write the bounded re-ask depends on. Split out from the
+    /// workspace actor only so a store that refuses a write can be exercised;
+    /// the ordinary initialiser binds it to the workspace, which is what every
+    /// real run uses.
+    private let recordEvidence: @Sendable (UUID, [EvidenceRecord]) async throws -> Void
 
     public init(profile: MappingProfile, casePack: CasePack, answerer: any MappingAnswering,
                 workspace: SourceWorkspace) {
+        self.init(profile: profile, casePack: casePack, answerer: answerer, workspace: workspace) { id, records in
+            try await workspace.recordEvidence(records, for: id)
+        }
+    }
+
+    public init(profile: MappingProfile, casePack: CasePack, answerer: any MappingAnswering,
+                workspace: SourceWorkspace,
+                recordEvidence: @escaping @Sendable (UUID, [EvidenceRecord]) async throws -> Void) {
         self.profile = profile
         self.casePack = casePack
         self.answerer = answerer
         self.workspace = workspace
+        self.recordEvidence = recordEvidence
     }
 
     public func run(_ request: MappingRunRequest) async -> MappingRunOutcome {
@@ -120,26 +134,40 @@ public actor MappingEngine {
         let recoverable = Self.entriesNeedingEvidence(resolved, request: request, evidence: current)
         if !recoverable.isEmpty, !Task.isCancelled {
             let extracted = await extractEvidence(for: recoverable)
-            for (id, records) in extracted { current[id] = records }
             // Registering the re-read rows is not optional: the manifest this
             // pass produces cites them, and a citation the registry cannot
-            // resolve would make the stored revision unverifiable later.
+            // resolve would make the stored revision unverifiable later. So
+            // evidence the registry will not accept is not used at all: the
+            // entry keeps the hold it already has and the reason is recorded,
+            // instead of a second answer being built on rows nothing can read
+            // back. A store that refuses a write - disk full, database locked -
+            // is a real failure mode, not a theoretical one.
+            var registered: [UUID: [EvidenceRecord]] = [:]
             for (id, records) in extracted {
-                try? await workspace.recordEvidence(records, for: id)
+                do {
+                    try await recordEvidence(id, records)
+                    registered[id] = records
+                } catch {
+                    failures[id] = error as? FormaError ?? .unavailable
+                }
             }
-            var retryState = BatchState(nextRef: 1)
-            let retry = Self.batches(from: recoverable, context: request.context, limit: request.entryLimit,
-                                     state: &retryState)
-            for var batch in Self.withEvidence(retry, evidence: current) {
-                let attempt = await answerer.answer(provider: request.provider, model: request.model,
-                                                    allowCloud: request.allowCloud, profile: request.profile,
-                                                    context: request.context, casePack: casePack, batch: batch,
-                                                    redaction: request.redaction)
-                requests += attempt.requests
-                usage = usage + attempt.usage
-                modelID = attempt.modelID ?? modelID
-                refused += merge(attempt: attempt, batch: &batch, into: &answers, failures: &failures)
-                if Task.isCancelled { break }
+            for (id, records) in registered { current[id] = records }
+            let retryable = recoverable.filter { registered[$0.id] != nil }
+            if !retryable.isEmpty {
+                var retryState = BatchState(nextRef: 1)
+                let retry = Self.batches(from: retryable, context: request.context, limit: request.entryLimit,
+                                         state: &retryState)
+                for var batch in Self.withEvidence(retry, evidence: current) {
+                    let attempt = await answerer.answer(provider: request.provider, model: request.model,
+                                                        allowCloud: request.allowCloud, profile: request.profile,
+                                                        context: request.context, casePack: casePack, batch: batch,
+                                                        redaction: request.redaction)
+                    requests += attempt.requests
+                    usage = usage + attempt.usage
+                    modelID = attempt.modelID ?? modelID
+                    refused += merge(attempt: attempt, batch: &batch, into: &answers, failures: &failures)
+                    if Task.isCancelled { break }
+                }
             }
             resolved = validate(request: request, answers: Array(answers.values), evidence: current)
         }

@@ -148,7 +148,7 @@ public struct ProviderMappingClient: Sendable {
                         throw FormaError.invalidResponse
                     }
                     reportedModel = transport.reportedModel(from: envelope, key: key) ?? reportedModel
-                    usage = usage + Self.usage(envelope, provider: provider)
+                    usage = usage + MappingUsage(transport.usage(from: envelope, provider: provider))
                     text = try transport.outputText(from: envelope, provider: provider)
                 } catch let error as FormaError {
                     // A rate limit gets one bounded retry; anything else stops.
@@ -199,21 +199,6 @@ public struct ProviderMappingClient: Sendable {
         )
     }
 
-    private static func usage(_ envelope: [String: Any], provider: ProbeProvider) -> MappingUsage {
-        guard let values = envelope["usage"] as? [String: Any] else { return MappingUsage() }
-        switch provider {
-        case .openAI:
-            let details = values["input_tokens_details"] as? [String: Any]
-            return MappingUsage(input: ProviderTransport.count(values["input_tokens"]),
-                                output: ProviderTransport.count(values["output_tokens"]),
-                                cacheRead: ProviderTransport.count(details?["cached_tokens"]))
-        case .anthropic:
-            return MappingUsage(input: ProviderTransport.count(values["input_tokens"]),
-                                output: ProviderTransport.count(values["output_tokens"]),
-                                cacheRead: ProviderTransport.count(values["cache_read_input_tokens"]),
-                                cacheCreation: ProviderTransport.count(values["cache_creation_input_tokens"]))
-        }
-    }
 
     /// Schema violations in an answer, or an empty list when it is acceptable.
     static func violations(of text: String, schema: Data) throws -> [ArtifactSchema.Violation] {
@@ -235,5 +220,16 @@ public struct ProviderMappingClient: Sendable {
         root["repair_instructions"] = [repairSuffix] + violations.prefix(20).map(\.logSummary)
         guard JSONSerialization.isValidJSONObject(root) else { throw FormaError.invalidOutput }
         return try JSONSerialization.data(withJSONObject: root, options: [.sortedKeys])
+    }
+}
+
+/// The transport's accounting re-exported in the mapping type. This is the
+/// only conversion: the probe and a mapping run parse a provider's usage with
+/// the same code, so "the provider reported N tokens" means one thing in both
+/// paths and a field rename is repaired once.
+extension MappingUsage {
+    init(_ usage: ProviderTransport.Usage) {
+        self.init(input: usage.input, output: usage.output,
+                  cacheRead: usage.cacheRead, cacheCreation: usage.cacheCreation)
     }
 }

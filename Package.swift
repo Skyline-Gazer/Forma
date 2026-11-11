@@ -28,8 +28,11 @@ let package = Package(
         ], resources: [
             // Profiles, artifact schemas and the CasePack are data, not code:
             // they are versioned as JSON so a policy change is a reviewable diff.
+            // An undeclared resource directory is not a build error: the bundle
+            // simply lacks the file, and only the test that loads it notices.
             .process("Mapping/Profiles"),
             .process("Mapping/Schemas"),
+            .process("Mapping/CasePack"),
         ]),
         .testTarget(name: "FormaCoreTests", dependencies: [
             "FormaCore",

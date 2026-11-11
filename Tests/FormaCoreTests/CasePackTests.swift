@@ -26,13 +26,19 @@ struct CasePackTests {
         for kind in [CasePack.Sample.Kind.positive, .negative, .conflict, .refusal] {
             #expect(kinds.contains(kind), "\(kind) must be taught")
         }
-        // The six SPEC §5.1 traps must appear as a decision that refuses the
-        // tempting category, not merely as prose.
-        let trapCategories = Set(pack.cases.filter { $0.kind == .negative || $0.kind == .conflict }
-            .compactMap(\.expected.documentCategory))
-        for category in ["01_招标文件", "02_投标文件", "03_厂商支持文件", "04_技术资料与编制素材"] {
-            #expect(trapCategories.contains(category), "no counter-example lands in \(category)")
+        // SPEC §5.1's six categories each have to appear as the tempting one a
+        // counter-example refuses. The category a file finally lands in is not
+        // the trap: a case that refuses 03_厂商支持文件 and files the document
+        // under 04 teaches the trap without ever naming 03 as a destination.
+        let refused = pack.cases.filter { $0.kind != .positive }.flatMap(\.whyNot)
+        for category in ProjectArchiveContract.categories {
+            #expect(refused.contains { $0.contains(category) },
+                    "no counter-example refuses \(category)")
         }
+        // The Vendor Library trap pulls the other way: generic vendor material
+        // must not be dragged into a project it does not belong to.
+        #expect(refused.contains { $0.contains("projectname") },
+                "the project-binding trap must be taught for the vendor profile")
     }
 
     @Test("vendor cases never invent a project")
@@ -93,8 +99,39 @@ struct CasePackTests {
 
     @Test("a pack of easy positives alone is refused")
     func positivesOnlyRejected() throws {
-        let pack = try CasePack.shipped()
-        let positives = pack.cases.filter { $0.kind == .positive }
-        #expect(positives.count < 20, "the shipped pack must not be mostly positives")
+        let shipped = try CasePack.shipped()
+        // The same pack with every counter-example turned into a positive: the
+        // rule that refuses it must be the kind check, not the size check, so
+        // breaking that guard cannot leave this test green.
+        let flattened = CasePack(schemaVersion: shipped.schemaVersion, id: shipped.id, version: shipped.version,
+                                 cases: shipped.cases.map { Self.copy($0, kind: .positive) })
+        #expect(Set(flattened.cases.map(\.kind)) == [.positive])
+        var rejected = false
+        do { try CasePack.check(flattened) } catch { rejected = true }
+        #expect(rejected, "a pack that only teaches easy cases must not ship")
+    }
+
+    @Test("negatives without a conflict or a refusal are refused")
+    func conflictKindIsRequired() throws {
+        let shipped = try CasePack.shipped()
+        let rest = shipped.cases.filter { $0.kind != .conflict && $0.kind != .refusal }
+        // Large enough to clear the size and coverage guards on its own, so the
+        // only rule left standing is the one under test.
+        #expect(rest.count >= 20)
+        #expect(Set(rest.map(\.kind)).contains(.negative))
+        let pack = CasePack(schemaVersion: shipped.schemaVersion, id: shipped.id, version: shipped.version,
+                             cases: rest)
+        var rejected = false
+        do { try CasePack.check(pack) } catch { rejected = true }
+        #expect(rejected, "a counter-example has to include a conflict or a refusal")
+    }
+
+    /// One sample with a different kind, so a rule can be isolated without
+    /// inventing a whole pack by hand.
+    private static func copy(_ sample: CasePack.Sample, kind: CasePack.Sample.Kind) -> CasePack.Sample {
+        CasePack.Sample(caseID: sample.caseID, kind: kind, scenario: sample.scenario, profiles: sample.profiles,
+                        input: sample.input, expected: sample.expected, whyNot: sample.whyNot,
+                        evidenceLevel: sample.evidenceLevel, sourceVersion: sample.sourceVersion,
+                        review: sample.review)
     }
 }

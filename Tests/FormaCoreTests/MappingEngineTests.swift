@@ -45,8 +45,13 @@ func proposalText(batch: MappingBatch, citingEvidence: Bool = true,
                   mutate: (@escaping (inout [String: Any]) -> Void) = { _ in }) -> String {
     var entries: [[String: Any]] = []
     for item in batch.entries {
-        var metadata: [String: Any?] = [:]
-        for field in MetadataFieldID.allCases { metadata[field.rawValue] = nil }
+        // Every field has to be present. The strict decoder refuses a metadata
+        // object that omits any of the twelve, and assigning `nil` into an
+        // optional dictionary *removes* the key rather than storing a null -
+        // so the whole answer fails to decode and every assertion downstream of
+        // it silently tests the empty case instead of the answer.
+        var metadata: [String: Any] = [:]
+        for field in MetadataFieldID.allCases { metadata[field.rawValue] = NSNull() }
         metadata["documentcategory"] = "01_招标文件"
         metadata["documenttype"] = "Tender Announcement"
         metadata["projectname"] = "示例项目_2026"
@@ -82,12 +87,36 @@ func proposalText(batch: MappingBatch, citingEvidence: Bool = true,
     }
     var document: [String: Any] = ["schema_version": "1.0", "batch_id": batch.id, "entries": entries]
     mutate(&document)
-    guard let data = try? JSONSerialization.data(withJSONObject: document) else { return "{}" }
+    guard let data = try? JSONSerialization.data(withJSONObject: document) else {
+        Issue.record("the fake answer must serialise; a silent fallback would decode as nothing")
+        return "{}"
+    }
     return String(decoding: data, as: UTF8.self)
 }
 
 func decodedProposal(_ text: String) -> MappingProposal? {
     try? JSONDecoder().decode(MappingProposal.self, from: Data(text.utf8))
+}
+
+/// An answer that leaves one required field unset. That is the only shape that
+/// makes an entry *hold* for missing body evidence rather than be unknown, and
+/// therefore the only one that reaches the bounded re-ask at all.
+func proposalTextMissingRequired(batch: MappingBatch) -> String {
+    proposalText(batch: batch, citingEvidence: false) { document in
+        guard var list = document["entries"] as? [[String: Any]] else {
+            Issue.record("the proposal document must expose its entries")
+            return
+        }
+        for index in list.indices {
+            var metadata = (list[index]["metadata"] as? [String: Any]) ?? [:]
+            metadata["completionyear"] = NSNull()
+            list[index]["metadata"] = metadata
+            var unknown = (list[index]["unknown_fields"] as? [String]) ?? []
+            unknown.append("completionyear")
+            list[index]["unknown_fields"] = unknown
+        }
+        document["entries"] = list
+    }
 }
 
 @Suite("Mapping engine")
@@ -177,13 +206,18 @@ struct MappingEngineTests {
         defer { fixture.source.cleanUp() }
         let answerer = FakeAnswerer { batch, _ in
             let text = proposalText(batch: batch) { document in
-                guard var list = document["entries"] as? [[String: Any]] else { return }
+                guard var list = document["entries"] as? [[String: Any]] else {
+                    Issue.record("the proposal document must expose its entries")
+                    return
+                }
                 var extra = list[0]
                 extra["entry_ref"] = "e9999"
                 list.append(extra)
                 document["entries"] = list
             }
-            return MappingAttempt(proposal: decodedProposal(text), requests: 1)
+            let proposal = decodedProposal(text)
+            #expect(proposal != nil, "the fake answer must decode, or this test proves nothing")
+            return MappingAttempt(proposal: proposal, requests: 1)
         }
         let run = MappingRunRequest(scope: fixture.scope, profile: fixture.profile, context: fixture.context,
                                     entries: fixture.entries, evidence: fixture.evidence,
@@ -230,19 +264,53 @@ struct MappingEngineTests {
     func boundedReAsk() async throws {
         let fixture = try await prepared()
         defer { fixture.source.cleanUp() }
-        // No evidence at all on the first pass: every entry holds for lack of
-        // body evidence, which is the only case worth asking about twice.
+        // No evidence at all on the first pass, and one required field left
+        // unset: that is the only case worth asking about twice.
         let answerer = FakeAnswerer { batch, _ in
-            MappingAttempt(proposal: decodedProposal(proposalText(batch: batch, citingEvidence: false)),
-                           requests: 1)
+            MappingAttempt(proposal: decodedProposal(proposalTextMissingRequired(batch: batch)), requests: 1)
         }
         let run = MappingRunRequest(scope: fixture.scope, profile: fixture.profile, context: fixture.context,
                                     entries: fixture.entries, evidence: [:],
                                     provider: .anthropic, model: "fake", allowCloud: true)
         let outcome = await (try await engine(fixture, answerer: answerer)).run(run)
         let asked = await answerer.calls()
-        #expect(asked >= outcome.batches)
+        // Reaching the bound is not enough: the first pass alone would satisfy
+        // `asked <= batches * 2` while the re-ask never ran.
+        #expect(asked > outcome.batches, "a hold for missing evidence must trigger the re-ask, got \(asked)")
         #expect(asked <= outcome.batches * 2, "the re-ask must be bounded, got \(asked) calls")
+        #expect(outcome.manifest.entries.allSatisfy { !$0.eligibleForAutoExecution })
+    }
+
+    @Test("evidence the registry will not accept never becomes a citation")
+    func unregisteredEvidenceIsNotReasked() async throws {
+        let fixture = try await prepared()
+        defer { fixture.source.cleanUp() }
+        let answerer = FakeAnswerer { batch, _ in
+            MappingAttempt(proposal: decodedProposal(proposalTextMissingRequired(batch: batch)), requests: 1)
+        }
+        let run = MappingRunRequest(scope: fixture.scope, profile: fixture.profile, context: fixture.context,
+                                    entries: fixture.entries, evidence: [:],
+                                    provider: .anthropic, model: "fake", allowCloud: true)
+        // Control first: with a registry that takes the write, the second pass
+        // really does run. Without this, the assertions below could pass on a
+        // path that was never reached.
+        let control = MappingEngine(profile: fixture.profile, casePack: try CasePack.shipped(), answerer: answerer,
+                                    workspace: fixture.workspace) { _, _ in }
+        let controlOutcome = await control.run(run)
+        #expect(controlOutcome.requests > controlOutcome.batches,
+                "the bounded re-ask must be reachable for this test to mean anything")
+        // Same run against a store that refuses writes - disk full, database
+        // locked. The re-read rows cannot be cited, so they must not be used.
+        let failing = MappingEngine(profile: fixture.profile, casePack: try CasePack.shipped(),
+                                    answerer: answerer, workspace: fixture.workspace) { _, _ in
+            throw FormaError.unavailable
+        }
+        let outcome = await failing.run(run)
+        #expect(outcome.requests == outcome.batches,
+                "a failed registration must not trigger a second ask, got \(outcome.requests)")
+        #expect(outcome.failures.count == fixture.entries.count,
+                "the store failure is recorded per entry instead of swallowed")
+        #expect(outcome.failures.values.allSatisfy { $0 == .unavailable })
         #expect(outcome.manifest.entries.allSatisfy { !$0.eligibleForAutoExecution })
     }
 
