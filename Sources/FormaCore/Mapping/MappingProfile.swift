@@ -111,22 +111,22 @@ public struct MappingProfile: Decodable, Sendable, Equatable {
         return result
     }
 
+    /// The rules a JSON Schema cannot express. Shape, length and vocabulary
+    /// limits live in `profile-1.0.schema.json` and are enforced there before
+    /// this runs; restating them here would give one profile two authorities
+    /// measured in different units.
     static func check(_ profile: MappingProfile) throws {
-        guard profile.schemaVersion == MappingProfile.artifactSchemaVersion else { throw FormaError.incompatible }
-        guard !profile.profileID.isEmpty, !profile.profileVersion.isEmpty else { throw FormaError.incompatible }
+        // Identifier uniqueness is not a schema property, and a duplicate would
+        // silently overwrite a field policy in the dictionary this builds.
         guard Set(profile.categories.map(\.identifier)).count == profile.categories.count,
               Set(profile.documentTypes.map(\.identifier)).count == profile.documentTypes.count
         else { throw FormaError.incompatible }
-        guard profile.categories.allSatisfy({ !$0.identifier.isEmpty && !$0.meaning.isEmpty }) else {
-            throw FormaError.incompatible
-        }
         // A live binding is only meaningful once V6 has confirmed the database.
         if profile.target.kind == .live {
             guard let uuid = profile.target.databaseUUID, UUID(uuidString: uuid) != nil else {
                 throw FormaError.incompatible
             }
         }
-        guard profile.counterExamples.count >= 4 else { throw FormaError.incompatible }
         // The template may only mix fixed segments with whole `{field}`
         // placeholders, so a typo cannot silently target a nonexistent group.
         for segment in profile.target.groupTemplate {
@@ -167,11 +167,6 @@ public struct MappingProfile: Decodable, Sendable, Equatable {
             // fabricate a business fact.
             guard !project.requiredForValidated, project.nullable,
                   !year.requiredForValidated, permitsUnaffiliatedDocuments else { throw FormaError.incompatible }
-        }
-        // No profile may relax the frozen twelve into a new identifier, and none
-        // may claim a verified native type before V3 has actually read one.
-        for policy in fields.values {
-            guard policy.nativeTypeStatus == .unverified else { throw FormaError.incompatible }
         }
     }
 

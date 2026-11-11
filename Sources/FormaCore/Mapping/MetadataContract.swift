@@ -150,11 +150,6 @@ public struct MetadataFieldPolicy: Codable, Sendable, Equatable {
         // both lists as rules. What must not happen is an empty rule set for a
         // required field, which would let anything pass.
         guard !policy.allowedEvidenceSources.isEmpty else { throw FormaError.incompatible }
-        guard Set(policy.allowedEvidenceSources).count == policy.allowedEvidenceSources.count,
-              Set(policy.insufficientEvidenceSources).count == policy.insufficientEvidenceSources.count else {
-            throw FormaError.incompatible
-        }
-        guard !policy.rule.isEmpty, policy.rule.utf8.count <= 600 else { throw FormaError.incompatible }
         // A field that may never be null is required by definition; the reverse
         // is allowed, because "required + nullable" means an unknown value holds
         // the entry rather than licensing the model to invent one.
