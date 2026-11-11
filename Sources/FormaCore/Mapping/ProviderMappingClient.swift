@@ -132,15 +132,21 @@ public struct ProviderMappingClient: Sendable {
 
             var payload = preview.payload
             for round in 0...1 {
-                let sent = try await send(provider: provider, model: trimmed, key: key, system: preview.system,
-                                          payload: payload, schema: schema)
+                let sent = await send(provider: provider, model: trimmed, key: key, system: preview.system,
+                                      payload: payload, schema: schema)
+                // Accounting first, always. A request that failed still reached
+                // the provider and still cost something; dropping the count on
+                // the error path reported a rate-limited run as making no
+                // requests at all, which is the opposite of what a report is for.
                 usage = usage + sent.usage
                 requests += sent.requests
                 reportedModel = sent.reportedModel ?? reportedModel
-                let broken = try Self.violations(of: sent.text, schema: schema)
+                if let error = sent.error { throw error }
+                let text = sent.text ?? ""
+                let broken = try Self.violations(of: text, schema: schema)
                 guard !broken.isEmpty else {
                     violations = []
-                    answer = sent.text
+                    answer = text
                     break
                 }
                 violations = broken
@@ -176,12 +182,14 @@ public struct ProviderMappingClient: Sendable {
         )
     }
 
-    /// The outcome of one semantic request.
+    /// The outcome of one semantic request: the answer if there was one, the
+    /// accounting either way, and the failure if the request did not succeed.
     struct Sent {
-        let text: String
+        let text: String?
         let usage: MappingUsage
         let requests: Int
         let reportedModel: String?
+        let error: FormaError?
     }
 
     /// One semantic request, with the transport's own bounded rate-limit retry
@@ -190,18 +198,29 @@ public struct ProviderMappingClient: Sendable {
     /// budgets, and sharing one loop turned "request plus one repair" into
     /// "request only", so an answer that was merely non-compliant came back as
     /// an unexplained hold.
+    ///
+    /// It returns rather than throws, because every path out of here has made
+    /// at least one request, and the count must survive the failure.
     private func send(provider: ProbeProvider, model: String, key: String, system: String,
-                      payload: Data, schema: Data) async throws -> Sent {
+                      payload: Data, schema: Data) async -> Sent {
         var usage = MappingUsage()
         var requests = 0
         var reportedModel: String?
         var rateLimitAttempt = 0
         while true {
-            let request = try transport.makeRequest(ProviderTransport.StructuredRequest(
-                provider: provider, model: model, name: "forma_mapping", system: system,
-                payload: String(decoding: payload, as: UTF8.self), schema: schema,
-                maxOutputTokens: Self.maximumOutputTokens
-            ), key: key)
+            let request: URLRequest
+            do {
+                request = try transport.makeRequest(ProviderTransport.StructuredRequest(
+                    provider: provider, model: model, name: "forma_mapping", system: system,
+                    payload: String(decoding: payload, as: UTF8.self), schema: schema,
+                    maxOutputTokens: Self.maximumOutputTokens
+                ), key: key)
+            } catch let error as FormaError {
+                return Sent(text: nil, usage: usage, requests: requests, reportedModel: reportedModel, error: error)
+            } catch {
+                return Sent(text: nil, usage: usage, requests: requests, reportedModel: reportedModel,
+                            error: .network)
+            }
             requests += 1
             do {
                 let (body, _) = try await transport.response(
@@ -213,7 +232,7 @@ public struct ProviderMappingClient: Sendable {
                 reportedModel = transport.reportedModel(from: envelope, key: key) ?? reportedModel
                 usage = usage + MappingUsage(transport.usage(from: envelope, provider: provider))
                 return Sent(text: try transport.outputText(from: envelope, provider: provider), usage: usage,
-                            requests: requests, reportedModel: reportedModel)
+                            requests: requests, reportedModel: reportedModel, error: nil)
             } catch let limited as ProviderTransport.RateLimited {
                 // A rate limit gets one retry, and the provider's own wait when
                 // it gave one. A second rate limit is reported as the status it
@@ -222,10 +241,23 @@ public struct ProviderMappingClient: Sendable {
                 guard rateLimitAttempt == 0,
                       let delay = ProviderTransport.retryDelay(retryAfter: limited.retryAfter,
                                                                attempt: rateLimitAttempt) else {
-                    throw limited.asFormaError
+                    return Sent(text: nil, usage: usage, requests: requests, reportedModel: reportedModel,
+                                error: limited.asFormaError)
                 }
                 rateLimitAttempt += 1
-                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                } catch {
+                    // A cancelled wait ends the attempt; it must not fall
+                    // through into another request.
+                    return Sent(text: nil, usage: usage, requests: requests,
+                                reportedModel: reportedModel, error: .cancelled)
+                }
+            } catch let error as FormaError {
+                return Sent(text: nil, usage: usage, requests: requests, reportedModel: reportedModel, error: error)
+            } catch {
+                return Sent(text: nil, usage: usage, requests: requests, reportedModel: reportedModel,
+                            error: .network)
             }
         }
     }

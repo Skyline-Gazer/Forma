@@ -283,10 +283,15 @@ struct MappingPromptTests {
     @Test("a currency word in front of a grouped number still marks it as money")
     func currencyWordBeforeANumberIsACue() throws {
         let plan = RedactionPlan.none
-        // The symbol pattern needs the currency adjacent to the number, so this
-        // is the case where the words before a grouped figure decide.
-        let text = try plan.redact(text: "人民币合计 1,200,000")
-        #expect(!text.contains("1,200,000"), "an amount named in currency words is replaced: \(text)")
+        // Adjacent currency is decided by the symbol pattern itself...
+        let adjacent = try plan.redact(text: "人民币 1,200,000")
+        #expect(!adjacent.contains("1,200,000"), "an adjacent currency mark is money: \(adjacent)")
+        // ...and punctuation between the word and the figure is precisely the
+        // case where only the words in front can decide. Drop 人民币 from the
+        // cue list and this one silently stops being redacted.
+        let separated = try plan.redact(text: "人民币（含税）1,200,000")
+        #expect(!separated.contains("1,200,000"),
+                "a currency named across punctuation is still money: \(separated)")
         let serial = try plan.redact(text: "档案流水号 1,200,000")
         #expect(serial.contains("1,200,000"), "a serial number is not a price: \(serial)")
     }

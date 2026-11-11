@@ -233,11 +233,12 @@ struct ProviderTests {
         #expect(result.error == expected)
     }
 
-    @Test("a rate limit buys exactly one retry and is then reported as the status")
-    func mappingRateLimitGetsOneRetry() async throws {
+    /// Runs one mapping request against a stub that always answers with
+    /// `status`, and returns what the client reported about it.
+    private func mappingAttempt(status: Int, headers: [String: String] = [:]) async throws -> MappingAttempt {
         let key = "probe-test-\(UUID().uuidString)"
-        let stub = HTTPStub(response: .response(status: 429, body: Data(#"{"error":{"message":"slow down"}}"#.utf8),
-                                                 headers: ["Retry-After": "0"]))
+        let stub = HTTPStub(response: .response(status: status, body: Data(#"{"error":{"message":"stub"}}"#.utf8),
+                                                headers: headers))
         ProbeURLProtocol.register(stub, for: key)
         defer { ProbeURLProtocol.unregister(key) }
         let configuration = URLSessionConfiguration.ephemeral
@@ -259,14 +260,28 @@ struct ProviderTests {
                                           basis: [.directory], memberSourceIDs: [sourceID], confidence: .low)],
             unassignedSourceIDs: [], conflictedSourceIDs: [], builtAt: .now
         )
-        let attempt = await client.map(provider: .openAI, model: "gpt-4o-mini", allowCloud: true, profile: profile,
-                                       context: context, casePack: try CasePack.shipped(), batch: batch,
-                                       redaction: .none)
+        return await client.map(provider: .openAI, model: "gpt-4o-mini", allowCloud: true, profile: profile,
+                                context: context, casePack: try CasePack.shipped(), batch: batch, redaction: .none)
+    }
+
+    @Test("a rate limit buys exactly one retry and is then reported as the status")
+    func mappingRateLimitGetsOneRetry() async throws {
+        let attempt = try await mappingAttempt(status: 429, headers: ["Retry-After": "0"])
         #expect(attempt.requests == 2, "one rate limit must buy exactly one retry, got \(attempt.requests)")
-        #expect(stub.requests.count == 2, "the retry must really reach the stub again")
         #expect(attempt.error == .remoteStatus(429),
                 "a second rate limit is reported as the status, not as a mystery")
         #expect(attempt.proposal == nil)
+    }
+
+    @Test("a failed request still reports the request it made")
+    func failedMappingStillCountsRequests() async throws {
+        // The report is the only place anyone can see that a provider was
+        // contacted. Counting only successes made a rate-limited or
+        // server-failed run look like it had never left the machine, which is
+        // the opposite of what the accounting is for.
+        let attempt = try await mappingAttempt(status: 500)
+        #expect(attempt.requests == 1, "one request was made, got \(attempt.requests)")
+        #expect(attempt.error == .remoteStatus(500))
     }
 
     @Test("Retry-After is read, bounded, and never guessed at")

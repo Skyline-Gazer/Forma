@@ -195,11 +195,13 @@ public struct RedactionPlan: Sendable {
         (#"(?<![0-9A-Za-z.,\-/:«»])[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?(?![0-9A-Za-z.,\-/:«»])"#, .before),
     ]
 
-    // No currency symbol or unit here: those live inside the first two
-    // patterns' matches, so a number they explain never reaches this list. What
-    // is left is the words that turn a bare grouped number into a price.
+    // The words that turn a bare grouped number into a price. A currency symbol
+    // or unit adjacent to the figure never reaches this list - the first two
+    // patterns consume those inside the match - but `人民币（含税）1,200,000`
+    // does: the cue is currency, the separation is punctuation, and only this
+    // list can decide that the number is money.
     private static let moneyCues = ["价", "金额", "报价", "费用", "预算", "税", "合计", "付款",
-                                    "保证金", "中标", "成本"]
+                                    "保证金", "中标", "成本", "人民币"]
 
     private static func looksLikeAmount(_ text: String, before context: Substring) -> Bool {
         // Cents imply a price; a grouped number without them needs support from
