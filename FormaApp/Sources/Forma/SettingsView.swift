@@ -91,15 +91,15 @@ struct SettingsView: View {
                     Button("Cancel") { model.cancelAux() }
                 }
             }
-            Text("Shows the exact bytes of one batch request — system text, payload, digest — built locally, with no network access.")
+            Text("Shows the first batch a run would build from this listing and context — system text, payload, digest — planned by the same code the run uses, built locally, with no network access. A run re-reads a file whose rows are not stored yet, so a body excerpt can differ from an earlier capture.")
                 .font(.caption).foregroundStyle(.secondary)
             if let preview = model.preview {
                 LabeledContent("Payload bytes", value: preview.byteCount.formatted())
                 LabeledContent("Request digest", value: preview.digest)
                     .font(.caption.monospaced())
                 LabeledContent("Redaction version", value: model.redaction.isIdentity ? "Identity (no terms)" : RedactionPlan.version)
-                LabeledContent("Files in previewed batch", value: model.previewedFileCount.formatted())
-                    .help("The batch this preview describes, at most the configured limit of \(model.entryLimit.formatted()) files")
+                LabeledContent("Files in previewed batch", value: "\(model.previewedFileCount.formatted()) of \(model.previewedBatchCount.formatted()) batches")
+                    .help("The engine groups files by the candidate that claims them, so one batch is one candidate's slice and never simply the first \(model.entryLimit.formatted()) files of the listing")
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("System text").font(.caption).foregroundStyle(.secondary)
@@ -134,28 +134,36 @@ struct SettingsView: View {
 
     private var redactionSection: some View {
         Section("Redaction terms") {
-            ForEach($model.redactionTerms) { $term in
+            ForEach(model.redactionTerms.indices, id: \.self) { index in
                 HStack(spacing: 8) {
-                    TextField("Term", text: $term.term)
-                    Picker("Role", selection: $term.role) {
+                    TextField("Term", text: $model.redactionTerms[index].term)
+                    Picker("Role", selection: $model.redactionTerms[index].role) {
                         ForEach(RedactionPlan.Role.allCases, id: \.self) { role in
                             Text(role.rawValue).tag(role)
                         }
                     }
                     .frame(width: 130)
+                    // Deletion belongs to the row it deletes. A blank row is
+                    // inert - FormaCore's plan skips terms with no text - so a
+                    // separate "clean up" sweep over the whole list was solving
+                    // a problem the plan never had, while leaving no way to
+                    // remove a term that was typed by mistake.
+                    Button {
+                        model.redactionTerms.remove(at: index)
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Remove this term")
+                    .accessibilityIdentifier("remove-redaction-term")
                 }
             }
             if model.redactionTerms.isEmpty {
                 Text("No terms: FormaCore's identity plan substitutes nothing.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            HStack {
-                Button("Add Term") { model.redactionTerms.append(WorkspaceModel.RedactionTerm(term: "", role: .identifier)) }
-                    .accessibilityIdentifier("add-redaction-term")
-                Button("Remove Blank Rows") { model.redactionTerms.removeAll(where: { $0.term.isEmpty }) }
-                    .disabled(!model.redactionTerms.contains { $0.term.isEmpty })
-                    .help("There is no selection in this list; this clears the rows that carry no term")
-            }
+            Button("Add Term") { model.redactionTerms.append(WorkspaceModel.RedactionTerm(term: "", role: .identifier)) }
+                .accessibilityIdentifier("add-redaction-term")
             TextField("Placeholder salt", text: $model.redactionSalt)
                 .accessibilityIdentifier("redaction-salt")
             Text("Placeholders are deterministic hashes of salt plus term; the salt never leaves the machine.")

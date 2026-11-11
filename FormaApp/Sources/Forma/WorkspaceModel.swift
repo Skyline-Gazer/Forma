@@ -133,9 +133,12 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var casePack: CasePack?
     @Published private(set) var capabilities: DEVONthinkCapabilities?
     @Published private(set) var preview: ProviderMappingClient.Preview?
-    /// How many files the current preview actually describes, which is at most
-    /// the configured batch limit and often fewer in a small pilot directory.
+    /// How many files the previewed batch carries, and how many batches a run
+    /// over this listing would need. Both come from the engine's own planning,
+    /// so they describe the request being previewed rather than the settings
+    /// field the user typed.
     @Published private(set) var previewedFileCount = 0
+    @Published private(set) var previewedBatchCount = 0
     @Published private(set) var leakedTerms: [String] = []
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var notice: String?
@@ -216,6 +219,11 @@ final class WorkspaceModel: ObservableObject {
     private var engineCache: (key: String, engine: MappingEngine)?
     private var work: Task<Void, Never>?
     private var fileWork: Task<Void, Never>?
+    /// Identifies the read whose task still owns `fileWork`. Cancelling a
+    /// cooperative task does not stop it immediately, so ownership has to be
+    /// decided by a value the retiring side increments rather than by the
+    /// handle, which the next read is free to overwrite.
+    private var fileRead = 0
     private var auxWork: Task<Void, Never>?
 
     private static let store = UserDefaults.standard
@@ -505,22 +513,34 @@ final class WorkspaceModel: ObservableObject {
         guard fileWork == nil else { return }
         fileEvidence = nil
         phase = .readingFile
+        fileRead += 1
+        let generation = fileRead
         fileWork = Task {
             defer {
-                fileWork = nil
-                if !phase.isBusy || phase == .readingFile { phase = .idle }
+                // Only the read that is still current may release the slot.
+                // clearFileEvidence() cancels cooperatively and drops the
+                // handle itself, so a task that is still unwinding must not
+                // nil out the handle of the newer read that started after it -
+                // that would leave a running task nothing can cancel or report.
+                if generation == fileRead {
+                    fileWork = nil
+                    if !phase.isBusy || phase == .readingFile { phase = .idle }
+                }
             }
             do {
                 let result = extracting
                     ? try await workspace.evidence(for: entry)
                     : try await workspace.hash(for: entry)
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, generation == fileRead else { return }
                 fileEvidence = result
-                if let rows = try? await workspace.evidenceRegistry(for: entry.id) {
+                if let rows = try? await workspace.evidenceRegistry(for: entry.id),
+                   generation == fileRead {
                     merge(rows)
                 }
             } catch {
-                if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .unavailable) }
+                if !Task.isCancelled, generation == fileRead {
+                    show(error, operation: .readEvidence, fallback: .unavailable)
+                }
             }
         }
     }
@@ -532,6 +552,9 @@ final class WorkspaceModel: ObservableObject {
     /// Drops the file detail panel's evidence and stops its read. The registry
     /// keeps its rows: FormaCore owns them until a re-read replaces them.
     func clearFileEvidence() {
+        // Retire the generation before touching the handle, so the cancelled
+        // task recognises its own cleanup as stale.
+        fileRead += 1
         fileWork?.cancel()
         fileWork = nil
         fileEvidence = nil
@@ -539,8 +562,12 @@ final class WorkspaceModel: ObservableObject {
 
     /// Loads the registry rows one manifest entry cites so a field chip can show
     /// its excerpt and locator, including after a restart.
+    ///
+    /// Read every time rather than once per source: the rows a source has are
+    /// replaced by FormaCore on each re-read and by every mapping run, so a
+    /// "already loaded" marker would be a cache with no invalidation, and the
+    /// chip would keep showing the excerpt the correction no longer cites.
     func loadEvidence(for sourceID: UUID) async {
-        guard evidenceBySource[sourceID] == nil else { return }
         do {
             merge(try await workspace.evidenceRegistry(for: sourceID))
         } catch {
@@ -571,34 +598,39 @@ final class WorkspaceModel: ObservableObject {
     /// `egress` is this run's consent, passed to FormaCore as
     /// `MappingRunRequest.allowCloud`. The local assessment path passes `false`
     /// and FormaCore's own client reports the refusal per file.
-    func runMapping(sourceIDs: Set<UUID>? = nil, egress: Bool) {
-        guard phase == .idle else { return }
+    /// Returns whether a request was actually dispatched. Consent is one-shot,
+    /// and a run that never left the guard list never used it: a caller that
+    /// cleared its own checkbox on a `false` would make the user re-consent to
+    /// the same bytes after a failure that involved no transmission at all.
+    @discardableResult
+    func runMapping(sourceIDs: Set<UUID>? = nil, egress: Bool) -> Bool {
+        guard phase == .idle else { return false }
         guard let scope = selectedScope, let profile = selectedProfile, let listing else {
             error = .unavailable
             notice = "Choose a source before mapping."
-            return
+            return false
         }
         guard let context else {
             error = .unavailable
             notice = "Build a project context first: FormaCore will not map files without one."
-            return
+            return false
         }
         guard let casePack else {
             error = .unavailable
             notice = "The shipped CasePack could not be loaded, so no request can be built."
-            return
+            return false
         }
         let targets: [SourceEntry]
         if let sourceIDs {
             targets = listing.entries.filter { sourceIDs.contains($0.id) }
             if targets.isEmpty {
                 notice = "The selected files are no longer in this listing."
-                return
+                return false
             }
         } else {
             targets = listing.entries
         }
-        guard let engine = engine(for: profile) else { return }
+        guard let engine = engine(for: profile) else { return false }
 
         let provider = self.provider
         let model = modelID
@@ -683,6 +715,7 @@ final class WorkspaceModel: ObservableObject {
                 + "\(unread.count.formatted()) files FormaCore could not read."
             self.refreshRows()
         }
+        return true
     }
 
     func cancelWork() {
@@ -908,25 +941,24 @@ final class WorkspaceModel: ObservableObject {
             notice = "A preview needs a source, a profile and a stored project context."
             return
         }
-        let limit = min(max(1, entryLimit), max(1, listing.entries.count))
-        let refs = Array(listing.entries.filter { $0.state == .present }.sorted { $0.relativePath < $1.relativePath })
-            .prefix(limit)
-            .enumerated()
-            .map { index, entry in
-                MappingEntryRef(ref: "p\(index + 1)", sourceID: entry.id, relativePath: entry.relativePath,
-                                sizeBytes: entry.sizeBytes.map(Int.init),
-                                extensionName: (entry.relativePath as NSString).pathExtension.lowercased(),
-                                hydrationPending: entry.hydrationPending, provider: entry.provider.rawValue)
-            }
-        guard !refs.isEmpty else {
-            notice = "This listing has no present file to preview."
+        // Ask the engine what it would send instead of imitating it: a run
+        // groups files by the candidate that claims them and splits oversized
+        // groups, so a preview built by prefixing the sorted listing would
+        // describe a request no run ever makes - different membership,
+        // different refs, no attached rows. The entries are the whole listing
+        // for the same reason: `runMapping` hands the engine every row it has.
+        let batches = MappingEngine.plannedBatches(from: listing.entries, context: context,
+                                                  limit: entryLimit, evidence: evidenceBySource)
+        guard let batch = batches.first else {
+            notice = "This listing has no file to preview."
             return
         }
-        let batch = MappingBatch(id: "preview", candidateID: nil, entries: refs, evidence: [])
-        // The screen reports how many files this preview actually describes,
-        // not the configured ceiling: with a small pilot directory the two
-        // differ, and the number is what a user weighs before letting bytes go.
-        previewedFileCount = refs.count
+        // The screen reports the batch it is describing and how many the whole
+        // listing would need, not the configured ceiling: with a small pilot
+        // directory those numbers differ, and the count is what a user weighs
+        // before letting bytes go.
+        previewedFileCount = batch.entries.count
+        previewedBatchCount = batches.count
         let plan = redaction
         preview = nil
         auxWork = Task {

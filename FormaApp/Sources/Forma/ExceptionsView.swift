@@ -86,8 +86,15 @@ struct ExceptionsView: View {
                         .accessibilityIdentifier("cancel-reprocess")
                 } else {
                     Button("Reprocess Selected", systemImage: "arrow.3.trianglepath") {
-                        model.runMapping(sourceIDs: selection, egress: reprocessEgress)
-                        reprocessEgress = false
+                        // The run says whether anything left the guard list.
+                        // Clearing consent after a refusal - no context, no
+                        // case pack, an engine that failed to build - would
+                        // make the reviewer re-authorise bytes that were never
+                        // touched, and the second click would then send them
+                        // without the tick having meant anything in between.
+                        if model.runMapping(sourceIDs: selection, egress: reprocessEgress) {
+                            reprocessEgress = false
+                        }
                     }
                     .disabled(selection.isEmpty || !model.canMap)
                     .help("Runs the mapping engine over the selected source identifiers only")
