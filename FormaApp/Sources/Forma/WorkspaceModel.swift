@@ -28,7 +28,6 @@ final class WorkspaceModel: ObservableObject {
         case reconciling
         case loadingManifest
         case correcting
-        case readingFile
         case discoveringMCP
         case previewing
 
@@ -46,7 +45,6 @@ final class WorkspaceModel: ObservableObject {
             case .reconciling: "Reconciling stored revisions…"
             case .loadingManifest: "Reading the stored manifest…"
             case .correcting: "Recording the correction…"
-            case .readingFile: "Reading file…"
             case .discoveringMCP: "Discovering the MCP server…"
             case .previewing: "Building the request preview…"
             }
@@ -224,6 +222,12 @@ final class WorkspaceModel: ObservableObject {
     /// decided by a value the retiring side increments rather than by the
     /// handle, which the next read is free to overwrite.
     private var fileRead = 0
+    /// Whether a single-file read is in flight. Deliberately separate from
+    /// `phase`: this is the state that decides whether the evidence panel shows
+    /// a Cancel button, and `cancelFileRead()` is the only task it can stop.
+    /// Sharing one busy value between a file open and a provider run gave a
+    /// button that said Cancel while pointing at a task that was not running.
+    @Published private(set) var fileReadInFlight = false
     private var auxWork: Task<Void, Never>?
 
     private static let store = UserDefaults.standard
@@ -527,7 +531,12 @@ final class WorkspaceModel: ObservableObject {
     func readFileEvidence(_ entry: SourceEntry, extracting: Bool) {
         guard fileWork == nil else { return }
         fileEvidence = nil
-        phase = .readingFile
+        // The read owns its own in-flight flag rather than borrowing `phase`.
+        // `phase` describes the long task that the toolbars' Cancel button
+        // stops; a second occupant of the same value means a button that reads
+        // "Cancel" while pointing at a task that is not running, and a busy
+        // flag that blocks unrelated work for the length of a file open.
+        fileReadInFlight = true
         fileRead += 1
         let generation = fileRead
         fileWork = Task {
@@ -539,7 +548,7 @@ final class WorkspaceModel: ObservableObject {
                 // that would leave a running task nothing can cancel or report.
                 if generation == fileRead {
                     fileWork = nil
-                    if !phase.isBusy || phase == .readingFile { phase = .idle }
+                    fileReadInFlight = false
                 }
             }
             do {
@@ -572,6 +581,7 @@ final class WorkspaceModel: ObservableObject {
         fileRead += 1
         fileWork?.cancel()
         fileWork = nil
+        fileReadInFlight = false
         fileEvidence = nil
     }
 

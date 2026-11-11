@@ -171,16 +171,21 @@ struct WorkspaceView: View {
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                     Divider()
-                    if model.phase == .readingFile {
+                    // Driven by the read's own slot. While `phase` also
+                    // described this read, a provider run in flight made this
+                    // panel offer "Cancel evidence read" for a read that had
+                    // finished - and the run it actually named could only be
+                    // stopped from the toolbar.
+                    if model.fileReadInFlight {
                         Button("Cancel evidence read") { model.cancelFileRead() }
                         ProgressView().controlSize(.small)
                     } else {
                         Button("Read Evidence") { model.readFileEvidence(entry, extracting: true) }
-                            .disabled(model.phase.isBusy || entry.state != .present
+                            .disabled(entry.state != .present
                                       || !["pdf", "docx", "xlsx"].contains((entry.relativePath as NSString).pathExtension.lowercased()))
                             .accessibilityIdentifier("read-evidence")
                         Button("Compute SHA-256") { model.readFileEvidence(entry, extracting: false) }
-                            .disabled(model.phase.isBusy || entry.state != .present)
+                            .disabled(entry.state != .present)
                     }
                     if let evidence = model.fileEvidence {
                         Text(evidence.status.rawValue).font(.subheadline).foregroundStyle(.secondary)
