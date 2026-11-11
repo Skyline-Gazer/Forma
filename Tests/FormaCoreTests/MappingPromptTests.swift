@@ -269,16 +269,22 @@ struct MappingPromptTests {
     @Test("distinct figures do not collapse onto one amount label")
     func amountLabelsAreDistinctPerValue() throws {
         let plan = RedactionPlan.none
+        // The assertion is about labels, not about the sentences they sit in:
+        // every input string differs anyway, so counting texts would prove
+        // nothing. Unlike terms, figures are not enumerable in advance, so an
+        // amount label is a digest of the value and uniqueness there is a
+        // birthday bound over 48 bits rather than a construction - for the two
+        // thousand figures a large quotation batch can carry, under one in a
+        // hundred thousand.
         var labels: Set<String> = []
         for value in stride(from: 1_000.0, through: 21_000.0, by: 10.0) {
             let text = try plan.redact(text: "报价 \(String(format: "%.2f", value)) 元")
-            labels.insert(text)
+            guard let label = amountLabel(in: text) else {
+                Issue.record("the figure was not replaced: \(text)")
+                continue
+            }
+            labels.insert(label)
         }
-        // Unlike terms, figures are not enumerable in advance, so an amount
-        // label is a digest of the value and uniqueness is a birthday bound
-        // over 48 bits rather than a construction: for the two thousand figures
-        // a large quotation batch can carry the risk is under one in a hundred
-        // thousand, and this fixed set exercises it.
         #expect(labels.count == 2_001, "two thousand figures must not share a label")
     }
 
@@ -288,10 +294,10 @@ struct MappingPromptTests {
         // Adjacent currency is decided by the symbol pattern itself...
         let adjacent = try plan.redact(text: "人民币 1,200,000")
         #expect(!adjacent.contains("1,200,000"), "an adjacent currency mark is money: \(adjacent)")
-        // ...and punctuation between the word and the figure is precisely the
-        // case where only the words in front can decide. Drop 人民币 from the
-        // cue list and this one silently stops being redacted.
-        let separated = try plan.redact(text: "人民币（含税）1,200,000")
+        // ...and a separated currency mark is the case only the cue list can
+        // decide: `人民币，1,200,000` carries no other money word, so dropping
+        // 人民币 from the list silently stops redacting a real price.
+        let separated = try plan.redact(text: "人民币，1,200,000")
         #expect(!separated.contains("1,200,000"),
                 "a currency named across punctuation is still money: \(separated)")
         let serial = try plan.redact(text: "档案流水号 1,200,000")

@@ -129,16 +129,11 @@ public struct RedactionPlan: Sendable {
         return output
     }
 
-    /// Record and content identities must never travel. Three shapes cover them,
-    /// and the order in the list below is load-bearing: a UUID is a database
-    /// handle, a run of exactly 64 hex digits is a SHA-256 snapshot fingerprint,
-    /// and any other run of 32 or more hex digits is some other digest - SHA-1, a
-    /// content hash, or an internal identifier this program did not mint but
-    /// should not forward either. The exact-64 rule has to run before the
-    /// open-ended one, or the open-ended rule consumes its input first and the
-    /// distinction survives only in this comment. The last rule is deliberately
-    /// blunt: a long hex business code is replaced too, because such a code is a
-    /// handle into somebody else's system and the model has no use for it.
+    /// Database and content handles - UUIDs, SHA-256 fingerprints, and any other
+    /// long hex run - never travel. The order below matters: the exact-64 rule
+    /// has to run before the open-ended `{32,}` one, or the open-ended rule
+    /// consumes every SHA-256 first. Replacing a long hex business code that is
+    /// not a digest is deliberate: it is still a handle into somebody's system.
     private func replaceIdentifiers(in value: String) -> String {
         var output = value
         for pattern in [
@@ -155,12 +150,9 @@ public struct RedactionPlan: Sendable {
     /// template versus a filled quotation is a *structural* distinction, so the
     /// placeholder keeps the shape ("a number was here") rather than the value.
     ///
-    /// Matching is deliberately narrow. A bare digit run is far more often a
-    /// tender reference (`ZB-DEMO-2026-014`), a date (`2026年3月`) or a version
-    /// (`v1.234`) than a price, and rewriting one of those into an amount
-    /// placeholder silently removes the very field the mapping was asked to
-    /// read. A number counts as money only when it carries a currency unit, has
-    /// cents, or is thousands-grouped with money words in front of it.
+    /// Matching is deliberately narrow: a bare digit run is far more often a
+    /// tender reference, a date or a version than a price, and rewriting one of
+    /// those removes the very field the mapping was asked to read.
     private func replaceAmounts(in value: String) -> String {
         var output = value
         for entry in Self.amountPatterns {
@@ -181,11 +173,8 @@ public struct RedactionPlan: Sendable {
         return output
     }
 
-    /// How a pattern knows it found a price. `inMatch` means the currency cue is
-    /// part of what the expression accepted, so nothing else is consulted;
-    /// `before` means the number carries no cue itself and the words in front of
-    /// it have to say it is money. Naming that in the type keeps the two
-    /// judgments from drifting apart when a pattern is edited.
+    /// Where a pattern's evidence of "money" comes from: inside its own match, or
+    /// from the words in front of the number it accepted.
     private enum MoneyCue {
         case inMatch
         case before
@@ -194,29 +183,25 @@ public struct RedactionPlan: Sendable {
     private static let amountPatterns: [(pattern: String, cue: MoneyCue)] = [
         // A currency symbol in front of the number.
         (#"(?<![0-9A-Za-z])(?:¥|￥|\$|人民币)\s*[0-9][0-9,]*(?:\.[0-9]+)?"#, .inMatch),
-        // A number with an explicit unit. A bare `万` is not enough: 万象 and
-        // 万达 are company names, and their digits must survive.
+        // A number with an explicit unit. A bare `万` is not enough: 万象 and 万达
+        // are company names, and their digits must survive.
         (#"(?<![0-9A-Za-z.,\-/:«»])[0-9][0-9,]*(?:\.[0-9]{1,2})?\s*(?:万元|亿元|元)(?![0-9A-Za-z])"#, .inMatch),
-        // Comma-grouped numbers, judged by the words in front of them. A
-        // placeholder on either side means this number belongs to something the
-        // plan already rewrote, so it is not evidence of a price.
+        // A thousands-grouped number, which is only money if the words say so.
         (#"(?<![0-9A-Za-z.,\-/:«»])[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?(?![0-9A-Za-z.,\-/:«»])"#, .before),
     ]
 
-    // The words that turn a bare grouped number into a price. A currency symbol
-    // or unit adjacent to the figure never reaches this list - the first two
-    // patterns consume those inside the match - but `人民币（含税）1,200,000`
-    // does: the cue is currency, the separation is punctuation, and only this
-    // list can decide that the number is money.
+    // The words that make a bare grouped number a price. A currency mark
+    // adjacent to the figure is handled by the first pattern, but a separated
+    // one is not: `人民币，1,200,000` reaches here with 人民币 as its only evidence.
     private static let moneyCues = ["价", "金额", "报价", "费用", "预算", "税", "合计", "付款",
                                     "保证金", "中标", "成本", "人民币"]
 
     private static func looksLikeAmount(_ text: String, before context: Substring) -> Bool {
-        // Cents imply a price; a grouped number without them needs support from
-        // the words in front of it. The window has to clear a placeholder: a
-        // vendor whose name is in the plan turns into `«厂商XXXXXXXXXXXX»`
-        // before this runs, and a shorter window would push the word 报价 out of
-        // sight and leave a real price in the request.
+        // Cents imply a price. Otherwise the words in front have to say it, over
+        // a window wide enough to clear a placeholder: a vendor name in the plan
+        // has already become `«厂商1»` by the time this runs, and a narrow window
+        // would lose the word 报价 behind it and leave a real price in the
+        // request.
         if text.contains(".") { return true }
         let window = String(context.suffix(64))
         return moneyCues.contains { window.contains($0) }
