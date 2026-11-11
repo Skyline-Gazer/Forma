@@ -166,6 +166,20 @@ enum MappingStore {
         return try FormaJSON.decode(ProjectContext.self, from: data)
     }
 
+    /// The stored context at one exact revision. Reconciliation compares a
+    /// manifest's own context against the current one, so the revision it cites
+    /// must stay readable after newer revisions exist.
+    static func context(scopeID: UUID, profile: MappingProfile, revision: Int, in db: Database) throws
+        -> ProjectContext?
+    {
+        guard let row = try Row.fetchOne(db, sql: """
+            SELECT payload FROM context_revisions WHERE scope_id = ? AND profile_id = ? AND profile_version = ?
+              AND revision = ?
+            """, arguments: [scopeID.sourceKey, profile.profileID, profile.profileVersion, revision]),
+              let payload: Data = row["payload"] else { return nil }
+        return try FormaJSON.decode(ProjectContext.self, from: payload)
+    }
+
     static func nextContextRevision(scopeID: UUID, profile: MappingProfile, in db: Database) throws -> Int {
         let row = try Row.fetchOne(db, sql: """
             SELECT MAX(revision) AS revision FROM context_revisions
@@ -173,29 +187,6 @@ enum MappingStore {
             """, arguments: [scopeID.sourceKey, profile.profileID, profile.profileVersion])
         let stored: Int? = row?["revision"]
         return (stored ?? 0) + 1
-    }
-
-    /// Context revisions that actually reference a source, used to invalidate
-    /// only the mappings that depended on them.
-    static func contextRevisions(covering sourceIDs: Set<UUID>, in db: Database) throws -> Set<Int> {
-        guard !sourceIDs.isEmpty else { return [] }
-        let keys = sourceIDs.map(\.sourceKey)
-        let placeholders = Array(repeating: "?", count: keys.count).joined(separator: ",")
-        let rows = try Row.fetchAll(
-            db,
-            sql: """
-                SELECT DISTINCT cr.revision AS revision FROM context_revisions cr
-                JOIN context_membership cm ON cm.revision_id = cr.id
-                WHERE cm.source_id IN (\(placeholders))
-                """,
-            arguments: StatementArguments(keys)
-        )
-        var revisions: Set<Int> = []
-        for row in rows {
-            let revision: Int = row["revision"]
-            revisions.insert(revision)
-        }
-        return revisions
     }
 
     // MARK: - Evidence registry

@@ -40,6 +40,14 @@ extension SourceWorkspace {
         }
     }
 
+    public func storedContext(scope: SourceScope, profile: MappingProfile, revision: Int) async throws
+        -> ProjectContext?
+    {
+        try await store.database.read { db in
+            try MappingStore.context(scopeID: scope.id, profile: profile, revision: revision, in: db)
+        }
+    }
+
     /// Replaces one file's evidence rows. Reading a file again invalidates its
     /// previous excerpts by construction, so an older citation cannot resolve.
     public func recordEvidence(_ records: [EvidenceRecord], for sourceID: UUID) async throws {
@@ -52,18 +60,28 @@ extension SourceWorkspace {
 
     /// Reads a file and registers what was observed, returning the rows a
     /// mapping request may cite.
+    ///
+    /// The capture carries the entry as it exists *after* the read: when the
+    /// content moved, the workspace appends a new snapshot revision, and
+    /// registering the fresh excerpt under the caller's older revision would
+    /// leave no evidence row at the current revision at all. Every later
+    /// manifest for that file would then fail its own citation check and could
+    /// never be stored.
     public func captureEvidence(for entry: SourceEntry) async throws -> [EvidenceRecord] {
         let capture = try await evidence(for: entry)
-        let records = try EvidenceRegistry.records(for: entry, capture: capture)
-        try await recordEvidence(records, for: entry.id)
+        let records = try EvidenceRegistry.records(for: capture.entry, capture: capture)
+        try await recordEvidence(records, for: capture.entry.id)
         return records
     }
 
+    /// Capturing a batch is all-or-nothing on cancellation: a partial result is
+    /// indistinguishable from "these files have no evidence", so cancellation
+    /// propagates instead of returning a half set.
     public func captureEvidence(for entries: [SourceEntry]) async throws -> [UUID: [EvidenceRecord]] {
         var result: [UUID: [EvidenceRecord]] = [:]
         for entry in entries {
+            try Task.checkCancellation()
             result[entry.id] = try await captureEvidence(for: entry)
-            if Task.isCancelled { break }
         }
         return result
     }
@@ -75,17 +93,10 @@ extension SourceWorkspace {
             let revision = try MappingStore.nextManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
             let stored = Manifest(envelope: manifest.envelope.rebased(to: revision), entries: manifest.entries,
                                   report: manifest.report)
+            // `manifest_entry_evidence.evidence_id` carries a foreign key into
+            // `evidence_items`, so citing an unregistered row fails here rather
+            // than being discovered by re-querying after the fact.
             try MappingStore.insertManifest(stored, scopeID: scopeID, in: db)
-            // Keep the cited evidence rows in the registry: an exported
-            // manifest that references rows which no longer exist is not
-            // re-checkable later.
-            let ids = Set(stored.entries.flatMap { entry in entry.fields.flatMap(\.evidenceIDs) })
-            if !ids.isEmpty {
-                let rows = try MappingStore.evidence(ids: ids, in: db)
-                // A saved manifest must not cite rows the registry does not
-                // hold, or the export could never be re-checked offline.
-                guard rows.count == ids.count else { throw FormaError.invalidOutput }
-            }
             return stored
         }
     }
@@ -108,8 +119,10 @@ extension SourceWorkspace {
             ?? ContextBuilder.build(ContextBuilderInput(scopeID: scope.id, profile: profile,
                                                         entries: listing.entries),
                                     revision: manifest.envelope.contextRevision)
+        let previous = try await storedContext(scope: scope, profile: profile,
+                                               revision: manifest.envelope.contextRevision)
         let decision = ManifestReconciler.decide(manifest: manifest, currentEntries: listing.entries,
-                                                 currentContext: context)
+                                                 previousContext: previous, currentContext: context)
         guard !decision.invalidatedSourceIDs.isEmpty else { return decision }
         try await store.database.write { db in
             try MappingStore.invalidate(manifestID: manifest.envelope.manifestID,

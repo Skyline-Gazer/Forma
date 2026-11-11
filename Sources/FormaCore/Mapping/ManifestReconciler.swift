@@ -8,17 +8,23 @@ import Foundation
 public enum ManifestReconciler {
     public struct Decision: Sendable, Equatable {
         public let invalidatedSourceIDs: Set<UUID>
+        /// Which rule produced the decision, in the vocabulary the Exceptions
+        /// view and the exported bundle show.
         public let reason: String
-        /// True when the remaining entries may be reused as they are, which is
-        /// what keeps a rescan from re-billing a whole archive.
-        public let reusable: Bool
     }
 
-    public static func decide(manifest: Manifest, currentEntries: [SourceEntry], currentContext: ProjectContext)
-        -> Decision
-    {
+    /// Compares a stored manifest against the current listing and the current
+    /// context.
+    ///
+    /// `previousContext` is the stored context revision the manifest cites.
+    /// Without it a rebuild of the context could not be distinguished from a
+    /// change of membership, and every entry would be re-mapped because one
+    /// unrelated directory moved.
+    public static func decide(manifest: Manifest, currentEntries: [SourceEntry], previousContext: ProjectContext?,
+                              currentContext: ProjectContext) -> Decision {
         let byID = Dictionary(uniqueKeysWithValues: currentEntries.map { ($0.id, $0) })
         var stale: Set<UUID> = []
+        var snapshotChanged = false
         for entry in manifest.entries {
             guard let current = byID[entry.sourceID] else {
                 stale.insert(entry.sourceID)
@@ -27,27 +33,26 @@ public enum ManifestReconciler {
             if current.snapshotFingerprint != entry.snapshotFingerprint
                 || Int(current.snapshotRevision) != entry.snapshotRevision {
                 stale.insert(entry.sourceID)
+                snapshotChanged = true
             }
         }
-        let contextMoved = manifest.entries.contains { entry in
-            !currentContext.candidate(for: entry.sourceID).isEmpty
-        } && currentContext.revision != manifest.envelope.contextRevision
-        if contextMoved {
-            // Only the files whose membership actually changed: an unrelated
-            // project directory must not invalidate this one's decisions.
-            stale.formUnion(currentContext.candidates.flatMap { candidate in
-                candidate.memberSourceIDs
-            }.filter { source in
-                guard let before = manifest.entry(for: source) else { return false }
-                return currentContext.conflictedSourceIDs.contains(source)
-                    || before.state == .invalidated
-            })
+        var membershipChanged = false
+        if let previousContext, previousContext.revision != currentContext.revision {
+            // Membership, not the mere existence of a newer context revision,
+            // is what invalidates a decision.
+            let moved = ContextBuilder.affectedSourceIDs(between: previousContext, and: currentContext)
+                .intersection(Set(manifest.entries.map(\.sourceID)))
+            if !moved.isEmpty {
+                stale.formUnion(moved)
+                membershipChanged = true
+            }
         }
-        if !stale.isEmpty {
-            return Decision(invalidatedSourceIDs: stale,
-                            reason: contextMoved ? "context_or_snapshot_changed" : "snapshot_changed",
-                            reusable: stale.count < manifest.entries.count)
-        }
-        return Decision(invalidatedSourceIDs: [], reason: "unchanged", reusable: true)
+        guard !stale.isEmpty else { return Decision(invalidatedSourceIDs: [], reason: "unchanged") }
+        // The most specific reason wins, because the recovery path differs: a
+        // membership change needs the affected cluster re-mapped, while a
+        // snapshot change needs the file re-read first.
+        let reason = membershipChanged && snapshotChanged ? "membership_and_snapshot_changed"
+            : membershipChanged ? "membership_changed" : snapshotChanged ? "snapshot_changed" : "source_missing"
+        return Decision(invalidatedSourceIDs: stale, reason: reason)
     }
 }

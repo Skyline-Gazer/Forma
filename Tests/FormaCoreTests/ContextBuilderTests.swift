@@ -168,7 +168,7 @@ struct ContextBuilderTests {
 
     @Test("an exact historical name labels a candidate without changing membership")
     func historyLabelsOnly() throws {
-        let paths = ["示例项目J/公告.pdf"]
+        let paths = ["示例项目K/公告.pdf"]
         let plain = try context(paths)
         let match = ContextHistoryMatch(
             databaseID: UUID(uuidString: "00000000-0000-4000-8000-000000000099")!,
@@ -180,6 +180,23 @@ struct ContextBuilderTests {
         #expect(candidate.basis.contains(.historyReference))
         #expect(candidate.displayName == "示例项目J")
         #expect(candidate.confidence == .medium, "history may lift a directory-only guess, not confirm it")
+    }
+
+    @Test("a one-character directory does not match a longer history name")
+    func shortKeyIsNotAMatch() throws {
+        // Bare substring matching used to let the directory `甲` "match" every
+        // history project whose name contained that character, then display the
+        // historical name as if it were confirmed.
+        let built = try context(["甲/公告.pdf"])
+        let match = ContextHistoryMatch(
+            databaseID: UUID(), recordID: UUID(), projectName: "甲子园智慧园区项目", groupPath: [], strength: .exactName
+        )
+        let aligned = try context(["甲/公告.pdf"], history: [match])
+        #expect(built.candidates.count == aligned.candidates.count)
+        let candidate = try #require(aligned.candidates.first)
+        #expect(!candidate.basis.contains(.historyReference),
+                "a single-character key must not be treated as a historical match")
+        #expect(candidate.displayName != "甲子园智慧园区项目")
     }
 
     @Test("a partial historical match does not raise confidence")

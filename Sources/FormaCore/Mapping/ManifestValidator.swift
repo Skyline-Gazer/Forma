@@ -266,12 +266,6 @@ public struct ManifestValidator: Sendable {
                                                       instancePath: "\(entry.relativePath)#\(field.rawValue)",
                                                       detail: "The field is listed as unknown but carries a value."))
             }
-            if proposed == nil, !declaredUnknown.contains(field),
-               proposal?.conflicts.contains(where: { $0.field == field }) == true {
-                // A declared conflict with no value is the honest shape and is
-                // handled by the conflict branch below.
-            }
-
             let conflictsForField = proposal?.conflicts.filter { $0.field == field } ?? []
             if !conflictsForField.isEmpty {
                 violations.append(ValidationViolation(code: "field_conflict",

@@ -69,24 +69,29 @@ struct MappingStoreTests {
         #expect(next == 2)
     }
 
-    @Test("invalidation can name only the contexts that reference a source")
-    func contextMembershipIsIndexed() async throws {
+    @Test("a stored context stays readable at the revision a manifest cites")
+    func contextRevisionStaysReadable() async throws {
         let setup = try await prepared()
         defer { setup.fixture.cleanUp() }
         let profile = try MappingProfile.projectArchive()
-        let referenced = setup.entries[0].id
-        let first = context(revision: 1, digest: String(repeating: "a", count: 64), members: [referenced],
-                            profile: profile, scopeID: setup.scope.id)
-        let second = context(revision: 2, digest: String(repeating: "c", count: 64), members: [],
-                             profile: profile, scopeID: setup.scope.id)
+        let first = context(revision: 1, digest: String(repeating: "a", count: 64),
+                            members: [setup.entries[0].id], profile: profile, scopeID: setup.scope.id)
+        let second = context(revision: 2, digest: String(repeating: "c", count: 64),
+                             members: [setup.entries[1].id], profile: profile, scopeID: setup.scope.id)
         try await setup.store.database.write { db in
             try MappingStore.insertContext(first, scopeID: setup.scope.id, in: db)
             try MappingStore.insertContext(second, scopeID: setup.scope.id, in: db)
         }
-        let revisions = try await setup.store.database.read { db in
-            try MappingStore.contextRevisions(covering: [referenced], in: db)
+        // Reconciliation needs the exact revision a manifest references, not
+        // just the newest one, or it cannot tell membership change from rebuild.
+        let cited = try await setup.store.database.read { db in
+            try MappingStore.context(scopeID: setup.scope.id, profile: profile, revision: 1, in: db)
         }
-        #expect(revisions == [1], "revision 2 has no member, so nothing depends on it")
+        #expect(cited == first)
+        let newest = try await setup.store.database.read { db in
+            try MappingStore.context(scopeID: setup.scope.id, profile: profile, revision: 3, in: db)
+        }
+        #expect(newest == nil)
     }
 
     @Test("evidence keeps its locator and status through storage")

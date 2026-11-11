@@ -255,17 +255,40 @@ public enum ContextBuilder {
 
     // MARK: - Phase two helpers
 
-    private static func relates(_ match: ContextHistoryMatch, to cluster: Cluster) -> Bool {
+    /// A historical record corroborates a candidate; it must not create one.
+    ///
+    /// Containment is admitted only between whole tokens of a meaningful
+    /// length. With bare substring matching, a one-character directory name
+    /// would "match" every history project containing that character, and the
+    /// interface would then display a guessed name as if it were confirmed.
+    static func relates(_ match: ContextHistoryMatch, to cluster: Cluster) -> Bool {
         let target = normalize(match.projectName)
         guard !target.isEmpty else { return false }
-        let keys = [normalize(cluster.key), normalize(lastSegment(cluster.key))]
-        return keys.contains { $0.contains(target) || (!$0.isEmpty && target.contains($0)) }
+        let keyForms = [normalize(cluster.key), normalize(lastSegment(cluster.key))]
+        if keyForms.contains(target) { return true }
+        let targetTokens = Set(tokens(match.projectName))
+        guard !targetTokens.isEmpty else { return false }
+        let keyTokens = Set(tokens(cluster.key))
+        return keyTokens.contains { $0.count >= minimumTokenLength && targetTokens.contains($0) }
+    }
+
+    /// The shortest token that may support a non-exact historical match.
+    static let minimumTokenLength = 3
+
+    private static func tokens(_ value: String) -> [String] {
+        value.components(separatedBy: CharacterSet(charactersIn: "/_-\u{2013}\u{2014} .\u{00b7}+ ,\u{ff0c}()\u{ff08}\u{ff09}[]\u{3010}\u{3011}"))
+            .map { normalize($0) }
+            .filter { !$0.isEmpty && $0.count >= minimumTokenLength }
     }
 
     private static func displayName(for cluster: Cluster, matches: [ContextHistoryMatch]) -> String? {
-        // An exact historical name is shown as the candidate's readable label,
-        // while the structural key stays what it is.
-        if let exact = matches.first(where: { $0.strength == .exactName }) { return exact.projectName }
+        // Only a name equal to the structural key may replace the label.
+        // Anything weaker is a hint about membership, not a title, and showing
+        // it as the project name would present a guess as a fact.
+        let keyForms = Set([cluster.key, lastSegment(cluster.key)].map(normalize))
+        if let exact = matches.first(where: {
+            $0.strength == .exactName && keyForms.contains(normalize($0.projectName))
+        }) { return exact.projectName }
         let segment = lastSegment(cluster.key)
         return segment.isEmpty ? nil : segment
     }
