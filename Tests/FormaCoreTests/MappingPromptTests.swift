@@ -296,6 +296,18 @@ struct MappingPromptTests {
         #expect(serial.contains("1,200,000"), "a serial number is not a price: \(serial)")
     }
 
+    @Test("a placeholder in front of a price does not hide the cue")
+    func placeholderDoesNotCrowdOutTheCue() throws {
+        let plan = RedactionPlan(terms: ["示例厂商乙股份有限公司": .vendor], salt: "workspace-s")
+        // Terms are replaced before amounts, so the money word now sits behind a
+        // placeholder. A window that only reached back over a short fragment
+        // would lose 报价, leave the figure in the request, and the model would
+        // read a real price that was supposed to be gone.
+        let text = try plan.redact(text: "示例厂商乙股份有限公司 报价 1,200,000")
+        #expect(text.contains("«厂商"), "the vendor name is replaced: \(text)")
+        #expect(!text.contains("1,200,000"), "the cue behind a placeholder still counts: \(text)")
+    }
+
     @Test("a field rule names the vocabulary its value must come from")
     func fieldRulesCarryVocabularies() throws {
         let profile = try MappingProfile.projectArchive()

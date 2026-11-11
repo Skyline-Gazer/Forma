@@ -47,22 +47,17 @@ public struct RedactionPlan: Sendable {
 
     public init(terms: [String: Role], salt: String) {
         self.salt = salt
-        self.terms = Self.ordered(terms: terms)
+        // Longest term first, because that is the only order anything here
+        // needs: "示例科技有限公司" must be replaced before "示例" can eat part
+        // of it. Labels come from the term and the salt, never from a position,
+        // so two plans built from the same names always agree.
+        self.terms = terms.map { (term: $0.key, role: $0.value) }
+            .sorted { $0.term.count != $1.term.count ? $0.term.count > $1.term.count : $0.term < $1.term }
         var replacements: [String: String] = [:]
         for entry in self.terms {
             replacements[entry.term] = Self.label(role: entry.role, seed: entry.term, salt: salt)
         }
         self.replacements = replacements
-    }
-
-    /// Role first, then the term, so two plans built from the same names always
-    /// produce the same labels. The label itself is a salted digest, not a
-    /// position in this list.
-    private static func ordered(terms: [String: Role]) -> [(term: String, role: Role)] {
-        terms.sorted {
-            if $0.value != $1.value { return $0.value.rawValue < $1.value.rawValue }
-            return $0.key < $1.key
-        }.map { (term: $0.key, role: $0.value) }
     }
 
     private static func label(role: Role, seed: String, salt: String) -> String {
@@ -114,8 +109,7 @@ public struct RedactionPlan: Sendable {
 
     private func applyKnownTerms(to value: String) -> String {
         var output = value
-        // Longest first, so "示例科技有限公司" is not partially replaced by "示例".
-        for entry in terms.sorted(by: { $0.term.count > $1.term.count }) {
+        for entry in terms {
             guard let placeholder = replacements[entry.term] else { continue }
             output = output.replacingOccurrences(of: entry.term, with: placeholder,
                                                  options: [.caseInsensitive, .diacriticInsensitive])
@@ -205,9 +199,12 @@ public struct RedactionPlan: Sendable {
 
     private static func looksLikeAmount(_ text: String, before context: Substring) -> Bool {
         // Cents imply a price; a grouped number without them needs support from
-        // the words immediately in front of it.
+        // the words in front of it. The window has to clear a placeholder: a
+        // vendor whose name is in the plan turns into `«厂商XXXXXXXXXXXX»`
+        // before this runs, and a shorter window would push the word 报价 out of
+        // sight and leave a real price in the request.
         if text.contains(".") { return true }
-        let window = String(context.suffix(16))
+        let window = String(context.suffix(64))
         return moneyCues.contains { window.contains($0) }
     }
 
