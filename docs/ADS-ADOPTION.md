@@ -156,9 +156,11 @@ two pulls that read anywhere else as the P2 total, a cross-reference to the wron
 mis-described the round count it pointed at), a defect-table summary whose row arithmetic did not match the
 table, and a README that declared P2 delivered while ROADMAP's Owner authorization line still listed only P0
 and P1. None of these were code, and all of them would have been inherited as fact by whoever reads the
-report next; the report now carries one authoritative count line that every other count defers to.
+report next. The report now states one counting convention before any number - sums cover only the pulls
+whose review has closed - and lists components rather than totals that a reader cannot recompute.
 
 The lesson recorded for adoption decisions: round counts measure persistence, not coverage. A review that
 has spent thirty-eight builds on a state machine can still miss "this read returns a different entity than
-the caller means" and "this cache is being used as a source of record". Those two shapes are now explicit
-checklist items for P3 review, listed in `docs/P2-ACCEPTANCE.md` §8.
+the caller means" and "this cache is being used as a source of record". Both shapes are recorded as review checks inside
+`docs/P2-ACCEPTANCE.md` §8, whose purpose is the P3 go/no-go judgement rather than a checklist of its own:
+two numbered items there name them, and nothing in that section is a standing review procedure.
