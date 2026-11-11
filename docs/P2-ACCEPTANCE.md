@@ -12,7 +12,11 @@
 | #40 | （stacked PR，基线分支被 squash 合并后自动关闭；由 #41 取代） | - | - | - |
 | #41 | P2.4 Provider 传输复用 + Mapping Engine + CasePack + Prompt/脱敏 | `98c956d`（head `f660f8b`） | tests、app build 均 `pass`（run 43020359230） | CNB pull #6：11 轮（1c+4w → 1c+2w → 1c+7w → 1c+9w+1i → 1c+9w+1i → 0c+4w+1i → 0c+0w → 1c+2w → 0c+3w → 0c+2w+2i → 0c+2w+2i），发现全部处理 |
 | #42 | P2.5 导出/离线重校验 + P2.7 Correction Capture 与候选案例 | `09baffe`（head `99632a4`） | tests、app build 均 `pass`（run 43024661916） | CNB pull #7：2 轮（1c+6w → 0c+2w，末轮 `passed`），发现全部处理 |
-| #43 | P2.6 原生工作界面 + P2.7 纠错落地路径 | 26a2c3b（head `921808b`） | tests、app build 均 `pass`（run 43078381212，最终测试数 213） | CNB pull #8：**38 次评审构建、37 次有效判定**（`3885a57` 因评审器输出缺字段判 `REVIEW_EVIDENCE_INVALID`，发现仍从 stage-2 日志读出并处理），累计 14 条 critical。按被评审 head 依次：1c+6w、1c、2c+5w+2i、0c+4w、0c+5w、1c+6w、0c+1w、1c+5w、1c+4w、1c+3w、（评审器故障）、0c+4w+1i、1c+2w+1i、0c+3w+1i、0c+6w、0c+3w、0c+0w、3 项、3 项、0c+5w、0c+4w、1c+3w、0c+6w+2i、0c+2w、0c+7w、0c+3w+1i、0c+3w+2i、0c+4w+2i、0c+5w+3i、1c+7w+2i、0c+8w、0c+3w、0c+3w+2i、0c+4w+1i、0c+0w+4i、0c+0w+4i、（末次待读）。最后四轮只命中注释冗余或复述前一轮已修项；发现全部处理或附证据说明不成立 |
+| #43 | P2.6 原生工作界面 + P2.7 纠错落地路径 | 26a2c3b（head `921808b`） | tests、app build 均 `pass`（run 43078381212，最终测试数 213） | CNB pull #8：**38 次评审构建、37 次有效判定**（`3885a57` 因评审器输出缺字段判 `REVIEW_EVIDENCE_INVALID`，发现仍从 stage-2 日志读出并处理），累计 14 条 critical。最后四轮只命中注释冗余或复述前一轮已修项；发现全部处理或附证据说明不成立 |
+| #44 | P2 验收报告 + ADS 台账（本文档） | 待合并 | tests、app build 均 `pass`（run 43083387505） | CNB pull #9：1 次构建，`changes_requested`（2 critical+2 warning，全部针对**已合并代码**而非文档，见 §6 末条与 §9） |
+| #45 | #43 合并后遗留项：3 项注释/UI 反馈 + pull #9 的 4 项缺陷 | 待合并（head `094edd3`） | 首提交 tests、app build 均 `pass`（run 43084110419）；含第二提交的重跑待记录 | CNB pull #10：镜像 `094edd3`，评审结果待记录 |
+
+注：#43 行原先列出逐次计数，完整 38 次链见 `docs/ADS-ADOPTION.md` 的 P2 台账；此处只保留汇总，避免同一串数字在两处失同步。
 
 注：P2.7 的「稳定占位脱敏与外发预览」随 #41 交付，「Correction Capture 与候选案例审核」随 #42 交付，因此不再单独开「纠错与隐私」PR。
 
@@ -66,7 +70,7 @@
 - 评审共发现 **1 条 critical**（重读已归档文件触发外键约束失败，导致证据永远无法刷新）与多条真实 warning：工件长度/数量上界只在 Schema 而不在构造、lint 对部分关键字形态放行、Profile 契约用 `else` 代表 Vendor、历史匹配用裸子串包含、失效判定与注释不一致、 reconcile 重复报告旧失效、死代码与无调用方的分支入口、注释描述与实现不符。全部 FIXED，并有对应回归测试或收紧后的断言。
 - **覆盖边界**：#38 的第 3 轮发现修复 commit 未触发第 4 轮评审（自动循环上限 3 轮），其验证依据为 GitHub Actions 与本地编译；#39 同理以其第 3 轮结果为准。该缺口在此登记，不追认为已评审通过。
 - **#41 评审轮数超出预期**：同一 PR 在 CNB 上跑了 11 轮（1 critical+4 warning → 1+2 → 1+7 → 1+9+1 → 1+9+1 → 0+4+1）。每轮都产出真实缺陷，其中三条属于生产语义错误而非风格问题：`candidate_ref` 与 projectKey 的错配（会让所有真实模型答案失去资格）、批次按 projectKey 分组却反查 candidateID（同一 key 多候选时挂错成员集合）、429 与 schema 修复共用一轮循环（一次限流吃掉修复额度）。这说明「一次集中复核」的预算假设对 AI 生成代码不成立；后续切片 PR 仍按同一流程执行，但验收报告按实际轮数记录，不把多轮评审当作异常。
-- **#43（CNB pull #8）跑了 38 次评审构建、37 次有效判定**（第 11 次 `3885a57` 因评审器输出缺 `severity` 被判 `REVIEW_EVIDENCE_INVALID`，发现仍从 stage-2 日志读出并处理，不计为有效判定），累计 14 条 critical。逐次计数见 §1、`/tmp/pull8-rounds-clean.txt` 与 ADS 台账。趋势不是「风格收敛」而是**同一状态机被逐层追问到自洽**：第 1–10 次修数据与写入路径（scope 持久化双写、引擎缓存键与本体分离、纠正记录一列两义、发布与记录分两次写、stale-base 可覆盖新修订）；第 11–21 次修并发与生命周期（await 之后的归属校验、回读吞掉已成功的写入、tab 卸载取消共享任务句柄、restore 双趟 reload、UI 先写后校验）；第 22–35 次修**整改自身引入的问题**与迁移对真实旧库的适配；第 36–38 次只命中注释密度与文档准确性。
+- **#43（CNB pull #8）跑了 38 次评审构建、37 次有效判定**（第 11 次 `3885a57` 因评审器输出缺 `severity` 被判 `REVIEW_EVIDENCE_INVALID`，发现仍从 stage-2 日志读出并处理，不计为有效判定），累计 14 条 critical。逐次计数与被评审 head 链见 `docs/ADS-ADOPTION.md` 的 P2 台账。趋势不是「风格收敛」而是**同一状态机被逐层追问到自洽**：第 1–10 次修数据与写入路径（scope 持久化双写、引擎缓存键与本体分离、纠正记录一列两义、发布与记录分两次写、stale-base 可覆盖新修订）；第 11–21 次修并发与生命周期（await 之后的归属校验、回读吞掉已成功的写入、tab 卸载取消共享任务句柄、restore 双趟 reload、UI 先写后校验）；第 22–35 次修**整改自身引入的问题**与迁移对真实旧库的适配；第 36–38 次只命中注释密度与文档准确性。
   - 第 22 次构建（`bffed12`）critical：`corrections_produced` 唯一索引在含「两行声称读过同一修订」的 v1 历史上会让 `CREATE UNIQUE INDEX` 失败、迁移中止，用户启动即 `Workspace unavailable` → 早者保留主张、晚者留空；新增测试先 rewind 一个由生产 store 建出的库、删除迁移记录再重开，让注册迁移真实执行。
   - 第 30 次构建（`e839a1c`）warning：`applyCorrection` 里 `nextManifestRevision` 被读两次（守卫一次、`persist` 一次），`produced_revision` 取第二次的值，二者理论上可以不一致 → `persist(..., expecting:)` 单次读并在同一处判定（`4a2bfbd`）。
   - 第 31 次构建（`98cfdfc`）warning：迁移把 `supersedes_revision IS NOT NULL` 当成「已接受」，而 `review_state` 允许 `pending`；`pending` 行什么都没发布却被赋上修订主张 → 两条 UPDATE 写明状态，测试加入第四行钉住（`659c490`）。同轮另一条：`ExceptionsView` 用两条独立可选链比较 `Int? == Int?` → 单次 `guard let` 绑定。
@@ -77,6 +81,8 @@
 - **两条被证据推翻的评审意见（记录以免被当成已修）**：第 30 次构建的 critical 称 `recordsByID` 会被旧副本覆盖——citation id 由 `sourceID`+`snapshotRevision`+source+locator 哈希而来（`EvidenceRegistry.identifier`），且 FormaCore 从不 `UPDATE evidence_items`，同一 id 的任何一次读取内容相同，故不存在新旧副本之分；第 25 次构建建议为索引冲突增加识别分支与日志入口，实现后按第 30 次构建自身给出的「该路径经守卫不可达」论证删除，只保留 schema 层约束与说明。两处最终都只留下可核对的事实说明。
 - **#43 的六条真实缺陷来自 CI 而非评审**：`Phase.label` 穷尽分支缺失、init 中在成员初始化前读取 `defaults`、`SourceEntry.sourceID`/`envelope.profile`/未绑定的 `scope` 等不存在的标识符（其中一条正是上一轮整改自己引入的）、`#expect` 宏内漏写 `try`、以及新迁移测试里删错表名（GRDB 的迁移记录表是 `grdb_migrations`，不是 `grdb_database_migrations`）。这不是巧合：FormaApp 在本机无法做跨文件类型检查（见 §3），而 GUI 改动几乎全是跨文件契约。P2 的 GUI 验收因此把 CI app build 当作类型层门禁。
 - **两处判断被评审纠正**：其一，我先把 `pending` 纠正行当作不可能状态并从 UI 删除，评审指出该状态在 schema 与 `CorrectionRecord.init` 默认值上都合法；随后又发现「合法」不等于「会发布修订」，最终口径是 UI 用红色上报这一组合、迁移拒绝为它赋号。其二，我声称 `SettingsView` 的字段在预览期间被 `phase.isBusy` 禁用，实际只有 provider 选择器带 `.disabled`，因此那几项比较是必需而非冗余——同时暴露出 `redactionSalt` 漏比。同类的「把当前代码的性质当成整个数据集的性质」错误一共出现三次（另一次是把 `try?` 叠加在本来 optional 的返回上）。
+- **文档 pull（CNB #9）的评审在已合并代码里找到 2 条 critical，而 #43 自身的 38 次构建没有**：评审范围是 `review/p2-docs` 对 `dev` 的 diff，因而重新读了 GUI 代码。两条均真实且可复现（已由 #45 的 `094edd3` 修复）：其一，`applyCorrection` 在写成功后用 `currentManifest(scope:profile:)` 回读以检测「修订已被推进」，而该查询返回的是这一 scope+profile 组合的**最新** manifest——当存在另一份 manifest（例如先跑过映射得到 B，再打开导入 bundle 里的 A 并修正它）时，屏幕被换成 B 的表头与条目，而提示说的是刚写下的 A 的修订；修复是不再二次读取，直接用写操作返回的 manifest。其二，`export()` 打包的是**本次会话点开过**的证据行，不是 manifest 引用的行；不点文件直接导出的 bundle 里 `evidence.json` 缺行、`missingEvidence` 非空，只有在另一台机器离线重校验时才暴露。修复是导出前按 manifest 自身来源读取登记行，并把缺行写进提示而不是宣布导出成功。同轮 2 条 warning（纠错校验对每个引用做线性扫描、历史读失败被降级成 `.notRead` 配一行列表）一并处理。
+  - 结论对 §5 的排期判断是**加强**而非削弱：评审次数不等于覆盖面，#43 的 38 次构建密集看了状态机与注释，却漏掉「一次多余的读取」和「会话缓存被当成数据来源」这两类。若要把这类缺陷压在前置期内，需要的是**按数据流边界重读**（每个存储查询的归属、每个写路径的返回值去向），不是更多轮同一视角的评审。P3 的评审检查项按此添加，见 §8。
 - **本地测试可用性**：`swift test` 对 `TestingMacros` 插件仍会随机失败（重跑 1–5 次通常可过，本会话最后一次全量为 213 项通过），因此**测试与 app 编译的权威仍是 GitHub Actions**；本地结果只用于快速反馈，不作为验收依据。
 
 ## 7. 风险与遗留
@@ -85,13 +91,18 @@
 2. 本地 swift-testing 宏插件在本轮后期完全不可用（见 §3），测试权威为 GitHub Actions；若 Owner 需要本地闭环，需安装完整 Xcode。
 3. 映射质量指标属 P3，需要独立脱敏金标准；本轮不宣称任何质量阈值达成。
 4. `dev` 无必需状态检查保护；本轮每个 PR 均在两项检查为绿后合并。
-5. `MappingStore.latestManifest` 以 `created_at DESC, revision DESC` 判定「当前修订」，而 `nextManifestRevision` 以 `MAX(revision)` 分配下一号。二者在极端时间戳重排下对「哪一版最新」可能给出不同答案。纠正发布路径已不依赖 `created_at`（只比较 `MAX(revision)+1` 与被纠正版本自身），但读取路径仍按 `created_at` 排序；改它会改变既有库的显示语义，留待 Owner 决定是否统一为 `revision DESC`。
-6. 「Prototype 与 Import/Release 阶段区分；一次集中复核即可，不添加无批准的强门禁」（AGENTS.md 第 6 条）中的**一次集中复核**假设在 AI 生成代码上不成立：#41 跑了 11 轮，#43 跑了 34 次评审构建（31 次有效判定、14 条 critical）。发现类型依次为数据正确性 → 并发与生命周期 → **整改自身引入的问题** → 注释与文档的可信度；第 22 次构建才暴露「唯一索引会让含重复 target 的旧库迁移失败、用户启动即不可用」这一真实数据形状问题，说明前 20 轮都停在代码内部而没有面对历史库。排期应按「多轮评审为常态」估计，并把每轮计数写入台账。
+5. 「当前 manifest」这一查询本身有歧义：`MappingStore.latestManifest` 以 `created_at DESC, revision DESC` 判定，而 `nextManifestRevision` 以 `MAX(revision)` 分配下一号，二者在时间戳重排下可对「哪一版最新」给出不同答案；同一 scope+profile 存在多份 manifestID 时，「当前」甚至不指向调用者刚写过的那份。CNB 文档 pull #9 的 critical 正是这一歧义落地成缺陷（写后又读、读到别份），#45 已让写路径不再依赖该查询。读取路径仍按 `created_at` 排序，统一为 `revision DESC` 会改变既有库的显示语义，留待 Owner 决定。
+6. 「Prototype 与 Import/Release 阶段区分；一次集中复核即可，不添加无批准的强门禁」（AGENTS.md 第 6 条）中的**一次集中复核**假设在 AI 生成代码上不成立：#41 跑了 11 轮，#43 跑了 38 次评审构建（37 次有效判定、14 条 critical）。发现类型依次为数据正确性 → 并发与生命周期 → **整改自身引入的问题** → 注释与文档的可信度；第 22 次构建才暴露「唯一索引会让含重复 target 的旧库迁移失败、用户启动即不可用」这一真实数据形状问题，说明前 20 轮都停在代码内部而没有面对历史库。而 #43 合并之后，文档 pull 的评审在重读同一批代码时又找到 2 条 critical（见 §6 末条），所以**轮数多不等于覆盖到**：排期应按「多轮评审为常态」估计、把每轮计数写入台账，并在 P3 增加按数据流边界的专门复查，而不是指望同一视角的第 N 轮会自然收敛。
 7. `docs/ROADMAP.md` 的「当前授权范围（Owner，2026-11-11）」一行仍写着「P2 … 未授权」，而 P2 各 PR 已按本轮指令合入 `dev`。本轮不擅自改写 Owner 的授权记录：该行需要 Owner 用一句话确认「P2 = 已授权、P3/I1/I2/R1 = 未授权」后由文档 PR 更新。
 
 ## 8. 是否具备进入 P3（判定见下）
 
 本地闭环（扫描 → 上下文 → 证据 → 校验 → Manifest → 导出 → 离线复核 → 纠正 → 界面）已实现并由 CI 验证；进入 P3 还需两项外部输入：真实 Provider 调用（凭据 + 授权）与 ≥150 条独立脱敏金标准。二者缺一时 P3 只能报告缺口，不能宣称质量验收。
+
+P3 的评审增加两类检查项，来源是 P2 漏网的缺陷形状（§6 末条、§9 后 7 行）：
+
+1. **每个存储查询的归属**：这次读的是不是调用者刚写的那一条，还是「该容器里最新的一条」；写路径的返回值是否被二次读取覆盖。
+2. **每个数据来源的身份**：界面/导出用的是持久化登记的数据，还是本次会话顺带缓存的数据；若不是同一集合，缺失时要显式说出而不是报告成功。
 
 ## 9. 评审期间发现并修复的实质缺陷（P2 切片 B/C/D/E）
 
@@ -146,6 +157,13 @@
 | 预览面板两行读当前设置，payload 是点击时快照 | 外发同意面把一次请求的字节与另一次请求的设置并排显示 | CNB 评审第 33 次构建 |
 | `ExceptionsView` 用两条独立可选链比较 `Int? == Int?` | 正确性依赖上方四行的早退；两侧同为 nil 时相等 | CNB 评审第 31 次构建 |
 | `entryLimit` 从 defaults 原样读出并显示 | 界面写「0」而引擎每批仍放 1 个文件，计数与设置不符 | CNB 评审第 38 次构建 |
+| 写成功后用 `currentManifest(scope:profile:)` 回读来检测修订推进 | 同 scope+profile 存在另一份更新的 manifest 时，屏幕被换成那份的表头与条目，提示说的却是刚写下的这份 | CNB 文档 pull #9 critical |
+| `export()` 取会话缓存 `evidenceBySource` 而非登记行 | 未点开文件即导出的 bundle 引用缺失证据，只有换机离线重校验才暴露 | CNB 文档 pull #9 critical |
+| 纠错校验对每个引用在来源的全部历史行上线性查找 | 单次修正成本为引用数 × 历史长度，与同批引入的批量读优化方向相反 | CNB 文档 pull #9 warning |
+| 历史读取失败时置 `.notRead` 却渲染一行列表 | 看起来完整、实际只有一条的审核历史，旁注还说「尚未读取」 | CNB 文档 pull #9 warning |
+| `(.evidenceVerified, nil)` 的说明写成「旧库让两次尝试记了同一个被读取的修订」 | 读者去找不存在的旧库行为；实际是迁移去重时主动不给晚者归属 | PR #45（合并后自查） |
+| `merge` 注释声称同一 id「每一次读取都相同」 | 只讲得住存储层：会话内新副本会覆盖内存视图而不写回存储 | PR #45（合并后自查） |
+| 提交纠正期间按钮仅置灰、无任何进行指示 | 慢盘或锁库时 reviewer 无法区分「未响应」与「已受理」，倾向重复点击 | PR #45（合并后自查） |
 
-这些缺陷全部由测试与评审闭环处理，未进入 I1/I2，也未对 DEVONthink 做任何写操作。
+前 15 项在所属 PR 合并前由测试与评审闭环处理；后 7 项在 #43 合并后由自查与文档 pull 的评审发现，由 #45 修复（4 项改变运行时行为，3 项是注释与界面反馈）。全部未进入 I1/I2，也未对 DEVONthink 做任何写操作。
 

@@ -104,6 +104,8 @@ P2 was delivered in four code PRs, each mirrored to CNB for review before merge.
 | [#6](https://cnb.cool/KoolingMachine/Forma/-/pulls/6) | [#41](https://github.com/Skyline-Gazer/Forma/pull/41) Mapping Engine, transport reuse, CasePack, redaction | `db96396` → … → `f660f8b` | 11 | merged as `98c956d`; GitHub Actions `run 43020359230` covered the final head |
 | [#7](https://cnb.cool/KoolingMachine/Forma/-/pulls/7) | [#42](https://github.com/Skyline-Gazer/Forma/pull/42) Manifest export, offline revalidation, Correction Capture | `f1ce455` → `2fee989` → `99632a4` | 2 (`passed`, 0 critical) | merged as `09baffe`; GitHub Actions `run 43024661916` covered the final head |
 | [#8](https://cnb.cool/KoolingMachine/Forma/-/pulls/8) | [#43](https://github.com/Skyline-Gazer/Forma/pull/43) Native workspace, correction UI, export screens | `386aa0f` → `372f682` → `5ab9184` → `7e1de89` → `a2a1232` → `eb43197` → `f26247b` → `2582495` → `0d96330` → `df1a7c2` → `3885a57`* → `5d7aa43` → `eff5e79` → `e1630dc` → `4b4c1bf` → `ee872e6` → `74c6185` → `409eae8` → `865958b` → `c130895` → `743df66` → `bffed12` → `a5720c9` → `2538113` → `ecc8a30` → `b3084a4` → `7a00f03` → `74ab1d9` → `58f8a97` → `e839a1c` → `98cfdfc` → `4a2bfbd` → `659c490` → `520163e` → `576ce51` → `c9060f3` → `921808b` | 38 builds (37 verdicts), 14 critical | merged as 26a2c3b; GitHub Actions `run 43078381212` covered the final head |
+| [#9](https://cnb.cool/KoolingMachine/Forma/-/pulls/9) | [#44](https://github.com/Skyline-Gazer/Forma/pull/44) P2 acceptance report and this ledger | `cdacae5` | 1 build, `changes_requested`: 2 critical + 2 warning, **all in already-merged code** | open; findings fixed in #45 `094edd3` |
+| [#10](https://cnb.cool/KoolingMachine/Forma/-/pulls/10) | [#45](https://github.com/Skyline-Gazer/Forma/pull/45) Post-merge review follow-ups | `4adcb95` → `094edd3` | verdict pending | open |
 
 ### What the round counts mean
 
@@ -125,3 +127,30 @@ Round counts are per CNB pull, and the automatic cycle budget is finite. Where a
 The findings were not the same complaint repeated, and they arrived in four layers. Builds 1-10 fixed what the workspace writes: a persisted scope with two writers, an engine cache whose key and body were maintained apart, a corrections column that meant "produced" on one path and "targeted" on another, publishing and recording split across two transactions, and a correction that could be published on top of a revision it had never seen. Builds 11-21 fixed when a value is allowed to be believed: guards that ran after the writes they protected, read-backs that swallowed a successful write when they failed, tab-shaped `onDisappear` handlers cancelling a task handle shared by every long operation, and two reload passes racing at launch. Builds 22-35 fixed the remediation itself and the migration's contact with real history: the unique index that aborts the upgrade of a version 1 database holding two corrections that name the same revision they read (build 22, critical - every workspace that had been used twice would have failed to open); the same migration crediting a `pending` row with a revision it never published; the next-revision number read twice in one transaction; and an egress-consent preview that paired snapshotted bytes with the settings on screen. Builds 36-38 hit comment bulk only: notes that argued with the reader, narrated a replaced implementation, or duplicated a constraint stated three lines away.
 
 Six defects were found only by CI, and only because the machine cannot type-check the app target locally: an exhaustive `switch` over `Phase` missing a case, a stored property read in `init` before initialisation completed, references to members that do not exist (`SourceEntry.sourceID`, `ManifestEnvelope.profile`), `try?` applied to an already-optional return, an ownership guard naming a variable no enclosing scope bound, and a migration test deleting `grdb_database_migrations` where GRDB keeps `grdb_migrations`. GUI work in this repository is gated on the macOS app build, and that gate is stated as the verification rather than described as a local pass.
+
+### What a later pull found after thirty-eight builds on the earlier one
+
+The documentation pull #9 mirrors `review/p2-docs` against CNB `dev`, so its review diff contained the
+workspace code merged in #43. On its first build the reviewer returned two criticals that thirty-eight
+builds of that same code had not:
+
+- `applyCorrection` re-read "the current manifest for this scope and profile" after publishing, to detect a
+  revision that had moved on in the meantime. The query answers with the newest manifest of that pair, not
+  the one the click corrected, so a second manifest for the same scope and profile — mapping run B plus an
+  imported bundle manifest A — put B's header and entries on screen under a notice describing the revision
+  just written to A. The write already returns the manifest it stored; the second read was removed rather
+  than narrowed, because no read of "latest" can be made to mean "the one I wrote".
+- `export()` packaged `evidenceBySource`, the rows this session had opened, instead of the rows the manifest
+  cites. Exporting after `reload()` without clicking through every file produced a bundle whose
+  `evidence.json` was missing cited rows, which only contradicts itself under offline revalidation, on
+  another machine, after the success notice has been dismissed.
+
+Both were reproduced against the current source before being fixed (#45 `094edd3`), together with the two
+warnings from the same build: the correction verifier scanned a source's whole evidence list once per cited
+id — undoing the batch read introduced beside it — and a failed history read after a recorded correction
+reported `notRead` while rendering a one-row list, which is a different claim.
+
+The lesson recorded for adoption decisions: round counts measure persistence, not coverage. A review that
+has spent thirty-eight builds on a state machine can still miss "this read returns a different entity than
+the caller means" and "this cache is being used as a source of record". Those two shapes are now explicit
+checklist items for P3 review, listed in `docs/P2-ACCEPTANCE.md` §8.
