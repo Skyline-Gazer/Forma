@@ -79,7 +79,7 @@
   - 第 34 次构建（`520163e`）warning：`merge` 注释缺少可核对来源 → 写明 `MappingStore.insertEvidence` 使用 `INSERT OR IGNORE`；`plannedBatches` 文档未说明该路径的 `limit` 未经构造器钳制 → 写明下限在 `batches` 内部、两入口在此汇合。
   - 第 35–38 次构建（`576ce51`、`c9060f3`、`921808b`）：只命中注释密度与复述（`revisionSplitSQL` 8→4 行、`merge` 7→4 行、预览守卫 8→3 行、`didSet` 5→3 行），以及「注释描述被替换掉的旧写法」这一类（`emptyReason`、`producedRevision`、`outcomeLine` 文案）。
 - **两条被证据推翻的评审意见（记录以免被当成已修）**：第 30 次构建的 critical 称 `recordsByID` 会被旧副本覆盖——citation id 由 `sourceID`+`snapshotRevision`+source+locator 哈希而来（`EvidenceRegistry.identifier`），且 FormaCore 从不 `UPDATE evidence_items`，同一 id 的任何一次读取内容相同，故不存在新旧副本之分；第 25 次构建建议为索引冲突增加识别分支与日志入口，实现后按第 30 次构建自身给出的「该路径经守卫不可达」论证删除，只保留 schema 层约束与说明。两处最终都只留下可核对的事实说明。
-- **#43 的六条真实缺陷来自 CI 而非评审**：`Phase.label` 穷尽分支缺失、init 中在成员初始化前读取 `defaults`、`SourceEntry.sourceID`/`envelope.profile`/未绑定的 `scope` 等不存在的标识符（其中一条正是上一轮整改自己引入的）、`#expect` 宏内漏写 `try`、以及新迁移测试里删错表名（GRDB 的迁移记录表是 `grdb_migrations`，不是 `grdb_database_migrations`）。这不是巧合：FormaApp 在本机无法做跨文件类型检查（见 §3），而 GUI 改动几乎全是跨文件契约。P2 的 GUI 验收因此把 CI app build 当作类型层门禁。#45 的整改又添了一条同类：导出改为读取登记行时写成 `manifest.entries.map(\.id)`，而 `ManifestEntry` 的键是 `sourceID`——app target 编译失败，同一分支的 FormaCore 测试全绿，本机对 FormaApp 只能做 `-parse`。
+- **#43 的六条真实缺陷来自 CI 而非评审**：`Phase.label` 穷尽分支缺失、init 中在成员初始化前读取 `defaults`、`SourceEntry.sourceID`/`envelope.profile`/未绑定的 `scope` 等不存在的标识符（其中一条正是上一轮整改自己引入的）、`#expect` 宏内漏写 `try`、以及新迁移测试里删错表名（GRDB 的迁移记录表是 `grdb_migrations`，不是 `grdb_database_migrations`）。这不是巧合：FormaApp 在本机无法做跨文件类型检查（见 §3），而 GUI 改动几乎全是跨文件契约。P2 的 GUI 验收因此把 CI app build 当作类型层门禁。#45 的整改又添了三条同类，全部是「凭印象引用 FormaCore 类型成员」的形状：导出改为读取登记行时写成 `manifest.entries.map(\.id)`（`ManifestEntry` 的键是 `sourceID`）；导出提示读取 `Summary.missingEvidence`（该字段属于 `ManifestExport.Revalidation`，离线重校验才有）；导出提示拆成两分支插值字符串后，`Task { }` 体的类型检查超时（`unable to type-check this expression in reasonable time`）。三次都是 app target 编译失败而 FormaCore 测试全绿，因为本机对 FormaApp 只能做 `-parse`。前两条已改为正确成员、并把「bundle 是否含全部被引用行」的说明交回重校验路径（缺行在那里以 `evidence_not_found` 报出），第三条把提示拆成独立函数。
 - **两处判断被评审纠正**：其一，我先把 `pending` 纠正行当作不可能状态并从 UI 删除，评审指出该状态在 schema 与 `CorrectionRecord.init` 默认值上都合法；随后又发现「合法」不等于「会发布修订」，最终口径是 UI 用红色上报这一组合、迁移拒绝为它赋号。其二，我声称 `SettingsView` 的字段在预览期间被 `phase.isBusy` 禁用，实际只有 provider 选择器带 `.disabled`，因此那几项比较是必需而非冗余——同时暴露出 `redactionSalt` 漏比。同类的「把当前代码的性质当成整个数据集的性质」错误一共出现三次（另一次是把 `try?` 叠加在本来 optional 的返回上）。
 - **文档 pull（CNB #9）的评审在已合并代码里找到 2 条 critical，而 #43 自身的 38 次构建没有**：评审范围是 `review/p2-docs` 对 `dev` 的 diff，因而重新读了 GUI 代码。两条均真实且可复现（已由 #45 的 `094edd3` 修复）：其一，`applyCorrection` 在写成功后用 `currentManifest(scope:profile:)` 回读以检测「修订已被推进」，而该查询返回的是这一 scope+profile 组合的**最新** manifest——当存在另一份 manifest（例如先跑过映射得到 B，再打开导入 bundle 里的 A 并修正它）时，屏幕被换成 B 的表头与条目，而提示说的是刚写下的 A 的修订；修复是不再二次读取，直接用写操作返回的 manifest。其二，`export()` 打包的是**本次会话点开过**的证据行，不是 manifest 引用的行；不点文件直接导出的 bundle 里 `evidence.json` 缺行、`missingEvidence` 非空，只有在另一台机器离线重校验时才暴露。修复是导出前按 manifest 自身来源读取登记行，并把缺行写进提示而不是宣布导出成功。同轮 2 条 warning（纠错校验对每个引用做线性扫描、历史读失败被降级成 `.notRead` 配一行列表）一并处理。
   - **#45 的第一版整改自身又被 CNB pull #10 连续两轮判为缺陷**（`4adcb95` 的「Recording…」进度指示挂在全局 `model.phase == .correcting` 上）：`phase` 由扫描、映射、导出、预览共用，且 `Task.cancel()` 只置标志位，`finishWork()` 要等任务走到 `defer` 才执行——取消后 reviewer 打开另一字段的 sheet，会看到「Recording…」而没有按钮，按回车不写入任何东西。改为挂 `recordingDraftID`（写入开始时置为该 draft 的 id、`defer` 清除），同轮自查又发现成功路径无条件 `self.draft = nil` 会清掉 reviewer 在写入期间新开的另一字段草稿，改为只在仍是本次点击那一份时关闭。这与 §6 已有的「整改自身引入的问题」是同一类，只是这次发生在合并之后。
@@ -101,7 +101,7 @@
 
 本地闭环（扫描 → 上下文 → 证据 → 校验 → Manifest → 导出 → 离线复核 → 纠正 → 界面）已实现并由 CI 验证；进入 P3 还需两项外部输入：真实 Provider 调用（凭据 + 授权）与 ≥150 条独立脱敏金标准。二者缺一时 P3 只能报告缺口，不能宣称质量验收。
 
-P3 的评审增加两类检查项，来源是 P2 漏网的缺陷形状（§6 末条、§9 后 9 行）：
+P3 的评审增加两类检查项，来源是 P2 漏网的缺陷形状（§6 末条、§9 后 11 行）：
 
 1. **每个存储查询的归属**：这次读的是不是调用者刚写的那一条，还是「该容器里最新的一条」；写路径的返回值是否被二次读取覆盖。
 2. **每个数据来源的身份**：界面/导出用的是持久化登记的数据，还是本次会话顺带缓存的数据；若不是同一集合，缺失时要显式说出而不是报告成功。
@@ -168,6 +168,8 @@ P3 的评审增加两类检查项，来源是 P2 漏网的缺陷形状（§6 末
 | 提交纠正期间按钮仅置灰、无任何进行指示 | 慢盘或锁库时 reviewer 无法区分「未响应」与「已受理」，倾向重复点击 | PR #45（合并后自查） |
 | 进度指示挂在全局 `phase` 上；成功路径无条件清空当前 draft | 别处忙或取消未落时 sheet 显示「Recording…」却无按钮可点；写入完成清掉另一字段正在输入的草稿 | CNB pull #10 两轮评审 |
 | 导出取登记行时误用 `ManifestEntry.id`（键为 `sourceID`） | app target 编译失败，而 FormaCore 测试全绿、本机无法跨文件检查 | GitHub Actions macOS app build run 43087794362 |
+| 导出提示读取 `Summary.missingEvidence`（属 `Revalidation` 字段） | 同上：编译失败；且概念上把离线复核的结论当作导出即时可知的事实 | GitHub Actions macOS app build run 43089752867 |
+| 导出提示写成两分支插值字符串放在 `Task` 体内 | 类型检查超时导致 app target 失败 | GitHub Actions macOS app build run 43089234676 |
 
-前 15 项在所属 PR 合并前由测试与评审闭环处理；后 9 项在 #43 合并后由自查与文档 pull、follow-up pull 的评审与 CI 发现，由 #45 修复（4 项改变运行时行为，3 项是注释与界面反馈，2 项是整改自身引入后由下一轮评审与 CI 抓回）。全部未进入 I1/I2，也未对 DEVONthink 做任何写操作。
+前 15 项在所属 PR 合并前由测试与评审闭环处理；后 11 项在 #43 合并后发现，由 #45 修复：4 项改变运行时行为（写后又读、导出取会话缓存、每引用一次线性扫描、历史读失败的状态语义），2 项是注释与界面措辞，1 项是新增的进行指示——它本身又被 CNB #10 连续两轮判为缺陷，连带修掉「写入完成时清掉另一字段正在输入的草稿」，3 项是凭印象引用 FormaCore 类型成员造成的 app target 编译失败或类型检查超时。全部未进入 I1/I2，也未对 DEVONthink 做任何写操作。
 
