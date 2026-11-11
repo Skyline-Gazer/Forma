@@ -186,4 +186,58 @@ struct CorrectionPersistenceTests {
         #expect(published.envelope.contextRevision == cited,
                 "the published revision still answers the context revision it cites")
     }
+
+    @Test("a refusal and a later decision do not claim the same revision")
+    func refusalAndAcceptanceStayDistinguishable() async throws {
+        let context = try await prepared()
+        defer { context.fixture.cleanUp() }
+        // Refused first: it cites nothing, so it publishes nothing.
+        let refused = try await context.workspace.applyCorrection(
+            to: context.manifest, sourceID: context.sourceID, field: .issuer,
+            correctedValue: "示例厂商乙", evidenceIDs: [], origin: .manual,
+            scope: context.scope, profile: context.profile)
+        #expect(!refused.violations.isEmpty)
+        // Then accepted against the revision that is still current. The pair is
+        // the sequence that made one column ambiguous: a refusal aimed at
+        // revision 1 and a decision that produced revision 2 both named a
+        // revision number, and nothing said which kind.
+        let current = try #require(await context.workspace.currentManifest(scope: context.scope,
+                                                                          profile: context.profile))
+        let accepted = try await context.workspace.applyCorrection(
+            to: current, sourceID: context.sourceID, field: .completionyear,
+            correctedValue: "2027", evidenceIDs: [context.yearRow], origin: .manual,
+            scope: context.scope, profile: context.profile)
+        #expect(accepted.violations.isEmpty, "violations: \(accepted.violations.map(\.code))")
+        let history = try await context.workspace.corrections(manifestID: context.manifest.envelope.manifestID)
+        #expect(history.count == 2)
+        let refusal = try #require(history.first { $0.reviewState == .rejected })
+        let decision = try #require(history.first { $0.reviewState == .evidenceVerified })
+        #expect(refusal.producedRevision == nil, "a refusal produces nothing, so it names no revision")
+        #expect(refusal.manifestRevision == current.envelope.revision,
+                "the version the reviewer was looking at is still part of the record")
+        #expect(decision.manifestRevision == 1 && decision.producedRevision == 2,
+                "the accepted decision names both what it read and what it wrote")
+    }
+
+    @Test("storage refuses two corrections claiming the same revision")
+    func producedRevisionIsUniqueInStorage() async throws {
+        let context = try await prepared()
+        defer { context.fixture.cleanUp() }
+        let store = try SourceStore(url: context.fixture.database)
+        let manifestID = context.manifest.envelope.manifestID
+        func claim() -> CorrectionRecord {
+            CorrectionRecord(manifestID: manifestID, manifestRevision: 1, producedRevision: 2,
+                             sourceID: context.sourceID, field: .completionyear, previousValue: "2026",
+                             correctedValue: "2027", evidenceIDs: [context.yearRow],
+                             snapshotFingerprint: "f", contextRevision: 1, origin: .manual,
+                             reviewState: .evidenceVerified)
+        }
+        try await store.database.write { db in try MappingStore.insertCorrection(claim(), in: db) }
+        var failure: (any Error)?
+        try await store.database.write { db in
+            do { try MappingStore.insertCorrection(claim(), in: db) } catch { failure = error }
+        }
+        #expect(failure != nil,
+                "one revision has at most one producing correction, and that is a constraint, not a habit")
+    }
 }

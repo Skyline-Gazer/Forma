@@ -48,6 +48,26 @@ enum MappingCorrectionMigrations {
                 CREATE INDEX corrections_source ON corrections(source_id, field);
                 """)
         }
+        // The first version of this table stored one revision number whose
+        // meaning depended on `review_state`: the revision produced on the
+        // accepted path, the revision targeted on the refused one. Two rows for
+        // one manifest could then claim the same revision while describing
+        // different facts, and nothing in the schema stopped it. v2 states the
+        // two facts in two columns and makes "one revision has at most one
+        // producing correction" a constraint instead of a convention.
+        migrator.registerMigration("mapping-corrections-v2") { db in
+            try db.execute(sql: """
+                ALTER TABLE corrections ADD COLUMN produced_revision INTEGER;
+                UPDATE corrections SET produced_revision = supersedes_revision + 1
+                    WHERE supersedes_revision IS NOT NULL;
+                UPDATE corrections SET manifest_revision = supersedes_revision
+                    WHERE supersedes_revision IS NOT NULL;
+                ALTER TABLE corrections DROP COLUMN supersedes_revision;
+                CREATE UNIQUE INDEX corrections_produced
+                    ON corrections(manifest_id, produced_revision)
+                    WHERE produced_revision IS NOT NULL;
+                """)
+        }
     }
 }
 
@@ -57,13 +77,13 @@ extension MappingStore {
     static func insertCorrection(_ correction: CorrectionRecord, in db: Database) throws {
         try db.execute(
             sql: """
-                INSERT INTO corrections (id, manifest_id, manifest_revision, supersedes_revision, source_id,
+                INSERT INTO corrections (id, manifest_id, manifest_revision, produced_revision, source_id,
                     field, previous_value, corrected_value, evidence_ids, snapshot_fingerprint,
                     context_revision, origin, review_state, case_candidate_id, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
             arguments: [correction.id.sourceKey, correction.manifestID.sourceKey, correction.manifestRevision,
-                        correction.supersedesRevision, correction.sourceID.sourceKey, correction.field.rawValue,
+                        correction.producedRevision, correction.sourceID.sourceKey, correction.field.rawValue,
                         correction.previousValue, correction.correctedValue,
                         try FormaJSON.encode(correction.evidenceIDs), correction.snapshotFingerprint,
                         correction.contextRevision, correction.origin.rawValue, correction.reviewState.rawValue,
@@ -86,7 +106,7 @@ extension MappingStore {
             let candidate: String? = row["case_candidate_id"]
             return CorrectionRecord(
                 id: try sourceUUID(row["id"]), manifestID: try sourceUUID(row["manifest_id"]),
-                manifestRevision: row["manifest_revision"], supersedesRevision: row["supersedes_revision"],
+                manifestRevision: row["manifest_revision"], producedRevision: row["produced_revision"],
                 sourceID: try sourceUUID(row["source_id"]), field: field,
                 previousValue: row["previous_value"], correctedValue: row["corrected_value"],
                 evidenceIDs: ids, snapshotFingerprint: row["snapshot_fingerprint"],
