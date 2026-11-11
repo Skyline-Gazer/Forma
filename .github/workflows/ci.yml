@@ -27,3 +27,16 @@ jobs:
         run: xcodebuild -version && swift --version && sw_vers
       - name: Unit tests
         run: swift test --parallel --force-resolved-versions
+
+  app:
+    name: macOS app build
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: xcodebuild -version && swift --version
+      - name: Build the Forma app product
+        run: swift build --package-path FormaApp --product Forma --only-use-versions-from-resolved-file
+        # The ADS pin check is wired into CI by the consumer change that adds
+        # scripts/check_ads_pin.py; scheduling it here first would be a red job.
