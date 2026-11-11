@@ -124,7 +124,6 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var outcome: MappingRunOutcome?
     @Published private(set) var reconciliation: ManifestReconciler.Decision?
     @Published private(set) var evidenceBySource: [UUID: [EvidenceRecord]] = [:]
-    @Published private(set) var registry: [String: EvidenceRecord] = [:]
     @Published private(set) var evidenceFailures: [UUID: FormaError] = [:]
     @Published private(set) var fileEvidence: SourceEvidence?
     @Published private(set) var exportSummary: ManifestExport.Summary?
@@ -163,6 +162,7 @@ final class WorkspaceModel: ObservableObject {
             // empty listing for the new one.
             reconciliation = nil
             correctionHistory = []
+            correctionsLoaded = false
             draft = nil
             refreshRows()
             Task { await self.reload() }
@@ -267,7 +267,14 @@ final class WorkspaceModel: ObservableObject {
 
     var roleInventory: [RedactionPlan.Role: Int] { redaction.roles }
 
-    func record(for id: String) -> EvidenceRecord? { registry[id] }
+    /// Resolves a citation id. FormaCore's per-source query already returns
+    /// every row registered for that file, including the snapshots an older
+    /// manifest revision was decided from, so a second dictionary keyed by id
+    /// was the same data maintained twice: two shapes to keep in the same order
+    /// and two chances to drift apart inside `merge`.
+    func record(for id: String) -> EvidenceRecord? {
+        evidenceBySource.values.lazy.flatMap { $0 }.first { $0.id == id }
+    }
 
     func clusterKeys(for sourceID: UUID) -> [String] {
         context?.candidate(for: sourceID).map(\.projectKey) ?? []
@@ -387,6 +394,12 @@ final class WorkspaceModel: ObservableObject {
         }
         guard let profile = selectedProfile else { return }
         do {
+            // Anything that has not been read back is not a statement about the
+            // manifest, so the flag drops before the work starts rather than
+            // only when it succeeds: the early returns below - no profile, a
+            // context the store cannot resolve - would otherwise leave the
+            // screen showing an empty list that reads like "no attempts".
+            correctionsLoaded = false
             let digest = ContextBuilder.inputDigest(scopeID: scope.id, profile: profile, entries: listing?.entries ?? [])
             let stored = try await workspace.storedContext(scope: scope, profile: profile, inputDigest: digest)
             guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
@@ -401,9 +414,11 @@ final class WorkspaceModel: ObservableObject {
                 // a refused decision becomes invisible exactly when someone
                 // returns to look for it.
                 correctionHistory = try await workspace.corrections(manifestID: stored.envelope.manifestID)
+                correctionsLoaded = true
                 notice = "Restored revision \(stored.envelope.revision) of manifest \(stored.envelope.manifestID.uuidString.lowercased()) from workspace storage."
             } else {
                 correctionHistory = []
+                correctionsLoaded = false
             }
             refreshRows()
         } catch {
@@ -575,19 +590,21 @@ final class WorkspaceModel: ObservableObject {
         }
     }
 
+    /// Folds freshly read rows into the per-source view. Rows are unioned by
+    /// id rather than replacing a source's list: a capture that returns only
+    /// what it just extracted must not hide the rows an older revision cites,
+    /// because those rows are what makes an old manifest verifiable.
     private func merge(_ records: [EvidenceRecord]) {
         guard !records.isEmpty else { return }
         var copy = evidenceBySource
-        var table = registry
-        for record in records { table[record.id] = record }
-        // FormaCore replaces a file's registry rows on every re-read, so the
-        // per-source view follows it; the identifier table keeps older rows
-        // that an older manifest revision still cites.
         for sourceID in Set(records.map(\.sourceID)) {
-            copy[sourceID] = records.filter { $0.sourceID == sourceID }
+            var byID: [String: EvidenceRecord] = [:]
+            for record in (copy[sourceID] ?? []) + records where record.sourceID == sourceID {
+                byID[record.id] = record
+            }
+            copy[sourceID] = byID.values.sorted { $0.id < $1.id }
         }
         evidenceBySource = copy
-        registry = table
     }
 
     // MARK: - Mapping run
@@ -740,7 +757,7 @@ final class WorkspaceModel: ObservableObject {
             return
         }
         let plan = redactionTerms.isEmpty ? nil : redaction
-        let records = Array(registry.values)
+        let records = evidenceBySource.values.flatMap { $0 }
         phase = .exporting
         work = Task {
             defer { finishWork() }
@@ -788,6 +805,7 @@ final class WorkspaceModel: ObservableObject {
                 // session's stale list beside a foreign manifest would
                 // attribute decisions to the wrong reviewer.
                 self.correctionHistory = []
+                self.correctionsLoaded = true
                 self.bundleURL = bundle
                 self.revalidation = nil
                 self.notice = "Loaded revision \(loaded.envelope.revision.formatted()) from \(bundle.path) · "
@@ -851,6 +869,11 @@ final class WorkspaceModel: ObservableObject {
 
     @Published var draft: CorrectionDraft?
     @Published private(set) var correctionHistory: [CorrectionRecord] = []
+    /// Whether `correctionHistory` describes storage rather than this session's
+    /// clicks. Without it an empty list is ambiguous: "nobody attempted
+    /// anything on this manifest" and "the attempts were never read back" look
+    /// identical, and only the first is a fact about the manifest.
+    @Published private(set) var correctionsLoaded = false
 
     /// Opens the sheet for one field, seeded with FormaCore's own value so the
     /// reviewer sees what they are overwriting rather than an empty box.
@@ -887,6 +910,11 @@ final class WorkspaceModel: ObservableObject {
                     correctedValue: trimmed.isEmpty ? nil : trimmed, evidenceIDs: citations,
                     origin: .manual, scope: scope, profile: profile)
                 guard !Task.isCancelled else { return }
+                // A reviewer who switched source while the click was in flight
+                // must not have their decision written onto the screen they
+                // left: every other long task in this model checks that it is
+                // still describing the same scope before publishing results.
+                guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
                 // Read back rather than trust the returned manifest: the store
                 // decides the revision number, and the screen must show what it
                 // actually wrote.
@@ -895,6 +923,7 @@ final class WorkspaceModel: ObservableObject {
                 self.draft = nil
                 refreshRows()
                 correctionHistory = try await workspace.corrections(manifestID: manifestID)
+                correctionsLoaded = true
                 notice = applied.violations.isEmpty
                     ? "Correction recorded as revision \(applied.manifest.envelope.revision.formatted())."
                     : "FormaCore refused this correction: \(applied.violations.map { $0.code }.joined(separator: " · ")). "
