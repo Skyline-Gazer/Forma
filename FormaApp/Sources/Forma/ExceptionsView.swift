@@ -15,6 +15,10 @@ struct ExceptionsView: View {
     @State private var codeFilter: String?
     @State private var selection = Set<UUID>()
 
+    /// Egress consent for this reprocess only. It starts off, is read when the
+    /// button fires and is cleared right after, so no later action inherits it.
+    @State private var reprocessEgress = false
+
     enum StateFilter: String, CaseIterable, Identifiable {
         case all
         case hold
@@ -82,11 +86,20 @@ struct ExceptionsView: View {
                         .accessibilityIdentifier("cancel-reprocess")
                 } else {
                     Button("Reprocess Selected", systemImage: "arrow.3.trianglepath") {
-                        model.runMapping(sourceIDs: selection, egress: model.allowCloud)
+                        model.runMapping(sourceIDs: selection, egress: reprocessEgress)
+                        reprocessEgress = false
                     }
                     .disabled(selection.isEmpty || !model.canMap)
                     .help("Runs the mapping engine over the selected source identifiers only")
                     .accessibilityIdentifier("reprocess-selected")
+                    // Consent is per action, not per session. Reading the
+                    // Settings-level flag here would let a box ticked an hour
+                    // ago, for a different question, authorise sending these
+                    // files now.
+                    Toggle("Let this run leave the machine", isOn: $reprocessEgress)
+                        .toggleStyle(.checkbox)
+                        .help("Off means FormaCore refuses every provider request and records that reason per file")
+                        .accessibilityIdentifier("reprocess-egress")
                 }
                 Button("Clear Selection") { selection.removeAll() }
                     .disabled(selection.isEmpty)

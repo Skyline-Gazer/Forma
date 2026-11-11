@@ -254,6 +254,26 @@ enum MappingStore {
         return try rows.map { try Self.decodeEvidence($0) }
     }
 
+    /// Every row for a set of sources, in one pass.
+    ///
+    /// Revalidating a whole manifest needs the rows behind citations in every
+    /// entry, and asking per source turned one reviewer action into a query for
+    /// each file the scan found.
+    static func evidence(for sourceIDs: Set<UUID>, in db: Database) throws -> [UUID: [EvidenceRecord]] {
+        guard !sourceIDs.isEmpty else { return [:] }
+        let keys = Array(sourceIDs).map(\.sourceKey).sorted()
+        let placeholders = Array(repeating: "?", count: keys.count).joined(separator: ",")
+        let rows = try Row.fetchAll(db, sql: """
+            SELECT * FROM evidence_items WHERE source_id IN (\(placeholders)) ORDER BY source_id, id
+            """, arguments: StatementArguments(keys))
+        var grouped: [UUID: [EvidenceRecord]] = [:]
+        for row in rows {
+            let record = try Self.decodeEvidence(row)
+            grouped[record.sourceID, default: []].append(record)
+        }
+        return grouped
+    }
+
     /// The rows that describe the file as it is now. Evidence from a superseded
     /// snapshot is still in the table for audit, but it may not support a
     /// current decision.

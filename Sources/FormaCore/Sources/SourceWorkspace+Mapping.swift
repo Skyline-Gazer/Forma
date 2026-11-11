@@ -205,9 +205,12 @@ extension SourceWorkspace {
                                 profile: MappingProfile) async throws -> CorrectionEngine.Applied {
         let listing = try listing(scope)
         let context = try await buildContext(scope: scope, profile: profile)
-        var evidence: [UUID: [EvidenceRecord]] = [:]
-        for entry in manifest.entries {
-            evidence[entry.sourceID] = try await evidenceRegistry(for: entry.sourceID)
+        // One query for the whole manifest rather than one per entry: the
+        // revalidation step resolves citations for every entry, so the rows for
+        // all of them are genuinely needed, and a hundred-file scan would
+        // otherwise issue a hundred round trips behind a single click.
+        let evidence = try await store.database.read { db in
+            try MappingStore.evidence(for: Set(manifest.entries.map(\.sourceID)), in: db)
         }
         let applied = CorrectionEngine(profile: profile).apply(
             to: manifest, sourceID: sourceID, field: field, correctedValue: correctedValue,
@@ -226,25 +229,5 @@ extension SourceWorkspace {
         try await store.database.read { db in
             try MappingStore.corrections(manifestID: manifestID, in: db)
         }
-    }
-
-    /// Writes an export bundle outside the actor's own database, returning what
-    /// was written. The evidence rows are read here so the caller never has to
-    /// assemble a registry by hand and get a bundle that cites nothing.
-    public func exportManifest(_ manifest: Manifest, to directory: URL,
-                              redaction: RedactionPlan? = nil) async throws -> ManifestExport.Summary {
-        var records: [EvidenceRecord] = []
-        for entry in manifest.entries {
-            let cited = Set(entry.fields.flatMap(\.evidenceIDs))
-            records.append(contentsOf: (try await evidenceRegistry(for: entry.sourceID))
-                .filter { cited.contains($0.id) })
-        }
-        return try ManifestExport.export(manifest: manifest, evidence: records, to: directory,
-                                         redaction: redaction)
-    }
-
-    /// Re-checks a bundle with no provider, no Keychain and no source file.
-    public func revalidateExport(at url: URL) throws -> ManifestExport.Revalidation {
-        try ManifestExport.revalidate(at: url)
     }
 }

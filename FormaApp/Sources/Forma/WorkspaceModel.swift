@@ -29,6 +29,7 @@ final class WorkspaceModel: ObservableObject {
         case loadingManifest
         case correcting
         case readingFile
+        case discoveringMCP
         case previewing
 
         var isBusy: Bool { self != .idle }
@@ -579,9 +580,9 @@ final class WorkspaceModel: ObservableObject {
         phase = .capturingEvidence(done: 0, total: targets.count)
         // The run identity records the versions that produced it, so a report
         // can say which profile, context, case pack and model answered. The
-        // case pack is present whenever an engine could be built at all.
+        // guard above already required a case pack to be loaded.
         let run = MappingRun(scopeID: scope.id, profile: profile, contextRevision: context.revision,
-                             casePackVersion: casePack?.version ?? "unversioned",
+                             casePackVersion: casePack.version,
                              modelProvider: provider.rawValue, modelID: model,
                              promptVersion: MappingPrompt.version)
         work = Task {
@@ -788,6 +789,11 @@ final class WorkspaceModel: ObservableObject {
         let current = row.entry.metadata[field] ?? ""
         draft = CorrectionDraft(sourceID: sourceID, field: field, value: current,
                                 citations: Set(row.entry.fields.first { $0.field == field }?.evidenceIDs ?? []))
+        // The sheet offers the registered rows to cite, and after a restart the
+        // in-memory dictionary is empty even though the registry is not. Without
+        // this read a returning reviewer would see no candidates, could cite
+        // nothing, and every correction would be refused as an opinion.
+        Task { await loadEvidence(for: sourceID) }
     }
 
     func cancelCorrection() { draft = nil }
@@ -921,8 +927,13 @@ final class WorkspaceModel: ObservableObject {
 
     // MARK: - Helpers
 
+    /// The engine is cached, but a cache keyed on nothing would answer a second
+    /// profile with the first profile's rules: `MappingEngine` binds a profile
+    /// and a case pack at construction. The key is the pair it was built from,
+    /// so switching profiles rebuilds and a repeat run reuses.
     private func engine(for profile: MappingProfile) -> MappingEngine? {
-        if let engine { return engine }
+        let key = "\(profile.versionKey)|\(casePack?.versionKey ?? "no-case-pack")"
+        if let engine, engineKey == key { return engine }
         guard let casePack else {
             error = .unavailable
             notice = "The shipped CasePack could not be loaded, so no engine can be built."
@@ -931,8 +942,15 @@ final class WorkspaceModel: ObservableObject {
         let built = MappingEngine(profile: profile, casePack: casePack,
                                   answerer: ProviderMappingClient(), workspace: workspace)
         engine = built
+        engineKey = key
         return built
     }
+
+    /// Which profile and case pack the cached engine was built for. Not
+    /// persisted: it describes an in-memory object that does not survive a
+    /// restart, and a key that outlives the thing it describes is a second
+    /// source of truth for nothing.
+    private var engineKey: String?
 
     private func refreshRows() {
         guard let manifest else {
