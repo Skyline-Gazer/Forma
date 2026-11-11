@@ -15,6 +15,7 @@ Forma 是一款使用 Swift 6 / SwiftUI 开发的 macOS 原生应用，目标是
 - [Agent 约束](AGENTS.md) — 仓库权限与边界
 - [ADS 接入与 CNB 评审拓扑](docs/ADS-ADOPTION.md) — 提供方职责、固定 SHA 与评审证据
 - [P0 / P1 验收报告](docs/P0-P1-ACCEPTANCE.md) — 实际执行结果、PASS/FAIL/BLOCKED/NOT_VERIFIED 判定与限制
+- [ADS 与 CNB 评审验收报告](docs/ADS-CNB-ACCEPTANCE.md) — 接入一致性、评审闭环、SHA 绑定与三项独立结论
 
 ## 构建与运行
 

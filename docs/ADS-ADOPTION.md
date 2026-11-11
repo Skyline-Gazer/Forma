@@ -51,7 +51,7 @@ Verified live state on 2026-11-11 with the authenticated CNB environment:
 - Seeding used exact GitHub object ids only, pushed with the authenticated token through an Authorization header; anonymous `git push` is rejected with `Repository Not Found`, which is a credential-scope symptom, not absence of the repository. No CNB-only commit exists, so CNB cannot advance authoritative history.
 - The `dev` mirror is fast-forwarded to the current GitHub `dev` head before each review round; a stale base makes the plugin review already-integrated code and mis-bind the diff.
 - Findings are retrieved from two channels: the retained runner log (`build-runner-download-log`) and, once the plugin parsed its own result, the review object itself (`list-pull-reviews` → `list-pull-review-comments`, author marked `is_npc: true`).
-- CodeBuddy capability observed: reads PR context, creates one review with inline line comments, and reads back through the API. **No write capability was granted, tested or needed here**; no NPC commit or NPC-authored PR exists in this workspace, and CodeBuddy write authority would require separate authorization.
+- Platform AI reviewer capability observed: it reads the PR context and diff, creates one review object carrying inline line comments, and that object is readable back through the API (`is_npc: true`). **Write authority was neither granted nor exercised**: no reviewer-authored commit or PR exists in this workspace, and that would need separate authorization.
 - Not authorized or not configured by this adoption: automatic CNB↔GitHub synchronization, push mirrors, release flows, CNB build/test stages, CNB merge authority, and any credential stored outside the platform secret store.
 
 ## Review-round ledger
