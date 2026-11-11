@@ -1,0 +1,4 @@
+ADS_REPOSITORY=https://github.com/Skyline-Gazer/ADS.git
+ADS_BRANCH=cnb/dev
+ADS_COMMIT=16b99f4b49769555acc66a0c57b8cfcb8c8bac60
+ADS_CONSUMPTION=git-submodule
