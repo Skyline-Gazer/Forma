@@ -84,7 +84,9 @@ struct MappingView: View {
         .sheet(item: $model.draft) { draft in
             correctionSheet(draft)
         }
-        .onDisappear { model.cancelWork() }
+        // No cancellation on disappear: leaving this tab unmounts the view, not
+        // the model, and `work` is the handle every long task shares. The window
+        // root cancels when the window actually closes.
     }
 
     private var emptyReason: String {
@@ -516,25 +518,27 @@ struct MappingView: View {
 
     /// One attempt, described by what it actually did to the version history.
     ///
-    /// Two shapes, because FormaCore writes two kinds of row: a refusal names
-    /// the version it was aimed at and published nothing, and a published
-    /// decision names both. Anything else is not a state to explain in
-    /// interface copy - `pending` is never stored by an apply, and a verified
-    /// row is inserted only after its revision was written - so an unlisted
-    /// combination says the row itself is wrong.
+    /// FormaCore writes two kinds of row: a refusal names the version it was
+    /// aimed at and published nothing, and a published decision names both.
+    /// `pending` is written by no current path, but a workspace created by an
+    /// earlier build can hold such rows - the column allows the value and the
+    /// migration only touches the revision numbers - so it is shown as what it
+    /// says rather than reported as a defect.
     private static func outcomeLine(_ record: CorrectionRecord) -> (text: String, color: Color) {
         switch (record.reviewState, record.producedRevision) {
         case (.rejected, _):
             ("Refused by FormaCore · attempted against revision "
                 + "\(record.manifestRevision.formatted()) · published nothing", .orange)
+        case (.pending, _):
+            ("Awaiting evidence verification · attempted against revision "
+                + "\(record.manifestRevision.formatted()) · replaced \(record.previousValue ?? "nothing")",
+             .blue)
         case (.evidenceVerified, let produced?):
             ("Recorded at revision \(produced.formatted()), superseding "
                 + "\(record.manifestRevision.formatted()) · replaced \(record.previousValue ?? "nothing")",
              .secondary)
-        default:
-            ("Row \(record.id) carries a state FormaCore never writes ("
-                + "\(record.reviewState.rawValue) · produced \(record.producedRevision.map { $0.formatted() } ?? "nil"))",
-             .red)
+        case (.evidenceVerified, nil):
+            ("Row \(record.id) claims a verified decision but names no revision it wrote", .red)
         }
     }
 }

@@ -54,6 +54,13 @@ private struct WorkspaceAreas: View {
                 .tabItem { Label("Settings", systemImage: "slider.horizontal.3") }
                 .accessibilityIdentifier("area-settings")
         }
+        // Cancelling belongs to the window's root view, not to a tab. Each area
+        // used to cancel in its own `onDisappear`, and a macOS TabView unmounts
+        // the tab you leave: clicking elsewhere in the window stopped whichever
+        // long task was in flight - a scan, a context build, a mapping run that
+        // had already paid for its provider requests - and left nothing but a
+        // notice saying "Cancelled" to explain why.
+        .onDisappear { model.cancelAll() }
         .task { await model.restore() }
         .alert("Forma", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
             Button("OK") { model.error = nil }

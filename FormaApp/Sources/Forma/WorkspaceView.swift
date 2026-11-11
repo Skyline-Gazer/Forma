@@ -92,7 +92,6 @@ struct WorkspaceView: View {
             // The model persists this itself; reading it back here was the race.
         }
         .onChange(of: selectedFile) { _, _ in model.clearFileEvidence() }
-        .onDisappear { model.cancelAll() }
     }
 
     // MARK: - Files

@@ -123,9 +123,8 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var reconciliation: ManifestReconciler.Decision?
     @Published private(set) var evidenceBySource: [UUID: [EvidenceRecord]] = [:] {
         didSet {
-            // Rebuilt rather than incrementally maintained: one writer, and no
-            // way for the citation index to keep a row the per-source view has
-            // already dropped.
+            // Rebuilt in one place, so the index cannot keep a row the
+            // per-source view has dropped.
             var index: [String: EvidenceRecord] = [:]
             for rows in evidenceBySource.values { for row in rows { index[row.id] = row } }
             recordsByID = index
@@ -170,7 +169,7 @@ final class WorkspaceModel: ObservableObject {
             correctionHistoryState = .notRead
             draft = nil
             refreshRows()
-            Task { await self.reload() }
+            scheduleReload()
         }
     }
 
@@ -184,8 +183,21 @@ final class WorkspaceModel: ObservableObject {
             // not another repair to perform.
             defaults.set(selectedProfileID, forKey: Keys.profile)
             engineCache = nil
-            Task { await self.reload() }
+            scheduleReload()
         }
+    }
+    /// Starts a reload for a value the reviewer changed, unless `restore()` is
+    /// assembling the launch state around it.
+    ///
+    /// Only the scheduling is suppressed, and only while restoring: persisting
+    /// the fallback identifier and invalidating the cached engine still happen
+    /// in the `didSet` above, because those are answers the next launch should
+    /// read. Two concurrent reloads, by contrast, both await and both write the
+    /// listing, context, manifest and attempts, so which set of values survives
+    /// depends on which read returned last rather than on anything stored.
+    private func scheduleReload() {
+        guard !isRestoring else { return }
+        Task { await self.reload() }
     }
 
     @Published var provider: ProbeProvider {
@@ -203,8 +215,8 @@ final class WorkspaceModel: ObservableObject {
         didSet { defaults.set(entryLimit, forKey: Keys.entryLimit) }
     }
 
-    /// Cloud egress consent. Deliberately never persisted: it starts off at every
-    /// launch and FormaCore's client refuses the request without it.
+    /// Cloud egress consent, never persisted: off at every launch, and
+    /// FormaCore's client refuses the request without it.
     @Published var allowCloud = false
 
     @Published var redactionSalt: String {
@@ -228,12 +240,12 @@ final class WorkspaceModel: ObservableObject {
     /// so ownership is a number the retiring side advances rather than the
     /// handle itself.
     private var fileRead = 0
-    /// Whether a single-file read is in flight. Deliberately separate from
-    /// `phase`: this is the state that decides whether the evidence panel shows
-    /// a Cancel button, and `cancelFileRead()` is the only task it can stop.
-    /// Sharing one busy value between a file open and a provider run gave a
-    /// button that said Cancel while pointing at a task that was not running.
+    /// Whether a file read is in flight; `cancelFileRead()` is the only task it
+    /// can stop, and `phase` describes the long task instead.
     @Published private(set) var fileReadInFlight = false
+    /// Set only while `restore()` assembles launch state, and read only by
+    /// `scheduleReload()`.
+    private var isRestoring = false
     private var auxWork: Task<Void, Never>?
 
     private static let store = UserDefaults.standard
@@ -359,6 +371,13 @@ final class WorkspaceModel: ObservableObject {
     // MARK: - Restore and loads
 
     func restore() async {
+        // Every identifier assigned below would otherwise schedule its own
+        // reload from `didSet`, and two of them running together both write the
+        // listing, context, manifest and attempt history after their own
+        // suspensions. `restore()` is the one caller that assembles launch
+        // state, so it reloads once, at the end.
+        isRestoring = true
+        defer { isRestoring = false }
         do {
             profiles = try MappingProfile.shipped()
         } catch {
@@ -370,22 +389,19 @@ final class WorkspaceModel: ObservableObject {
         } catch {
             show(error, operation: .providerProbe, fallback: .unavailable)
         }
-        var repairedScope = false
         do {
             scopes = try await workspace.scopes()
             if scopes.contains(where: { $0.id == selectedScopeID }) == false {
+                // The stored identifier names a source that is gone. Falling
+                // back is the answer the next launch should read, so the
+                // assignment still persists it; only the reload is deferred to
+                // the single one below.
                 selectedScopeID = scopes.first?.id
-                // Assigning the identifier already schedules a reload through
-                // `didSet`, which is also the only writer of that preference.
-                repairedScope = true
             }
         } catch {
             show(error, operation: .openWorkspace, fallback: .storage)
         }
-        // One pass per launch: two concurrent reloads would each write the
-        // listing, context, manifest and attempts after their own suspensions,
-        // and the screen would end up showing whichever read returned last.
-        if !repairedScope { await reload() }
+        await reload()
     }
 
     /// Reloads the listing plus whatever FormaCore has stored for this
@@ -409,11 +425,10 @@ final class WorkspaceModel: ObservableObject {
         }
         guard let profile = selectedProfile else { return }
         do {
-            // Anything that has not been read back is not a statement about the
-            // manifest, so the flag drops before the work starts rather than
-            // only when it succeeds: the early returns below - no profile, a
-            // context the store cannot resolve - would otherwise leave the
-            // screen showing an empty list that reads like "no attempts".
+            // Dropped before the work rather than only when it succeeds: the
+            // early returns below - no profile, a context the store cannot
+            // resolve - would otherwise leave an empty list reading like
+            // "nobody attempted anything".
             correctionHistoryState = .notRead
             let digest = ContextBuilder.inputDigest(scopeID: scope.id, profile: profile, entries: listing?.entries ?? [])
             let stored = try await workspace.storedContext(scope: scope, profile: profile, inputDigest: digest)
@@ -741,7 +756,16 @@ final class WorkspaceModel: ObservableObject {
             if Task.isCancelled {
                 try? await self.workspace.finishMappingRun(id: run.id, state: .cancelled,
                                                             batches: result.batches, error: .cancelled)
-                notice = "Run cancelled after \(result.batches.formatted()) batches."
+                // A cancellation that arrives after `engine.run` has returned
+                // has already spent the provider requests it made, and the
+                // answers are still thrown away. That is the cheaper of two
+                // wrong options: storing them would publish a revision built
+                // from part of the listing and replace the complete one that
+                // is currently usable. The notice says so rather than letting
+                // "Cancelled" imply nothing was learned.
+                notice = "Run cancelled after \(result.batches.formatted()) batches. Answers that had already "
+                    + "returned are recorded in the run history but not published: a revision is written only by "
+                    + "a run that finished, and this one's would have replaced the complete revision with a partial one."
                 return
             }
             var stored = result.manifest
@@ -974,47 +998,57 @@ final class WorkspaceModel: ObservableObject {
                 guard !Task.isCancelled else { return }
                 // A reviewer who switched source while the click was in flight
                 // must not have their decision written onto the screen they
-                // left. The check has to follow each suspension, not just the
-                // first one: two more reads happen below, and a scope change
-                // during either would otherwise land another source's manifest,
-                // rows and attempt list on this screen.
+                // left, and the check has to follow each suspension rather than
+                // only the first one.
                 guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
-                // The decision is in storage from here on, so the screen is
-                // built from what the engine returned and the two reads below
-                // only refine it. Reading first and publishing after meant a
-                // storage error during a harmless read-back concealed a
-                // correction that had already succeeded: no confirmation, the
-                // sheet still open, and the reviewer's next click was refused
-                // by the stale-base guard - with a message about the source
-                // changing, caused by their own write.
-                self.manifest = applied.manifest
-                self.draft = nil
-                refreshRows()
+                // The decision is in storage from here on, so nothing below can
+                // undo it: the two reads refine the screen, and a storage error
+                // during either used to conceal a correction that had already
+                // succeeded - no confirmation, the sheet still open, and the
+                // next click refused by the stale-base guard with a message
+                // about the source changing, caused by this write.
                 var message = applied.violations.isEmpty
                     ? "Correction recorded as revision \(applied.manifest.envelope.revision.formatted())."
                     : "FormaCore refused this correction: \(applied.violations.map { $0.code }.joined(separator: " · ")). "
                         + "Nothing was changed, and the attempt is on the exceptions list."
-                var attempts = [applied.correction]
-                var historyWasRead = false
-                if let stored = try? await workspace.currentManifest(scope: scope, profile: profile),
-                   stored.envelope.revision != applied.manifest.envelope.revision {
+                // Both reads finish before a single line of state is written,
+                // and the ownership check sits between them: publishing in
+                // several steps let a scope change during a read land another
+                // source's manifest on this screen with this source's listing
+                // under it, and no later guard could take it back.
+                // Read separately rather than with `try?` on the call: these
+                // functions already answer optionally, and `try?` over them
+                // produces a nested optional that unwraps to the wrong thing -
+                // a failed read and a nil result would arrive as different
+                // shapes at the code below.
+                var stored: Manifest?
+                do { stored = try await workspace.currentManifest(scope: scope, profile: profile) }
+                catch { stored = nil }
+                var attempts: [CorrectionRecord]?
+                do { attempts = try await workspace.corrections(manifestID: manifestID) }
+                catch { attempts = nil }
+                guard !Task.isCancelled, scope.id == selectedScopeID,
+                      profile.profileID == selectedProfileID else { return }
+                var shown = applied.manifest
+                if let stored = stored, stored.envelope.revision != applied.manifest.envelope.revision {
                     // Something advanced the manifest between the write and
-                    // this read. The notice names both numbers rather than
+                    // this read: the notice names both numbers rather than
                     // letting the header show one and the audit trail another.
                     message = "Correction recorded as revision "
                         + "\(applied.manifest.envelope.revision.formatted()); the manifest has since advanced to revision "
                         + "\(stored.envelope.revision.formatted())."
-                    self.manifest = stored
-                    refreshRows()
+                    shown = stored
                 }
-                if let history = try? await workspace.corrections(manifestID: manifestID) {
-                    attempts = history
-                    historyWasRead = true
+                self.manifest = shown
+                self.draft = nil
+                refreshRows()
+                if let history = attempts {
+                    correctionHistory = history
+                    correctionHistoryState = .fromStore
+                } else {
+                    correctionHistory = [applied.correction]
+                    correctionHistoryState = .notRead
                 }
-                guard !Task.isCancelled, scope.id == selectedScopeID,
-                      profile.profileID == selectedProfileID else { return }
-                correctionHistory = attempts
-                correctionHistoryState = historyWasRead ? .fromStore : .notRead
                 notice = message
             } catch {
                 if !Task.isCancelled { show(error, operation: .applyCorrection, fallback: .storage) }
@@ -1074,8 +1108,7 @@ final class WorkspaceModel: ObservableObject {
                 // batch's payload the one a run would build: a preview
                 // assembled out of memory could show a batch with no evidence
                 // at all, which is not a request any run sends.
-                let rows = try await workspace.registeredEvidence(
-                    for: Set(listing.entries.map(\.sourceID)))
+                let rows = try await workspace.registeredEvidence(for: Set(listing.entries.map(\.id)))
                 let batches = MappingEngine.plannedBatches(from: listing.entries, context: context,
                                                           limit: entryLimit, evidence: rows)
                 guard let batch = batches.first else {
