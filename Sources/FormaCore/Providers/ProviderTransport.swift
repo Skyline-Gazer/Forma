@@ -249,11 +249,11 @@ struct ProviderTransport: Sendable {
         return min(max(seconds, 0), 30)
     }
 
-    /// How long to wait before the single permitted retry.
-    static func retryDelay(retryAfter: TimeInterval?, attempt: Int) -> TimeInterval? {
-        guard attempt < 2 else { return nil }
-        if let retryAfter { return retryAfter }
-        return attempt == 0 ? 1 : 4
+    /// How long to wait before the single permitted retry: what the provider
+    /// asked for when it said, otherwise one second. There is no second retry,
+    /// so there is nothing to back off further and no ladder to maintain.
+    static func retryDelay(retryAfter: TimeInterval?) -> TimeInterval {
+        retryAfter ?? 1
     }
 
     private static let redirectPolicy = RejectProviderRedirects()

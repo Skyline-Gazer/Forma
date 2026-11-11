@@ -237,36 +237,33 @@ struct MappingPromptTests {
         let first = numbering("workspace-a")
         #expect(Set(first.values).count == 6, "six customers need six distinct labels")
         #expect(first == numbering("workspace-a"), "the same salt must reproduce itself")
-        // What is guaranteed, and what would break without the salt: a label is
-        // a role plus a salted code, so holding the name list is not enough to
-        // read a request back into names - the salt is required, and a different
-        // salt gives a different table. This does not claim the code is
-        // unguessable given the salt; with the salt, the mapping is reproducible
-        // by design, which is what makes an exported request auditable.
+        // What the salt buys: the ordinal a name receives is decided by its
+        // salted digest, so a different salt re-shuffles the table, and someone
+        // holding only the name list cannot tell which customer is «客户1».
+        // Given the salt the mapping is reproducible by design - that is what
+        // makes an exported request auditable later.
         let other = numbering("workspace-b")
-        #expect(Set(first.values).isDisjoint(with: Set(other.values)),
-                "a different salt must not reproduce any label")
+        #expect(first != other, "a different salt must not reproduce the same table")
+        #expect(Set(other.values) == Set(first.values),
+                "the labels stay «客户1» through «客户6»; only the assignment moves")
         for (term, label) in first {
-            #expect(label.hasPrefix("«客户"), "a label keeps its role: \(label)")
-            let code = label.dropFirst("«客户".count).dropLast()
-            #expect(code.count == 12 && code.allSatisfy(\.isHexDigit),
-                    "a label carries a salted code, not a position: \(label)")
-            #expect(!term.components(separatedBy: .whitespaces).contains(String(code)),
-                    "a label must not be the term in another dress")
-            #expect(other[term] != label)
+            let ordinal = label.dropFirst("«客户".count).dropLast()
+            #expect(Int(ordinal).map { (1...6).contains($0) } == true,
+                    "a label is a role and an ordinal, never the term in another dress: \(label)")
         }
     }
 
-    @Test("a plan hands out distinct labels at the scale a real workspace uses")
-    func labelsAreDistinctAtScale() {
-        // The code is not retried on collision, so the space itself has to be
-        // wide enough. Five thousand names in one role is well past anything the
-        // corpus holds, and a narrower code fails this test instead of silently
-        // letting two customers share a label.
+    @Test("no two names in a role can share a label")
+    func labelsAreUniqueByConstruction() {
+        // Uniqueness is structural, not a property of the hash width: ordinals
+        // are handed out one at a time, so five thousand customers get five
+        // thousand labels no matter how their digests fall.
         let names = Dictionary(uniqueKeysWithValues: (1...5_000).map { ("客户名称\($0)", RedactionPlan.Role.customer) })
         let plan = RedactionPlan(terms: names, salt: "workspace-scale")
-        let labels = Set(names.keys.compactMap { plan.placeholder(for: $0) })
-        #expect(labels.count == 5_000, "five thousand customers need five thousand labels")
+        let labels = names.keys.compactMap { plan.placeholder(for: $0) }
+        #expect(Set(labels).count == 5_000)
+        #expect(Set(labels.map { $0.dropFirst("«客户".count).dropLast() }).count == 5_000,
+                "the ordinals themselves must not repeat")
     }
 
     @Test("distinct figures do not collapse onto one amount label")
@@ -277,6 +274,11 @@ struct MappingPromptTests {
             let text = try plan.redact(text: "报价 \(String(format: "%.2f", value)) 元")
             labels.insert(text)
         }
+        // Unlike terms, figures are not enumerable in advance, so an amount
+        // label is a digest of the value and uniqueness is a birthday bound
+        // over 48 bits rather than a construction: for the two thousand figures
+        // a large quotation batch can carry the risk is under one in a hundred
+        // thousand, and this fixed set exercises it.
         #expect(labels.count == 2_001, "two thousand figures must not share a label")
     }
 

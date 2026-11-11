@@ -9,17 +9,16 @@ import Foundation
 /// distinct - a customer never collapses onto a vendor or a bidding entity -
 /// because those distinctions are exactly what the mapping has to reason about.
 ///
-/// A term label is `«<role><code>»`, where the code is the first twelve hex
-/// digits of the term's salted digest. The same term under the same salt always
-/// becomes the same label, a label carries nothing back into the term without
-/// the salt, and neither the caller's input order nor how many names share a
-/// role is revealed. Twelve hex digits is 48 bits: a workspace with ten thousand
-/// names in one role still meets its first collision with probability under one
-/// in a hundred thousand, and a test over five thousand names pins that the
-/// labels a plan hands out are distinct. Amounts use the same construction on
-/// the value, so two placeholders sharing a code really are the same number -
-/// the fact a mapping needs when one total appears in prose and again in a
-/// table.
+/// A term label is `«<role><ordinal>»`, and the ordinal is assigned in the
+/// order the term's salted digest falls into. Two properties follow, and neither
+/// is a matter of luck: no two terms in a role can share a label, because
+/// ordinals are not reused; and the numbering cannot be reproduced without the
+/// salt, so holding the name list is not enough to read a request back into
+/// names. Amounts are labelled by a digest of the value instead, because figures
+/// are not enumerable in advance - two placeholders sharing a code really are
+/// the same number, which is the fact a mapping needs when one total appears in
+/// prose and again in a table - and the collision risk over the number of
+/// distinct figures one batch can carry is under one in a hundred thousand.
 public struct RedactionPlan: Sendable {
     public enum Role: String, CaseIterable, Sendable {
         case customer, vendor, bidder, agent, person, project, amount, identifier
@@ -47,21 +46,34 @@ public struct RedactionPlan: Sendable {
 
     public init(terms: [String: Role], salt: String) {
         self.salt = salt
-        // Longest term first, because that is the only order anything here
-        // needs: "示例科技有限公司" must be replaced before "示例" can eat part
-        // of it. Labels come from the term and the salt, never from a position,
-        // so two plans built from the same names always agree.
+        // Longest term first, because that is the only order replacement needs:
+        // "示例科技有限公司" has to go before "示例" can eat part of it.
         self.terms = terms.map { (term: $0.key, role: $0.value) }
             .sorted { $0.term.count != $1.term.count ? $0.term.count > $1.term.count : $0.term < $1.term }
+        // Numbering walks the terms in salted-digest order, so the ordinal a
+        // name receives says nothing about how the caller listed them and
+        // cannot be recomputed without the salt.
+        let numbering = terms.keys
+            .compactMap { term -> (term: String, key: String)? in
+                guard let role = terms[term] else { return nil }
+                return (term, Self.digest(of: "\(salt)\u{1f}\(role.rawValue)\u{1f}\(term)"))
+            }
+            .sorted { $0.key < $1.key }
+        var counters: [Role: Int] = [:]
         var replacements: [String: String] = [:]
-        for entry in self.terms {
-            replacements[entry.term] = Self.label(role: entry.role, seed: entry.term, salt: salt)
+        for entry in numbering {
+            guard let role = terms[entry.term] else { continue }
+            counters[role, default: 0] += 1
+            replacements[entry.term] = "«\(role.label)\(counters[role]!)»"
         }
         self.replacements = replacements
     }
 
-    private static func label(role: Role, seed: String, salt: String) -> String {
-        "«\(role.label)\(digest(of: "\(salt)\u{1f}\(role.rawValue)\u{1f}\(seed)").prefix(12).uppercased())»"
+    /// Amount labels are keyed on the value, so one figure carries one code in
+    /// a path and in a body, in this call and the next. A per-call counter would
+    /// hand two different prices the same label and reset between entry points.
+    private static func amountLabel(digits: String, salt: String) -> String {
+        "«金额\(digest(of: "\(salt)\u{1f}\u{1f}\u{1f}\(digits)").prefix(12).uppercased())»"
     }
 
     private static func digest(of value: String) -> String {
@@ -215,7 +227,7 @@ public struct RedactionPlan: Sendable {
     /// make the model read them as one amount, and would reset between the
     /// path and text entry points.
     private func amountLabel(for text: String) -> String {
-        Self.label(role: .amount, seed: String(text.filter { $0.isNumber }), salt: salt)
+        Self.amountLabel(digits: String(text.filter { $0.isNumber }), salt: salt)
     }
 
     /// A caller may ask whether a specific string would survive redaction, which

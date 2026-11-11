@@ -11,13 +11,18 @@ public struct MappingAttempt: Sendable, Equatable {
     public let modelID: String?
     public let usage: MappingUsage
     public let latencyMilliseconds: Int
-    /// Provider requests actually made for this batch, including the repair call.
+    /// Provider requests actually made for this batch: the first ask, any
+    /// rate-limit retry inside it, and the single repair call.
     public let requests: Int
+    /// How many of those requests were transport retries after a 429. Kept
+    /// apart from `requests` so a report can tell "the provider pushed back"
+    /// from "the answer needed fixing" instead of reading one number.
+    public let rateLimitRetries: Int
     public let payloadDigest: String
 
     public init(proposal: MappingProposal?, violations: [ArtifactSchema.Violation] = [], error: FormaError? = nil,
                 modelID: String? = nil, usage: MappingUsage = MappingUsage(), latencyMilliseconds: Int = 0,
-                requests: Int = 0, payloadDigest: String = "") {
+                requests: Int = 0, rateLimitRetries: Int = 0, payloadDigest: String = "") {
         self.proposal = proposal
         self.violations = violations
         self.error = error
@@ -25,6 +30,7 @@ public struct MappingAttempt: Sendable, Equatable {
         self.usage = usage
         self.latencyMilliseconds = latencyMilliseconds
         self.requests = requests
+        self.rateLimitRetries = rateLimitRetries
         self.payloadDigest = payloadDigest
     }
 
@@ -115,6 +121,7 @@ public struct ProviderMappingClient: Sendable {
 
         var usage = MappingUsage()
         var requests = 0
+        var rateLimitRetries = 0
         var reportedModel: String?
         var violations: [ArtifactSchema.Violation] = []
         var answer: String?
@@ -140,6 +147,7 @@ public struct ProviderMappingClient: Sendable {
                 // requests at all, which is the opposite of what a report is for.
                 usage = usage + sent.usage
                 requests += sent.requests
+                rateLimitRetries += sent.rateLimitRetries
                 reportedModel = sent.reportedModel ?? reportedModel
                 if let error = sent.error { throw error }
                 let text = sent.text ?? ""
@@ -178,7 +186,7 @@ public struct ProviderMappingClient: Sendable {
         return MappingAttempt(
             proposal: proposal, violations: violations, error: failure, modelID: reportedModel, usage: usage,
             latencyMilliseconds: Int(elapsed.seconds) * 1_000 + Int(elapsed.attoseconds / 1_000_000_000_000_000),
-            requests: requests, payloadDigest: preview.digest
+            requests: requests, rateLimitRetries: rateLimitRetries, payloadDigest: preview.digest
         )
     }
 
@@ -188,6 +196,7 @@ public struct ProviderMappingClient: Sendable {
         let text: String?
         let usage: MappingUsage
         let requests: Int
+        let rateLimitRetries: Int
         let reportedModel: String?
         let error: FormaError?
     }
@@ -205,6 +214,7 @@ public struct ProviderMappingClient: Sendable {
                       payload: Data, schema: Data) async -> Sent {
         var usage = MappingUsage()
         var requests = 0
+        var rateLimitRetries = 0
         var reportedModel: String?
         var rateLimitAttempt = 0
         while true {
@@ -216,10 +226,11 @@ public struct ProviderMappingClient: Sendable {
                     maxOutputTokens: Self.maximumOutputTokens
                 ), key: key)
             } catch let error as FormaError {
-                return Sent(text: nil, usage: usage, requests: requests, reportedModel: reportedModel, error: error)
+                return Sent(text: nil, usage: usage, requests: requests, rateLimitRetries: rateLimitRetries,
+                            reportedModel: reportedModel, error: error)
             } catch {
-                return Sent(text: nil, usage: usage, requests: requests, reportedModel: reportedModel,
-                            error: .network)
+                return Sent(text: nil, usage: usage, requests: requests, rateLimitRetries: rateLimitRetries,
+                            reportedModel: reportedModel, error: .network)
             }
             requests += 1
             do {
@@ -232,32 +243,36 @@ public struct ProviderMappingClient: Sendable {
                 reportedModel = transport.reportedModel(from: envelope, key: key) ?? reportedModel
                 usage = usage + MappingUsage(transport.usage(from: envelope, provider: provider))
                 return Sent(text: try transport.outputText(from: envelope, provider: provider), usage: usage,
-                            requests: requests, reportedModel: reportedModel, error: nil)
+                            requests: requests, rateLimitRetries: rateLimitRetries,
+                            reportedModel: reportedModel, error: nil)
             } catch let limited as ProviderTransport.RateLimited {
                 // A rate limit gets one retry, and the provider's own wait when
                 // it gave one. A second rate limit is reported as the status it
                 // is, because a mapping run that waits indefinitely cannot be
                 // cancelled by the person watching it.
-                guard rateLimitAttempt == 0,
-                      let delay = ProviderTransport.retryDelay(retryAfter: limited.retryAfter,
-                                                               attempt: rateLimitAttempt) else {
-                    return Sent(text: nil, usage: usage, requests: requests, reportedModel: reportedModel,
-                                error: limited.asFormaError)
+                guard rateLimitAttempt == 0 else {
+                    return Sent(text: nil, usage: usage, requests: requests,
+                                rateLimitRetries: rateLimitRetries,
+                                reportedModel: reportedModel, error: limited.asFormaError)
                 }
+                let delay = ProviderTransport.retryDelay(retryAfter: limited.retryAfter)
                 rateLimitAttempt += 1
+                rateLimitRetries += 1
                 do {
                     try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 } catch {
                     // A cancelled wait ends the attempt; it must not fall
                     // through into another request.
                     return Sent(text: nil, usage: usage, requests: requests,
+                                rateLimitRetries: rateLimitRetries,
                                 reportedModel: reportedModel, error: .cancelled)
                 }
             } catch let error as FormaError {
-                return Sent(text: nil, usage: usage, requests: requests, reportedModel: reportedModel, error: error)
+                return Sent(text: nil, usage: usage, requests: requests, rateLimitRetries: rateLimitRetries,
+                            reportedModel: reportedModel, error: error)
             } catch {
-                return Sent(text: nil, usage: usage, requests: requests, reportedModel: reportedModel,
-                            error: .network)
+                return Sent(text: nil, usage: usage, requests: requests, rateLimitRetries: rateLimitRetries,
+                            reportedModel: reportedModel, error: .network)
             }
         }
     }

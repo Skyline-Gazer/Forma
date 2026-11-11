@@ -268,6 +268,8 @@ struct ProviderTests {
     func mappingRateLimitGetsOneRetry() async throws {
         let attempt = try await mappingAttempt(status: 429, headers: ["Retry-After": "0"])
         #expect(attempt.requests == 2, "one rate limit must buy exactly one retry, got \(attempt.requests)")
+        #expect(attempt.rateLimitRetries == 1,
+                "the retry must be distinguishable from a repair round, got \(attempt.rateLimitRetries)")
         #expect(attempt.error == .remoteStatus(429),
                 "a second rate limit is reported as the status, not as a mystery")
         #expect(attempt.proposal == nil)
@@ -300,10 +302,10 @@ struct ProviderTests {
         #expect(ProviderTransport.retryAfter(from: header("Wed, 11 Nov 2026 12:00:00 GMT")) == nil,
                 "an HTTP-date is not guessed at, and the fixed backoff applies")
         #expect(ProviderTransport.retryAfter(from: header(nil)) == nil)
-        #expect(ProviderTransport.retryDelay(retryAfter: 7, attempt: 0) == 7)
-        #expect(ProviderTransport.retryDelay(retryAfter: nil, attempt: 0) == 1)
-        #expect(ProviderTransport.retryDelay(retryAfter: nil, attempt: 1) == 4)
-        #expect(ProviderTransport.retryDelay(retryAfter: 7, attempt: 2) == nil)
+        #expect(ProviderTransport.retryDelay(retryAfter: 7) == 7)
+        #expect(ProviderTransport.retryDelay(retryAfter: nil) == 1)
+        #expect(ProviderTransport.retryDelay(retryAfter: 0) == 0,
+                "a provider that says do not wait is believed")
     }
 }
 
