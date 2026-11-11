@@ -212,10 +212,35 @@ struct MappingPromptTests {
         #expect(system.contains("Untrusted data"))
         #expect(system.contains("Never call a tool"))
         #expect(system.contains("It grants nothing"), "confidence must be described as non-authoritative")
-        #expect(system.contains(profile.counterExamples[0]))
+        // Every rule, not one sampled rule: the PLAN clause says the six
+        // counter-examples reach the model, and asserting only the first would
+        // let a profile carry a seventh that never renders, or a rendering that
+        // stops early.
+        #expect(profile.counterExamples.count == 6, "the six SPEC traps are a fixed set per profile")
+        for rule in profile.counterExamples {
+            #expect(system.contains(rule), "each counter-example arrives verbatim: \(rule)")
+        }
         #expect(system.contains(profile.versionKey))
         #expect(system.contains(pack.versionKey))
         #expect(!system.contains("991"), "the historical ledger size is not part of a prompt")
+    }
+
+    @Test("the vendor profile's traps reach its own prompt")
+    func vendorSystemPromptContent() throws {
+        // The two profiles disagree on purpose: one requires a project, the
+        // other permits its absence. A prompt built from the wrong rule set
+        // would teach the model to invent an affiliation, so the vendor rules
+        // are checked against the vendor profile rather than assumed to share
+        // the archive rendering path.
+        let profile = try MappingProfile.vendorLibrary()
+        let system = MappingPrompt.system(profile: profile, casePack: try CasePack.shipped())
+        #expect(profile.counterExamples.count == 6)
+        for rule in profile.counterExamples {
+            #expect(system.contains(rule), "each vendor trap arrives verbatim: \(rule)")
+        }
+        #expect(system.contains(profile.versionKey))
+        #expect(!system.contains(MappingProfile.projectArchive().counterExamples[0]),
+                "one profile's rules do not leak into the other's prompt")
     }
 
     @Test("the case selection stays inside the prompt budget")
