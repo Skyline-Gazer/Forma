@@ -112,11 +112,6 @@ struct ExceptionsView: View {
                     .disabled(selection.isEmpty)
             }
         }
-        // No cancellation on disappear: a macOS TabView unmounts the tab you
-        // leave, and `work` is the one handle shared by every long task in the
-        // model - scanning, context building, mapping, export. Switching tabs
-        // would stop the run in flight, and the only cue would be a notice
-        // saying "Cancelled". The window root covers the case that is real.
         .onChange(of: stateFilter) { _, _ in selection.removeAll() }
         .onChange(of: codeFilter) { _, _ in selection.removeAll() }
     }

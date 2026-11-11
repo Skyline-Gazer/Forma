@@ -1112,10 +1112,11 @@ final class WorkspaceModel: ObservableObject {
     /// before dispatch, so the excerpt shown here is what the registered rows
     /// produce, not a receipt for what a run will attach.
     ///
-    /// Everything the request is built from is taken at the click and the
-    /// panel is compared with that snapshot before anything is published: this
-    /// is the egress consent surface, so a preview must not be allowed to
-    /// describe one request while the fields beside it describe another.
+    /// The inputs are read off the panel at the click - the source, profile,
+    /// context revision, case pack, batch limit and redaction terms, which are
+    /// editable fields rather than anything durable - and compared with the
+    /// panel again before anything is published, so a preview cannot end up
+    /// describing one request while the fields beside it describe another.
     func previewEgress() {
         guard auxWork == nil else { return }
         guard let scope = selectedScope, let profile = selectedProfile, let context, let casePack,

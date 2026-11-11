@@ -4,11 +4,6 @@ import SwiftUI
 
 struct WorkspaceView: View {
     @ObservedObject var model: WorkspaceModel
-    // No @AppStorage mirror of the selected scope: `WorkspaceModel.selectedScopeID`
-    // is the only writer of that key. A second writer on appear raced the model's
-    // own fallback for a stored scope that no longer exists, persisted a value no
-    // source matched, and could land the next start on a different source than the
-    // one just chosen.
     @State private var selectedFile: UUID?
     @State private var selectedCluster: String?
 

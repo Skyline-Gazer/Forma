@@ -84,9 +84,6 @@ struct MappingView: View {
         .sheet(item: $model.draft) { draft in
             correctionSheet(draft)
         }
-        // No cancellation on disappear: leaving this tab unmounts the view, not
-        // the model, and `work` is the handle every long task shares. The window
-        // root cancels when the window actually closes.
     }
 
     private var emptyReason: String {
