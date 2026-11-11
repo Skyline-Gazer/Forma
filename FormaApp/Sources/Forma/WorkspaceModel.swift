@@ -851,17 +851,30 @@ final class WorkspaceModel: ObservableObject {
             return
         }
         let plan = redactionTerms.isEmpty ? nil : redaction
-        let records = evidenceBySource.values.flatMap { $0 }
+        let sourceIDs = Set(manifest.entries.map(\.id))
         phase = .exporting
         work = Task {
             defer { finishWork() }
             do {
-                let summary = try ManifestExport.export(manifest: manifest, evidence: records, to: directory,
-                                                       redaction: plan)
+                // Registered rows, not the ones this session happens to have
+                // opened. A bundle whose manifest cites evidence the export
+                // never carried contradicts itself: the violation only shows up
+                // when somebody revalidates it offline, on another machine,
+                // after the "Exported N files" notice was dismissed.
+                let grouped = try await workspace.registeredEvidence(for: sourceIDs)
+                let summary = try ManifestExport.export(manifest: manifest,
+                                                        evidence: grouped.values.flatMap { $0 },
+                                                        to: directory, redaction: plan)
                 guard !Task.isCancelled else { return }
                 exportSummary = summary
                 bundleURL = directory.appendingPathComponent(summary.manifestID, isDirectory: true)
-                notice = "Exported \(summary.files.count.formatted()) files for revision \(summary.revision.formatted())."
+                notice = summary.missingEvidence.isEmpty
+                    ? "Exported \(summary.files.count.formatted()) files for revision "
+                        + "\(summary.revision.formatted())."
+                    : "Exported \(summary.files.count.formatted()) files for revision "
+                        + "\(summary.revision.formatted()), but \(summary.missingEvidence.count.formatted()) "
+                        + "cited evidence rows are not registered in this store: revalidating this bundle "
+                        + "offline will report it incomplete."
             } catch {
                 if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .storage) }
             }
@@ -977,9 +990,10 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var correctionHistory: [CorrectionRecord] = []
     /// What `correctionHistory` currently describes.
     ///
-    /// An empty list means three different things depending on how it got
-    /// empty, and a boolean could name two of them: not read yet, read from
-    /// this store, or belonging to a bundle whose history is on another machine.
+    /// The same list can mean four different things depending on how it got
+    /// that way, and a boolean could name two of them at best: not read yet,
+    /// read from this store, belonging to a bundle whose history is on another
+    /// machine, or a read that failed and left only the click's own row.
     enum CorrectionHistoryState {
         /// Nothing has been read for the manifest now on screen.
         case notRead
@@ -989,6 +1003,10 @@ final class WorkspaceModel: ObservableObject {
         /// The manifest came from an exported bundle: its attempts live in the
         /// store of whoever exported it and cannot be read from here at all.
         case offlineBundle
+        /// The read for this manifest's attempts failed. The list holds the
+        /// decision just made and nothing else, so it is neither the full
+        /// history nor an empty one, and must not be presented as either.
+        case readFailed
     }
     @Published private(set) var correctionHistoryState: CorrectionHistoryState = .notRead
 
@@ -1054,39 +1072,34 @@ final class WorkspaceModel: ObservableObject {
                     ? "Correction recorded as revision \(applied.manifest.envelope.revision.formatted())."
                     : "FormaCore refused this correction: \(applied.violations.map { $0.code }.joined(separator: " · ")). "
                         + "Nothing was changed, and the attempt is on the exceptions list."
-                // Both reads finish before any state is written. Publishing in
-                // steps let a scope change during a read land another source's
-                // manifest here with this source's listing under it. The reads
-                // are explicit `do`/`catch` rather than `try?` because these
-                // calls already answer optionally: `try?` over them nests the
-                // optional, and a failure and a nil would look alike below.
-                var stored: Manifest?
-                do { stored = try await workspace.currentManifest(scope: scope, profile: profile) }
-                catch { stored = nil }
+                // One read before any state is written, and it is the read that
+                // matters: the audit trail for the manifest just corrected. The
+                // published version itself is not re-fetched - `applyCorrection`
+                // returns the manifest the store wrote, and asking the store for
+                // "the current manifest of this scope and profile" can answer
+                // with a *different* manifest that happens to be newer, putting
+                // another listing on screen under a notice about this one.
+                // The read is an explicit `do`/`catch` rather than `try?`
+                // because it already answers optionally: `try?` over it nests
+                // the optional, and a failure and a nil would look alike below.
                 var attempts: [CorrectionRecord]?
                 do { attempts = try await workspace.corrections(manifestID: manifestID) }
                 catch { attempts = nil }
                 guard !Task.isCancelled, scope.id == selectedScopeID,
                       profile.profileID == selectedProfileID else { return }
-                var shown = applied.manifest
-                if let stored = stored, stored.envelope.revision != applied.manifest.envelope.revision {
-                    // The manifest moved on between the write and this read:
-                    // the notice names both numbers instead of letting the
-                    // header show one and the audit trail another.
-                    message = "Correction recorded as revision "
-                        + "\(applied.manifest.envelope.revision.formatted()); the manifest has since advanced to revision "
-                        + "\(stored.envelope.revision.formatted())."
-                    shown = stored
-                }
-                self.manifest = shown
+                self.manifest = applied.manifest
                 self.draft = nil
                 refreshRows()
                 if let history = attempts {
                     correctionHistory = history
                     correctionHistoryState = .fromStore
                 } else {
+                    // The click's own row is shown, and the panel says the rest
+                    // is missing because the read failed - not that nothing has
+                    // been read, which is a different claim and would present a
+                    // one-row list as a complete history.
                     correctionHistory = [applied.correction]
-                    correctionHistoryState = .notRead
+                    correctionHistoryState = .readFailed
                 }
                 notice = message
             } catch {

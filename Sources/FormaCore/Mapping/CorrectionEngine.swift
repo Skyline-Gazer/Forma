@@ -168,15 +168,17 @@ public struct CorrectionEngine: Sendable {
             // citation list is an opinion too: a value with nothing behind it is
             // exactly what a human click must not silently introduce.
             //
-            // The cited ids are looked up rather than the whole registry indexed:
-            // a correction cites a handful of rows, while a source's row list
-            // grows with every re-read, and building a dictionary of all of it to
-            // answer three lookups is work proportional to the wrong number.
+            // One pass over the source's rows into an id index, then one lookup
+            // per citation. Indexing is the cheaper direction: a source's row
+            // list grows with every re-read, while a correction cites a handful
+            // of rows, and scanning the list per citation made each click cost
+            // citations x history. `evidence` is keyed by source, so the rows
+            // here are already the cited source's own.
             let rows = evidence[sourceID] ?? []
             let target = manifest.entries[position]
+            let rowsByID = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             let verified = evidenceIDs.filter { id in
-                guard let record = rows.first(where: { $0.id == id }) else { return false }
-                guard record.isUsable, record.sourceID == sourceID else { return false }
+                guard let record = rowsByID[id], record.isUsable else { return false }
                 // The same binding the validator insists on: a row from an older
                 // snapshot describes a file that is no longer the one in front of
                 // the reviewer, and accepting it would let a correction cite

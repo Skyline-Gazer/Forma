@@ -159,6 +159,10 @@ struct MappingView: View {
                             Text("No reviewer decision has been recorded for this manifest.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
+                    case .readFailed:
+                        Text("The history could not be read from storage, so only the decision just "
+                            + "made is listed here. This is not the full set of attempts.")
+                            .font(.caption).foregroundStyle(.orange)
                     }
                     ForEach(model.correctionHistory, id: \.id) { record in
                         VStack(alignment: .leading, spacing: 2) {
