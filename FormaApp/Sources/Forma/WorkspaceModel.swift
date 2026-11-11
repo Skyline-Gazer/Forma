@@ -301,9 +301,9 @@ final class WorkspaceModel: ObservableObject {
     var roleInventory: [RedactionPlan.Role: Int] { redaction.roles }
 
     /// Evidence rows this session has read, keyed by citation id: the review
-    /// screen resolves one per field chip per render. `merge` writes it in the
-    /// same walk that rebuilds `evidenceBySource`, for the sources that batch
-    /// touched, so the two views of the same rows cannot drift apart.
+    /// screen resolves one per field chip per render. `merge` writes it from the
+    /// same list it writes `evidenceBySource` from, for the sources that batch
+    /// touched, so one id cannot show one excerpt here and another there.
     @Published private(set) var recordsByID: [String: EvidenceRecord] = [:]
 
     func record(for id: String) -> EvidenceRecord? { recordsByID[id] }
@@ -657,7 +657,11 @@ final class WorkspaceModel: ObservableObject {
     /// Folds freshly read rows into the per-source view. Rows are unioned by
     /// id rather than replacing a source's list: a capture that returns only
     /// what it just extracted must not hide the rows an older revision cites,
-    /// because those rows are what makes an old manifest verifiable.
+    /// because those rows are what makes an old manifest verifiable. When two
+    /// reads carry one id, the later merge supplies the copy both views show -
+    /// the store itself keeps the first content for an id (`insertEvidence`
+    /// ignores a collision), so this is about which read reached the session
+    /// last, not about two copies of one stored row disagreeing.
     private func merge(_ records: [EvidenceRecord]) {
         guard !records.isEmpty else { return }
         // Only the sources this batch touched are rebuilt. Order between two
@@ -1002,7 +1006,13 @@ final class WorkspaceModel: ObservableObject {
         Task { await loadEvidence(for: sourceID) }
     }
 
-    func cancelCorrection() { draft = nil }
+    func cancelCorrection() {
+        // Cancelling while the write is in flight has to stop the write, not
+        // just hide the sheet: the reviewer's next signal would otherwise be a
+        // result notice for a decision they believe they abandoned.
+        if phase == .correcting { cancelWork() }
+        draft = nil
+    }
 
     /// Records a human decision. The engine, not this screen, decides whether
     /// it is supported: a click that cites nothing is stored as a refused

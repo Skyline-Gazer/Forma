@@ -418,10 +418,19 @@ struct MappingView: View {
             HStack {
                 Button("Cancel") { model.cancelCorrection() }
                     .accessibilityIdentifier("cancel-correction")
-                Button("Record Correction") { model.applyCorrection() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(model.phase.isBusy)
-                    .accessibilityIdentifier("record-correction")
+                if model.phase == .correcting {
+                    // A disabled button alone says nothing about a click that
+                    // was accepted: the press looks ignored, so the reviewer
+                    // presses again. Say that the decision is being written.
+                    ProgressView().controlSize(.small)
+                    Text("Recording…").font(.caption).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("correction-progress")
+                } else {
+                    Button("Record Correction") { model.applyCorrection() }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(model.phase.isBusy)
+                        .accessibilityIdentifier("record-correction")
+                }
             }
         }
         .padding(15)
@@ -515,8 +524,11 @@ struct MappingView: View {
 
     /// One attempt, described by what it did to the version history: a stored
     /// decision names the revision it wrote, a refusal names the one it read
-    /// and wrote nothing. Any other pairing came from outside a review - or
-    /// from a version 1 history whose claim the migration could not attribute.
+    /// and wrote nothing. A verified row with no revision is the later of two
+    /// accepted attempts that both recorded the same revision they read - the
+    /// version 1 migration credits the successor to the earlier one and leaves
+    /// this one unattributed rather than guessing. Anything else came from
+    /// outside a review.
     private static func outcomeLine(_ record: CorrectionRecord) -> (text: String, color: Color) {
         switch (record.reviewState, record.producedRevision) {
         case (.evidenceVerified, let produced?):
@@ -527,9 +539,9 @@ struct MappingView: View {
             ("Refused by FormaCore · attempted against revision "
                 + "\(record.manifestRevision.formatted()) · published nothing", .orange)
         case (.evidenceVerified, nil):
-            ("Verified decision against revision \(record.manifestRevision.formatted()) - an older "
-                + "workspace let two attempts name the same revision they read, so which version "
-                + "this one wrote cannot be known", .orange)
+            ("Verified decision against revision \(record.manifestRevision.formatted()) - a second "
+                + "attempt named the same revision, so the version 1 migration left this one without "
+                + "a version it wrote", .orange)
         default:
             ("Row \(record.id) is neither shape a review produces - verified with the revision it "
                 + "wrote, or refused with none: it carries \(record.reviewState.rawValue) with "
