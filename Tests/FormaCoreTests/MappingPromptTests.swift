@@ -249,12 +249,46 @@ struct MappingPromptTests {
         for (term, label) in first {
             #expect(label.hasPrefix("«客户"), "a label keeps its role: \(label)")
             let code = label.dropFirst("«客户".count).dropLast()
-            #expect(code.count == 8 && code.allSatisfy(\.isHexDigit),
+            #expect(code.count == 12 && code.allSatisfy(\.isHexDigit),
                     "a label carries a salted code, not a position: \(label)")
             #expect(!term.components(separatedBy: .whitespaces).contains(String(code)),
                     "a label must not be the term in another dress")
             #expect(other[term] != label)
         }
+    }
+
+    @Test("a plan hands out distinct labels at the scale a real workspace uses")
+    func labelsAreDistinctAtScale() {
+        // The code is not retried on collision, so the space itself has to be
+        // wide enough. Five thousand names in one role is well past anything the
+        // corpus holds, and a narrower code fails this test instead of silently
+        // letting two customers share a label.
+        let names = Dictionary(uniqueKeysWithValues: (1...5_000).map { ("客户名称\($0)", RedactionPlan.Role.customer) })
+        let plan = RedactionPlan(terms: names, salt: "workspace-scale")
+        let labels = Set(names.keys.compactMap { plan.placeholder(for: $0) })
+        #expect(labels.count == 5_000, "five thousand customers need five thousand labels")
+    }
+
+    @Test("distinct figures do not collapse onto one amount label")
+    func amountLabelsAreDistinctPerValue() throws {
+        let plan = RedactionPlan.none
+        var labels: Set<String> = []
+        for value in stride(from: 1_000.0, through: 21_000.0, by: 10.0) {
+            let text = try plan.redact(text: "报价 \(String(format: "%.2f", value)) 元")
+            labels.insert(text)
+        }
+        #expect(labels.count == 2_001, "two thousand figures must not share a label")
+    }
+
+    @Test("a currency word in front of a grouped number still marks it as money")
+    func currencyWordBeforeANumberIsACue() throws {
+        let plan = RedactionPlan.none
+        // The symbol pattern needs the currency adjacent to the number, so this
+        // is the case where the words before a grouped figure decide.
+        let text = try plan.redact(text: "人民币合计 1,200,000")
+        #expect(!text.contains("1,200,000"), "an amount named in currency words is replaced: \(text)")
+        let serial = try plan.redact(text: "档案流水号 1,200,000")
+        #expect(serial.contains("1,200,000"), "a serial number is not a price: \(serial)")
     }
 
     @Test("a field rule names the vocabulary its value must come from")

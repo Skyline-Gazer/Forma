@@ -32,18 +32,24 @@ struct CasePackTests {
         for kind in [CasePack.Sample.Kind.positive, .negative, .conflict, .refusal] {
             #expect(kinds.contains(kind), "\(kind) must be taught")
         }
-        // SPEC §5.1's six categories each have to appear as the tempting one a
-        // counter-example refuses. The category a file finally lands in is not
-        // the trap: a case that refuses 03_厂商支持文件 and files the document
-        // under 04 teaches the trap without ever naming 03 as a destination.
+        // Neither list below is invented by this test. The categories come from
+        // the Project Archive profile, which is the artifact SPEC §5.1 froze, and
+        // the field name comes from the field enum. A pack that stops teaching a
+        // declared trap fails here, and a profile that gains a category forces
+        // the pack to teach it too.
+        //
+        // The trap is the category a counter-example refuses, not the one a file
+        // lands in: a case that refuses 03_厂商支持文件 and files the document
+        // under 04 teaches exactly the thing that went wrong historically.
         let refused = pack.cases.filter { $0.kind != .positive }.flatMap(\.whyNot)
-        for category in ProjectArchiveContract.categories {
+        let archive = try MappingProfile.projectArchive()
+        for category in archive.categories.map(\.identifier) {
             #expect(refused.contains { $0.contains(category) },
-                    "no counter-example refuses \(category)")
+                    "the profile declares \(category) but no counter-example refuses it")
         }
         // The Vendor Library trap pulls the other way: generic vendor material
         // must not be dragged into a project it does not belong to.
-        #expect(refused.contains { $0.contains("projectname") },
+        #expect(refused.contains { $0.contains(MetadataFieldID.projectname.rawValue) },
                 "the project-binding trap must be taught for the vendor profile")
     }
 

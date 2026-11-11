@@ -87,13 +87,6 @@ public actor MappingEngine {
         self.workspace = workspace
     }
 
-    /// Writes re-read evidence rows into the registry, or reports why it could
-    /// not be done. The registry is the only writer: the engine holds no client
-    /// that could change anything outside its own database.
-    private func register(_ id: UUID, _ records: [EvidenceRecord]) async throws {
-        try await workspace.recordEvidence(records, for: id)
-    }
-
     public func run(_ request: MappingRunRequest) async -> MappingRunOutcome {
         let evidence = request.evidence
         var answers: [UUID: ProposalForEntry] = [:]
@@ -137,7 +130,7 @@ public actor MappingEngine {
             var registered: [UUID: [EvidenceRecord]] = [:]
             for (id, records) in extracted {
                 do {
-                    try await register(id, records)
+                    try await workspace.recordEvidence(records, for: id)
                     registered[id] = records
                 } catch {
                     failures[id] = error as? FormaError ?? .unavailable

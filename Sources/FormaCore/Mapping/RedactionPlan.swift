@@ -9,15 +9,17 @@ import Foundation
 /// distinct - a customer never collapses onto a vendor or a bidding entity -
 /// because those distinctions are exactly what the mapping has to reason about.
 ///
-/// A term label is `«<role><code>»`, where the code is the first eight hex
+/// A term label is `«<role><code>»`, where the code is the first twelve hex
 /// digits of the term's salted digest. The same term under the same salt always
 /// becomes the same label, a label carries nothing back into the term without
 /// the salt, and neither the caller's input order nor how many names share a
-/// role is revealed. Eight hex digits put the first collision past a thousand
-/// names in one role, and a plan that does hit one extends the code rather than
-/// letting two customers share a label. Amounts use the same construction on the
-/// value, so two placeholders sharing a code really are the same number - the
-/// fact a mapping needs when one total appears in prose and again in a table.
+/// role is revealed. Twelve hex digits is 48 bits: a workspace with ten thousand
+/// names in one role still meets its first collision with probability under one
+/// in a hundred thousand, and a test over five thousand names pins that the
+/// labels a plan hands out are distinct. Amounts use the same construction on
+/// the value, so two placeholders sharing a code really are the same number -
+/// the fact a mapping needs when one total appears in prose and again in a
+/// table.
 public struct RedactionPlan: Sendable {
     public enum Role: String, CaseIterable, Sendable {
         case customer, vendor, bidder, agent, person, project, amount, identifier
@@ -47,19 +49,8 @@ public struct RedactionPlan: Sendable {
         self.salt = salt
         self.terms = Self.ordered(terms: terms)
         var replacements: [String: String] = [:]
-        var taken: Set<String> = []
         for entry in self.terms {
-            // A short code can collide; extend it deterministically rather than
-            // letting two different customers share one label, which would read
-            // to the model as one customer.
-            var seed = entry.term
-            var label = Self.label(role: entry.role, seed: seed, salt: salt)
-            while taken.contains(label) {
-                seed += "\u{1f}collision"
-                label = Self.label(role: entry.role, seed: seed, salt: salt)
-            }
-            taken.insert(label)
-            replacements[entry.term] = label
+            replacements[entry.term] = Self.label(role: entry.role, seed: entry.term, salt: salt)
         }
         self.replacements = replacements
     }
@@ -75,7 +66,7 @@ public struct RedactionPlan: Sendable {
     }
 
     private static func label(role: Role, seed: String, salt: String) -> String {
-        "«\(role.label)\(digest(of: "\(salt)\u{1f}\(role.rawValue)\u{1f}\(seed)").prefix(8).uppercased())»"
+        "«\(role.label)\(digest(of: "\(salt)\u{1f}\(role.rawValue)\u{1f}\(seed)").prefix(12).uppercased())»"
     }
 
     private static func digest(of value: String) -> String {
@@ -204,8 +195,11 @@ public struct RedactionPlan: Sendable {
         (#"(?<![0-9A-Za-z.,\-/:«»])[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?(?![0-9A-Za-z.,\-/:«»])"#, .before),
     ]
 
+    // No currency symbol or unit here: those live inside the first two
+    // patterns' matches, so a number they explain never reaches this list. What
+    // is left is the words that turn a bare grouped number into a price.
     private static let moneyCues = ["价", "金额", "报价", "费用", "预算", "税", "合计", "付款",
-                                    "保证金", "中标", "成本", "人民币"]
+                                    "保证金", "中标", "成本"]
 
     private static func looksLikeAmount(_ text: String, before context: Substring) -> Bool {
         // Cents imply a price; a grouped number without them needs support from

@@ -241,8 +241,8 @@ struct ProviderTransport: Sendable {
     /// turns a rate limit into a task the user cannot cancel. A delta-seconds
     /// value is what both providers send; an HTTP-date is treated as absent
     /// rather than guessed at, and the fixed backoff applies.
-    static func retryAfter(from response: HTTPURLResponse) -> TimeInterval? {
-        guard let header = response.value(forHTTPHeaderField: "Retry-After"),
+    static func retryAfter(from response: HTTPURLResponse?) -> TimeInterval? {
+        guard let header = response?.value(forHTTPHeaderField: "Retry-After"),
               let seconds = TimeInterval(header.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             return nil
         }
