@@ -4,7 +4,7 @@
 
 Forma 是一款使用 Swift 6 / SwiftUI 开发的 macOS 原生应用，目标是将非标准目录、文件清单与文档内容转换为可验证的结构化 Manifest，并在后续阶段经 DEVONthink 官方 MCP 安全落地。
 
-> **当前状态：SPEC 与 PLAN 已批准，Roadmap 和 Issues 已建立；尚未批准应用代码开发。**
+> **当前状态：Owner 已授权 P0/P1。开发集成分支为 `dev`。**
 
 ## 文档入口
 
@@ -24,6 +24,13 @@ Forma 是一款使用 Swift 6 / SwiftUI 开发的 macOS 原生应用，目标是
 - 共享记录仅在元数据语义兼容且官方能力实测支持时考虑 Replicant，非默认去重策略
 - 先验证 AI Mapping 的质量，再构建实际 Import 闭环
 
+## 本地开发
+
+- macOS 14+；标准工具链为 Xcode 26.3 与其内置 Swift 6。GitHub Actions 在 `macos-15` 执行单元测试和 App 构建。
+- 测试：`swift test --force-resolved-versions`。
+- 构建：`xcodebuild -project Forma.xcodeproj -scheme Forma -destination 'platform=macOS' -onlyUsePackageVersionsFromResolvedFile CODE_SIGNING_ALLOWED=NO build`。也可在 Xcode 打开 `Forma.xcodeproj` 并运行共享 `Forma` scheme。
+- 在 Workspace 选择本地或 OneDrive 目录后执行 **Scan**。清单与历史快照存入本机 SQLite，重启后可继续查看。选择 PDF、DOCX 或 XLSX 文件后使用 **Read Evidence** 查看定位片段。扫描只读取元数据。占位文件未就绪时，应用保留清单并报告状态。
+
 ## 参考资料
 
 历史 DEVONthink 迁移与分类治理在 [Skyline-Gazer/tmp](https://github.com/Skyline-Gazer/tmp) 的 `tmp` 分支，固定参考提交 `cba4bc35831b67ebb3a41bfbc70a9fe89c7b428b`。
@@ -32,4 +39,4 @@ Forma 是一款使用 Swift 6 / SwiftUI 开发的 macOS 原生应用，目标是
 
 ## 当前审批边界
 
-Agent 可根据已冻结 SPEC 编制候选 `docs/PLAN.md` 并通过独立分支/PR 提交供审核。未经 Owner 单独授权，不创建 GitHub Project、Issues，不合并实施 PR，也不开始应用代码开发。
+P0/P1 在 `dev` 通过可独立审查的 PR 开发。P2、I1、I2 和发行需要单独授权。Prototype 只对明确授权的隔离 DEVONthink 数据库查询，禁止任何 DEVONthink 写入。

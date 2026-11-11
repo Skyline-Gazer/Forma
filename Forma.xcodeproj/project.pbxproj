@@ -1,0 +1,138 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+		100000000000000000000001 = {
+			isa = PBXProject;
+			attributes = { LastSwiftUpdateCheck = 2630; LastUpgradeCheck = 2630; };
+			buildConfigurationList = 100000000000000000000009;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			knownRegions = (en, Base);
+			mainGroup = 100000000000000000000003;
+			packageReferences = (10000000000000000000000E);
+			productRefGroup = 100000000000000000000005;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (100000000000000000000002);
+		};
+		100000000000000000000002 = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 10000000000000000000000A;
+			buildPhases = (100000000000000000000007, 100000000000000000000008);
+			buildRules = ();
+			dependencies = ();
+			name = Forma;
+			packageProductDependencies = (10000000000000000000000F);
+			productName = Forma;
+			productReference = 100000000000000000000006;
+			productType = "com.apple.product-type.application";
+		};
+		100000000000000000000003 = {
+			isa = PBXGroup;
+			children = (100000000000000000000004, 100000000000000000000005);
+			sourceTree = "<group>";
+		};
+		100000000000000000000004 = {
+			isa = PBXGroup;
+			children = (100000000000000000000013, 100000000000000000000014);
+			path = FormaApp;
+			sourceTree = "<group>";
+		};
+		100000000000000000000005 = {
+			isa = PBXGroup;
+			children = (100000000000000000000006);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		100000000000000000000006 = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.application;
+			path = Forma.app;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		100000000000000000000007 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (100000000000000000000016, 100000000000000000000017);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000008 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (100000000000000000000010);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000009 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (10000000000000000000000B, 100000000000000000000011);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		10000000000000000000000A = {
+			isa = XCConfigurationList;
+			buildConfigurations = (10000000000000000000000C, 100000000000000000000012);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		10000000000000000000000B = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		10000000000000000000000C = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.skyline-gazer.forma";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		10000000000000000000000E = { isa = XCLocalSwiftPackageReference; relativePath = .; };
+		10000000000000000000000F = {
+			isa = XCSwiftPackageProductDependency;
+			package = 10000000000000000000000E;
+			productName = FormaCore;
+		};
+		100000000000000000000010 = { isa = PBXBuildFile; productRef = 10000000000000000000000F; };
+		100000000000000000000011 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		100000000000000000000012 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.skyline-gazer.forma";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		100000000000000000000013 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormaApplication.swift; sourceTree = "<group>"; };
+		100000000000000000000014 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
+		100000000000000000000016 = { isa = PBXBuildFile; fileRef = 100000000000000000000013; };
+		100000000000000000000017 = { isa = PBXBuildFile; fileRef = 100000000000000000000014; };
+	};
+	rootObject = 100000000000000000000001;
+}

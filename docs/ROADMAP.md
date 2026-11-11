@@ -1,6 +1,6 @@
 # Forma — Implementation Roadmap (Approved Planning Baseline)
 
-**状态：Roadmap prepared / Not authorized for application implementation.**  
+**状态：Owner 已授权 P0/P1 实施。** 其余阶段沿用原有审批边界。  
 **基线：** [SPEC v0.1.1 FROZEN](SPEC.md) · [PLAN v0.1](PLAN.md) · [PLAN PR #1 merged](https://github.com/Skyline-Gazer/Forma/pull/1)  
 **Owner 决策确认日期：** 2026-11-11
 
@@ -40,13 +40,13 @@ P2 的 E2/E3 可部分并行，但用户可操作的 Prototype 应形成完整 M
 
 ## 实施与治理边界
 
-- **本次授权范围：** 合并 PLAN、建立 Roadmap、创建并关联 Issues。**没有批准开始代码开发**，因此全部 Issues 为 Planned / Open，未指派开发人，也不启动工作流。
+- **当前授权范围：** P0/P1 原生 App、扫描、持久身份、快照、证据抽取、只读能力探针和 macOS CI。在 `dev` 分阶段集成，使用既有 Issues 记录进度。
 - 首阶段 Prototype 只读隔离 DEVONthink 库，禁止任何写入；生产 Project_Archive 现有 991 条记录不可修改。
 - SPEC 产品契约有变化须先获 Owner 批准修订；一般实现细节以 PLAN 和对应 Issue 为准。
 - 公开仓库只允许脱敏/合成案例；真实资料留本地。
 - 不引入 Rust/Tauri、独立 RAG/Vector DB 或不必要服务。
 - 正常执行异常驱动复核；不为每批资料引入不必要审批。
-- **真正开始开发之前仍需 Owner 明确授权。**
+- P2、I1、I2 和发行须获 Owner 另行授权。
 
 ## GitHub Project 看板状态
 
