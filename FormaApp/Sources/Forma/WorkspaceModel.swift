@@ -301,9 +301,9 @@ final class WorkspaceModel: ObservableObject {
     var roleInventory: [RedactionPlan.Role: Int] { redaction.roles }
 
     /// Evidence rows this session has read, keyed by citation id: the review
-    /// screen resolves one per field chip per render. `merge` writes it in the
-    /// same walk that rebuilds `evidenceBySource`, for the sources that batch
-    /// touched, so the two views of the same rows cannot drift apart.
+    /// screen resolves one per field chip per render. `merge` writes it from the
+    /// same list it writes `evidenceBySource` from, for the sources that batch
+    /// touched, so one id cannot show one excerpt here and another there.
     @Published private(set) var recordsByID: [String: EvidenceRecord] = [:]
 
     func record(for id: String) -> EvidenceRecord? { recordsByID[id] }
@@ -657,7 +657,11 @@ final class WorkspaceModel: ObservableObject {
     /// Folds freshly read rows into the per-source view. Rows are unioned by
     /// id rather than replacing a source's list: a capture that returns only
     /// what it just extracted must not hide the rows an older revision cites,
-    /// because those rows are what makes an old manifest verifiable.
+    /// because those rows are what makes an old manifest verifiable. When two
+    /// reads carry one id, the later merge supplies the copy both views show -
+    /// the store itself keeps the first content for an id (`insertEvidence`
+    /// ignores a collision), so this is about which read reached the session
+    /// last, not about two copies of one stored row disagreeing.
     private func merge(_ records: [EvidenceRecord]) {
         guard !records.isEmpty else { return }
         // Only the sources this batch touched are rebuilt. Order between two
@@ -847,17 +851,31 @@ final class WorkspaceModel: ObservableObject {
             return
         }
         let plan = redactionTerms.isEmpty ? nil : redaction
-        let records = evidenceBySource.values.flatMap { $0 }
+        let sourceIDs = Set(manifest.entries.map(\.sourceID))
         phase = .exporting
         work = Task {
             defer { finishWork() }
             do {
-                let summary = try ManifestExport.export(manifest: manifest, evidence: records, to: directory,
-                                                       redaction: plan)
+                // Registered rows, not the ones this session happens to have
+                // opened. A bundle whose manifest cites evidence the export
+                // never carried contradicts itself: the violation only shows up
+                // when somebody revalidates it offline, on another machine,
+                // after the "Exported N files" notice was dismissed.
+                let grouped = try await workspace.registeredEvidence(for: sourceIDs)
+                let records = grouped.values.flatMap { $0 }
+                let summary = try ManifestExport.export(manifest: manifest, evidence: records,
+                                                        to: directory, redaction: plan)
                 guard !Task.isCancelled else { return }
                 exportSummary = summary
                 bundleURL = directory.appendingPathComponent(summary.manifestID, isDirectory: true)
-                notice = "Exported \(summary.files.count.formatted()) files for revision \(summary.revision.formatted())."
+                // Stated as what happened, and no more: whether the bundle holds
+                // every row its manifest cites is answered when the bundle is
+                // revalidated, where absent ids surface as `evidence_not_found`.
+                // An export cannot assert that from its own return value, which
+                // counts files and a revision.
+                let files = summary.files.count.formatted()
+                let revision = summary.revision.formatted()
+                notice = "Exported \(files) files for revision \(revision)."
             } catch {
                 if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .storage) }
             }
@@ -970,12 +988,22 @@ final class WorkspaceModel: ObservableObject {
     }
 
     @Published var draft: CorrectionDraft?
+
+    /// The draft whose Record click is being written, or nil.
+    ///
+    /// Not `phase`, even though `phase` is `.correcting` during the same
+    /// window: one model-level phase is shared with scanning, mapping, export
+    /// and preview, and a cancelled write only returns it to `.idle` when its
+    /// task reaches its `defer`, which can be after the reviewer has opened
+    /// another field's sheet. Keying on the draft says which sheet is waiting.
+    @Published private(set) var recordingDraftID: String?
     @Published private(set) var correctionHistory: [CorrectionRecord] = []
     /// What `correctionHistory` currently describes.
     ///
-    /// An empty list means three different things depending on how it got
-    /// empty, and a boolean could name two of them: not read yet, read from
-    /// this store, or belonging to a bundle whose history is on another machine.
+    /// The same list can mean four different things depending on how it got
+    /// that way, and a boolean could name two of them at best: not read yet,
+    /// read from this store, belonging to a bundle whose history is on another
+    /// machine, or a read that failed and left only the click's own row.
     enum CorrectionHistoryState {
         /// Nothing has been read for the manifest now on screen.
         case notRead
@@ -985,6 +1013,10 @@ final class WorkspaceModel: ObservableObject {
         /// The manifest came from an exported bundle: its attempts live in the
         /// store of whoever exported it and cannot be read from here at all.
         case offlineBundle
+        /// The read for this manifest's attempts failed. The list holds the
+        /// decision just made and nothing else, so it is neither the full
+        /// history nor an empty one, and must not be presented as either.
+        case readFailed
     }
     @Published private(set) var correctionHistoryState: CorrectionHistoryState = .notRead
 
@@ -1002,7 +1034,13 @@ final class WorkspaceModel: ObservableObject {
         Task { await loadEvidence(for: sourceID) }
     }
 
-    func cancelCorrection() { draft = nil }
+    func cancelCorrection() {
+        // Cancelling while the write is in flight has to stop the write, not
+        // just hide the sheet: the reviewer's next signal would otherwise be a
+        // result notice for a decision they believe they abandoned.
+        if recordingDraftID == draft?.id { cancelWork() }
+        draft = nil
+    }
 
     /// Records a human decision. The engine, not this screen, decides whether
     /// it is supported: a click that cites nothing is stored as a refused
@@ -1024,9 +1062,11 @@ final class WorkspaceModel: ObservableObject {
         let trimmed = draft.value.trimmingCharacters(in: .whitespacesAndNewlines)
         let citations = draft.citations.sorted()
         let manifestID = manifest.envelope.manifestID
+        let draftID = draft.id
         phase = .correcting
+        recordingDraftID = draftID
         work = Task {
-            defer { finishWork() }
+            defer { recordingDraftID = nil; finishWork() }
             do {
                 let applied = try await workspace.applyCorrection(
                     to: manifest, sourceID: draft.sourceID, field: draft.field,
@@ -1038,45 +1078,41 @@ final class WorkspaceModel: ObservableObject {
                 // follows each suspension, not only the first.
                 guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
                 // The decision is in storage from here on, so nothing below can
-                // undo it: the two reads only refine the screen, and an error
-                // in either used to conceal a correction that had succeeded.
-                var message = applied.violations.isEmpty
+                // undo it: what follows only refines the screen, and an error
+                // there used to conceal a correction that had succeeded.
+                let message = applied.violations.isEmpty
                     ? "Correction recorded as revision \(applied.manifest.envelope.revision.formatted())."
                     : "FormaCore refused this correction: \(applied.violations.map { $0.code }.joined(separator: " · ")). "
                         + "Nothing was changed, and the attempt is on the exceptions list."
-                // Both reads finish before any state is written. Publishing in
-                // steps let a scope change during a read land another source's
-                // manifest here with this source's listing under it. The reads
-                // are explicit `do`/`catch` rather than `try?` because these
-                // calls already answer optionally: `try?` over them nests the
-                // optional, and a failure and a nil would look alike below.
-                var stored: Manifest?
-                do { stored = try await workspace.currentManifest(scope: scope, profile: profile) }
-                catch { stored = nil }
+                // The published manifest is not re-fetched. "The current manifest
+                // for this scope and profile" is a different question - it can
+                // answer with another manifest that happens to be newer - and
+                // `applyCorrection` already returns the one the store wrote. The
+                // history read is `do`/`catch` rather than `try?` because it
+                // already answers optionally, and the two would look alike below.
                 var attempts: [CorrectionRecord]?
                 do { attempts = try await workspace.corrections(manifestID: manifestID) }
                 catch { attempts = nil }
                 guard !Task.isCancelled, scope.id == selectedScopeID,
                       profile.profileID == selectedProfileID else { return }
-                var shown = applied.manifest
-                if let stored = stored, stored.envelope.revision != applied.manifest.envelope.revision {
-                    // The manifest moved on between the write and this read:
-                    // the notice names both numbers instead of letting the
-                    // header show one and the audit trail another.
-                    message = "Correction recorded as revision "
-                        + "\(applied.manifest.envelope.revision.formatted()); the manifest has since advanced to revision "
-                        + "\(stored.envelope.revision.formatted())."
-                    shown = stored
-                }
-                self.manifest = shown
-                self.draft = nil
+                self.manifest = applied.manifest
+                // Close the sheet this click came from, and only that one: the
+                // reviewer may have opened another field while this write was
+                // running, and clearing whatever draft is current would throw
+                // away a decision being typed now. `self.` is load-bearing -
+                // the bare `draft` above is this click's unwrapped draft.
+                if self.draft?.id == draftID { self.draft = nil }
                 refreshRows()
                 if let history = attempts {
                     correctionHistory = history
                     correctionHistoryState = .fromStore
                 } else {
+                    // The click's own row is shown, and the panel says the rest
+                    // is missing because the read failed - not that nothing has
+                    // been read, which is a different claim and would present a
+                    // one-row list as a complete history.
                     correctionHistory = [applied.correction]
-                    correctionHistoryState = .notRead
+                    correctionHistoryState = .readFailed
                 }
                 notice = message
             } catch {
