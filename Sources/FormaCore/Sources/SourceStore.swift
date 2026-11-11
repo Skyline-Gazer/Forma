@@ -77,8 +77,15 @@ struct SourceStore {
 
     init(url: URL) throws {
         guard url.isFileURL else { throw FormaError.storage }
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
         database = try DatabaseQueue(path: url.path)
+        // Registered paths, snapshots and hashes stay owner-readable; SQLite also creates
+        // sidecar files, so each one is restricted immediately after opening.
+        for suffix in ["", "-wal", "-shm"] {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600],
+                                                   ofItemAtPath: url.path + suffix)
+        }
         var migrator = DatabaseMigrator()
         migrator.registerMigration("source-workspace-v1") { db in
             try db.execute(sql: """

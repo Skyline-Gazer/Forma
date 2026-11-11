@@ -24,17 +24,20 @@ extension SourceWorkspace {
         for record in result.records {
             let path = record.normalizedPath
             guard !collides(path) else { continue }
+            // One registered relative path keeps its own source_id even when only the
+            // spelling differs: on a case- or Unicode-insensitive volume the folded path
+            // is the same registered location, so `update` records the new spelling in
+            // path_history and refreshes the snapshot instead of orphaning the file.
+            // Distinct names that fold to one path inside a single scan are the scanner's
+            // collisionPaths, and those are held below without being folded.
             var stored = byPath[path]
-            if let existing = stored, !SourcePath.sameSpelling(existing.entry.relativePath, record.relativePath),
-               existing.stableIdentity == nil || existing.stableIdentity != record.stableIdentity {
-                issues.append(.init(relativePath: existing.entry.relativePath, reason: .pathCollision))
-                issues.append(.init(relativePath: record.relativePath, reason: .pathCollision))
-                try mark(existing, state: .held, scanID: scanID, in: db)
-                used.insert(existing.entry.id)
-                continue
-            }
+            // A move is only adopted when one previous entry and one current record share
+            // one stable identity, the previous path has disappeared from this scan, and
+            // that entry is still a live presence. An entry already held for ambiguity or
+            // recorded missing must not be resurrected by an identity match alone.
             if stored == nil, allowMoves, let identity = record.stableIdentity,
-               let old = oldIdentities[identity], old.count == 1, newIdentities[identity]?.count == 1,
+               let old = oldIdentities[identity], old.count == 1, old[0].1.entry.state == .present,
+               newIdentities[identity]?.count == 1,
                !seen.contains(old[0].1.entry.normalizedRelativePath),
                !collides(old[0].1.entry.normalizedRelativePath) {
                 stored = old[0].1

@@ -121,9 +121,15 @@ enum SourceEvidenceReader {
             return .init(status: .changedDuringRead)
         }
         // Reopen from the authorized root in case the directory was swapped during the read.
-        let currentDirectory = try root.openDirectory(parentPath)
+        // A failed reopen or name lookup here means the source moved while we were reading it,
+        // which must not be downgraded to a generic "unavailable" document.
+        let currentDirectory: Int32
+        do { currentDirectory = try root.openDirectory(parentPath) }
+        catch { return .init(status: .changedDuringRead) }
         defer { close(currentDirectory) }
-        let after = try SourceFileMetadata.read(in: currentDirectory, name: name)
+        let after: SourceFileMetadata
+        do { after = try SourceFileMetadata.read(in: currentDirectory, name: name) }
+        catch { return .init(status: .changedDuringRead) }
         guard after == before else { return .init(status: .changedDuringRead) }
         try Task.checkCancellation()
         guard let copy else { return .init(status: .ok, sha256: digest, metadata: before, stableIdentity: identity) }

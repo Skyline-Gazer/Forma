@@ -116,6 +116,34 @@ struct EvidenceTests {
         }
     }
 
+    @Test func worksheetRelationshipTargetsResolveInsideThePackageOrFailClosed() throws {
+        let sheet = "<worksheet xmlns=\"\(spreadsheetNamespace)\"><sheetData>"
+            + "<row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>located value</t></is></c></row></sheetData></worksheet>"
+        let located = EvidenceExtraction(status: .ok, items: [
+            EvidenceItem(locator: .xlsx(sheet: "Summary", cell: "A1"), text: "located value",
+                         sheetVisibility: .visible, cellType: "inlineStr"),
+        ])
+        // OPC permits package-root-relative targets and percent-encoded names; both resolve.
+        for (target, part) in [("worksheets/sheet1.xml", "xl/worksheets/sheet1.xml"),
+                               ("/xl/worksheets/sheet1.xml", "xl/worksheets/sheet1.xml"),
+                               ("works%20sheets/sheet1.xml", "xl/works%20sheets/sheet1.xml")] {
+            let data = try xlsx(sheets: [("Summary", "visible", "sheet")],
+                                relationships: [relationship("sheet", "worksheet", target)],
+                                parts: [(part, sheet)])
+            #expect(try extract(data, extension: "xlsx") == located, "target \(target)")
+        }
+        // A declared part that the package does not contain is corruption, never an empty success.
+        let missing = try xlsx(sheets: [("Summary", "visible", "sheet")],
+                               relationships: [relationship("sheet", "worksheet", "worksheets/gone.xml")],
+                               parts: [("xl/worksheets/sheet1.xml", sheet)])
+        #expect(try extract(missing, extension: "xlsx") == EvidenceExtraction(status: .corrupt, items: []))
+        // Resolving above the package root is rejected instead of silently truncated.
+        let above = try xlsx(sheets: [("Summary", "visible", "sheet")],
+                             relationships: [relationship("sheet", "worksheet", "../../../sheet.xml")],
+                             parts: [("xl/worksheets/sheet1.xml", sheet)])
+        #expect(try extract(above, extension: "xlsx") == EvidenceExtraction(status: .corrupt, items: []))
+    }
+
     @Test func rejectsDTDsInUTF8AndUTF16() throws {
         let body = wordDocument("<w:p><w:r><w:t>&secret;</w:t></w:r></w:p>")
         let dtd = """
