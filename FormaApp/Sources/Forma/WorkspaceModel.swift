@@ -862,23 +862,30 @@ final class WorkspaceModel: ObservableObject {
                 // when somebody revalidates it offline, on another machine,
                 // after the "Exported N files" notice was dismissed.
                 let grouped = try await workspace.registeredEvidence(for: sourceIDs)
-                let summary = try ManifestExport.export(manifest: manifest,
-                                                        evidence: grouped.values.flatMap { $0 },
+                let records = grouped.values.flatMap { $0 }
+                let summary = try ManifestExport.export(manifest: manifest, evidence: records,
                                                         to: directory, redaction: plan)
                 guard !Task.isCancelled else { return }
                 exportSummary = summary
                 bundleURL = directory.appendingPathComponent(summary.manifestID, isDirectory: true)
-                notice = summary.missingEvidence.isEmpty
-                    ? "Exported \(summary.files.count.formatted()) files for revision "
-                        + "\(summary.revision.formatted())."
-                    : "Exported \(summary.files.count.formatted()) files for revision "
-                        + "\(summary.revision.formatted()), but \(summary.missingEvidence.count.formatted()) "
-                        + "cited evidence rows are not registered in this store: revalidating this bundle "
-                        + "offline will report it incomplete."
+                notice = Self.exportNotice(summary)
             } catch {
                 if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .storage) }
             }
         }
+    }
+
+    /// What an export says about itself. A missing row is stated, not swallowed:
+    /// the bundle would otherwise contradict its own manifest only when someone
+    /// else revalidates it offline. Its own function because a ternary of two
+    /// interpolated strings inside the `Task` above is more than the app
+    /// target's type-checker will resolve here.
+    private static func exportNotice(_ summary: ManifestExport.Summary) -> String {
+        let head = "Exported \(summary.files.count.formatted()) files for revision "
+            + "\(summary.revision.formatted())"
+        guard !summary.missingEvidence.isEmpty else { return head + "." }
+        return head + ", but \(summary.missingEvidence.count.formatted()) cited evidence rows are not "
+            + "registered in this store: revalidating this bundle offline will report it incomplete."
     }
 
     /// Reads a written bundle: the manifest for offline viewing and its evidence
