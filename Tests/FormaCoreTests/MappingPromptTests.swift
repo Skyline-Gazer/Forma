@@ -267,7 +267,11 @@ struct MappingPromptTests {
                 "a truncated request must say how much it dropped")
         #expect(rows.contains { $0["source"] as? String == "content" },
                 "content rows are what the field rules are judged on")
-        #expect(!rows.contains { $0["source"] as? String == "fs_metadata" },
-                "filesystem metadata is the first thing the budget gives up")
+        // Ranking is the point of the budget: the rows the field rules are
+        // judged on stay, and the cheapest filler is what gets dropped.
+        let kept = rows.filter { $0["source"] as? String == "fs_metadata" }.count
+        #expect(kept == MappingPrompt.maximumEvidenceRows - 1,
+                "filesystem metadata is the first thing the budget gives up, kept \(kept)")
+        #expect(rows.filter { $0["source"] as? String == "content" }.count == 1)
     }
 }

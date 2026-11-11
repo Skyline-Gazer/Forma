@@ -131,23 +131,28 @@ struct MappingEngineTests {
         let evidence: [UUID: [EvidenceRecord]]
     }
 
-    /// `readableBody` writes a real PDF instead of text under a `.pdf` name.
-    /// The bounded re-ask is only reachable when re-reading the file actually
-    /// yields body evidence, so the tests that exercise it need a body the
-    /// extractor can read; every other test keeps the cheap text fixture.
+    /// `readableBody` writes real PDFs instead of text under a `.pdf` name.
+    /// Whether re-reading a file yields usable body evidence decides both the
+    /// bounded re-ask and the validated path, so the tests that care need
+    /// documents the extractor can read; every other test keeps the cheap text
+    /// fixture, where extraction fails by design.
     private func prepared(readableBody: Bool = false) async throws -> Fixture {
         let fixture = try SourceFixture()
-        if readableBody {
-            let body = try makePDF(["示例项目_2026 招标公告 2026 公告"])
-            let url = fixture.root.appendingPathComponent("示例项目_2026/01_招标/公告.pdf")
+        let bodies = [
+            "示例项目_2026/01_招标/公告.pdf": "示例项目_2026 招标公告 2026 公告",
+            "示例项目_2026/02_投标/技术标.pdf": "示例项目_2026 技术标 2026 公告",
+            "别的项目_2025/公告.pdf": "别的项目_2025 公告 2026 公告",
+        ]
+        for (path, text) in bodies.sorted(by: { $0.key < $1.key }) {
+            let url = fixture.root.appendingPathComponent(path)
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)
-            try body.write(to: url)
-        } else {
-            _ = try fixture.write("tender notice 示例项目_2026 公告", at: "示例项目_2026/01_招标/公告.pdf")
+            if readableBody {
+                try makePDF([text]).write(to: url)
+            } else {
+                try Data(text.utf8).write(to: url)
+            }
         }
-        _ = try fixture.write("bid body", at: "示例项目_2026/02_投标/技术标.pdf")
-        _ = try fixture.write("other notice", at: "别的项目_2025/公告.pdf")
         let workspace = try SourceWorkspace(databaseURL: fixture.database)
         let scope = try await workspace.register(fixture.root)
         let listing = try await workspace.scan(scope)
@@ -157,7 +162,11 @@ struct MappingEngineTests {
         )
         var evidence: [UUID: [EvidenceRecord]] = [:]
         for item in listing.entries {
-            let capture = try await workspace.hash(for: item)
+            // The registry rows come from the extraction path, not the hash
+            // path: whether a file yields usable body evidence is exactly what
+            // decides a hold and the bounded re-ask, and a hash-only capture
+            // would make every entry look unevidenced.
+            let capture = try await workspace.evidence(for: item)
             evidence[item.id] = try EvidenceRegistry.records(for: item, capture: capture)
         }
         return Fixture(source: fixture, workspace: workspace, scope: scope, entries: listing.entries,
@@ -188,7 +197,7 @@ struct MappingEngineTests {
 
     @Test("a well-formed answer produces a manifest with no execution authority")
     func validatedMapping() async throws {
-        let fixture = try await prepared()
+        let fixture = try await prepared(readableBody: true)
         defer { fixture.source.cleanUp() }
         let answerer = FakeAnswerer { batch, _ in
             MappingAttempt(proposal: decodedProposal(proposalText(batch: batch)), modelID: "fake-model", requests: 1)
