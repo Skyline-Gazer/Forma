@@ -46,6 +46,37 @@ public enum FormaJSON {
     }()
 }
 
+
+/// The artifact schemas bound every string that crosses a boundary. The same
+/// bounds are applied where the values are constructed, so a program-built
+/// artifact cannot violate its own schema: a limit that only the validator
+/// knows is a limit that a future caller will exceed.
+enum Bounded {
+    static func text(_ value: String?, _ limit: Int) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A value shorter than the schema's `minLength` carries no information,
+        // so it is reported as unknown rather than kept as a stub.
+        guard trimmed.count >= 4 else { return nil }
+        return String(trimmed.prefix(limit))
+    }
+
+    static func required(_ value: String, _ limit: Int) -> String {
+        String(value.prefix(limit))
+    }
+
+    static func list(_ values: [String], _ limit: Int) -> [String] {
+        values.compactMap { text($0, limit) }
+    }
+
+    /// Truncation without a minimum: the schema bounds the length but allows a
+    /// short legitimate value, so dropping "A1" would be a data loss.
+    static func clipped(_ value: String?, _ limit: Int) -> String? {
+        guard let value else { return nil }
+        return String(value.prefix(limit))
+    }
+}
+
 // MARK: - Decision state
 
 /// PLAN §7.3. `invalidated` is a revision-validity flag: it records that a
@@ -340,7 +371,7 @@ public struct ProposalConflict: Codable, Sendable, Equatable, Hashable {
 
     public init(field: MetadataFieldID, detail: String) {
         self.field = field
-        self.detail = detail
+        self.detail = Bounded.text(detail, 300) ?? "unspecified conflict"
     }
 }
 
@@ -375,7 +406,7 @@ public struct ProposalEntry: Codable, Sendable, Equatable {
         self.unknownFields = unknownFields
         self.conflicts = conflicts
         self.confidence = confidence
-        self.reasoning = reasoning
+        self.reasoning = Bounded.required(reasoning, 600)
     }
 }
 
@@ -498,10 +529,10 @@ public struct FieldOutcome: Codable, Sendable, Equatable {
     public init(field: MetadataFieldID, value: String?, status: Status, evidenceIDs: [String] = [],
                 conflicts: [String] = []) {
         self.field = field
-        self.value = value
+        self.value = Bounded.clipped(value, 512)
         self.status = status
         self.evidenceIDs = evidenceIDs
-        self.conflicts = conflicts
+        self.conflicts = Bounded.list(conflicts, 300)
     }
 }
 
@@ -522,7 +553,7 @@ public struct ManifestAssociation: Codable, Sendable, Equatable, Hashable {
     public init(kind: Kind, sourceID: UUID, basis: String, evidenceIDs: [String] = []) {
         self.kind = kind
         self.sourceID = sourceID
-        self.basis = String(basis.prefix(300))
+        self.basis = Bounded.text(basis, 300) ?? "unspecified basis"
         self.evidenceIDs = evidenceIDs
     }
 }
@@ -539,8 +570,8 @@ public struct ManifestTarget: Codable, Sendable, Equatable {
     public let resolved: Bool
 
     public init(databaseName: String?, groupPath: [String], resolved: Bool) {
-        self.databaseName = databaseName
-        self.groupPath = groupPath
+        self.databaseName = Bounded.clipped(databaseName, 128)
+        self.groupPath = groupPath.map { Bounded.required($0, 256) }
         self.resolved = resolved
     }
 }
@@ -581,7 +612,10 @@ public struct ManifestEntry: Codable, Sendable, Equatable {
         self.snapshotFingerprint = snapshotFingerprint
         self.snapshotRevision = snapshotRevision
         self.sourceVersion = sourceVersion
-        self.relativePath = relativePath
+        // The exported schema forbids an absolute path, so a leading separator
+        // is stripped instead of letting a hand-built entry fail validation.
+        self.relativePath = Bounded.required(
+            relativePath.replacingOccurrences(of: "^/+", with: "", options: .regularExpression), 1_024)
         self.state = state
         self.target = target
         self.metadata = metadata
@@ -593,9 +627,9 @@ public struct ManifestEntry: Codable, Sendable, Equatable {
             : fields
         self.associations = associations
         self.eligibleForAutoExecution = eligibleForAutoExecution
-        self.invalidatedReason = invalidatedReason
+        self.invalidatedReason = Bounded.text(invalidatedReason, 300)
         self.confidence = confidence
-        self.providerReasoning = providerReasoning
+        self.providerReasoning = Bounded.clipped(providerReasoning, 600)
     }
 
     public func outcome(for field: MetadataFieldID) -> FieldOutcome? {
@@ -648,7 +682,9 @@ public struct MetadataValues: Sendable, Equatable {
 
     public init(_ values: [MetadataFieldID: String?]) throws {
         guard Set(values.keys) == Set(MetadataFieldID.allCases) else { throw FormaError.invalidOutput }
-        self.values = values
+        // The artifact schemas bound every metadata value; the same bound is
+        // applied here so a program-built entry cannot exceed its own schema.
+        self.values = values.mapValues { Bounded.clipped($0, 512) }
     }
 
     /// All slots unknown: the honest starting point for a program-built entry.
@@ -662,7 +698,7 @@ public struct MetadataValues: Sendable, Equatable {
 
     public subscript(field: MetadataFieldID) -> String? {
         get { values[field] ?? nil }
-        set { values[field] = newValue }
+        set { values[field] = Bounded.clipped(newValue, 512) }
     }
 
     public var nonNullFields: Set<MetadataFieldID> {
