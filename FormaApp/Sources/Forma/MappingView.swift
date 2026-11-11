@@ -142,19 +142,24 @@ struct MappingView: View {
                     Text("context \(manifest.envelope.contextDigest)").font(.caption2.monospaced())
                         .foregroundStyle(.secondary).textSelection(.enabled)
                 }
-                // A manifest's decision history belongs with the manifest it
-                // describes - and with the fields these decisions edited, which
-                // is this screen. Refusals are listed as plainly as
-                // acceptances: a click FormaCore ruled out still happened, and
-                // hiding it would leave the revision history describing only
-                // the decisions that were right.
                 Section("Correction attempts") {
-                    if !model.correctionsLoaded {
+                    // Each way this list can be empty says something different,
+                    // and only one of them is a fact about the manifest: a
+                    // refusal still happened, an unread list says nothing about
+                    // whether anything happened, and a bundle exported elsewhere
+                    // has its attempts in a store this machine cannot open.
+                    switch model.correctionHistoryState {
+                    case .notRead:
                         Text("Attempts for this manifest have not been read from storage yet.")
                             .font(.caption).foregroundStyle(.secondary)
-                    } else if model.correctionHistory.isEmpty {
-                        Text("No reviewer decision has been recorded for this manifest.")
+                    case .offlineBundle:
+                        Text("This bundle was exported elsewhere; its correction attempts are not stored here.")
                             .font(.caption).foregroundStyle(.secondary)
+                    case .fromStore:
+                        if model.correctionHistory.isEmpty {
+                            Text("No reviewer decision has been recorded for this manifest.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                     ForEach(model.correctionHistory, id: \.id) { record in
                         VStack(alignment: .leading, spacing: 2) {
@@ -451,7 +456,7 @@ struct MappingView: View {
                     }
                 }
             } else {
-                Text("Evidence row \(id) is not in the local registry: \(FormaError.unavailable.localizedDescription) Open the exported bundle's \(ManifestExport.evidenceFile) to read it.")
+                Text("Evidence row \(id) has not been read into this session. It is stored in the exported bundle's \(ManifestExport.evidenceFile), and FormaCore keeps every row an older revision cited.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
@@ -465,7 +470,7 @@ struct MappingView: View {
     // MARK: - Text helpers
 
     private func chipTitle(_ id: String) -> String {
-        guard let record = model.record(for: id) else { return FormaError.unavailable.localizedDescription }
+        guard let record = model.record(for: id) else { return "Row not read · \(String(id.dropFirst(3).prefix(6)))" }
         return "\(record.source.rawValue) · \(String(id.dropFirst(3).prefix(6)))"
     }
 

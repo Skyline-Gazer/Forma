@@ -74,6 +74,20 @@ extension SourceWorkspace {
         }
     }
 
+    /// Every registered row for a set of sources, in one read.
+    ///
+    /// A caller that has to describe a batch - the privacy preview - needs the
+    /// rows for every file in it. Asking per file turned one reviewer action
+    /// into a query for each file, and a preview assembled from whatever a
+    /// session happened to open earlier describes a request the run would not
+    /// make.
+    public func registeredEvidence(for sourceIDs: Set<UUID>) async throws -> [UUID: [EvidenceRecord]] {
+        guard !sourceIDs.isEmpty else { return [:] }
+        return try await store.database.read { db in
+            try MappingStore.evidence(for: sourceIDs, in: db)
+        }
+    }
+
     /// Reads a file and registers what was observed, returning the rows a
     /// mapping request may cite.
     ///
@@ -242,6 +256,24 @@ extension SourceWorkspace {
             // could have stored it.
             let published = try await store.database.write { db -> (manifest: Manifest,
                                                                     record: CorrectionRecord) in
+                // The revision being corrected has to still be the current one.
+                // `persist` numbers whatever it is handed from the store, so
+                // without this check a decision made against revision 3 could
+                // be published as revision 5 while silently discarding what
+                // revision 4 decided - the newer version would exist, and
+                // nothing would say a reviewer had overwritten it. Comparing
+                // the store's next number with this manifest's own is what
+                // makes "you are correcting an older version" a refusal rather
+                // than an overwrite nobody was told about.
+                guard try MappingStore.nextManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
+                        == manifest.envelope.revision + 1 else { throw FormaError.sourceChanged }
+                // `produced_revision` is unique per manifest. Reaching a
+                // collision here cannot be a user mistake - this transaction
+                // assigns the number itself, after the check above - so it can
+                // only mean the store already holds a decision claiming it.
+                // FormaError's vocabulary is a published contract, and an
+                // inconsistent store is what `.storage` reports; the constraint
+                // text belongs in the diagnostic, not in a new error case.
                 let stored = try Self.persist(applied.manifest, scopeID: scope.id, in: db)
                 var record = applied.correction
                 record.producedRevision = stored.envelope.revision

@@ -316,4 +316,33 @@ struct CorrectionPersistenceTests {
         #expect(refused.manifestRevision == 3 && refused.producedRevision == nil,
                 "a refusal targeted 3 and produced nothing, and the split has to say so")
     }
+
+    @Test("a correction built on a superseded revision is refused")
+    func staleBaseIsRefused() async throws {
+        let context = try await prepared()
+        defer { context.fixture.cleanUp() }
+        let current = try #require(await context.workspace.currentManifest(scope: context.scope,
+                                                                          profile: context.profile))
+        let advanced = try await context.workspace.applyCorrection(
+            to: current, sourceID: context.sourceID, field: .completionyear,
+            correctedValue: "2027", evidenceIDs: [context.yearRow], origin: .manual,
+            scope: context.scope, profile: context.profile)
+        #expect(advanced.violations.isEmpty, "violations: \(advanced.violations.map(\.code))")
+        #expect(advanced.manifest.envelope.revision == 2)
+        // The version on the first reviewer's screen is now an old one. Publishing
+        // a decision built on it would number the new revision 3 and silently
+        // discard what revision 2 decided, so the store refuses the base instead.
+        await #expect(throws: FormaError.sourceChanged) {
+            _ = try await context.workspace.applyCorrection(
+                to: current, sourceID: context.sourceID, field: .completionyear,
+                correctedValue: "2028", evidenceIDs: [context.yearRow], origin: .manual,
+                scope: context.scope, profile: context.profile)
+        }
+        let stillCurrent = try #require(await context.workspace.currentManifest(scope: context.scope,
+                                                                               profile: context.profile))
+        #expect(stillCurrent.envelope.revision == 2, "the refusal must not publish a revision")
+        let history = try await context.workspace.corrections(manifestID: current.envelope.manifestID)
+        #expect(history.compactMap(\.producedRevision).allSatisfy { $0 <= 2 },
+                "nothing may claim a revision that was never written")
+    }
 }

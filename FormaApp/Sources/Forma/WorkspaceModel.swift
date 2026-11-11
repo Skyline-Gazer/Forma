@@ -121,7 +121,16 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var exceptions: [ExceptionRow] = []
     @Published private(set) var outcome: MappingRunOutcome?
     @Published private(set) var reconciliation: ManifestReconciler.Decision?
-    @Published private(set) var evidenceBySource: [UUID: [EvidenceRecord]] = [:]
+    @Published private(set) var evidenceBySource: [UUID: [EvidenceRecord]] = [:] {
+        didSet {
+            // Rebuilt rather than incrementally maintained: one writer, and no
+            // way for the citation index to keep a row the per-source view has
+            // already dropped.
+            var index: [String: EvidenceRecord] = [:]
+            for rows in evidenceBySource.values { for row in rows { index[row.id] = row } }
+            recordsByID = index
+        }
+    }
     @Published private(set) var evidenceFailures: [UUID: FormaError] = [:]
     @Published private(set) var fileEvidence: SourceEvidence?
     @Published private(set) var exportSummary: ManifestExport.Summary?
@@ -130,10 +139,8 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var casePack: CasePack?
     @Published private(set) var capabilities: DEVONthinkCapabilities?
     @Published private(set) var preview: ProviderMappingClient.Preview?
-    /// How many files the previewed batch carries, and how many batches a run
-    /// over this listing would need. Both come from the engine's own planning,
-    /// so they describe the request being previewed rather than the settings
-    /// field the user typed.
+    /// Files in the previewed batch, and batches a run over this listing would
+    /// need. Both come from the engine's planning, not from the settings field.
     @Published private(set) var previewedFileCount = 0
     @Published private(set) var previewedBatchCount = 0
     @Published private(set) var leakedTerms: [String] = []
@@ -160,7 +167,7 @@ final class WorkspaceModel: ObservableObject {
             // empty listing for the new one.
             reconciliation = nil
             correctionHistory = []
-            correctionsLoaded = false
+            correctionHistoryState = .notRead
             draft = nil
             refreshRows()
             Task { await self.reload() }
@@ -217,10 +224,9 @@ final class WorkspaceModel: ObservableObject {
     private var engineCache: (key: String, engine: MappingEngine)?
     private var work: Task<Void, Never>?
     private var fileWork: Task<Void, Never>?
-    /// Identifies the read whose task still owns `fileWork`. Cancelling a
-    /// cooperative task does not stop it immediately, so ownership has to be
-    /// decided by a value the retiring side increments rather than by the
-    /// handle, which the next read is free to overwrite.
+    /// Which read still owns `fileWork`. A cancelled task outlives its handle,
+    /// so ownership is a number the retiring side advances rather than the
+    /// handle itself.
     private var fileRead = 0
     /// Whether a single-file read is in flight. Deliberately separate from
     /// `phase`: this is the state that decides whether the evidence panel shows
@@ -271,14 +277,12 @@ final class WorkspaceModel: ObservableObject {
 
     var roleInventory: [RedactionPlan.Role: Int] { redaction.roles }
 
-    /// Resolves a citation id. FormaCore's per-source query already returns
-    /// every row registered for that file, including the snapshots an older
-    /// manifest revision was decided from, so a second dictionary keyed by id
-    /// was the same data maintained twice: two shapes to keep in the same order
-    /// and two chances to drift apart inside `merge`.
-    func record(for id: String) -> EvidenceRecord? {
-        evidenceBySource.values.lazy.flatMap { $0 }.first { $0.id == id }
-    }
+    /// Evidence rows this session has read, keyed by citation id: the review
+    /// screen resolves one per field chip per render. Derived from
+    /// `evidenceBySource` in its `didSet`, so the two cannot drift apart.
+    @Published private(set) var recordsByID: [String: EvidenceRecord] = [:]
+
+    func record(for id: String) -> EvidenceRecord? { recordsByID[id] }
 
     func clusterKeys(for sourceID: UUID) -> [String] {
         context?.candidate(for: sourceID).map(\.projectKey) ?? []
@@ -378,10 +382,9 @@ final class WorkspaceModel: ObservableObject {
         } catch {
             show(error, operation: .openWorkspace, fallback: .storage)
         }
-        // One pass per launch. Two reloads running together both write the
-        // listing, the context, the manifest and the attempt history after
-        // their own suspensions, and which set of values ends up on screen is
-        // decided by which read returned last rather than by anything stored.
+        // One pass per launch: two concurrent reloads would each write the
+        // listing, context, manifest and attempts after their own suspensions,
+        // and the screen would end up showing whichever read returned last.
         if !repairedScope { await reload() }
     }
 
@@ -411,7 +414,7 @@ final class WorkspaceModel: ObservableObject {
             // only when it succeeds: the early returns below - no profile, a
             // context the store cannot resolve - would otherwise leave the
             // screen showing an empty list that reads like "no attempts".
-            correctionsLoaded = false
+            correctionHistoryState = .notRead
             let digest = ContextBuilder.inputDigest(scopeID: scope.id, profile: profile, entries: listing?.entries ?? [])
             let stored = try await workspace.storedContext(scope: scope, profile: profile, inputDigest: digest)
             guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
@@ -433,11 +436,11 @@ final class WorkspaceModel: ObservableObject {
                 // history to this one.
                 guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
                 correctionHistory = attempts
-                correctionsLoaded = true
+                correctionHistoryState = .fromStore
                 notice = "Restored revision \(current.envelope.revision) of manifest \(current.envelope.manifestID.uuidString.lowercased()) from workspace storage."
             } else {
                 correctionHistory = []
-                correctionsLoaded = false
+                correctionHistoryState = .notRead
             }
             refreshRows()
         } catch {
@@ -500,9 +503,16 @@ final class WorkspaceModel: ObservableObject {
         work = Task {
             defer { finishWork() }
             do {
+                // Both reads finish before either result is published: this is
+                // the same rule the other long tasks follow, and writing the
+                // verdict first meant a scope switch could leave one source's
+                // judgement attached to another source's manifest.
                 let decision = try await workspace.reconcile(scope: scope, profile: profile)
+                let current = try await workspace.currentManifest(scope: scope, profile: profile)
+                guard !Task.isCancelled, scope.id == selectedScopeID,
+                      profile.profileID == selectedProfileID else { return }
                 reconciliation = decision
-                if let current = try await workspace.currentManifest(scope: scope, profile: profile) {
+                if let current {
                     manifest = current
                     refreshRows()
                 }
@@ -830,7 +840,7 @@ final class WorkspaceModel: ObservableObject {
                 // session's stale list beside a foreign manifest would
                 // attribute decisions to the wrong reviewer.
                 self.correctionHistory = []
-                self.correctionsLoaded = true
+                self.correctionHistoryState = .offlineBundle
                 self.bundleURL = bundle
                 self.revalidation = nil
                 self.notice = "Loaded revision \(loaded.envelope.revision.formatted()) from \(bundle.path) · "
@@ -894,11 +904,26 @@ final class WorkspaceModel: ObservableObject {
 
     @Published var draft: CorrectionDraft?
     @Published private(set) var correctionHistory: [CorrectionRecord] = []
-    /// Whether `correctionHistory` describes storage rather than this session's
-    /// clicks. Without it an empty list is ambiguous: "nobody attempted
-    /// anything on this manifest" and "the attempts were never read back" look
-    /// identical, and only the first is a fact about the manifest.
-    @Published private(set) var correctionsLoaded = false
+    /// What `correctionHistory` currently describes.
+    ///
+    /// An empty list means three different things depending on how it got
+    /// empty, and a single boolean could only name two of them: the reload
+    /// path set it only when a manifest was restored, the bundle path set it
+    /// while clearing rows that were never readable here, and the correction
+    /// path set it after its own write. Each of those read as "this manifest
+    /// has no attempts", which is a claim about the manifest rather than about
+    /// this machine.
+    enum CorrectionHistoryState {
+        /// Nothing has been read for the manifest now on screen.
+        case notRead
+        /// The rows below are everything the local store holds for it, and an
+        /// empty list is then a fact about the manifest.
+        case fromStore
+        /// The manifest came from an exported bundle: its attempts live in the
+        /// store of whoever exported it and cannot be read from here at all.
+        case offlineBundle
+    }
+    @Published private(set) var correctionHistoryState: CorrectionHistoryState = .notRead
 
     /// Opens the sheet for one field, seeded with FormaCore's own value so the
     /// reviewer sees what they are overwriting rather than an empty box.
@@ -929,7 +954,8 @@ final class WorkspaceModel: ObservableObject {
         // project while showing its result on another, so what is being
         // corrected is identified against what is selected rather than assumed.
         guard manifest.envelope.scopeID == scope.id,
-              manifest.envelope.profile.versionKey == profile.versionKey else {
+              manifest.envelope.profileID == profile.profileID,
+              manifest.envelope.profileVersion == profile.profileVersion else {
             self.draft = nil
             notice = "That correction was opened against a different source or profile. Close the sheet and open it again."
             return
@@ -955,18 +981,18 @@ final class WorkspaceModel: ObservableObject {
                 guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
                 // Read back rather than trust the returned manifest: the store
                 // decides the revision number, and the screen must show what it
-                // actually wrote.
+                // actually wrote. Both reads happen before anything is
+                // published, because a guard placed after the writes it is
+                // meant to protect has already performed them.
                 let current = try await workspace.currentManifest(scope: scope, profile: profile)
+                let attempts = try await workspace.corrections(manifestID: manifestID)
                 guard !Task.isCancelled, scope.id == selectedScopeID,
                       profile.profileID == selectedProfileID else { return }
                 self.manifest = current ?? applied.manifest
                 self.draft = nil
-                refreshRows()
-                let attempts = try await workspace.corrections(manifestID: manifestID)
-                guard !Task.isCancelled, scope.id == selectedScopeID,
-                      profile.profileID == selectedProfileID else { return }
                 correctionHistory = attempts
-                correctionsLoaded = true
+                correctionHistoryState = .fromStore
+                refreshRows()
                 notice = applied.violations.isEmpty
                     ? "Correction recorded as revision \(applied.manifest.envelope.revision.formatted())."
                     : "FormaCore refused this correction: \(applied.violations.map { $0.code }.joined(separator: " · ")). "
@@ -1019,24 +1045,29 @@ final class WorkspaceModel: ObservableObject {
         // describe a request no run ever makes - different membership,
         // different refs, no attached rows. The entries are the whole listing
         // for the same reason: `runMapping` hands the engine every row it has.
-        let batches = MappingEngine.plannedBatches(from: listing.entries, context: context,
-                                                  limit: entryLimit, evidence: evidenceBySource)
-        guard let batch = batches.first else {
-            notice = "This listing has no file to preview."
-            return
-        }
-        // The screen reports the batch it is describing and how many the whole
-        // listing would need, not the configured ceiling: with a small pilot
-        // directory those numbers differ, and the count is what a user weighs
-        // before letting bytes go.
-        previewedFileCount = batch.entries.count
-        previewedBatchCount = batches.count
-        let plan = redaction
         preview = nil
         auxWork = Task {
             defer { auxWork = nil; if phase == .previewing { phase = .idle } }
             self.phase = .previewing
             do {
+                // The rows come from storage, not from whatever this session
+                // happened to open. Reading them here is what makes the first
+                // batch's payload the one a run would build: a preview
+                // assembled out of memory could show a batch with no evidence
+                // at all, which is not a request any run sends.
+                let rows = try await workspace.registeredEvidence(
+                    for: Set(listing.entries.map(\.sourceID)))
+                let batches = MappingEngine.plannedBatches(from: listing.entries, context: context,
+                                                          limit: entryLimit, evidence: rows)
+                guard let batch = batches.first else {
+                    if !Task.isCancelled { notice = "This listing has no file to preview." }
+                    return
+                }
+                // The screen reports the batch it is describing and how many the
+                // whole listing would need, not the configured ceiling.
+                previewedFileCount = batch.entries.count
+                previewedBatchCount = batches.count
+                let plan = redaction
                 let value = try ProviderMappingClient.preview(profile: profile, context: context,
                                                               casePack: casePack, batch: batch, redaction: plan)
                 guard !Task.isCancelled else { return }
