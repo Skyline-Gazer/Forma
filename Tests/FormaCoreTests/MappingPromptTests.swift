@@ -225,4 +225,49 @@ struct MappingPromptTests {
         #expect(pack.selected(for: profile).count <= 24)
         #expect(pack.selected(for: profile).count <= pack.cases.count)
     }
+
+    @Test("the salt decides which term gets which ordinal")
+    func ordinalsDependOnTheSalt() throws {
+        let names = (1...6).map { "客户名称\($0)" }
+        let terms = Dictionary(uniqueKeysWithValues: names.map { ($0, RedactionPlan.Role.customer) })
+        func numbering(_ salt: String) -> [String: String] {
+            let plan = RedactionPlan(terms: terms, salt: salt)
+            return Dictionary(uniqueKeysWithValues: names.map { ($0, plan.placeholder(for: $0) ?? "") })
+        }
+        let first = numbering("workspace-a")
+        #expect(Set(first.values).count == 6, "six customers need six distinct labels")
+        #expect(first == numbering("workspace-a"), "the same salt must reproduce itself")
+        // If the salt were decorative, every workspace would number the same
+        // customer list identically - which is exactly what makes the labels
+        // reversible for anyone who can guess the list.
+        #expect(first != numbering("workspace-b"),
+                "a different salt must not reproduce the same numbering")
+    }
+
+    @Test("the payload bounds its evidence rows and reports what it left out")
+    func evidenceRowsAreBounded() throws {
+        let profile = try MappingProfile.projectArchive()
+        let file = entry(sourceID, "示例项目_2026/01_招标/公告.pdf")
+        var records = [try record("ev_content", source: .content, excerpt: "招标公告正文", file: file)]
+        for index in 0..<(MappingPrompt.maximumEvidenceRows + 50) {
+            records.append(try record("ev_meta_\(index)", source: .fsMetadata, excerpt: "size_bytes=4096",
+                                       file: file, locator: nil))
+        }
+        let data = try MappingPrompt.payload(profile: profile,
+                                             context: context(profile: profile, members: [file.id]),
+                                             casePack: try CasePack.shipped(),
+                                             batch: batch(file: file, evidence: records),
+                                             redaction: .none)
+        let root = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let rows = try #require(root["evidence"] as? [[String: Any]])
+        #expect(rows.count == MappingPrompt.maximumEvidenceRows,
+                "the request body must be bounded, got \(rows.count)")
+        let constraints = try #require(root["constraints"] as? [String: Any])
+        #expect(constraints["evidence_rows_omitted"] as? Int == 51,
+                "a truncated request must say how much it dropped")
+        #expect(rows.contains { $0["source"] as? String == "content" },
+                "content rows are what the field rules are judged on")
+        #expect(!rows.contains { $0["source"] as? String == "fs_metadata" },
+                "filesystem metadata is the first thing the budget gives up")
+    }
 }

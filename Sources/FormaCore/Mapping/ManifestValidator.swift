@@ -449,18 +449,22 @@ public struct ManifestValidator: Sendable {
                 }
                 return
             }
-            guard keys.contains(ref) else {
+            // The ref is the candidate's opaque id, which is what the prompt
+            // issues: a project key is a directory-derived name and may carry a
+            // customer, so it is never something the model has to echo back.
+            guard let named = input.context.candidates.first(where: { $0.id == ref }) else {
                 outcome.associationBlocking = true
                 outcome.associationReason = "candidate_unknown"
                 violations.append(ValidationViolation(code: "candidate_unknown", instancePath: ref,
                                                       detail: "The candidate is not part of the current context for this file."))
                 return
             }
-            if association.state == .confirmed, !candidates.contains(where: { $0.projectKey == ref }) {
+            guard candidates.contains(named) else {
                 outcome.associationBlocking = true
                 outcome.associationReason = "membership_mismatch"
                 violations.append(ValidationViolation(code: "membership_mismatch", instancePath: entry.relativePath,
                                                       detail: "The confirmed candidate does not contain this source."))
+                return
             }
         }
     }

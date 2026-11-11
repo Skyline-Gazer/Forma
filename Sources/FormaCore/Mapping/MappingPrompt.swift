@@ -59,6 +59,11 @@ public enum MappingPrompt {
     /// can override rather than a rule buried in a loop.
     public static let defaultEntryLimit = 100
 
+    /// The evidence rows one request may carry. The entry count is bounded by
+    /// the batch limit; this bounds the part that actually grows, and the
+    /// payload reports how many rows it left out rather than hiding them.
+    public static let maximumEvidenceRows = 400
+
     public static func system(profile: MappingProfile, casePack: CasePack) -> String {
         let blocks = [
             """
@@ -103,8 +108,28 @@ public enum MappingPrompt {
         let selected = casePack.selected(for: profile)
         let refsBySource = Dictionary(uniqueKeysWithValues: batch.entries.map { ($0.sourceID, $0.ref) })
 
+        // PLAN §6.1 bounds a batch by entry count; the evidence rows are what
+        // actually grows without limit, because a re-read unions fresh rows onto
+        // the ones already registered and a spreadsheet can yield hundreds per
+        // file. The transport bounds a *response*, never a request, so the
+        // payload bounds itself: content rows - the ones the field rules are
+        // judged on - are kept ahead of everything else, and the number left
+        // out is reported in the request instead of quietly missing from it.
+        let ranked = batch.evidence.sorted { lhs, rhs in
+            let rank: (EvidenceRecord) -> Int = { record in
+                switch record.source {
+                case .content: record.locator == nil ? 1 : 0
+                case .path, .filename: 2
+                case .sibling, .fsMetadata, .mcp: 3
+                }
+            }
+            let left = rank(lhs)
+            let right = rank(rhs)
+            if left != right { return left < right }
+            return lhs.id < rhs.id
+        }
         var evidenceRows: [[String: Any]] = []
-        for record in batch.evidence.sorted(by: { $0.id < $1.id }) {
+        for record in ranked.prefix(Self.maximumEvidenceRows) {
             // Only the excerpt and the path are redacted; the locator stays
             // exact so a reviewer can find the page or cell again.
             guard let ref = refsBySource[record.sourceID] else {
@@ -122,6 +147,7 @@ public enum MappingPrompt {
                 "status": record.extractionStatus.rawValue,
             ])
         }
+        let omittedRows = max(0, ranked.count - evidenceRows.count)
 
         var candidateRows: [[String: Any]] = []
         for candidate in context.candidates.sorted(by: { $0.id < $1.id }) {
@@ -149,6 +175,7 @@ public enum MappingPrompt {
                 "prompt_version": version,
                 "redaction_version": redactionVersion,
                 "batch_id": batch.id,
+                "evidence_rows_omitted": omittedRows,
             ],
             "field_rules": profile.fields.values.sorted { $0.identifier < $1.identifier }.map { policy in
                 [

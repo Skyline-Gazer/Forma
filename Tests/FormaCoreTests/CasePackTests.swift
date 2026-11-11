@@ -39,6 +39,32 @@ struct CasePackTests {
         // must not be dragged into a project it does not belong to.
         #expect(refused.contains { $0.contains("projectname") },
                 "the project-binding trap must be taught for the vendor profile")
+        // The same pack must also clear the rules themselves, not just look
+        // well-populated when read directly.
+        try CasePack.check(pack)
+    }
+
+    @Test("a pack that teaches only one profile is refused")
+    func singleProfilePackRejected() throws {
+        let shipped = try CasePack.shipped()
+        let archive = shipped.cases.filter { $0.profiles.contains(ProjectArchiveContract.id) }
+        // Twenty samples drawn from the Project Archive cases: size, admissibility,
+        // counter-example kinds and the evidence ratio all clear, so the only
+        // rule left to fail is the one under test.
+        var cases: [CasePack.Sample] = []
+        for index in 0..<20 {
+            let base = archive[index % archive.count]
+            cases.append(CasePack.Sample(caseID: "solo-\(index)", kind: base.kind, scenario: base.scenario,
+                                         profiles: [ProjectArchiveContract.id], input: base.input,
+                                         expected: base.expected, whyNot: base.whyNot,
+                                         evidenceLevel: base.evidenceLevel, sourceVersion: base.sourceVersion,
+                                         review: base.review))
+        }
+        let pack = CasePack(schemaVersion: shipped.schemaVersion, id: shipped.id, version: shipped.version,
+                             cases: cases)
+        var rejected = false
+        do { try CasePack.check(pack) } catch { rejected = true }
+        #expect(rejected, "a pack that teaches one profile cannot be the shipped pack")
     }
 
     @Test("vendor cases never invent a project")
