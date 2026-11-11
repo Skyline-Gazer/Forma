@@ -77,12 +77,12 @@ struct ManifestReconcilerTests {
         let decision = try #require(await setup.workspace.reconcile(scope: setup.scope, profile: setup.profile))
         // The rebuilt context is stored, not fabricated: reconciliation must
         // compare two real revisions.
-        let stored = try await setup.store.database.read { db -> Int in
+        let contextCount = try await setup.store.database.read { db -> Int in
             let row = try Row.fetchOne(db, sql: "SELECT COUNT(*) AS count FROM context_revisions")
             let count: Int = row?["count"] ?? 0
             return count
         }
-        #expect(stored == 2)
+        #expect(contextCount == 2)
         #expect(decision.invalidatedSourceIDs.isEmpty,
                 "an untouched project keeps its decisions, got \(decision.reason)")
         // Now the existing project itself grows, which must invalidate exactly
