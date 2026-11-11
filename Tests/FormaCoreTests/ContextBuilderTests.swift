@@ -26,8 +26,8 @@ struct ContextBuilderTests {
         )
     }
 
-    /// The listing the builder saw, so tests can talk about files by path.
-    private var lastEntries: [SourceEntry] = []
+    /// The identity the fixture gives a path, so assertions can name files.
+    private func ids(_ paths: [String]) -> Set<UUID> { Set(paths.map { entry($0).id }) }
 
     private func context(_ paths: [String], profile: MappingProfile? = nil,
                          history: [ContextHistoryMatch] = [], states: [String: SourceEntryState] = [:]) throws
@@ -35,7 +35,6 @@ struct ContextBuilderTests {
     {
         let selected = try profile ?? MappingProfile.projectArchive()
         let entries = paths.map { entry($0, state: states[$0] ?? .present) }
-        lastEntries = entries
         return ContextBuilder.build(
             ContextBuilderInput(scopeID: scopeID, profile: selected, entries: entries, history: history),
             revision: 1, builtAt: Date(timeIntervalSince1970: 1_800_000_000)
@@ -104,10 +103,10 @@ struct ContextBuilderTests {
             "项目乙/通用控制器_数据表.pdf",
             "项目甲/公告.pdf",
         ])
-        let duplicated = built.entries.filter { $0.relativePath.contains("通用控制器") }
+        let duplicated = ids(["项目甲/通用控制器_数据表.pdf", "项目乙/通用控制器_数据表.pdf"])
         #expect(duplicated.count == 2)
         for member in duplicated {
-            #expect(built.conflictedSourceIDs.contains(member.id),
+            #expect(built.conflictedSourceIDs.contains(member),
                     "the same material under two projects must not silently pick one")
         }
         // Both claims survive as their own candidates: refusing to choose means
