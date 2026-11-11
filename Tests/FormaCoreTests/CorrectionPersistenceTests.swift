@@ -27,17 +27,29 @@ struct CorrectionPersistenceTests {
     /// stored manifest that cites rows the registry can resolve.
     private func prepared() async throws -> Prepared {
         let fixture = try SourceFixture()
-        _ = try fixture.write("招标公告 示例项目_2026 归档完成 2026 年", at: "示例项目_2026/01_招标/公告.pdf")
+        // A real PDF, because a correction has to cite body evidence: text
+        // under a `.pdf` name yields no content rows, and the test would then
+        // be judging a citation to a filename.
+        let body = try makePDF(["示例项目_2026 招标公告 归档完成 2027 年"])
+        let url = fixture.root.appendingPathComponent("示例项目_2026/01_招标/公告.pdf")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try body.write(to: url)
         let workspace = try SourceWorkspace(databaseURL: fixture.database)
         let scope = try await workspace.register(fixture.root)
         let listing = try await workspace.scan(scope)
         let profile = try MappingProfile.projectArchive()
         let registered = try await workspace.captureEvidence(for: listing.entries)
-        let entry = try #require(listing.entries.first)
-        let rows = registered[entry.id] ?? []
-        // The row a completionyear citation may point at: it carries the year in
-        // its excerpt, which is what the profile's rule looks for.
-        let year = try #require(rows.first { ($0.excerpt ?? "").contains("2026") && $0.isUsable })
+        // Re-read the listing after capturing: registering a body can advance
+        // the snapshot revision, and a manifest built from the pre-capture
+        // revision would be blocked by its own snapshot binding before the
+        // correction is even judged.
+        let current = try await workspace.scan(scope)
+        let entry = try #require(current.entries.first)
+        let rows = (registered[entry.id] ?? []).filter { $0.snapshotRevision == entry.snapshotRevision }
+        // The body says 2027; the stored manifest claims 2026. That is the
+        // mistake a reviewer corrects, and the row that supports the fix.
+        let year = try #require(rows.first { ($0.excerpt ?? "").contains("2027") && $0.isUsable })
         let category = try #require(rows.first { ($0.excerpt ?? "").contains("招标") && $0.isUsable })
 
         var metadata = MetadataValues.allUnknown
