@@ -131,9 +131,21 @@ struct MappingEngineTests {
         let evidence: [UUID: [EvidenceRecord]]
     }
 
-    private func prepared() async throws -> Fixture {
+    /// `readableBody` writes a real PDF instead of text under a `.pdf` name.
+    /// The bounded re-ask is only reachable when re-reading the file actually
+    /// yields body evidence, so the tests that exercise it need a body the
+    /// extractor can read; every other test keeps the cheap text fixture.
+    private func prepared(readableBody: Bool = false) async throws -> Fixture {
         let fixture = try SourceFixture()
-        _ = try fixture.write("tender notice 示例项目_2026 公告", at: "示例项目_2026/01_招标/公告.pdf")
+        if readableBody {
+            let body = try makePDF(["示例项目_2026 招标公告 2026 公告"])
+            let url = fixture.root.appendingPathComponent("示例项目_2026/01_招标/公告.pdf")
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            try body.write(to: url)
+        } else {
+            _ = try fixture.write("tender notice 示例项目_2026 公告", at: "示例项目_2026/01_招标/公告.pdf")
+        }
         _ = try fixture.write("bid body", at: "示例项目_2026/02_投标/技术标.pdf")
         _ = try fixture.write("other notice", at: "别的项目_2025/公告.pdf")
         let workspace = try SourceWorkspace(databaseURL: fixture.database)
@@ -262,7 +274,7 @@ struct MappingEngineTests {
 
     @Test("a missing body triggers at most one bounded re-ask")
     func boundedReAsk() async throws {
-        let fixture = try await prepared()
+        let fixture = try await prepared(readableBody: true)
         defer { fixture.source.cleanUp() }
         // No evidence at all on the first pass, and one required field left
         // unset: that is the only case worth asking about twice.
@@ -283,7 +295,7 @@ struct MappingEngineTests {
 
     @Test("evidence the registry will not accept never becomes a citation")
     func unregisteredEvidenceIsNotReasked() async throws {
-        let fixture = try await prepared()
+        let fixture = try await prepared(readableBody: true)
         defer { fixture.source.cleanUp() }
         let answerer = FakeAnswerer { batch, _ in
             MappingAttempt(proposal: decodedProposal(proposalTextMissingRequired(batch: batch)), requests: 1)
@@ -306,10 +318,13 @@ struct MappingEngineTests {
             throw FormaError.unavailable
         }
         let outcome = await failing.run(run)
+        // Only the entry whose re-read produced rows can hit the store, so the
+        // failure is reported for exactly that file.
+        let readable = try #require(fixture.entries.first { $0.relativePath.contains("01_招标") })
         #expect(outcome.requests == outcome.batches,
                 "a failed registration must not trigger a second ask, got \(outcome.requests)")
-        #expect(outcome.failures.count == fixture.entries.count,
-                "the store failure is recorded per entry instead of swallowed")
+        #expect(outcome.failures.keys.contains(readable.id),
+                "the store failure is recorded for the file it concerns, got \(outcome.failures)")
         #expect(outcome.failures.values.allSatisfy { $0 == .unavailable })
         #expect(outcome.manifest.entries.allSatisfy { !$0.eligibleForAutoExecution })
     }
