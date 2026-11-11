@@ -134,12 +134,8 @@ struct SettingsView: View {
 
     private var redactionSection: some View {
         Section("Redaction terms") {
-            // Bound by the row's own identity. `RedactionTerm` is Identifiable
-            // precisely so that deleting one row cannot renumber the bindings of
-            // the others: with array indices as identities, a removal leaves the
-            // enclosing ForEach holding a subscript that no longer exists, and
-            // the text fields of the surviving rows get re-parented to the wrong
-            // term.
+            // Bound to each term's own identity, so the delete button below
+            // removes one row without re-parenting the fields of the survivors.
             ForEach($model.redactionTerms) { $term in
                 HStack(spacing: 8) {
                     TextField("Term", text: $term.term)

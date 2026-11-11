@@ -25,9 +25,10 @@ public struct CorrectionRecord: Codable, Sendable, Equatable {
     public let manifestRevision: Int
     /// The revision this decision published, or `nil` when it published
     /// nothing. Assigned by the store when the version is written, so a claim
-    /// cannot run ahead of the revision it names. The history of why this is
-    /// not one column with `manifestRevision` belongs to the migration that
-    /// splits it, in `MappingCorrectionMigrations`.
+    /// cannot run ahead of the revision it names.
+    ///
+    /// Why this is not the same column as `manifestRevision`: see
+    /// `MappingCorrectionMigrations.revisionSplitSQL`.
     public var producedRevision: Int?
     public let sourceID: UUID
     public let field: MetadataFieldID

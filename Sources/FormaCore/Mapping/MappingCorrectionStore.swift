@@ -48,19 +48,24 @@ enum MappingCorrectionMigrations {
                 CREATE INDEX corrections_source ON corrections(source_id, field);
                 """)
         }
-        // The first version of this table stored one revision number whose
-        // meaning depended on `review_state`: the revision produced on the
-        // accepted path, the revision targeted on the refused one. Two rows for
-        // one manifest could then claim the same revision while describing
-        // different facts, and nothing in the schema stopped it. v2 states the
-        // two facts in two columns and makes "one revision has at most one
-        // producing correction" a constraint instead of a convention.
+        // Version 1 left one column meaning two things, depending on a third;
+        // the statements that undo that, and the reason for each of them, are
+        // written once, on `revisionSplitSQL`.
         migrator.registerMigration("mapping-corrections-v2") { db in
             try db.execute(sql: revisionSplitSQL)
         }
     }
 
-    /// The statements that split the one ambiguous column into two honest ones.
+    /// The statements that split `corrections`' one ambiguous column into two
+    /// honest ones.
+    ///
+    /// Version 1 stored a single revision number whose meaning depended on
+    /// `review_state`: the revision produced on the accepted path, the revision
+    /// targeted on the refused one. Two rows for one manifest could then name
+    /// the same revision while describing different facts, and nothing in the
+    /// schema stopped it. This states the two facts in two columns and makes
+    /// "one revision has at most one producing correction" a constraint instead
+    /// of a convention.
     ///
     /// Named rather than inlined because an existing database is the only place
     /// the two `UPDATE`s do any work: a fresh one runs them over an empty table,
