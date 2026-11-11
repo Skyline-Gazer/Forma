@@ -531,9 +531,10 @@ struct MappingView: View {
                 + "workspace let two attempts name the same revision they read, so which version "
                 + "this one wrote cannot be known", .orange)
         default:
-            ("Row \(record.id) combines \(record.reviewState.rawValue) with "
-                + (record.producedRevision.map { "revision \($0.formatted())" } ?? "no produced revision")
-                + " - not a pairing FormaCore's review flow writes", .red)
+            ("Row \(record.id) is neither shape a review produces - verified with the revision it "
+                + "wrote, or refused with none: it carries \(record.reviewState.rawValue) with "
+                + (record.producedRevision.map { "revision \($0.formatted())" } ?? "no produced revision"),
+             .red)
         }
     }
 }

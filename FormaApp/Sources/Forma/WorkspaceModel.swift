@@ -213,7 +213,14 @@ final class WorkspaceModel: ObservableObject {
     }
 
     @Published var entryLimit: Int {
-        didSet { defaults.set(entryLimit, forKey: Keys.entryLimit) }
+        // Floored here so the field shows the number the engine honours: a zero
+        // left in defaults by an older build would read as "0 files per batch"
+        // while every batch still carried one file.
+        didSet {
+            let floored = max(1, entryLimit)
+            guard floored == entryLimit else { entryLimit = floored; return }
+            defaults.set(entryLimit, forKey: Keys.entryLimit)
+        }
     }
 
     /// Cloud egress consent, never persisted: off at every launch, and
@@ -261,7 +268,10 @@ final class WorkspaceModel: ObservableObject {
             ?? .openAI
         provider = storedProvider
         modelID = Self.store.string(forKey: Keys.model) ?? storedProvider.defaultModel
-        entryLimit = (Self.store.object(forKey: Keys.entryLimit) as? Int) ?? MappingPrompt.defaultEntryLimit
+        // `didSet` does not run for this assignment, so the floor is applied
+        // here as well: a zero stored by an older build must not survive launch.
+        entryLimit = max(1, (Self.store.object(forKey: Keys.entryLimit) as? Int)
+                            ?? MappingPrompt.defaultEntryLimit)
         redactionSalt = Self.store.string(forKey: Keys.salt) ?? Self.defaultSalt
         redactionTerms = Self.store.loadTerms(forKey: Keys.terms)
         selectedProfileID = Self.store.string(forKey: Keys.profile)
@@ -1133,9 +1143,7 @@ final class WorkspaceModel: ObservableObject {
                 let rows = try await workspace.registeredEvidence(for: Set(listing.entries.map(\.id)))
                 let batches = MappingEngine.plannedBatches(from: listing.entries, context: context,
                                                           limit: limit, evidence: rows)
-                // Compared against the request the click built, not the fields
-                // behind it: same source, profile and stored context, same batch
-                // limit, same substitution.
+                // The panel must still describe the request that was built.
                 guard !Task.isCancelled, scope.id == selectedScopeID,
                       profile.profileID == selectedProfileID,
                       contextRevision == self.context?.revision,

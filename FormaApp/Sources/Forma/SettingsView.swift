@@ -102,9 +102,9 @@ struct SettingsView: View {
                                                             ? "Identity (no terms)" : RedactionPlan.version)
                 LabeledContent("Files in previewed batch", value: preview.fileCount.formatted())
                 LabeledContent("Batches for this listing", value: preview.batchCount.formatted())
-                    .help("The engine groups files by the candidate that claims them, so one batch is one "
-                        + "candidate's slice and never simply the first \(preview.entryLimit.formatted()) files "
-                        + "of the listing")
+                    .help("The engine groups files by the candidate that claims them: one batch is one "
+                        + "candidate's slice of the listing, and the limit is the most files any batch "
+                        + "may carry - not a fixed slice taken from the top")
                 LabeledContent("Limit used by this preview", value: preview.entryLimit.formatted())
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
