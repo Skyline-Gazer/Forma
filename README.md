@@ -4,7 +4,7 @@
 
 Forma 是一款使用 Swift 6 / SwiftUI 开发的 macOS 原生应用，目标是将非标准目录、文件清单与文档内容转换为可验证的结构化 Manifest，并在后续阶段经 DEVONthink 官方 MCP 安全落地。
 
-> **当前状态：P0/P1 实施中；来源扫描、身份、快照、证据抽取、只读能力探针与原生 GUI 已合并到 `dev`，评审整改在 PR #31。ADS 以不可变 SHA 接入（见 [ads-pin.txt](ads-pin.txt) 与 [docs/ADS-ADOPTION.md](docs/ADS-ADOPTION.md)）；阶段授权与权限边界由 [docs/ROADMAP.md](docs/ROADMAP.md) 和 [AGENTS.md](AGENTS.md) 在仓库内记录。**
+> **当前状态：P0/P1 工程与验收报告已在 `dev`；来源扫描、身份、快照、证据抽取、只读能力探针、原生 GUI 与评审整改均已合并。隔离 DEVONthink 测试库、Provider 凭据、真实 OneDrive 目录三项现场验证仍为 BLOCKED，逐项判定见 [P0 / P1 验收报告](docs/P0-P1-ACCEPTANCE.md)。ADS 以不可变 SHA 接入（[ads-pin.txt](ads-pin.txt)、[docs/ADS-ADOPTION.md](docs/ADS-ADOPTION.md)）；阶段授权与权限边界由 [docs/ROADMAP.md](docs/ROADMAP.md) 和 [AGENTS.md](AGENTS.md) 在仓库内记录。**
 
 ## 文档入口
 
@@ -13,6 +13,8 @@ Forma 是一款使用 Swift 6 / SwiftUI 开发的 macOS 原生应用，目标是
 - [实施 Roadmap](docs/ROADMAP.md) — Owner 决策、阶段依赖与 Epic/Feature Issues
 - [PLAN 编制任务书](docs/PLAN_REQUEST.md) — 规划过程归档
 - [Agent 约束](AGENTS.md) — 仓库权限与边界
+- [ADS 接入与 CNB 评审拓扑](docs/ADS-ADOPTION.md) — 提供方职责、固定 SHA 与评审证据
+- [P0 / P1 验收报告](docs/P0-P1-ACCEPTANCE.md) — 实际执行结果、PASS/FAIL/BLOCKED/NOT_VERIFIED 判定与限制
 
 ## 构建与运行
 
