@@ -90,18 +90,23 @@ public struct RedactionPlan: Sendable {
     public func redact(path: String) -> String {
         var output = path
         output = applyKnownTerms(to: output)
-        output = replaceIdentifiers(in: output)
-        // A path segment that is only digits is a date or a code, both of which
-        // can identify a customer when combined with a directory name.
+        // Amounts before identifiers: a placeholder is not neutral text, and
+        // replacing a record id first would hand the amount pass a digit run
+        // whose neighbour is now `»` - inventing a price next to an id that
+        // never had one. A path segment that is only digits is a date or a
+        // code, both of which can identify a customer when combined with a
+        // directory name.
         output = replaceAmounts(in: output)
+        output = replaceIdentifiers(in: output)
         return String(output.prefix(512))
     }
 
     public func redact(text: String) -> String {
         var output = text
         output = applyKnownTerms(to: output)
-        output = replaceIdentifiers(in: output)
+        // See `redact(path:)`: the order is part of the guarantee.
         output = replaceAmounts(in: output)
+        output = replaceIdentifiers(in: output)
         return String(output.prefix(600))
     }
 
@@ -164,9 +169,11 @@ public struct RedactionPlan: Sendable {
         #"(?<![0-9A-Za-z])(?:¥|￥|\$|人民币)\s*[0-9][0-9,]*(?:\.[0-9]+)?"#,
         // A number with an explicit unit. A bare `万` is not enough: 万象 and
         // 万达 are company names, and their digits must survive.
-        #"(?<![0-9A-Za-z.,\-/:])[0-9][0-9,]*(?:\.[0-9]{1,2})?\s*(?:万元|亿元|元)(?![0-9A-Za-z])"#,
-        // Comma-grouped numbers, judged by the words in front of them.
-        #"(?<![0-9A-Za-z.,\-/:])[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?(?![0-9A-Za-z.,\-/:])"#,
+        #"(?<![0-9A-Za-z.,\-/:«»])[0-9][0-9,]*(?:\.[0-9]{1,2})?\s*(?:万元|亿元|元)(?![0-9A-Za-z])"#,
+        // Comma-grouped numbers, judged by the words in front of them. A
+        // placeholder on either side means this number belongs to something the
+        // plan already rewrote, so it is not evidence of a price.
+        #"(?<![0-9A-Za-z.,\-/:«»])[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?(?![0-9A-Za-z.,\-/:«»])"#,
     ]
 
     private static let moneyCues = ["价", "金额", "报价", "费用", "预算", "税", "合计", "付款",

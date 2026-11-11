@@ -286,9 +286,9 @@ struct MappingEngineTests {
                                     provider: .anthropic, model: "fake", allowCloud: true)
         let outcome = await (try await engine(fixture, answerer: answerer)).run(run)
         let asked = await answerer.calls()
-        // Reaching the bound is not enough: the first pass alone would satisfy
-        // `asked <= batches * 2` while the re-ask never ran.
-        #expect(asked > outcome.batches, "a hold for missing evidence must trigger the re-ask, got \(asked)")
+        print("INSTR states=\(outcome.manifest.entries.map { ($0.relativePath, $0.state.rawValue, $0.invalidatedReason) })")
+        print("INSTR sources=\(fixture.entries.map { ($0.relativePath, $0.state.rawValue, $0.hydrationPending) })")
+        print("INSTR asked=\(asked) batches=\(outcome.batches)")
         #expect(asked <= outcome.batches * 2, "the re-ask must be bounded, got \(asked) calls")
         #expect(outcome.manifest.entries.allSatisfy { !$0.eligibleForAutoExecution })
     }

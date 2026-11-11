@@ -130,40 +130,17 @@ public struct ProviderMappingClient: Sendable {
             }
             guard !trimmed.contains(key) else { throw FormaError.incompatible }
 
-            // Round 0 is the request; round 1 is the single permitted repair call.
             var payload = preview.payload
             for round in 0...1 {
-                let request = try transport.makeRequest(ProviderTransport.StructuredRequest(
-                    provider: provider, model: trimmed, name: "forma_mapping", system: preview.system,
-                    payload: String(decoding: payload, as: UTF8.self), schema: schema,
-                    maxOutputTokens: Self.maximumOutputTokens
-                ), key: key)
-                requests += 1
-                let text: String
-                do {
-                    let (body, _) = try await transport.response(
-                        request, limit: ProviderTransport.maximumMappingResponseBytes
-                    )
-                    guard let envelope = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
-                        throw FormaError.invalidResponse
-                    }
-                    reportedModel = transport.reportedModel(from: envelope, key: key) ?? reportedModel
-                    usage = usage + MappingUsage(transport.usage(from: envelope, provider: provider))
-                    text = try transport.outputText(from: envelope, provider: provider)
-                } catch let error as FormaError {
-                    // A rate limit gets one bounded retry; anything else stops.
-                    if case .remoteStatus(let code) = error, code == 429, round == 0, requests < 2,
-                       let delay = ProviderTransport.retryDelay(after: nil, attempt: 0) {
-                        try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                        requests -= 1
-                        continue
-                    }
-                    throw error
-                }
-                let broken = try Self.violations(of: text, schema: schema)
+                let sent = try await send(provider: provider, model: trimmed, key: key, system: preview.system,
+                                          payload: payload, schema: schema)
+                usage = usage + sent.usage
+                requests += sent.requests
+                reportedModel = sent.reportedModel ?? reportedModel
+                let broken = try Self.violations(of: sent.text, schema: schema)
                 guard !broken.isEmpty else {
                     violations = []
-                    answer = text
+                    answer = sent.text
                     break
                 }
                 violations = broken
@@ -199,6 +176,53 @@ public struct ProviderMappingClient: Sendable {
         )
     }
 
+    /// The outcome of one semantic request.
+    struct Sent {
+        let text: String
+        let usage: MappingUsage
+        let requests: Int
+        let reportedModel: String?
+    }
+
+    /// One semantic request, with the transport's own bounded rate-limit retry
+    /// inside it. That retry cannot reach into the repair round: a rate limit
+    /// and a schema violation are different failures needing different
+    /// budgets, and sharing one loop turned "request plus one repair" into
+    /// "request only", so an answer that was merely non-compliant came back as
+    /// an unexplained hold.
+    private func send(provider: ProbeProvider, model: String, key: String, system: String,
+                      payload: Data, schema: Data) async throws -> Sent {
+        var usage = MappingUsage()
+        var requests = 0
+        var reportedModel: String?
+        var rateLimitRetried = false
+        while true {
+            let request = try transport.makeRequest(ProviderTransport.StructuredRequest(
+                provider: provider, model: model, name: "forma_mapping", system: system,
+                payload: String(decoding: payload, as: UTF8.self), schema: schema,
+                maxOutputTokens: Self.maximumOutputTokens
+            ), key: key)
+            requests += 1
+            do {
+                let (body, _) = try await transport.response(
+                    request, limit: ProviderTransport.maximumMappingResponseBytes
+                )
+                guard let envelope = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
+                    throw FormaError.invalidResponse
+                }
+                reportedModel = transport.reportedModel(from: envelope, key: key) ?? reportedModel
+                usage = usage + MappingUsage(transport.usage(from: envelope, provider: provider))
+                return Sent(text: try transport.outputText(from: envelope, provider: provider), usage: usage,
+                            requests: requests, reportedModel: reportedModel)
+            } catch let error as FormaError {
+                // A rate limit is retried once, here and nowhere else.
+                guard !rateLimitRetried, case .remoteStatus(let code) = error, code == 429,
+                      let delay = ProviderTransport.retryDelay(after: nil, attempt: 0) else { throw error }
+                rateLimitRetried = true
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+        }
+    }
 
     /// Schema violations in an answer, or an empty list when it is acceptable.
     static func violations(of text: String, schema: Data) throws -> [ArtifactSchema.Violation] {
