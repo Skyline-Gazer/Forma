@@ -155,9 +155,12 @@ struct ExceptionsView: View {
                 }
             }
             Section("Reprocessing") {
-                Text(model.allowCloud
-                     ? "The next run may use cloud egress because consent is on in Settings."
-                     : "Cloud egress is off, so FormaCore refuses every provider request and reports that reason per file.")
+                // This describes what the button next to it will do, so it reads
+                // this panel's own box - not the Settings-level flag, which a
+                // different action may have set and which this run ignores.
+                Text(reprocessEgress
+                     ? "This run may use cloud egress, because the box above is ticked."
+                     : "Cloud egress is off for this run, so FormaCore refuses every provider request and reports that reason per file.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if !selection.isEmpty {

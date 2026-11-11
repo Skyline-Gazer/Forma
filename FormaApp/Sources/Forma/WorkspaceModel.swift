@@ -133,6 +133,9 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var casePack: CasePack?
     @Published private(set) var capabilities: DEVONthinkCapabilities?
     @Published private(set) var preview: ProviderMappingClient.Preview?
+    /// How many files the current preview actually describes, which is at most
+    /// the configured batch limit and often fewer in a small pilot directory.
+    @Published private(set) var previewedFileCount = 0
     @Published private(set) var leakedTerms: [String] = []
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var notice: String?
@@ -141,11 +144,23 @@ final class WorkspaceModel: ObservableObject {
     @Published var selectedScopeID: UUID? {
         didSet {
             guard oldValue != selectedScopeID else { return }
+            // The model is the only writer of this key. A view that mirrored it
+            // into @AppStorage on appear would race the fallback in `restore()`
+            // and persist a scope id that no longer exists, so every start had
+            // to repair it again - and switching scope then restarting could
+            // land on a different source than the one chosen.
+            defaults.set(selectedScopeID?.uuidString, forKey: Keys.scope)
             listing = nil
             context = nil
             contextIsStale = false
             manifest = nil
             outcome = nil
+            // A reconciliation belongs to the manifest it was computed against.
+            // Leaving it set showed the previous source's judgement next to an
+            // empty listing for the new one.
+            reconciliation = nil
+            correctionHistory = []
+            draft = nil
             refreshRows()
             Task { await self.reload() }
         }
@@ -153,9 +168,14 @@ final class WorkspaceModel: ObservableObject {
 
     @Published var selectedProfileID: String? {
         didSet {
-            guard oldValue != selectedProfileID, !isRestoring else { return }
+            guard oldValue != selectedProfileID else { return }
+            // Persisting and invalidating the engine are separate duties, and
+            // neither may be skipped because a value arrived during restore:
+            // `restore()` falls back to the first profile when the stored one is
+            // gone, and that fallback is the answer the next start should read,
+            // not another repair to perform.
             defaults.set(selectedProfileID, forKey: Keys.profile)
-            engine = nil
+            engineCache = nil
             Task { await self.reload() }
         }
     }
@@ -191,25 +211,30 @@ final class WorkspaceModel: ObservableObject {
 
     private let workspace: SourceWorkspace
     private let defaults = UserDefaults.standard
-    private var engine: MappingEngine?
+    /// The engine together with the identity it was built for. One value, so a
+    /// cache and its validity key cannot be out of step with each other.
+    private var engineCache: (key: String, engine: MappingEngine)?
     private var work: Task<Void, Never>?
     private var fileWork: Task<Void, Never>?
     private var auxWork: Task<Void, Never>?
-    private var isRestoring = true
 
     private static let store = UserDefaults.standard
 
     init(workspace: SourceWorkspace) {
         self.workspace = workspace
-        let storedProvider = ProbeProvider.allCases.first { $0.rawValue == defaults.string(forKey: Keys.provider) }
+        // Reads go through the shared defaults instance rather than the
+        // `defaults` property: Swift forbids touching `self` - and a property
+        // read is a `self` use - until every stored property has a value, and
+        // the assignments below are exactly what gives them one.
+        let storedProvider = ProbeProvider.allCases.first { $0.rawValue == Self.store.string(forKey: Keys.provider) }
             ?? .openAI
         provider = storedProvider
-        modelID = defaults.string(forKey: Keys.model) ?? storedProvider.defaultModel
-        entryLimit = (defaults.object(forKey: Keys.entryLimit) as? Int) ?? MappingPrompt.defaultEntryLimit
-        redactionSalt = defaults.string(forKey: Keys.salt) ?? Self.defaultSalt
+        modelID = Self.store.string(forKey: Keys.model) ?? storedProvider.defaultModel
+        entryLimit = (Self.store.object(forKey: Keys.entryLimit) as? Int) ?? MappingPrompt.defaultEntryLimit
+        redactionSalt = Self.store.string(forKey: Keys.salt) ?? Self.defaultSalt
         redactionTerms = Self.store.loadTerms(forKey: Keys.terms)
-        selectedProfileID = defaults.string(forKey: Keys.profile)
-        selectedScopeID = UUID(uuidString: defaults.string(forKey: Keys.scope) ?? "")
+        selectedProfileID = Self.store.string(forKey: Keys.profile)
+        selectedScopeID = UUID(uuidString: Self.store.string(forKey: Keys.scope) ?? "")
     }
 
     // MARK: - Derived values
@@ -311,7 +336,6 @@ final class WorkspaceModel: ObservableObject {
     // MARK: - Restore and loads
 
     func restore() async {
-        isRestoring = true
         do {
             profiles = try MappingProfile.shipped()
         } catch {
@@ -331,7 +355,6 @@ final class WorkspaceModel: ObservableObject {
         } catch {
             show(error, operation: .openWorkspace, fallback: .storage)
         }
-        isRestoring = false
         await reload()
     }
 
@@ -887,9 +910,12 @@ final class WorkspaceModel: ObservableObject {
             return
         }
         let batch = MappingBatch(id: "preview", candidateID: nil, entries: refs, evidence: [])
+        // The screen reports how many files this preview actually describes,
+        // not the configured ceiling: with a small pilot directory the two
+        // differ, and the number is what a user weighs before letting bytes go.
+        previewedFileCount = refs.count
         let plan = redaction
         preview = nil
-        leakedTerms = []
         auxWork = Task {
             defer { auxWork = nil; if phase == .previewing { phase = .idle } }
             self.phase = .previewing
@@ -934,7 +960,7 @@ final class WorkspaceModel: ObservableObject {
     /// so switching profiles rebuilds and a repeat run reuses.
     private func engine(for profile: MappingProfile) -> MappingEngine? {
         let key = "\(profile.versionKey)|\(casePack?.versionKey ?? "no-case-pack")"
-        if let engine, engineKey == key { return engine }
+        if let engineCache, engineCache.key == key { return engineCache.engine }
         guard let casePack else {
             error = .unavailable
             notice = "The shipped CasePack could not be loaded, so no engine can be built."
@@ -942,16 +968,9 @@ final class WorkspaceModel: ObservableObject {
         }
         let built = MappingEngine(profile: profile, casePack: casePack,
                                   answerer: ProviderMappingClient(), workspace: workspace)
-        engine = built
-        engineKey = key
+        engineCache = (key, built)
         return built
     }
-
-    /// Which profile and case pack the cached engine was built for. Not
-    /// persisted: it describes an in-memory object that does not survive a
-    /// restart, and a key that outlives the thing it describes is a second
-    /// source of truth for nothing.
-    private var engineKey: String?
 
     private func refreshRows() {
         guard let manifest else {

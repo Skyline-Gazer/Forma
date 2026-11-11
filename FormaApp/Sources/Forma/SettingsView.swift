@@ -98,7 +98,8 @@ struct SettingsView: View {
                 LabeledContent("Request digest", value: preview.digest)
                     .font(.caption.monospaced())
                 LabeledContent("Redaction version", value: model.redaction.isIdentity ? "Identity (no terms)" : RedactionPlan.version)
-                LabeledContent("Files in previewed batch", value: model.entryLimit.formatted())
+                LabeledContent("Files in previewed batch", value: model.previewedFileCount.formatted())
+                    .help("The batch this preview describes, at most the configured limit of \(model.entryLimit.formatted()) files")
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("System text").font(.caption).foregroundStyle(.secondary)
@@ -151,8 +152,9 @@ struct SettingsView: View {
             HStack {
                 Button("Add Term") { model.redactionTerms.append(WorkspaceModel.RedactionTerm(term: "", role: .identifier)) }
                     .accessibilityIdentifier("add-redaction-term")
-                Button("Remove Selected") { model.redactionTerms.removeAll(where: { $0.term.isEmpty }) }
-                    .disabled(model.redactionTerms.isEmpty)
+                Button("Remove Blank Rows") { model.redactionTerms.removeAll(where: { $0.term.isEmpty }) }
+                    .disabled(!model.redactionTerms.contains { $0.term.isEmpty })
+                    .help("There is no selection in this list; this clears the rows that carry no term")
             }
             TextField("Placeholder salt", text: $model.redactionSalt)
                 .accessibilityIdentifier("redaction-salt")

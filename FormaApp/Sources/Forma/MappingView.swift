@@ -155,16 +155,17 @@ struct MappingView: View {
                     }
                 }
             }
-            if let decision = model.reconciliation {
+            // A reconciliation is a judgement about a specific manifest, so it
+            // is shown with the manifest it was computed against and nowhere
+            // else: a count of "still usable" without the entry total it came
+            // from is a number about nothing.
+            if let manifest = model.manifest, let decision = model.reconciliation {
                 Section("Reconciliation") {
                     LabeledContent("Invalidated files", value: decision.invalidatedSourceIDs.count.formatted())
                     LabeledContent("Reason", value: decision.reason)
-                    // Reconciliation is reported even when no manifest is on
-                    // screen, so the entry count is read from the model rather
-                    // than from the `if let` above, which has already closed.
                     LabeledContent("Still usable",
-                                   value: "\(((model.manifest?.entries.count ?? 0) - decision.invalidatedSourceIDs.count).formatted())"
-                                       + " of \((model.manifest?.entries.count ?? 0).formatted())")
+                                   value: "\((manifest.entries.count - decision.invalidatedSourceIDs.count).formatted())"
+                                       + " of \(manifest.entries.count.formatted())")
                 }
             }
             if let summary = model.exportSummary {
