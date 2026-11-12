@@ -8,18 +8,25 @@ import Foundation
 /// suite that re-derives them independently will eventually judge different
 /// things while both look green.
 enum EvaluationFixtures {
-    /// The table `EvaluationMetrics.slices(for:)` builds once per run: one row per
-    /// case, one column per measure, in `allCases` order. Bootstrap tests need the
-    /// same shape, and hand-rolling it in two places is how the two drift apart.
-    static func populations(_ cases: [CaseJudgement], runProfile: String? = nil)
-        -> [[(numerator: Int, denominator: Int)]] {
+    /// The table `EvaluationMetrics.slices(for:)` builds once per run Profile: one row
+    /// per case, carrying its cluster and one column per measure in `allCases` order.
+    /// Bootstrap tests need the same shape, and hand-rolling it in two places is how
+    /// the two drift apart.
+    static func rows(_ cases: [CaseJudgement], runProfile: String? = nil) -> [ClusterBootstrap.Row] {
         cases.map { judgement in
-            EvaluationMeasure.allCases.map { $0.population(in: judgement, runProfile: runProfile) }
+            ClusterBootstrap.Row(clusterKey: judgement.clusterKey,
+                                 columns: EvaluationMeasure.allCases.map {
+                                     $0.population(in: judgement, runProfile: runProfile)
+                                 })
         }
     }
 
-    /// The cluster keys of the same sample, in the same order.
-    static func keys(_ cases: [CaseJudgement]) -> [String] { cases.map(\.clusterKey) }
+    /// The same rows from a hand-built tally table, for cases that want a specific
+    /// cluster structure rather than one judgement per project.
+    static func rows(_ columns: [[(numerator: Int, denominator: Int)]],
+                     keys: [String]) -> [ClusterBootstrap.Row] {
+        zip(columns, keys).map { ClusterBootstrap.Row(clusterKey: $0.1, columns: $0.0) }
+    }
 
     /// The opaque candidate reference the prompt would have issued, and which the
     /// manifest association then records. Five characters, because `Bounded.text`

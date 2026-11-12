@@ -199,9 +199,9 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         /// Whether the suggestion is met, nil exactly when `actual` is.
         public var isMet: Bool? { shortfall.map { $0 <= 0 } }
 
-        /// The numeric suggestions of PLAN §8.2, in the order PLAN lists them. The
-        /// last row is its zero-error line for invented fills, expressed as a ceiling
-        /// of none rather than as a rate to be beaten.
+        /// PLAN §8.2's numeric suggestions, in the order PLAN lists them; §6.1 of
+        /// `docs/EVALUATION-METRICS.md` is that table and says why the last row is a
+        /// ceiling of none.
         static let proposals: [(measure: EvaluationMeasure, direction: Direction, suggested: Double)] = [
             (.precisionAuto, .atLeast, 0.95),
             (.coverage, .atLeast, 0.70),

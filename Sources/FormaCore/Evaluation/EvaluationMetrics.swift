@@ -109,11 +109,10 @@ public enum EvaluationMeasure: String, Codable, Sendable, CaseIterable, Comparab
 }
 
 extension FieldJudgement.Verdict {
-    /// The reference answer has a value here.
+    // These three are the slot categories of §3 of `docs/EVALUATION-METRICS.md`; that
+    // table is where membership is defined, so nothing is restated here.
     var isExpectationSlot: Bool { self != .allowedUnknown && self != .invented }
-    /// The reference answer has no value here.
     var isNullExpectation: Bool { self == .allowedUnknown || self == .invented }
-    /// The candidate asserted something, whether or not it stands up.
     var isCandidateAssertion: Bool { self == .correct || self == .wrong || self == .contradicted
         || self == .invented }
 }
@@ -167,15 +166,11 @@ public struct EvaluationSlice: Codable, Sendable, Equatable {
     public let stratum: Stratum
     /// The stratum's key - a Profile id, a scenario category, or nil for overall.
     public let key: String?
-    /// Records this row's own evidence rests on. For a pooled row that is the judged
-    /// records of the cut: equal to `rate.denominator` for a record-level measure, and
-    /// unrelated in size to it for a slot-level one, whose denominator counts slots -
-    /// 42 slots over 40 records is ordinary, not a multiple of anything. For a
-    /// `field_precision` `.field` row it is only the records that asserted something
-    /// about that field, which is what makes a field two records touched out of forty
-    /// sparse on its own evidence. `isSparse` reads this, so the unit has to be the
-    /// row's own or the gate would measure how big the run was instead of how thin the
-    /// row is.
+    /// Records this row's own evidence rests on - the unit `isSparse` reads, so the
+    /// gate measures the thinness of the row rather than the size of the run. Which
+    /// records those are for each row kind, and how the number relates to
+    /// `rate.denominator`, is stated once in §3 item 7 and §5 of
+    /// `docs/EVALUATION-METRICS.md`.
     public let caseCount: Int
     /// Clusters this row's evidence rests on, published so a nil `clusterInterval`
     /// can be told apart: too few clusters to vary, this measure too thin in some draw,
@@ -253,54 +248,63 @@ public enum ClusterBootstrap {
         public let clusterCount: Int
     }
 
+    /// One judged record's contribution to a bootstrap sample.
+    ///
+    /// The cluster key travels with the columns rather than arriving as a parallel
+    /// array because `indices` selects positions in this one: with two parameters a
+    /// caller can hand over the same length in a different order, and every row then
+    /// gets charged to whichever project happens to sit at its index.
+    public struct Row: Sendable {
+        public let clusterKey: String
+        /// One entry per measure, in `EvaluationMeasure.allCases` order.
+        public let columns: [(numerator: Int, denominator: Int)]
+
+        public init(clusterKey: String, columns: [(numerator: Int, denominator: Int)]) {
+            self.clusterKey = clusterKey
+            self.columns = columns
+        }
+    }
+
     /// Rate and interval for the requested measures over one sample.
     ///
-    /// `populations` is the per-case tally for the whole corpus, in
-    /// `EvaluationMeasure.allCases` order, computed once per run Profile by the
-    /// caller (it is the only input that varies between strata of the same corpus);
-    /// `indices`
-    /// picks this stratum's rows out of it and `keys` names each row's cluster.
-    ///
-    /// What is shared across strata is the expensive part: the slot comparisons behind
-    /// `populations` run once per attribution, and this function only adds the integers
-    /// they produced - `O(measures x rows in this stratum)`, per stratum, because a
-    /// per-Profile or per-category rate is a genuinely different sum. What is not free
-    /// is that summation, and nothing here claims otherwise.
+    /// `rows` is the whole corpus, built once per run Profile by the caller - the slot
+    /// comparisons behind it are the part worth sharing - and `indices` picks this
+    /// stratum's rows out of it. Per stratum this function adds
+    /// `O(measures x rows in this stratum)` integer pairs, because a per-Profile or
+    /// per-category rate is a genuinely different sum.
     public static func summarize(measures: [EvaluationMeasure] = EvaluationMeasure.allCases,
-                                 populations: [[(numerator: Int, denominator: Int)]],
-                                 indices: [Int], keys: [String],
+                                 rows: [Row], indices: [Int],
                                  resamples: Int = 2_000, seed: UInt64 = 0x9E37_79B9_7F4A_7C15)
         -> [EvaluationMeasure: Summary] {
         guard !measures.isEmpty else { return [:] }
         // A subset request still reads the columns built for the full order.
         let columns = measures.map { EvaluationMeasure.allCases.firstIndex(of: $0)! }
-        precondition(populations.allSatisfy { $0.count == EvaluationMeasure.allCases.count },
-                     "populations is one row per record in `EvaluationMeasure.allCases` column order; "
-                         + "a subset `measures` request still reads those columns")
+        precondition(rows.allSatisfy { $0.columns.count == EvaluationMeasure.allCases.count },
+                     "Row.columns holds one entry per measure, in `EvaluationMeasure.allCases` "
+                         + "order; a subset `measures` request still reads those columns")
 
-        // Positions within this sample, grouped by cluster key. Computed before the
-        // totals so a stratum with nothing to vary still reports why.
+        // This stratum's positions, grouped by the cluster that owns them - built first
+        // so a stratum with nothing to vary still reports why, and used as-is for the
+        // totals below, so a row's cluster is read in exactly one place.
         var grouped: [String: [Int]] = [:]
-        for position in indices.indices {
-            grouped[keys[indices[position]], default: []].append(position)
+        for offset in indices.indices {
+            grouped[rows[indices[offset]].clusterKey, default: []].append(offset)
         }
         let clusterCount = grouped.count
 
-        // One pass over the stratum's rows, accumulated into the cluster that owns
-        // each row. The pooled rate is then the sum of those cluster rows - the same
-        // integers, so the total is computed once rather than twice over. Clusters are
-        // keyed in sorted order so a re-run with the same seed walks them the same way.
-        let clusters = grouped.keys.sorted()
+        // Sorted so a re-run with the same seed walks the clusters the same way. The
+        // pooled rate is then the sum of these cluster rows: one pass over the rows of
+        // this stratum, and the same integers either way.
+        let members = grouped.keys.sorted().compactMap { grouped[$0] }
         var clusterTotals: [[(numerator: Int, denominator: Int)]] =
-            clusters.map { _ in Array(repeating: (numerator: 0, denominator: 0), count: measures.count) }
-        var clusterOf: [String: Int] = [:]
-        for (slot, key) in clusters.enumerated() { clusterOf[key] = slot }
-        for member in indices.indices {
-            let source = populations[indices[member]]
-            let slot = clusterOf[keys[indices[member]]]!
-            for position in measures.indices {
-                clusterTotals[slot][position].numerator += source[columns[position]].numerator
-                clusterTotals[slot][position].denominator += source[columns[position]].denominator
+            members.map { _ in Array(repeating: (numerator: 0, denominator: 0), count: measures.count) }
+        for (slot, offsets) in members.enumerated() {
+            for offset in offsets {
+                let source = rows[indices[offset]].columns
+                for position in measures.indices {
+                    clusterTotals[slot][position].numerator += source[columns[position]].numerator
+                    clusterTotals[slot][position].denominator += source[columns[position]].denominator
+                }
             }
         }
 
@@ -324,7 +328,7 @@ public enum ClusterBootstrap {
         // also take away the draws of every measure listed after it.
         var voided = measures.map { _ in false }
         for _ in 0..<resamples {
-            let picks = (0..<clusters.count).map { _ in Int(generator.next() % UInt64(clusters.count)) }
+            let picks = (0..<clusterCount).map { _ in Int(generator.next() % UInt64(clusterCount)) }
             for position in measures.indices where !voided[position] {
                 var numerator = 0
                 var denominator = 0
@@ -404,8 +408,7 @@ public enum EvaluationMetrics {
     /// §3 item 2 of `docs/EVALUATION-METRICS.md` is where that consequence is written.
     public static func slices(for cases: [CaseJudgement], request: Request = Request()) -> [EvaluationSlice] {
         let measures = EvaluationMeasure.allCases
-        let keys = cases.map(\.clusterKey)
-        var tables: [String?: [[(numerator: Int, denominator: Int)]]] = [:]
+        var tables: [String?: [ClusterBootstrap.Row]] = [:]
 
         var output: [EvaluationSlice] = []
         for (stratum, key, sample) in cuts(of: cases) {
@@ -417,9 +420,9 @@ public enum EvaluationMetrics {
             // Vendor and Project Archive files has no single answer to "correct
             // under which Profile".
             let runProfile = stratum == .profile ? key : request.runProfileID
-            let populations: [[(numerator: Int, denominator: Int)]]
+            let table: [ClusterBootstrap.Row]
             if let built = tables[runProfile] {
-                populations = built
+                table = built
             } else {
                 // One table per distinct attribution, not one per stratum: the
                 // overall and category rows share whichever table matches the run's
@@ -429,13 +432,15 @@ public enum EvaluationMetrics {
                 // in the nil-attribution table, which is what makes the pooled rows
                 // read N/A rather than 0%. Cuts under different attributions are
                 // different measurements, which is why they are not shared.
-                populations = cases.map { judgement in
-                    measures.map { $0.population(in: judgement, runProfile: runProfile) }
+                table = cases.map { judgement in
+                    ClusterBootstrap.Row(clusterKey: judgement.clusterKey,
+                                         columns: measures.map {
+                                             $0.population(in: judgement, runProfile: runProfile)
+                                         })
                 }
-                tables[runProfile] = populations
+                tables[runProfile] = table
             }
-            let summaries = ClusterBootstrap.summarize(measures: measures, populations: populations,
-                                                       indices: sample, keys: keys,
+            let summaries = ClusterBootstrap.summarize(measures: measures, rows: table, indices: sample,
                                                        resamples: request.resamples, seed: request.seed)
             for measure in measures {
                 let summary = summaries[measure]!

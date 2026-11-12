@@ -272,12 +272,12 @@ struct EvaluationMetricsTests {
         // the only difference between them is where the split falls.
         let byProject = ["p1", "p2", "p2", "p3", "p4", "p5"]
         let oneEach = ["p1", "p2", "p3", "p4", "p5", "p6"]
-        let clustered = ClusterBootstrap.summarize(measures: [.fieldPrecision], populations: populations,
-                                                   indices: indices, keys: byProject,
-                                                   resamples: 400, seed: 11)
-        let scattered = ClusterBootstrap.summarize(measures: [.fieldPrecision], populations: populations,
-                                                   indices: indices, keys: oneEach,
-                                                   resamples: 400, seed: 11)
+        let clustered = ClusterBootstrap.summarize(measures: [.fieldPrecision],
+                                                   rows: EvaluationFixtures.rows(populations, keys: byProject),
+                                                   indices: indices, resamples: 400, seed: 11)
+        let scattered = ClusterBootstrap.summarize(measures: [.fieldPrecision],
+                                                   rows: EvaluationFixtures.rows(populations, keys: oneEach),
+                                                   indices: indices, resamples: 400, seed: 11)
         let tight = try #require(clustered[.fieldPrecision]?.interval)
         let wide = try #require(scattered[.fieldPrecision]?.interval)
         #expect(tight != wide, "grouping decides what a draw can contain")
@@ -288,6 +288,46 @@ struct EvaluationMetricsTests {
         #expect(clustered[.fieldPrecision]?.rate == scattered[.fieldPrecision]?.rate)
         #expect(clustered[.fieldPrecision]?.rate.estimate == 0.5)
         #expect(tight.lowerBound < 0.5 && tight.upperBound > 0.5)
+    }
+
+    @Test("indices selects rows of the table, not positions within the cut")
+    func indicesAddressTheCorpusNotTheStratum() throws {
+        // Every other bootstrap case in this file hands `indices` as the identity
+        // array, where the two index domains coincide and mixing them up is invisible.
+        // Here nine rows sit in the table and only the last six form the stratum: the
+        // first three projects are correct and outside the cut, so reading
+        // `rows[offset]` where `rows[indices[offset]]` belongs would charge the stratum
+        // with rows that are not in it - 24/36 pooled rather than 12/24 - and the band
+        // would quietly be drawn from the wrong projects.
+        let field = EvaluationMeasure.allCases.firstIndex(of: .fieldPrecision)!
+        func columns(_ numerator: Int, _ denominator: Int) -> [(numerator: Int, denominator: Int)] {
+            EvaluationMeasure.allCases.indices.map { $0 == field ? (numerator, denominator) : (0, 0) }
+        }
+        let right = columns(4, 4)
+        let wrong = columns(0, 4)
+        // The first three rows deliberately share their cluster names with the first
+        // three rows of the cut. Charging by position instead of by row therefore
+        // collapses six clusters into three and puts a right row and a wrong row in
+        // each of them - every draw then yields exactly the pooled rate, so the band
+        // collapses to a point. Both of those are asserted below, because the pooled
+        // sum alone cannot tell the two readings apart.
+        let table = EvaluationFixtures.rows(
+            [right, right, right, right, right, right, wrong, wrong, wrong],
+            keys: ["d", "e", "f", "d", "e", "f", "g", "h", "i"])
+        let summary = ClusterBootstrap.summarize(measures: [.fieldPrecision], rows: table,
+                                                 indices: Array(3..<9), resamples: 400, seed: 5)
+        let row = try #require(summary[.fieldPrecision])
+        #expect(row.rate.numerator == 12 && row.rate.denominator == 24)
+        #expect(row.rate.estimate == 0.5)
+        #expect(row.clusterCount == 6, "d, e, f once each, then g, h, i: the cut's own rows")
+        #expect(row.interval!.lowerBound < 0.5 && row.interval!.upperBound > 0.5,
+                "three projects right and three wrong is a stratum that varies")
+        // Same table, whole corpus: `d`, `e` and `f` now hold two right rows apiece,
+        // so nine rows make six clusters and a different pooled rate.
+        let everything = ClusterBootstrap.summarize(measures: [.fieldPrecision], rows: table,
+                                                    indices: Array(0..<9), resamples: 400, seed: 5)
+        #expect(everything[.fieldPrecision]?.rate.estimate == 24.0 / 36.0)
+        #expect(everything[.fieldPrecision]?.clusterCount == 6)
     }
 
     @Test("the band reads what each project contains, not only how many there are")
@@ -311,12 +351,12 @@ struct EvaluationMetricsTests {
         let clumpedRows = [right, right, wrong, wrong, right, wrong, right, wrong, right, wrong]
         let clumpedKeys = ["c0", "c0", "c1", "c1", "c2", "c2", "c3", "c3", "c4", "c4"]
         let indices = Array(0..<10)
-        let balanced = ClusterBootstrap.summarize(measures: [.fieldPrecision], populations: balancedRows,
-                                                  indices: indices, keys: balancedKeys,
-                                                  resamples: 400, seed: 23)
-        let clumped = ClusterBootstrap.summarize(measures: [.fieldPrecision], populations: clumpedRows,
-                                                 indices: indices, keys: clumpedKeys,
-                                                 resamples: 400, seed: 23)
+        let balanced = ClusterBootstrap.summarize(measures: [.fieldPrecision],
+                                                  rows: EvaluationFixtures.rows(balancedRows, keys: balancedKeys),
+                                                  indices: indices, resamples: 400, seed: 23)
+        let clumped = ClusterBootstrap.summarize(measures: [.fieldPrecision],
+                                                rows: EvaluationFixtures.rows(clumpedRows, keys: clumpedKeys),
+                                                indices: indices, resamples: 400, seed: 23)
         let point = try #require(balanced[.fieldPrecision]?.interval)
         let spread = try #require(clumped[.fieldPrecision]?.interval)
         #expect(balanced[.fieldPrecision]?.rate == clumped[.fieldPrecision]?.rate)
@@ -389,13 +429,11 @@ struct EvaluationMetricsTests {
             cases.append(EvaluationFixtures.judgement(singleton, entry: nil))
         }
 
-        let populations = EvaluationFixtures.populations(cases, runProfile: ProjectArchiveContract.id)
-        let keys = EvaluationFixtures.keys(cases)
+        let table = EvaluationFixtures.rows(cases, runProfile: ProjectArchiveContract.id)
         func hold(_ sample: [CaseJudgement]) -> ClosedRange<Double>? {
             ClusterBootstrap.summarize(measures: [.holdRate],
-                                       populations: EvaluationFixtures.populations(sample, runProfile: ProjectArchiveContract.id),
+                                       rows: EvaluationFixtures.rows(sample, runProfile: ProjectArchiveContract.id),
                                        indices: Array(sample.indices),
-                                       keys: EvaluationFixtures.keys(sample),
                                        resamples: 200, seed: 0x9E37_79B9_7F4A_7C15)[.holdRate]?.interval
         }
         let interval = try #require(hold(cases))
@@ -408,17 +446,15 @@ struct EvaluationMetricsTests {
         let few = Array(cases.prefix(3))
         #expect(hold(few) == nil)
         let fewSummary = ClusterBootstrap.summarize(measures: [.holdRate],
-                                                    populations: EvaluationFixtures.populations(few, runProfile: ProjectArchiveContract.id),
-                                                    indices: Array(few.indices),
-                                                    keys: EvaluationFixtures.keys(few))
+                                                    rows: EvaluationFixtures.rows(few, runProfile: ProjectArchiveContract.id),
+                                                    indices: Array(few.indices))
         let fewClusters = try #require(fewSummary[.holdRate]?.clusterCount)
         #expect(fewClusters < ClusterBootstrap.minimumClusters)
 
         // Asking for one measure must not change its interval: the draws are shared
         // across the columns, so a subset request is a projection, not a resample.
-        let all = ClusterBootstrap.summarize(populations: populations, indices: Array(cases.indices),
-                                            keys: keys, resamples: 200,
-                                            seed: 0x9E37_79B9_7F4A_7C15)
+        let all = ClusterBootstrap.summarize(rows: table, indices: Array(cases.indices),
+                                            resamples: 200, seed: 0x9E37_79B9_7F4A_7C15)
         #expect(all[.holdRate]?.interval == interval)
     }
 
@@ -438,9 +474,9 @@ struct EvaluationMetricsTests {
                                                      gold: reference)
             cases.append(EvaluationFixtures.judgement(reference, entry: entry))
         }
-        let summary = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases, runProfile: ProjectArchiveContract.id),
-                                                 indices: Array(cases.indices),
-                                                 keys: EvaluationFixtures.keys(cases))
+        let summary = ClusterBootstrap.summarize(
+            rows: EvaluationFixtures.rows(cases, runProfile: ProjectArchiveContract.id),
+            indices: Array(cases.indices))
         #expect(summary[.precisionAuto]?.interval == nil)
         #expect(summary[.coverage]?.interval != nil)
         #expect(summary[.inventedFillRate]?.interval != nil, "the last measure kept all of its draws")
@@ -460,9 +496,9 @@ struct EvaluationMetricsTests {
                                                         cluster: "vc\(index)")
             cases.append(EvaluationFixtures.judgement(reference, entry: nil))
         }
-        let summaries = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases, runProfile: ProjectArchiveContract.id),
-                                                   indices: Array(cases.indices),
-                                                   keys: EvaluationFixtures.keys(cases))
+        let summaries = ClusterBootstrap.summarize(
+            rows: EvaluationFixtures.rows(cases, runProfile: ProjectArchiveContract.id),
+            indices: Array(cases.indices))
         #expect(summaries[.coverage]?.interval != nil)
         #expect(summaries[.precisionAuto]?.interval == nil)
         #expect(summaries[.highConfidenceErrorRate]?.interval == nil)
@@ -488,9 +524,9 @@ struct EvaluationMetricsTests {
                                                      publishable: index >= 3, gold: reference)
             cases.append(EvaluationFixtures.judgement(reference, entry: entry))
         }
-        let summaries = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases, runProfile: ProjectArchiveContract.id),
-                                                   indices: Array(cases.indices),
-                                                   keys: EvaluationFixtures.keys(cases))
+        let summaries = ClusterBootstrap.summarize(
+            rows: EvaluationFixtures.rows(cases, runProfile: ProjectArchiveContract.id),
+            indices: Array(cases.indices))
         #expect(summaries[.precisionAuto]?.rate.denominator == 3)
         #expect(summaries[.precisionAuto]?.interval == nil,
                 "a draw of only the ineligible clusters leaves no ratio to place a bound on")

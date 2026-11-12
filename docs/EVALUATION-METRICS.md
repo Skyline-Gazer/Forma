@@ -178,7 +178,7 @@ PLAN §8.2 在给出建议阈值的同时要求"**必须展示实际值与差距
 | `EvaluationMeasure.population(in:)`（逐字段） | 同上 | 只为 `field_precision` 的 12 条 `.field` 行服务；行分母之和 == pooled 分母 |
 | `EvaluationRate` | 同上 | 分母（槽位观测）为 0 ⇒ `estimate` 与 Wilson 端点为 nil |
 | `EvaluationSlice.caseCount` / `isSparse` / `sparseCaseLimit` | 同上 | 可引用性以**该行自身证据的记录数**计（pooled 行 = 切面记录数；`.field` 行 = 对该字段有候选断言的记录数）；`sparseCaseLimit = 30` 是 harness 策略（§5） |
-| `ClusterBootstrap.summarize(measures:populations:indices:keys:resamples:seed:)` | 同上 | 唯一公开入口；`populations` 由调用方按 `allCases` 列序**每种归属算一次**并缓存（`slices(for:)` 的 `tables`：overall / category 用 `request.runProfileID` 那一层，Profile 切面用自己的 key——不同归属本就是不同的测量，不共用）；簇 < `minimumClusters`、任一无定义抽样、或 `resamples < minimumResamples` ⇒ 该指标区间为 nil（§5 的 (a)(b)(c)） |
+| `ClusterBootstrap.summarize(measures:rows:indices:resamples:seed:)`（`Row` 把簇键与该行的分子分母绑在一起）| 同上 | 唯一公开入口；`indices` 是**表内行下标**（不是切面内的位置），`rows` 由调用方按 `allCases` 列序**每种归属算一次**并缓存（`slices(for:)` 的 `tables`：overall / category 用 `request.runProfileID` 那一层，Profile 切面用自己的 key——不同归属本就是不同的测量，不共用）；簇总计直接走这份分组，一行的簇键只在一处被读到；簇 < `minimumClusters`、任一无定义抽样、或 `resamples < minimumResamples` ⇒ 该指标区间为 nil（§5 的 (a)(b)(c)） |
 | `EvaluationMetrics.slices(for:request:)` | 同上 | 切面 = overall ∪ 出现的每个 Profile ∪ 出现的每个类别（另有 §3 第 7 条的 12 条逐字段行）；一条记录属于两个 Profile 时在两个切面各出现一次，绝不计为两条记录；Profile 切面把**该切面的 Profile** 当作 `runProfile`，其余切面用 `request.runProfileID`，为 nil 时 `precision_auto` 与 `high_confidence_error_rate` 在那些行**没有人口**（N/A，§3 第 2 条）；分子分母表按归属各算一次并缓存，不同归属不共用（它们本就是不同的测量） |
 | `EvaluationMetrics.confusion(_:)` | 同上 | 键形如 `mapped->absent`；无条目用 `absent` |
 | `EvaluationMetrics.refusals(_:)` → `Refusals` | 同上 | PLAN §8.2 的拒判原因；`byRecordState` 只数未自动落地的记录，`bySlotStatus` 遍历全部记录数未填的期望槽；两个字典不得合并（§3 第 5 条），后者的总数与 `missed_fill_rate` 的分子一致 |
