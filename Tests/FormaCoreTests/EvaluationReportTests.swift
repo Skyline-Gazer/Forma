@@ -20,6 +20,7 @@ struct EvaluationReportTests {
 
     private func dataset(reviewed: Int, revision: String = "1.0.0", countable: Int? = nil,
                          overlaps: [String] = [], unaccounted: [String] = [], pending: Int = 0,
+                         shortfalls: [GoldDataset.Shortfall] = [],
                          allowed: [String]? = nil) throws -> GoldDataset.Report {
         // `casePackVersion` is not a free label here: `GoldDataset.load` fills it from
         // `split.casePack.version`, and the report layer compares the two. `revision`
@@ -33,7 +34,7 @@ struct EvaluationReportTests {
                            pendingAdjudication: pending,
                            perProfileCountable: [ProjectArchiveContract.id: reviewed],
                            perCategoryCountable: [GoldRecord.Category.positive.rawValue: reviewed],
-                           shortfalls: [], undeclaredOverlaps: overlaps, unaccountedRecords: unaccounted,
+                           shortfalls: shortfalls, undeclaredOverlaps: overlaps, unaccountedRecords: unaccounted,
                            meetsIndependentTarget: reviewed >= GoldDataset.independentTarget,
                            requiredMinimum: GoldDataset.independentTarget)
     }
@@ -286,6 +287,27 @@ struct EvaluationReportTests {
         #expect(line.detail.contains("1 条仍为 adjudication_pending"))
         #expect(!line.detail.contains("已全部排除争议记录"))
         #expect(line.detail.contains("caseSetNotDerivedFromSplit"))
+    }
+
+    @Test("a dataset that misses its quota cells says so without losing the run")
+    func quotaShortfallsAreDisclosed() throws {
+        let gaps = [GoldDataset.Shortfall(profile: ProjectArchiveContract.id, category: .nearDuplicate,
+                                          count: 3, required: GoldDataset.stratumTarget),
+                    GoldDataset.Shortfall(profile: VendorLibraryContract.id, category: .templateFamily,
+                                          count: 0, required: GoldDataset.stratumTarget)]
+        let report = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
+                                      dataset: try dataset(reviewed: 160, shortfalls: gaps))
+        let row = try #require(report.claimBlockers.first { $0.kind == .stratumQuotasUnmet })
+        #expect(row.detail.contains("2 个 Profile x 类别格"))
+        #expect(row.detail.contains("near_duplicate=3"), "the cell is named by its raw value")
+        // Disclosure only, for the reason §6 states: the quota cells (2 x every
+        // category at 10) cannot all be filled inside a 150-record dataset, and a cell
+        // that thin is already uncitable through §5's floor. Refusing here would make
+        // the claim unreachable for reasons the sampling plan itself creates.
+        #expect(report.isQualityClaimAllowed)
+        let clean = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
+                                     dataset: try dataset(reviewed: 160))
+        #expect(!clean.claimBlockers.contains { $0.kind == .stratumQuotasUnmet })
     }
 
     @Test("an identity that describes another dataset loses the claim")

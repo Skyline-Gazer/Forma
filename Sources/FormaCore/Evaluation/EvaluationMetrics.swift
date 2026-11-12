@@ -258,9 +258,13 @@ public enum ClusterBootstrap {
     /// `EvaluationMeasure.allCases` order, computed once per run Profile by the
     /// caller (it is the only input that varies between strata of the same corpus);
     /// `indices`
-    /// picks this stratum's rows out of it and `keys` names each row's cluster. No
-    /// judgement is re-walked here, so measuring eleven strata costs no more slot
-    /// comparisons than measuring one.
+    /// picks this stratum's rows out of it and `keys` names each row's cluster.
+    ///
+    /// What is shared across strata is the expensive part: the slot comparisons behind
+    /// `populations` run once per attribution, and this function only adds the integers
+    /// they produced - `O(measures x rows in this stratum)`, per stratum, because a
+    /// per-Profile or per-category rate is a genuinely different sum. What is not free
+    /// is that summation, and nothing here claims otherwise.
     public static func summarize(measures: [EvaluationMeasure] = EvaluationMeasure.allCases,
                                  populations: [[(numerator: Int, denominator: Int)]],
                                  indices: [Int], keys: [String],
@@ -269,6 +273,9 @@ public enum ClusterBootstrap {
         guard !measures.isEmpty else { return [:] }
         // A subset request still reads the columns built for the full order.
         let columns = measures.map { EvaluationMeasure.allCases.firstIndex(of: $0)! }
+        precondition(populations.allSatisfy { $0.count == EvaluationMeasure.allCases.count },
+                     "populations is one row per record in `EvaluationMeasure.allCases` column order; "
+                         + "a subset `measures` request still reads those columns")
 
         // Positions within this sample, grouped by cluster key. Computed before the
         // totals so a stratum with nothing to vary still reports why.
@@ -278,34 +285,37 @@ public enum ClusterBootstrap {
         }
         let clusterCount = grouped.count
 
+        // One pass over the stratum's rows, accumulated into the cluster that owns
+        // each row. The pooled rate is then the sum of those cluster rows - the same
+        // integers, so the total is computed once rather than twice over. Clusters are
+        // keyed in sorted order so a re-run with the same seed walks them the same way.
+        let clusters = grouped.keys.sorted()
+        var clusterTotals: [[(numerator: Int, denominator: Int)]] =
+            clusters.map { _ in Array(repeating: (numerator: 0, denominator: 0), count: measures.count) }
+        var clusterOf: [String: Int] = [:]
+        for (slot, key) in clusters.enumerated() { clusterOf[key] = slot }
+        for member in indices.indices {
+            let source = populations[indices[member]]
+            let slot = clusterOf[keys[indices[member]]]!
+            for position in measures.indices {
+                clusterTotals[slot][position].numerator += source[columns[position]].numerator
+                clusterTotals[slot][position].denominator += source[columns[position]].denominator
+            }
+        }
+
         var output: [EvaluationMeasure: Summary] = [:]
         for (position, measure) in measures.enumerated() {
             var numerator = 0
             var denominator = 0
-            for index in indices {
-                numerator += populations[index][columns[position]].numerator
-                denominator += populations[index][columns[position]].denominator
+            for totals in clusterTotals {
+                numerator += totals[position].numerator
+                denominator += totals[position].denominator
             }
             output[measure] = Summary(rate: EvaluationRate(numerator: numerator, denominator: denominator),
                                       interval: nil, clusterCount: clusterCount)
         }
 
         guard clusterCount >= minimumClusters, resamples >= minimumResamples else { return output }
-        let clusters = grouped.keys.sorted().map { grouped[$0]! }
-
-        var clusterTotals: [[(numerator: Int, denominator: Int)]] = []
-        clusterTotals.reserveCapacity(clusters.count)
-        for members in clusters {
-            var row = Array(repeating: (numerator: 0, denominator: 0), count: measures.count)
-            for member in members {
-                let source = populations[indices[member]]
-                for position in row.indices {
-                    row[position].numerator += source[columns[position]].numerator
-                    row[position].denominator += source[columns[position]].denominator
-                }
-            }
-            clusterTotals.append(row)
-        }
 
         var generator = SplitMix64(seed: seed)
         var ratios: [[Double]] = measures.map { _ in [] }

@@ -83,8 +83,29 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         /// report that no re-run could reproduce. Vetoing rather than relabelling: the
         /// numbers stay visible, the claim goes.
         case identityDisagreesWithDataset
+        /// `GoldDataset.Report.shortfalls` is non-empty: some Profile x scenario-category
+        /// cell holds fewer than `GoldDataset.stratumTarget` countable records, so the
+        /// dataset does not meet PLAN §8.1's sampling plan.
+        ///
+        /// Disclosed, not disqualifying, and the reason is arithmetic rather than
+        /// tolerance: the cells are 2 Profiles x every category at 10 each, which
+        /// already exceeds the 150 independent samples §8.1 asks for, so a dataset can
+        /// satisfy its total and still miss several cells on the way there. A run whose
+        /// claim depends on such a cell cannot quote it anyway - a cell below the quota
+        /// is far below `EvaluationSlice.sparseCaseLimit` (30), which is where §5 stops
+        /// a stratum from being cited on its own merits - so the quota finding tells the
+        /// reader which parts of the table are structural gaps rather than thin
+        /// measurements, and nothing more.
+        case stratumQuotasUnmet
 
-        var preventsQualityClaim: Bool { self != .pendingAdjudicationExcluded }
+        /// Two findings describe the run without disqualifying it: how many disputed
+        /// records were left out, and which quota cells the dataset is short of. Both
+        /// are properties of the sample the reader needs next to the numbers, not
+        /// reasons the numbers cannot be numbers - and both have their own §6 entry
+        /// saying where the actual protection lives (§5's quotability floor).
+        var preventsQualityClaim: Bool { !Self.disclosureOnly.contains(self) }
+
+        static let disclosureOnly: Set<Blocker> = [.pendingAdjudicationExcluded, .stratumQuotasUnmet]
     }
 
     /// A reason, with the count that produced it.
@@ -202,6 +223,14 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
             blockers.append(Finding(kind: .identityDisagreesWithDataset,
                                     detail: "运行身份与所测数据集在 " + disagreed.joined(separator: "、")
                                         + " 上不一致；这份数字属于哪一批样本无法确定，因此不给出质量结论。"))
+        }
+        if !dataset.shortfalls.isEmpty {
+            let cells = dataset.shortfalls.map { "\($0.profile)/\($0.category.rawValue)=\($0.count)" }
+            let named = cells.prefix(6).joined(separator: "、")
+            blockers.append(Finding(kind: .stratumQuotasUnmet,
+                                    detail: "\(cells.count) 个 Profile x 类别格未达 \(GoldDataset.stratumTarget) 条："
+                                        + named + (cells.count > 6 ? " 等" : "")
+                                        + "；这些格远低 §5 的 30 条可引用下限，本就只能作描述读，故本条仅披露。"))
         }
         self.claimBlockers = blockers
         self.isQualityClaimAllowed = !blockers.contains { $0.kind.preventsQualityClaim }

@@ -251,6 +251,81 @@ struct EvaluationMetricsTests {
         #expect(rate(.holdRate, [absent]) == EvaluationRate(numerator: 1, denominator: 1))
     }
 
+    @Test("the grouping of records into projects changes the band")
+    func resamplingDependsOnClusterIdentity() throws {
+        // The same six rows, two ways of saying which project they came from. A
+        // bootstrap that treated `keys` as decoration would answer identically both
+        // times; the content of clustering is that a draw takes a project's fields
+        // with it, so one project carrying three empty rows drags every draw that
+        // includes it. This pins that the structure is read rather than merely
+        // published - nothing here noticed when that accumulation was rewritten.
+        // `populations` is full-width by contract - one column per measure, in
+        // `EvaluationMeasure.allCases` order - even when only one measure is requested.
+        let field = EvaluationMeasure.allCases.firstIndex(of: .fieldPrecision)!
+        func columns(_ numerator: Int, _ denominator: Int) -> [(numerator: Int, denominator: Int)] {
+            EvaluationMeasure.allCases.indices.map { $0 == field ? (numerator, denominator) : (0, 0) }
+        }
+        let populations = [columns(4, 4), columns(0, 4), columns(0, 4),
+                           columns(0, 4), columns(4, 4), columns(4, 4)]
+        let indices = Array(populations.indices)
+        // Five projects for six rows, so both requests clear `minimumClusters` and
+        // the only difference between them is where the split falls.
+        let byProject = ["p1", "p2", "p2", "p3", "p4", "p5"]
+        let oneEach = ["p1", "p2", "p3", "p4", "p5", "p6"]
+        let clustered = ClusterBootstrap.summarize(measures: [.fieldPrecision], populations: populations,
+                                                   indices: indices, keys: byProject,
+                                                   resamples: 400, seed: 11)
+        let scattered = ClusterBootstrap.summarize(measures: [.fieldPrecision], populations: populations,
+                                                   indices: indices, keys: oneEach,
+                                                   resamples: 400, seed: 11)
+        let tight = try #require(clustered[.fieldPrecision]?.interval)
+        let wide = try #require(scattered[.fieldPrecision]?.interval)
+        #expect(tight != wide, "grouping decides what a draw can contain")
+        #expect(clustered[.fieldPrecision]?.clusterCount == 5)
+        #expect(scattered[.fieldPrecision]?.clusterCount == 6)
+        // Twelve of twenty-four either way: the rate is blind to the structure, the
+        // band is not, which is the division PLAN §8.2 draws.
+        #expect(clustered[.fieldPrecision]?.rate == scattered[.fieldPrecision]?.rate)
+        #expect(clustered[.fieldPrecision]?.rate.estimate == 0.5)
+        #expect(tight.lowerBound < 0.5 && tight.upperBound > 0.5)
+    }
+
+    @Test("the band reads what each project contains, not only how many there are")
+    func resamplingReflectsClusterComposition() throws {
+        // Ten rows, five clusters of two, pooled ratio 20/40 either way. The balanced
+        // partition gives every project one right row and one wrong row, so each
+        // cluster is 4/8 and no draw - however it repeats clusters - can leave 0.5:
+        // its band collapses to a point, which is the honest reading of "no project
+        // here differs from another". The clumped partition parks two whole projects
+        // at 8/8 and 0/8, so a draw can lean either way and the band opens. Had the
+        // per-cluster totals been accumulated per row, or the grouping been ignored,
+        // both partitions would return the same width and nothing here would say so.
+        let field = EvaluationMeasure.allCases.firstIndex(of: .fieldPrecision)!
+        func columns(_ numerator: Int, _ denominator: Int) -> [(numerator: Int, denominator: Int)] {
+            EvaluationMeasure.allCases.indices.map { $0 == field ? (numerator, denominator) : (0, 0) }
+        }
+        let right = columns(4, 4)
+        let wrong = columns(0, 4)
+        let balancedRows = [right, wrong, right, wrong, right, wrong, right, wrong, right, wrong]
+        let balancedKeys = ["b0", "b0", "b1", "b1", "b2", "b2", "b3", "b3", "b4", "b4"]
+        let clumpedRows = [right, right, wrong, wrong, right, wrong, right, wrong, right, wrong]
+        let clumpedKeys = ["c0", "c0", "c1", "c1", "c2", "c2", "c3", "c3", "c4", "c4"]
+        let indices = Array(0..<10)
+        let balanced = ClusterBootstrap.summarize(measures: [.fieldPrecision], populations: balancedRows,
+                                                  indices: indices, keys: balancedKeys,
+                                                  resamples: 400, seed: 23)
+        let clumped = ClusterBootstrap.summarize(measures: [.fieldPrecision], populations: clumpedRows,
+                                                 indices: indices, keys: clumpedKeys,
+                                                 resamples: 400, seed: 23)
+        let point = try #require(balanced[.fieldPrecision]?.interval)
+        let spread = try #require(clumped[.fieldPrecision]?.interval)
+        #expect(balanced[.fieldPrecision]?.rate == clumped[.fieldPrecision]?.rate)
+        #expect(balanced[.fieldPrecision]?.clusterCount == 5)
+        #expect(clumped[.fieldPrecision]?.clusterCount == 5)
+        #expect(point == 0.5...0.5, "every cluster is the pooled rate, so every draw is too")
+        #expect(spread.upperBound - spread.lowerBound > 0)
+    }
+
     @Test("the candidate-value gate counts records, not slots")
     func sparseStratum() throws {
         // Twenty-nine records, one expected slot each: twenty-nine of both, sparse
