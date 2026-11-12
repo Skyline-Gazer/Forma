@@ -138,10 +138,13 @@ struct EvaluationRunnerTests {
             configuration: configuration(profile: try profile, timeout: .milliseconds(30)))
         let elapsed = clock.duration(to: .now)
 
-        // Three requests at a 30 ms deadline each: bounded by the deadline, not by
-        // the answerer's 30 s sleep. The bound is generous because it is only here
-        // to catch a runner that stopped enforcing one.
-        #expect(elapsed < .seconds(5))
+        // Three requests at a 30 ms deadline each, against an answerer that would
+        // sleep for 30 s. The claim is "the run did not wait for the answerer", so
+        // the bound is the answerer's own delay: a runner that stopped enforcing the
+        // deadline takes at least 30 s, and one that enforces it returns far sooner
+        // (the measured value on CI is a few seconds, because macOS coalesces the
+        // deadline's own timer under load - which is why the bound is not tighter).
+        #expect(elapsed < .seconds(20))
         #expect(run.telemetry.timedOutAttempts == 3)
         #expect(run.telemetry.failedRequests == 3)
         #expect(run.requests.allSatisfy { $0.outcome == MappingOutcome.timeout.rawValue })
