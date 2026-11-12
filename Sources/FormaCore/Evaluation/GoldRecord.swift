@@ -16,15 +16,15 @@ public struct GoldRecord: Codable, Sendable, Equatable {
         case adversarialWording = "adversarial_wording"
     }
 
-    public enum ReviewStatus: String, Codable, Sendable {
+    public enum ReviewStatus: String, Codable, Sendable, CaseIterable {
         case confirmed, adjudicationPending = "adjudication_pending", rejected
     }
 
-    public enum Redaction: String, Codable, Sendable {
+    public enum Redaction: String, Codable, Sendable, CaseIterable {
         case synthetic, reviewed, unredacted
     }
 
-    public enum Usage: String, Codable, Sendable {
+    public enum Usage: String, Codable, Sendable, CaseIterable {
         case evaluation, fewshot, excluded
     }
 
