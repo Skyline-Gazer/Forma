@@ -6,6 +6,10 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "FormaCore", targets: ["FormaCore"]),
+        // Opt-in benchmark entry point. Not built by `swift test`: the
+        // benchmark workflow builds and runs it explicitly, so a slow hosted
+        // runner can never turn a unit-test PR into a red build.
+        .executable(name: "FormaBenchmark", targets: ["FormaBenchmark"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.8.0"),
@@ -34,6 +38,7 @@ let package = Package(
             .process("Mapping/Schemas"),
             .process("Mapping/CasePack"),
         ]),
+        .executableTarget(name: "FormaBenchmark", dependencies: ["FormaCore"]),
         .testTarget(name: "FormaCoreTests", dependencies: [
             "FormaCore",
             .product(name: "ZIPFoundation", package: "ZIPFoundation"),

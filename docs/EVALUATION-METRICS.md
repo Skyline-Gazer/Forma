@@ -1,6 +1,6 @@
 # Forma 离线评测口径与结论门禁（EVALUATION-METRICS）
 
-> 状态：P3-A 切片 2b。本文定义**指标的可执行口径**、**离线运行器语义**与**结论门禁**。
+> 状态：P3-A 切片 2b / 2c。本文定义**指标的可执行口径**、**离线运行器语义**、**规模基准口径**与**结论门禁**。
 > PLAN §8.2 给出指标名称与验收意图，本文给出分子分母。三者必须同步，顺序是：**先改 PLAN（需求源）→ 再改代码 → 最后更新本文**。本文不是实现真值的背书；口径的实际行为以代码为准，且下列性质各有用例固定：两套单位各自的分母（`coveragePopulation`、`precisionAutoPopulation`、`perFieldRows`）、可引用性单位（`sparsityCountsRecords`）、未命名 Profile 的运行不给出精确率而非 0%（`unattributedRunHasNoPrecisionRow`）、逐字段行按自己的证据判稀疏（`fieldRowSparsityFollowsItsEvidence`）、无定义抽样逐指标失效且与顺序无关（`emptyDrawVoidsInsteadOfSkipping`、`voidingIsOrderIndependent`）、无观测与无区间的区别（`measureWithoutPopulationHasNoInterval`、`clusterResampling`）、拒判原因的单位（`refusalsNameTheReasons`）、用例集来自版本化 split（`casesMustComeFromTheCountableSplit`）、否决与仅披露的划分是逐条选定的（`blockerPartitionIsDeliberate`）、运行器把请求当批而不是当样本（`requestsAreBatchesNotAttempts`）、单次请求超时由运行器兜住（`deadlineBoundsAHungAnswer`）、取消不缩小分母（`cancellationIsDisclosed`）、并发上限可核对（`concurrencyIsBounded`）、缺失的 usage 不补零（`usageIsNeverInvented`）、非流式不冒充首字延迟（`firstTokenIsAbsentUnlessObserved`）、替身运行不得被引用（`standInRunIsRefused`）。
 
 ## 1. 目的与范围
@@ -11,20 +11,20 @@
 
 因此本文的第一职责是**固定每个指标看见什么、以什么单位计**：一条记录还是一个槽位观测。
 
-### 1.2 本切片做什么（2a：指标；2b：运行器）
-
+### 1.2 本切片做什么（2a：指标；2b：运行器；2c：规模基准）
 - 把一份金标准记录与引擎产出的一条 `ManifestEntry` 判成槽位级结论（§2）。
 - 按 PLAN §8.2 的名称计算七个比率，声明各自单位（`EvaluationMeasure.unit`），并公开分子分母（§3）。
 - 给出区间：Wilson 95%（比例）+ 按项目簇 bootstrap（相关性）（§4）。
 - 规定什么情况下**不许把数字当成质量结论**（§5、§6）。
 - 2b：把一份 `GoldDataset` 真正跑起来——批计划、有界并发、单次请求超时、可控重试与退避、取消、部分失败、运行身份与结果追溯，见 §10。
 - 2b：采集并记录 Request / Attempt / Batch / Run 四级执行事实与成本/Token/延迟，见 §10。
+- 2c：可复现的合成夹具（100 / 1k / 10k）、分阶段计时、并发扫描与故障注入量化、版本化结果结构，见 §11；实验定义与命令见 `docs/EVALUATION-BENCHMARK.md`。
 
 ### 1.3 本切片不做什么
 
 - 不调用任何真实 Provider，不产生任何关于真实模型质量的结论。
 - 运行器不自带 Provider，也不构造任何 Provider 客户端：谁应答由调用方注入（§10.1）。默认与全部离线验证路径都走确定性替身。
-- 不做扫描/OneDrive/DEVONthink 的真机性能实测；2b 的执行数字是**运行器与算法层**的证据，不能替代 macOS 上 10,000 文件的扫描验收。
+- 不做扫描/OneDrive/DEVONthink 的真机性能实测；2b 与 2c 的执行数字是**运行器与算法层**的证据，不能替代 macOS 上 10,000 文件的扫描验收（M9）。
 - 不改变 `docs/GOLD-DATASET.md` 的数据集规则；本文只消费 `GoldDataset.Report`。
 
 ### 1.4 与 P3-A / P3-B 授权边界的对应
@@ -168,6 +168,7 @@ PLAN §8.2 在给出建议阈值的同时要求"**必须展示实际值与差距
 | --- | --- | --- |
 | ~~评测运行器（逐条送样、重试、并发上限、超时）~~ | P3-A 切片 2b：**已实现**，见 §10 | 无 |
 | ~~成本 / Token / TTFT / P95 采集~~ | P3-A 切片 2b：**已实现**，见 §10 | 无 |
+| ~~离线规模基准（合成夹具、分阶段计时、并发扫描、故障量化、结果结构）~~ | P3-A 切片 2c：**已实现**，见 §11 | 无 |
 | 真实 Provider 适配与网络隔离开关 | P3-B | 凭据、外发授权、预算 |
 | ≥150 条独立核实的真实金标准样本 | P3-B | 隔离 DEVONthink 库、授权目录 |
 | 报告发布与看板 | P3-B | 上述全部 |
@@ -175,7 +176,7 @@ PLAN §8.2 在给出建议阈值的同时要求"**必须展示实际值与差距
 
 首段那串用例名不是装饰：`DocumentationIntegrityTests` 会读本文，断言每个名字都能在 `Tests` 源码里找到对应的 `func`（改名而未同步文档会让它失败）。
 
-本文的 §3、§5、§6 是三处**口径**，§10 是第四处（运行器语义）；切片 2b 与 P3-B 不得另立定义；要改先改本文。
+本文的 §3、§5、§6 是三处**口径**，§10 是第四处（运行器语义），§11 是与之相邻的基准与阶段语义（不新增分子分母）；切片 2b / 2c 与 P3-B 不得另立定义；要改先改本文。
 
 ## 9. 接口事实
 
@@ -251,3 +252,29 @@ PLAN §8.2 在给出建议阈值的同时要求"**必须展示实际值与差距
 ### 10.7 本节的限制
 
 本节全部数字来自合成样本与确定性替身，只证明运行器与算法层的正确性和开销，**不证明任何模型的质量**，也不能替代 macOS 上 10,000 文件扫描的性能验收（见 `docs/MACOS-VALIDATION-BACKLOG.md`）。
+
+## 11. 规模基准与阶段语义（切片 2c）
+
+本节只定义**基准如何测量**，不新增分子分母；实验定义、命令与结果在 `docs/EVALUATION-BENCHMARK.md`。三种基准不得互相替代：运行器规模基准 ≠ 真实文件扫描基准 ≠ Provider 基准。
+
+### 11.1 夹具与身份
+
+`EvaluationBenchmarkFixture.Spec` 的 `version`、`seed`、记录数、簇数、few-shot 数与撤回数共同决定 `fixture_id`；同一 spec 在任何进程生成相同的 `GoldRecord`、`GoldSplit` 与 countable 集合。夹具走生产 `GoldDataset` 的 split/泄漏校验，批计划走生产 `MappingEngine.plannedBatches`；基准不重写 Mapping、Validator、Judgement 或 Report。合成路径、nil 的 `sha256`、`.synthetic` 审核标记说明没有真实文件被读取。
+
+`benchmark_id` 只绑定 fixture 与场景（逻辑身份），跨机器可复现；`measurement_id` 与 `executed_at` 绑定本次测量，绝不把两台机器的结果写成同一次测量。2c 不改变 2b 的 `runID` / `manifestID` 派生材料（`runIsReproducible`）。
+
+### 11.2 阶段耗时与总耗时
+
+`EvaluationStageTimings` 记录 7 个阶段（夹具构造、批计划、请求执行、Manifest 校验、用例判定、报告/指标、工件序列化），每阶段带墙钟毫秒、观测数、`MeasurementKind` 与不可观测原因。第 8 项"总耗时"不是阶段：`total_wall_clock_milliseconds` 用同一单调时钟在整段执行外单独测得；`sumOfStageMilliseconds` 只是下界，`unaccountedMilliseconds` 明列未覆盖部分。夹具构造与运行器执行分别计时，互斥阶段不相加冒充总耗时。`EvaluationArtifact` 升到 schema 1.1 以携带阶段明细；旧版导出缺该键时解码为 nil，不伪造耗时。
+
+### 11.3 守恒与故障注入
+
+基准的固定断言是状态机关系，不是性能阈值：`sampleCount == countableRecordIDs.count`、`requestCount >= issuedRequestCount`、`attemptCount >= issuedRequestCount`、`observedConcurrency <= maximumConcurrency`，以及 `succeededRequests + failedRequests == issuedRequestCount`、`retryCount == attemptCount - issuedRequestCount`。2c 同时修正 2b 的一处记账漏洞：在首个 attempt 之前就被取消的批次现在不算"已下发请求"，否则它会以 `attempts == 0` 同时破坏上述不变量并把"我们停了"记成"请求失败"（`cancellationAccounting`）。
+
+故障（失败比例、重试、超时结果、永久不可用、延迟、部分完成、取消、未下发）只在替身层注入 outcome；失败样本始终留在合法分母中。`SKIP_VERIFIED` 属于 Import 状态机，不在运行器里实现，也不改变分母；not-issued 只是取消造成的调度事实。
+
+### 11.4 来源与限制
+
+`execution_telemetry` 直接复用 2b 的 `EvaluationTelemetry`（含 measured / simulated / extrapolated / unavailable）。本机墙钟与 `ru_maxrss` 可以是 `.measured`，但替身的 usage、费用、模型延迟仍是 `.simulated` / `.unavailable`，且随每个结果导出 `limitations` 与 `substituteAnswers` 否决。峰值内存不可得时输出 `unavailable` 而非 0。共享 Runner 的绝对耗时不设合并 Gate；`--baseline` 只做可解释的倍率比较。合成 10,000 记录的内存与吞吐曲线只描述算法层，不预测 M9 的真实 10,000 文件扫描（含 IO、hydration 与 PDF 抽取）。
+
+正确性由 `EvaluationBenchmarkTests` 覆盖：夹具可复现（`fixtureReproducibility`）、10k 身份唯一（`tenThousandIdentities`）、拆批守恒（`batchSplittingConservation`）、并发上限（`concurrencyBound`）、重试记账（`retryAccounting`）、取消记账（`cancellationAccounting`）、缺失观测（`missingObservationSemantics`）、阶段覆盖（`performanceStageCoverage`）、脱敏与 schema（`redactedExportAndSchema`）、身份区分（`benchmarkIdentityVersusMeasurement`）、无 Provider 访问（`noProviderAccess`）。

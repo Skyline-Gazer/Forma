@@ -139,6 +139,8 @@ public enum EvaluationRunner {
     public static func run(dataset: GoldDataset, answerer: any MappingAnswering,
                            configuration: Configuration) async throws -> EvaluationRun {
         let startedAt = Date()
+        let stageStart = ContinuousClock.now
+        var stageMeasurements: [EvaluationStageMeasurement] = []
         let profile = configuration.profile
         let casePack = dataset.casePack
         let report = dataset.report()
@@ -198,12 +200,22 @@ public enum EvaluationRunner {
         // written here: the membership, the refs and the attached evidence rows are
         // what a real run would send, so a request digest computed from them means
         // something.
+        let planningStart = ContinuousClock.now
         let batches = MappingEngine.plannedBatches(from: entries, context: context,
                                                    limit: configuration.entryLimit, evidence: evidence)
+        stageMeasurements.append(EvaluationStageMeasurement(
+            stage: .batchPlanning,
+            wallClockMilliseconds: EvaluationStageTimings.milliseconds(from: planningStart),
+            observationCount: entries.count, kind: .measured))
 
+        let executionStart = ContinuousClock.now
         let execution = await Self.execute(batches: batches, answerer: answerer, configuration: configuration,
                                            profile: profile, context: context, casePack: casePack,
                                            recordIDsBySource: recordIDsBySource)
+        stageMeasurements.append(EvaluationStageMeasurement(
+            stage: .requestExecution,
+            wallClockMilliseconds: EvaluationStageTimings.milliseconds(from: executionStart),
+            observationCount: execution.requests.count, kind: .measured))
 
         // Merge answers exactly as the engine does: an unknown `entry_ref` is
         // refused rather than matched by name, and a request failure is applied
@@ -228,8 +240,13 @@ public enum EvaluationRunner {
         }
 
         let ordered = proposals.values.sorted { $0.sourceID.uuidString < $1.sourceID.uuidString }
+        let validationStart = ContinuousClock.now
         let validation = ManifestValidator(ValidationInput(profile: profile, context: context, entries: entries,
                                                            evidence: evidence, proposals: ordered)).validate()
+        stageMeasurements.append(EvaluationStageMeasurement(
+            stage: .manifestValidation,
+            wallClockMilliseconds: EvaluationStageTimings.milliseconds(from: validationStart),
+            observationCount: entries.count, kind: .measured))
 
         let counts = validation.report.counts
         let state: ManifestEnvelope.ManifestState
@@ -267,10 +284,15 @@ public enum EvaluationRunner {
             createdAt: startedAt, state: state)
         let manifest = Manifest(envelope: envelope, entries: validation.entries, report: validation.report)
 
+        let judgementStart = ContinuousClock.now
         let cases = samples.map { sample in
             CaseJudgement(gold: sample.record, entry: manifest.entry(for: sample.entry.id),
                           projectKeys: projectKeys)
         }
+        stageMeasurements.append(EvaluationStageMeasurement(
+            stage: .caseJudgement,
+            wallClockMilliseconds: EvaluationStageTimings.milliseconds(from: judgementStart),
+            observationCount: cases.count, kind: .measured))
 
         let telemetry = Self.telemetry(execution: execution, samples: samples, batches: batches,
                                        configuration: configuration, pricing: configuration.pricing,
@@ -281,12 +303,22 @@ public enum EvaluationRunner {
             withdrawnRecords: dataset.split.removed.count, pendingAdjudication: report.pendingAdjudication,
             unaccountedRecords: report.unaccountedRecords)
 
+        let reportStart = ContinuousClock.now
+        let evaluationReport = EvaluationReport(cases: cases, identity: identity, dataset: report)
+        stageMeasurements.append(EvaluationStageMeasurement(
+            stage: .reportAndMetrics,
+            wallClockMilliseconds: EvaluationStageTimings.milliseconds(from: reportStart),
+            observationCount: cases.count, kind: .measured))
+        let stageTimings = EvaluationStageTimings(
+            stages: stageMeasurements,
+            totalWallClockMilliseconds: EvaluationStageTimings.milliseconds(from: stageStart))
+
         return EvaluationRun(
             runID: runID, identity: identity, boundary: boundary, manifest: manifest, cases: cases,
             telemetry: telemetry,
             requests: batches.compactMap { execution.requests[$0.id]?.observation },
             refusedReferences: refusedReferences,
-            report: EvaluationReport(cases: cases, identity: identity, dataset: report))
+            report: evaluationReport, stages: stageTimings)
     }
 
     // MARK: - Execution
@@ -513,7 +545,13 @@ public enum EvaluationRunner {
     private static func telemetry(execution: Execution, samples: [EvaluationSample], batches: [MappingBatch],
                                   configuration: Configuration, pricing: TokenPricing?,
                                   substitute: Bool) -> EvaluationTelemetry {
+        // A batch whose child task was cancelled before it made its first call is
+        // an outcome, but not an issued request: it never reached the answerer,
+        // and counting it as issued would both break
+        // `attemptCount >= issuedRequestCount` and conflate "we stopped" with
+        // "the request failed".
         let ordered = batches.compactMap { execution.requests[$0.id] }
+        let issued = ordered.filter { $0.observation.attempts > 0 }
         var usage = TokenUsage.unavailable
         var latency: [Int] = []
         var firstToken: [Int] = []
@@ -530,7 +568,7 @@ public enum EvaluationRunner {
             retryCount += max(0, request.observation.attempts - 1)
             timedOut += request.attemptsTimedOut
             cancelled += request.attemptsCancelled
-            if request.outcome == .ok { succeeded += 1 }
+            if request.observation.attempts > 0, request.outcome == .ok { succeeded += 1 }
             if let latencyMilliseconds = request.observation.providerLatencyMilliseconds,
                latencyMilliseconds > 0 {
                 latency.append(latencyMilliseconds)
@@ -539,13 +577,13 @@ public enum EvaluationRunner {
                 firstToken.append(first)
             }
         }
-        let failed = ordered.count - succeeded
+        let failed = issued.count - succeeded
         let wallClock = execution.wallClockMilliseconds
         let throughput = wallClock > 0 ? Double(samples.count) / (Double(wallClock) / 1_000) : nil
         let provenance: MeasurementKind = substitute ? .simulated : .measured
 
         return EvaluationTelemetry(
-            sampleCount: samples.count, requestCount: batches.count, issuedRequestCount: ordered.count,
+            sampleCount: samples.count, requestCount: batches.count, issuedRequestCount: issued.count,
             attemptCount: attemptCount, providerRequestCount: providerRequests, retryCount: retryCount,
             timedOutAttempts: timedOut, cancelledAttempts: cancelled, succeededRequests: succeeded,
             failedRequests: failed, maximumConcurrency: configuration.maximumConcurrency,
@@ -754,25 +792,31 @@ public struct EvaluationBoundary: Codable, Sendable, Equatable {
 /// reviewer needs to decide whether the run can be quoted, and nothing that
 /// identifies a customer's documents.
 public struct EvaluationArtifact: Codable, Sendable, Equatable {
+    /// "1.1" adds `stage_timings`. A 1.0 export has no such key, so `stages` is
+    /// optional and an older artifact still decodes without a fabricated timing.
     public let schemaVersion: String
     public let runID: String
     public let identity: EvaluationRunIdentity
     public let boundary: EvaluationBoundary
     public let telemetry: EvaluationTelemetry
     public let report: EvaluationReport
+    public let stages: EvaluationStageTimings?
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version", runID = "run_id", identity, boundary, telemetry, report
+        case stages = "stage_timings"
     }
 
-    public init(schemaVersion: String = "1.0", runID: String, identity: EvaluationRunIdentity,
-                boundary: EvaluationBoundary, telemetry: EvaluationTelemetry, report: EvaluationReport) {
+    public init(schemaVersion: String = "1.1", runID: String, identity: EvaluationRunIdentity,
+                boundary: EvaluationBoundary, telemetry: EvaluationTelemetry, report: EvaluationReport,
+                stages: EvaluationStageTimings? = nil) {
         self.schemaVersion = schemaVersion
         self.runID = runID
         self.identity = identity
         self.boundary = boundary
         self.telemetry = telemetry
         self.report = report
+        self.stages = stages
     }
 }
 
@@ -793,13 +837,16 @@ public struct EvaluationRun: Sendable {
     public let refusedReferences: Int
     /// The rates and the gate, computed once from the cases above.
     public let report: EvaluationReport
+    /// Where the run's own time went. Never a sum of its parts: see
+    /// `EvaluationStageTimings`.
+    public let stages: EvaluationStageTimings
 
     /// The §6 gate, re-stated for callers that only hold the run.
     public var isQualityClaimAllowed: Bool { report.isQualityClaimAllowed }
 
     public var artifact: EvaluationArtifact {
         EvaluationArtifact(runID: runID, identity: identity, boundary: boundary, telemetry: telemetry,
-                           report: report)
+                           report: report, stages: stages)
     }
 
     /// The run as JSON, for a shareable report.
