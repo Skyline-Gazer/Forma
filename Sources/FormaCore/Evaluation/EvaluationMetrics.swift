@@ -175,9 +175,12 @@ public struct EvaluationSlice: Codable, Sendable, Equatable {
     /// this, so the unit has to be the row's own or the gate would measure how big
     /// the run was instead of how thin the row is.
     public let caseCount: Int
-    /// Clusters this stratum judged, published so a nil `clusterInterval` can be
-    /// told apart: too few clusters to vary, this measure too thin in some draw, or
-    /// the run asked for fewer than two draws (§5).
+    /// Clusters this row's evidence rests on, published so a nil `clusterInterval`
+    /// can be told apart: too few clusters to vary, this measure too thin in some draw,
+    /// or fewer draws than `ClusterBootstrap.minimumResamples` (§5). A `field_precision`
+    /// `.field` row sits outside that rule: it never has a cluster interval, by
+    /// construction rather than by any verdict on the data, and its `clusterCount` only
+    /// states how many projects asserted the field.
     public let clusterCount: Int
     public let rate: EvaluationRate
     /// Cluster-level bootstrap interval; see §5 of `docs/EVALUATION-METRICS.md` for
@@ -356,21 +359,18 @@ struct SplitMix64 {
 /// All measures over the overall set and each declared stratum.
 public enum EvaluationMetrics {
     public struct Request: Sendable {
-        /// Cluster draws behind every `clusterInterval` in this run.
-        ///
         /// Draws behind every `clusterInterval` in this run.
         ///
         /// A band is two order statistics of the resampled ratios. Two draws or fewer
         /// put both indices on the same sample - a zero-width band - and a short run
-        /// above that still only reports the extremes of what those clusters happened
-        /// to produce. `ClusterBootstrap.minimumResamples` is where this harness stops
-        /// calling that a band.
-        /// `ClusterBootstrap.minimumResamples` is that floor, and a run below it gets
-        /// the rates without the bands - a nil `clusterInterval` for that reason
-        /// rather than for thinness. Nothing raises the caller's number: what a run
-        /// asked for is published in `EvaluationRunIdentity.bootstrapResamples`, and
-        /// silently rewriting a parameter of the measurement is the one change a
-        /// reader has the fewest means of discovering.
+        /// above that still only reports the extremes of what those clusters happened to
+        /// produce. `ClusterBootstrap.minimumResamples` is where this harness stops
+        /// calling such a result a band: below it a run gets its rates with a nil
+        /// `clusterInterval`, for that reason rather than for thinness. Nothing raises
+        /// the caller's number - what a run asked for is published in
+        /// `EvaluationRunIdentity.bootstrapResamples` - because silently rewriting a
+        /// parameter of the measurement is the one change a reader has the fewest means
+        /// of discovering.
         public let resamples: Int
         public let seed: UInt64
         /// The Profile this run executed under, when the run named exactly one.

@@ -266,7 +266,7 @@ struct EvaluationReportTests {
         let row = try #require(report.claimBlockers.first { $0.kind == .pendingAdjudicationExcluded })
         #expect(row.detail.contains("3 条争议记录"))
         #expect(row.detail.contains("40 条记录中有 0 条"))
-        #expect(row.detail.contains("排除确实发生"))
+        #expect(row.detail.contains("已全部排除争议记录"))
         #expect(report.isQualityClaimAllowed, "a disclosure still never vetoes by itself")
 
         // A runner whose split disagrees with the review states gets the veto from
@@ -280,7 +280,8 @@ struct EvaluationReportTests {
         #expect(!dirty.isQualityClaimAllowed)
         let line = try #require(dirty.claimBlockers.first { $0.kind == .pendingAdjudicationExcluded })
         #expect(line.detail.contains("1 条仍为 adjudication_pending"))
-        #expect(!line.detail.contains("排除确实发生"))
+        #expect(!line.detail.contains("已全部排除争议记录"))
+        #expect(line.detail.contains("caseSetNotDerivedFromSplit"))
     }
 
     @Test("a run that asked for no bands records what it asked for")

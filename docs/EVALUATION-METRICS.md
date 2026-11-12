@@ -43,7 +43,7 @@
 
 判定顺序即上表匹配顺序：先排除"两边都空"，再排除"期望空"，再排除"候选空"，**冲突优先于对错**——被自身证据反驳的值不是"错"，是"永远不许自动发布"，两者必须在后续限制上分道。
 
-`CaseJudgement` 另记录记录级事实，供 §3 的文件级比率直接取用：`candidateState`（引擎到达的 `DecisionState`，无条目为 nil）、`profiles`、`category`、`isAutoMapped`、`declaresHighConfidence`、`matchesProjectReference`、`matchesTargetCategory`、`mainDecisionIsCorrect(runProfile:)`；`FieldJudgement.autoPublishable` 只服务 §6 的 `eligibilityStateInconsistent` 核验，不再进入任何指标的分母。
+`FieldJudgement` 还带一个 `status`（候选条目为该槽记下的 `FieldOutcome.Status`，无条目为 nil）：`verdict` 说这一格与参考答案是什么关系，`status` 说程序拿它做了什么，§3 第 5 条的拒判原因只由后者提供。`CaseJudgement` 另记录记录级事实，供 §3 的文件级比率直接取用：`candidateState`（引擎到达的 `DecisionState`，无条目为 nil）、`profiles`、`category`、`isAutoMapped`、`declaresHighConfidence`、`matchesProjectReference`、`matchesTargetCategory`、`mainDecisionIsCorrect(runProfile:)`；`FieldJudgement.autoPublishable` 只服务 §6 的 `eligibilityStateInconsistent` 核验，不再进入任何指标的分母。
 
 条目缺失（`entry == nil`）时：每个期望值都是 `withheld`；不可能有 `contradicted`，也不可能自动发布——没有东西可发布。
 
@@ -73,7 +73,7 @@
    条目级开关与槽位级规则（§2 的 `autoPublishable`）不需要在指标里再交一次，是因为程序自己已经交过了：`ManifestValidator` 只在 `.evidenced` / `.inherited` 上保留取值，而带值就要带让它通过引用核对与继承核验的 evidence id，`validated` 又要求每个 `required_for_validated` 字段都有值。该事实由 `ManifestValidatorTests.autoMappedImpliesPublishableSlots` 钉住——把 `publishableStatuses` 改成与写出侧不符的集合会让那条用例失败，而不是让 `precision_auto` 静默换成另一个量。无条目（引擎没给出该记录）在 `coverage` 里算分母不算分子——0% 的 coverage 是合法可引用的结果，不是"没测到"。
 2. **一条记录"正确"要同时满足三个分量**（PLAN §8.2）：本次运行的 Profile ∈ 该记录标注的 `profiles`；项目归属与期望簇键一致；目标类别出现在条目 group path 里。三分量各自留成 `matchesProjectReference` / `matchesTargetCategory` / Profile 判定，坏数字要能追到是哪个分量弄坏的。
    - **项目分量按程序真正写下的东西读。** manifest 的 `project_candidate` association 里写的是提示发出的**不透明 ref**（`ManifestValidator` 的原文是 `"context revision N candidate <ref>"`），而参考答案记的是**项目簇键**（GOLD-DATASET「期望项目归属」）；两者靠运行上下文的 `ContextCandidate.id → projectKey` 表对齐，这张表由 `CaseJudgement(gold:entry:projectKeys:)` 从外部注入。判定同时接受条目自己写出的项目线索：`.projectname` 槽的值、group path 与 database name。
-   - 没有这张表、而条目的项目线索只剩一个解不开的 ref 时，判为**不匹配**而不是略过：不可核查的归属不能算通过。同理 `runProfile == nil`（运行没有唯一命名一个 Profile）时 `precision_auto` 与 `high_confidence_error_rate` 的分子恒为 0，分母照实给出。
+   - 没有这张表、而条目的项目线索只剩一个解不开的 ref 时，判为**不匹配**而不是略过：不可核查的归属不能算通过。（`runProfile == nil` 的后果见下一条，两种"无从核查"不要混成一件。）
    - **`runProfile == nil`（运行没有唯一命名一个 Profile）时这两项指标没有人口**：`precision_auto` 与 `high_confidence_error_rate` 的分子分母都是 0，报成 N/A 而不是 0%。写"0/40"等于给读者一个"观测到的 0% 精确率"，而事实只是运行没说这批文件是在哪个 Profile 下判的——按 §5 的可引用规则它还会被判为"确有观测"。多 Profile 运行由 **Profile 切面**给出这两个率（那一层的 `runProfile` 就是切面自己的 key），`coverage` / `hold_rate` / 槽位级三项不依赖归属，照常计。`EvaluationReport` 在身份里只有一个 Profile 时自动填入 `runProfileID`，多个时保持 nil 让上面这条生效。
    - 期望方留空（`project_reference` / `target_category` 为显式 `null`）的分量**真空满足**：harness 不能替标注员发明项目或类别，把它判成漏答是在为数据集自己的沉默扣分。
    - 一个文件被多个候选项目认领时，association 集合记的是**所有**认领者，不是程序挑中的那一个；这种歧义不会污染 `precision_auto`——冲突归属会阻断合格性，该记录落在分母之外（`computeEligibility` 的 `.conflict` 拒绝与 `associationReason` 失效路径）。残留风险只有调用方交来的表与它交来的 `conflictedSourceIDs` 不自洽。
@@ -81,7 +81,7 @@
 4. **"漏填"与"答错"分列两项，不得相加**：`missed_fill_rate` 的分子是 `withheld`（含候选只给空串/纯空白的槽，§7），`field_precision` 的分母只含候选断言，两者对同一个槽各说各话。`allowedUnknown`（期望方也放弃猜测的槽）不是期望槽，永远不进漏填分母——一致的未知不是漏答，这正是 PLAN 要求报告把两者分开的原因。
 5. **拒判原因与混淆矩阵并列，各自单位**（PLAN §8.2 的"分层"行同时列了两者）。`EvaluationMetrics.refusals(_:)` 给出两个字典：`byRecordState` 按记录停在哪个 `DecisionState`（无条目为 `absent`）计未自动落地的文件；`bySlotStatus` 按政策留下的 `FieldOutcome.Status`（无条目同样 `absent`）计那些期望却没填的槽——**这一半遍历全部记录**，包括已经自动落地却漏了字段的文件：文件级它不是拒判，槽级它正是评审要补的那几格，跳过这批就会把报表最需要理由的情形（不完整的自动写出）藏起来，而且总数会与 `missed_fill_rate` 的分子不再相等（两处表格说的是同一次运行）。**两者永不相加**——一个是文件数、一个是槽位数，相加就是本节第 1 条要避免的那种混淆。混淆矩阵说的是"引擎到达哪个决定"，这一对说的是"为什么没把参考答案要的东西写出去"，读者据此分配复核工作。键全部来自 manifest 自己的词汇表，报表不新造标签。
 6. **搁置按条目计**：条目被扣在 `hold` / `unknown` 时该记录整体计 1，即使个别槽带着值——评审者从被扣住的条目里拿不到可用产出；无条目同样计 1（没有任何产出）。`unknown` / `invalidated` / 请求失败的分列计数由 `EvaluationMetrics.confusion(_:)` 给出（§9），不折进同一个数字。
-7. **`field_precision` 另有 12 条逐字段行**（`EvaluationSlice.stratum == .field`，`key` 为字段 rawValue；PLAN §8.2"12 字段分别报告"）。逐字段分母之和等于 pooled 分母，因此既不会重计也不会漏计。逐字段行的 `caseCount` / `clusterCount` 数的是**对该字段有过候选断言的记录与项目簇**，不是整个切面的规模：否则 40 条记录里只有 2 条填过的字段会因为"切面有 40 条"而躲过 §5 的稀疏门禁，并可被单独引用。逐字段行只出在 **overall 层**：PLAN §8.2 的"12 字段分别报告"挂在 `field_precision` 一行，而"每 Profile/类别"挂在"分层"一行，两者相交成的 field × Profile × 类别网格不是 PLAN 要求的东西，把它铺开会用几百行表格淹没真正薄的那几格（要按层看某一字段时，2b 的运行器可以按切面重跑同一套判据）。逐字段行只带 Wilson 区间，不带簇级区间——那里 nil 是**按构造**而非对稀薄的判断，pooled 行才报簇区间。
+7. **`field_precision` 另有 12 条逐字段行**（`EvaluationSlice.stratum == .field`，`key` 为字段 rawValue；PLAN §8.2"12 字段分别报告"）。逐字段分母之和等于 pooled 分母，因此既不会重计也不会漏计。逐字段行的 `caseCount` / `clusterCount` 数的是**对该字段有过候选断言的记录与项目簇**，不是整个切面的规模：否则 40 条记录里只有 2 条填过的字段会因为"切面有 40 条"而躲过 §5 的稀疏门禁，并可被单独引用。`.field` 行的 `clusterInterval` **恒为 nil，且不属于下面 §5 的三原因之一**：那一层按构造不计算簇级带，它的 `clusterCount` 只说明有多少项目断言过这个字段（判别某条 pooled 行为何没有带，才用 §5 的 (a)(b)(c)）。逐字段行只出在 **overall 层**：PLAN §8.2 的"12 字段分别报告"挂在 `field_precision` 一行，而"每 Profile/类别"挂在"分层"一行，两者相交成的 field × Profile × 类别网格不是 PLAN 要求的东西，把它铺开会用几百行表格淹没真正薄的那几格（要按层看某一字段时，2b 的运行器可以按切面重跑同一套判据）。逐字段行只带 Wilson 区间，不带簇级区间——那里 nil 是**按构造**而非对稀薄的判断，pooled 行才报簇区间。
 
 ## 4. 区间
 
@@ -96,7 +96,7 @@
 - **门禁的单位是记录数**：`EvaluationSlice.caseCount` 是本切面被判定的记录条数，`isSparse = caseCount < 30`。它不看 `rate.denominator`：§3 之后各指标的 `rate.denominator` 单位由 `EvaluationMeasure.unit`（`.records` / `.slots`）声明，同一个切面里既可能是记录也可能是槽位观测——3 条记录 × 12 槽能凑出 36 个槽位观测，150 条记录会让槽位分母上千，用槽位数当门禁两头失真（薄样本被放行、干净样本里天然小分母的指标被永久封死）。
 - Wilson 区间按**该指标自身的观测单位**计算（`EvaluationMeasure.unit`）：记录级比率就在记录数上取置信宽度，槽位级比率就在槽位数上。那是这批观测自身的置信宽度，与"够不够格下结论"是两个问题，两处的单位各写在文档里。
 - 分母为 0 时 `estimate == nil` 且 Wilson 端点为 nil（没测过的东西不存在"0 分"这种质量结论）。PLAN §8.2 要求"所有零分母标 N/A"：`nil` 就是那个 N/A，报表不得把它印成 0，也不得印成 100%。
-- `clusterInterval` 为 nil 有**三个不同的原因**，读者必须能分开：**(a)** 本切面簇数 < `ClusterBootstrap.minimumClusters`（5），簇太少、无可变异性；**(b)** 至少一次重抽样的分母为 0，即该指标在这一层过薄（§4）；**(c)** `Request.resamples < ClusterBootstrap.minimumResamples`（20），抽样太少：两次及以下零宽，再多也只是簇样本的极值；`resamples < 1` 由 `Request.init` 直接拒绝，不留这一档。三者都只关掉簇级区间，**不影响 `isQuotableOnOwnMerits`**：记录数达标的切面照样可以引用率（配 Wilson），只是没有簇级区间可报（`resamplesArePublishedWithTheRun`）。`(c)` 是请求可以合法表达的一种形态——**只要率、不要带**——因此重抽样层既不 `precondition` 崩溃也不把参数垫高：一次跑批不该因为关掉一列而整体中止，而静默改写运行参数正是最难被读者发现的改动。每个切面都随区间一起给出 `clusterCount`：`(a)` 时它 < 5，`(b)` 与 `(c)` 时它 ≥ 5，这两者靠 `EvaluationRunIdentity.bootstrapResamples` 区分——那个数与算出这批切面所用的 `Request.resamples` 一道发布，读者用同一份报告就能把「太薄」与「没人要带」分开（`singleDrawHasNoBand` 钉住率不受影响，`resamplesArePublishedWithTheRun` 钉住身份与切面来自同一次请求）。`resamples: 2` 与 `resamples: 1` 同属 (c)：一次抽样是"没有带"，两次是"带是舍入产物"，对读者的处置一样——只引用率，不引用带。`isQuotableOnOwnMerits` 不看它，因为"能不能引用这条率"与"有没有簇级区间"是两个问题。
+- `clusterInterval` 为 nil 有**三个不同的原因**，读者必须能分开（这三条只描述会计算簇级带的 pooled 行；`.field` 行按构造没有带，见 §3 第 7 条）：**(a)** 本切面簇数 < `ClusterBootstrap.minimumClusters`（5），簇太少、无可变异性；**(b)** 至少一次重抽样的分母为 0，即该指标在这一层过薄（§4）；**(c)** `Request.resamples < ClusterBootstrap.minimumResamples`（20），抽样太少：两次及以下零宽，再多也只是簇样本的极值；`resamples < 1` 由 `Request.init` 直接拒绝，不留这一档。三者都只关掉簇级区间，**不影响 `isQuotableOnOwnMerits`**：记录数达标的切面照样可以引用率（配 Wilson），只是没有簇级区间可报（`resamplesArePublishedWithTheRun`）。`(c)` 是请求可以合法表达的一种形态——**只要率、不要带**——因此重抽样层既不 `precondition` 崩溃也不把参数垫高：一次跑批不该因为关掉一列而整体中止，而静默改写运行参数正是最难被读者发现的改动。每个切面都随区间一起给出 `clusterCount`：`(a)` 时它 < 5，`(b)` 与 `(c)` 时它 ≥ 5，这两者靠 `EvaluationRunIdentity.bootstrapResamples` 区分——那个数与算出这批切面所用的 `Request.resamples` 一道发布，读者用同一份报告就能把「太薄」与「没人要带」分开（`singleDrawHasNoBand` 钉住率不受影响，`resamplesArePublishedWithTheRun` 钉住身份与切面来自同一次请求）。`resamples: 2` 与 `resamples: 1` 同属 (c)：一次抽样是"没有带"，两次是"带是舍入产物"，对读者的处置一样——只引用率，不引用带。`isQuotableOnOwnMerits` 不看它，因为"能不能引用这条率"与"有没有簇级区间"是两个问题。
 - 可引用性（`EvaluationSlice.isQuotableOnOwnMerits`）= 记录数达标 **且** 该指标确有观测（`rate.denominator > 0`）。两半缺一不可：只有前半，`precision_auto` 在"没有任何可自动发布产出"的运行里会因为 40 条记录而变得可引用，而它其实什么都没看过。
 - `EvaluationReport.isQuotable(_:stratum:key:)` **逐数**判定，而不是整份报告一票：总体 42 条、某反例类别只有 2 条是常态，而被引用的往往正是那一行。
 - `quotableMeasures` 只列总体切面下非稀疏的指标，供摘要直接取用。
@@ -111,7 +111,7 @@
 | `insufficientIndependentSamples` | `reviewedCountable < 150` | 是 |
 | `undeclaredPromptOverlap` | 评测集与提示侧存在未声明交集 | 是 |
 | `unaccountedRecords` | 目录中存在三处清单都未登记的记录 | 是 |
-| `pendingAdjudicationExcluded` | 数据集把争议记录排除在可计数集合之外（PLAN §8.1 要求报告排除量）。披露行同时写出**两个数**：数据集排除 N 条、本次判定的 M 条记录里仍有 K 条争议（K 应为 0），并按 K 决定是否说"排除确实发生" | 否——仅披露 |
+| `pendingAdjudicationExcluded` | 数据集把争议记录排除在可计数集合之外（PLAN §8.1 要求报告排除量）。披露行同时写出**两个数**：数据集排除 N 条、本次判定的 M 条记录里仍有 K 条争议（K 应为 0），并按 K 说明本次用例是否已全部排除争议记录 | 否——仅披露 |
 | `caseSetNotDerivedFromSplit` | 被判定记录不在 `Report.countableRecordIDs` 内、同一记录被判定两次，或该记录自身仍为 `adjudication_pending` | 是 |
 | `eligibilityStateInconsistent` | 候选在未达 `validated` 的条目上带有可自动发布的槽位 | 是 |
 

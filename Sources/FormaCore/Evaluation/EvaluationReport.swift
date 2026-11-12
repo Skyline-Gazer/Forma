@@ -49,9 +49,10 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         case undeclaredPromptOverlap
         /// Records in the directory that the split accounts for nowhere.
         case unaccountedRecords
-        /// Disputed records are kept out of every accuracy denominator, as PLAN
-        /// §8.1 requires, and the excluded volume is reported so a rate can be read
-        /// against it. Disclosed, not disqualifying: a run with a few pending
+        /// `GoldDataset` keeps disputed records out of `countableRecordIDs`, as PLAN
+        /// §8.1 requires, and this report refuses any judged record still marked
+        /// `adjudication_pending` through `caseSetNotDerivedFromSplit`; the excluded
+        /// volume is disclosed so a rate can be read against it. Disclosed, not disqualifying: a run with a few pending
         /// adjudications still measured what it measured, and treating the honest
         /// exclusion as a defect would only discourage recording it.
         ///
@@ -177,7 +178,7 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
             // numbers and whether they agree, so a reader never has to take the
             // disclosure's word for the exclusion.
             let agreement = pending == 0
-                ? "，因此排除确实发生，这些记录不在任何分母里。"
+                ? "，即本次判定的用例已全部排除争议记录。"
                 : "，已由 caseSetNotDerivedFromSplit 否决本次结论。"
             blockers.append(Finding(kind: .pendingAdjudicationExcluded,
                                     detail: "数据集把 \(dataset.pendingAdjudication) 条争议记录排除在可计数集合之外；"
