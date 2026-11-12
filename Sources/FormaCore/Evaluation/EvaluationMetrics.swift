@@ -338,8 +338,13 @@ public enum ClusterBootstrap {
         }
 
         for (position, measure) in measures.enumerated() {
-            // Not voided means every draw had a denominator, so there are exactly
-            // `resamples` ratios - more than one, because of the guard above.
+            // Not voided means every draw contributed a defined ratio, so this is
+            // exactly `resamples` samples. The guard above also holds the run at
+            // `minimumResamples`, and at twenty the two order statistics resolve to
+            // indices 0 and 18 - `Int((n - 1) * 0.975) - Int((n - 1) * 0.025)`, which
+            // widens with n. `singleDrawHasNoBand` is where that separation is tested;
+            // `minimumResamples`'s own comment is where the choice of twenty is argued,
+            // as opposed to the arithmetic minimum of two that merely separates them.
             guard !voided[position] else { continue }
             let sorted = ratios[position].sorted()
             let lower = sorted[Int(Double(sorted.count - 1) * 0.025)]
