@@ -329,6 +329,9 @@ struct EvaluationReportTests {
         let row = try #require(report.claimBlockers.first { $0.kind == .stratumQuotasUnmet })
         #expect(row.detail.contains("2 个 Profile x 类别格"))
         #expect(row.detail.contains("near_duplicate=3"), "the cell is named by its raw value")
+        // The counting rule travels with the finding: a reader who only has the JSON
+        // must not assume the quota grid is the cross-counted one PLAN §8.1 allows.
+        #expect(row.detail.contains("互斥计数"))
         // Disclosure only, for the reason §6 states: the quota cells (2 x every
         // category at 10) cannot all be filled inside a 150-record dataset, and a cell
         // that thin is already uncitable through §5's floor. Refusing here would make

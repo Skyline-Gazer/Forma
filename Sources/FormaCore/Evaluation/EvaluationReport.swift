@@ -298,7 +298,9 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
             blockers.append(Finding(kind: .stratumQuotasUnmet,
                                     detail: "\(cells.count) 个 Profile x 类别格未达 \(GoldDataset.stratumTarget) 条："
                                         + named + (cells.count > 6 ? " 等" : "")
-                                        + "；这些格远低 §5 的 30 条可引用下限，本就只能作描述读，故本条仅披露。"))
+                                        + "；这些格远低 §5 的 30 条可引用下限，本就只能作描述读，故本条仅披露。"
+                                        + "（格子按 gold-record-1.0 的单值 scenario 互斥计数，"
+                                        + "PLAN §8.1 的\"场景可交叉计数\"在该 schema 下不可表达）"))
         }
         self.claimBlockers = blockers
         self.isQualityClaimAllowed = !blockers.contains { $0.kind.preventsQualityClaim }
