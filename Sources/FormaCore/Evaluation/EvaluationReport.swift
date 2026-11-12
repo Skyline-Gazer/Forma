@@ -54,18 +54,9 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         case undeclaredPromptOverlap
         /// Records in the directory that the split accounts for nowhere.
         case unaccountedRecords
-        /// `GoldDataset` keeps disputed records out of `countableRecordIDs`, as PLAN
-        /// §8.1 requires, and this report refuses any judged record still marked
-        /// `adjudication_pending` through `caseSetNotDerivedFromSplit`; the excluded
-        /// volume is disclosed so a rate can be read against it. Disclosed, not disqualifying: a run with a few pending
-        /// adjudications still measured what it measured, and treating the honest
-        /// exclusion as a defect would only discourage recording it.
-        ///
-        /// Disclosing it is only honest because the exclusion is enforced two ways:
-        /// a judged record outside `Report.countableRecordIDs` is caught by
-        /// `caseSetNotDerivedFromSplit`, and a record still marked `adjudication_pending`
-        /// is caught there too, by its own flag - so the claim does not depend on the
-        /// caller having built that id list consistently with the review statuses.
+        /// How much the dataset kept out of its countable set, and whether this run's
+        /// own denominators still exclude it. Disclosed, never disqualifying - §6's table
+        /// says why, and the generation site is where the enforcement is spelled out.
         case pendingAdjudicationExcluded
         /// A judged record is not in the dataset's countable set, or the same record
         /// was judged more than once. Either way the denominators are no longer
@@ -88,26 +79,12 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         /// report that no re-run could reproduce. Vetoing rather than relabelling: the
         /// numbers stay visible, the claim goes.
         case identityDisagreesWithDataset
-        /// `GoldDataset.Report.shortfalls` is non-empty: some Profile x scenario-category
-        /// cell holds fewer than `GoldDataset.stratumTarget` countable records, so the
-        /// dataset does not meet PLAN §8.1's sampling plan.
-        ///
-        /// Disclosed, not disqualifying, and the reason is arithmetic rather than
-        /// tolerance: the cells are 2 Profiles x every category at 10 each, which
-        /// already exceeds the 150 independent samples §8.1 asks for, so a dataset can
-        /// satisfy its total and still miss several cells on the way there. A run whose
-        /// claim depends on such a cell cannot quote it anyway - a cell below the quota
-        /// is far below `EvaluationSlice.sparseCaseLimit` (30), which is where §5 stops
-        /// a stratum from being cited on its own merits - so the quota finding tells the
-        /// reader which parts of the table are structural gaps rather than thin
-        /// measurements, and nothing more.
+        /// Which Profile x category cells the dataset is short of. Disclosed, never
+        /// disqualifying: §6's row carries the arithmetic (16 cells x 10 is already more
+        /// than §8.1's 150) and points at §5's floor for what a thin cell may be used for.
         case stratumQuotasUnmet
 
-        /// Two findings describe the run without disqualifying it: how many disputed
-        /// records were left out, and which quota cells the dataset is short of. Both
-        /// are properties of the sample the reader needs next to the numbers, not
-        /// reasons the numbers cannot be numbers - and both have their own §6 entry
-        /// saying where the actual protection lives (§5's quotability floor).
+        /// The two disclosure-only kinds; every other case vetoes.
         var preventsQualityClaim: Bool { !Self.disclosureOnly.contains(self) }
 
         static let disclosureOnly: Set<Blocker> = [.pendingAdjudicationExcluded, .stratumQuotasUnmet]

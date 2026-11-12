@@ -58,50 +58,37 @@ public enum EvaluationMeasure: String, Codable, Sendable, CaseIterable, Comparab
         let slots = judgement.fields
         switch self {
         case .coverage:
-            // auto_mapped / total: one record, one policy-executable mapping.
             return (judgement.isAutoMapped ? 1 : 0, 1)
         case .precisionAuto:
             guard judgement.isAutoMapped, let runProfile else { return (0, 0) }
             return (judgement.mainDecisionIsCorrect(runProfile: runProfile) ? 1 : 0, 1)
         case .highConfidenceErrorRate:
-            // The model's own claim, over the records it made one; PLAN §8.2 keeps
-            // this separate from the policy verdict on purpose. Whether that claim
-            // was right is the same unanswerable question `precision_auto` asks, so
-            // an unattributed run leaves this population empty too.
+            // A claim only exists where an entry does; §3's table carries the rest.
             guard let runProfile, judgement.declaresHighConfidence, judgement.candidateState != nil else {
                 return (0, 0)
             }
             return (judgement.mainDecisionIsCorrect(runProfile: runProfile) ? 0 : 1, 1)
         case .holdRate:
-            // held / total. No entry is held as surely as an entry that was parked
-            // mid-decision: the reviewer received nothing either way.
+            // No entry at all counts as held - §3's table says so in its last clause.
             let held = judgement.candidateState.map { $0 == .hold || $0 == .unknown } ?? true
             return (held ? 1 : 0, 1)
         case .fieldPrecision:
-            // Every non-empty candidate, contradicted and invented included: of what
-            // the engine asserted, how much was right.
             let asserted = slots.filter { $0.verdict.isCandidateAssertion }.count
             let correct = slots.filter { $0.verdict == .correct }.count
             return (correct, asserted)
         case .missedFillRate:
-            // PLAN §8.2's 漏填: the reference had a value and the candidate did not.
-            // `allowedUnknown` slots - where the reference declined to guess - are
-            // not expectation slots, so they stay out of this denominator entirely:
-            // an agreed unknown is not a miss, which is the distinction the plan asks
-            // the report to keep visible.
             let expected = slots.filter { $0.verdict.isExpectationSlot }.count
             let missed = slots.filter { $0.verdict == .withheld }.count
             return (missed, expected)
         case .inventedFillRate:
-            // Slots with no expectation, filled or wrongly filled.
             let nullExpectation = slots.filter { $0.verdict.isNullExpectation }.count
             let invented = slots.filter { $0.verdict == .invented }.count
             return (invented, nullExpectation)
         }
     }
 
-    /// The same measure restricted to one field, for `field_precision`'s per-field
-    /// rows (PLAN §8.2: "12 字段分别报告").
+    /// One slot's contribution to `field_precision`'s per-field rows; §3's table gives
+    /// the rule for both this and the pooled path above.
     func population(in field: FieldJudgement) -> (numerator: Int, denominator: Int) {
         let asserted = field.verdict.isCandidateAssertion
         return (field.verdict == .correct ? 1 : 0, asserted ? 1 : 0)
@@ -269,9 +256,9 @@ public enum ClusterBootstrap {
     ///
     /// `rows` is the whole corpus, built once per run Profile by the caller - the slot
     /// comparisons behind it are the part worth sharing - and `indices` picks this
-    /// stratum's rows out of it. Per stratum this function adds
-    /// `O(measures x rows in this stratum)` integer pairs, because a per-Profile or
-    /// per-category rate is a genuinely different sum.
+    /// stratum's rows out of it. What it adds per stratum is
+    /// `O(measures x rows in this stratum)` integer pairs: a per-Profile or per-category
+    /// rate is a genuinely different sum, so no two strata can share one.
     public static func summarize(measures: [EvaluationMeasure] = EvaluationMeasure.allCases,
                                  rows: [Row], indices: [Int],
                                  resamples: Int = 2_000, seed: UInt64 = 0x9E37_79B9_7F4A_7C15)
@@ -283,22 +270,17 @@ public enum ClusterBootstrap {
                      "Row.columns holds one entry per measure, in `EvaluationMeasure.allCases` "
                          + "order; a subset `measures` request still reads those columns")
 
-        // This stratum's positions, grouped by the cluster that owns them - built first
-        // so a stratum with nothing to vary still reports why, and used as-is for the
-        // totals below, so a row's cluster is read in exactly one place.
+        // Built before the totals so a stratum with nothing to vary still reports why.
         var grouped: [String: [Int]] = [:]
         for offset in indices.indices {
             grouped[rows[indices[offset]].clusterKey, default: []].append(offset)
         }
         let clusterCount = grouped.count
 
-        // Sorted because the draw indices mean something: a published band has to be
-        // reproducible in another process, and dictionary order is not. Nothing
-        // in-process can observe that - Swift fixes one dictionary's order for the life
-        // of the process, so no test here would fail if the sort went away; it is the
-        // run recorded twice on two machines that would disagree. The pooled rate is
-        // then the sum of these cluster rows: one pass over the rows of this stratum,
-        // and the same integers either way.
+        // Sorted because a published band has to be reproducible in another process and
+        // dictionary order is not. Nothing in-process can observe that - Swift fixes one
+        // dictionary's order for the life of the process, so no test would fail if the
+        // sort went away; the run recorded twice on two machines would disagree.
         let members = grouped.sorted { $0.key < $1.key }.map(\.value)
         var clusterTotals: [[(numerator: Int, denominator: Int)]] =
             members.map { _ in Array(repeating: (numerator: 0, denominator: 0), count: measures.count) }
@@ -348,11 +330,10 @@ public enum ClusterBootstrap {
         for (position, measure) in measures.enumerated() {
             // Not voided means every draw contributed a defined ratio, so this is
             // exactly `resamples` samples. The guard above also holds the run at
-            // `minimumResamples`, and at twenty the two order statistics resolve to
-            // indices 0 and 18 - `Int((n - 1) * 0.975) - Int((n - 1) * 0.025)`, which
-            // widens with n. `singleDrawHasNoBand` is where that separation is tested;
-            // `minimumResamples`'s own comment is where the choice of twenty is argued,
-            // as opposed to the arithmetic minimum of two that merely separates them.
+            // `minimumResamples`, so the two order statistics resolve to indices
+            // `Int((n - 1) * 0.975)` and `Int((n - 1) * 0.025)` with n at least twenty:
+            // 18 and 0 at the floor, widening as n grows. `singleDrawHasNoBand` tests the
+            // separation; the choice of twenty is argued once, on `minimumResamples`.
             guard !voided[position] else { continue }
             let sorted = ratios[position].sorted()
             let lower = sorted[Int(Double(sorted.count - 1) * 0.025)]
@@ -383,12 +364,12 @@ struct SplitMix64 {
 /// All measures over the overall set and each declared stratum.
 public enum EvaluationMetrics {
     public struct Request: Sendable {
-        /// Draws behind every `clusterInterval` in this run; below
-        /// `ClusterBootstrap.minimumResamples` a row gets its rate with a nil band for
-        /// that reason rather than for thinness. That constant and §5 of
-        /// `docs/EVALUATION-METRICS.md` are where the reason is written once; nothing
-        /// here raises the caller's number, and in a report the number comes from
-        /// `EvaluationRunIdentity.bootstrapResamples`.
+        /// Draws behind every `clusterInterval` in this run. Below
+        /// `ClusterBootstrap.minimumResamples` a row gets its rate with a nil band, and
+        /// which of §5's three causes that is cannot be read off this type alone: a bare
+        /// `Request` records nothing about what was published, so the cause needs
+        /// `EvaluationRunIdentity.bootstrapResamples` beside it. Nothing here raises the
+        /// caller's number; the floor's reason is written on that constant.
         public let resamples: Int
         public let seed: UInt64
         /// The Profile this run executed under, when the run named exactly one.
