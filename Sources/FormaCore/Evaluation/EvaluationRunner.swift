@@ -138,7 +138,7 @@ public enum EvaluationRunner {
     /// reports it as `hold` instead of dropping it.
     public static func run(dataset: GoldDataset, answerer: any MappingAnswering,
                            configuration: Configuration) async throws -> EvaluationRun {
-        let start = ContinuousClock.now
+        let startedAt = Date()
         let profile = configuration.profile
         let casePack = dataset.casePack
         let report = dataset.report()
@@ -191,7 +191,7 @@ public enum EvaluationRunner {
             revision: 1, scopeID: scopeID, profileID: profile.profileID,
             profileVersion: profile.profileVersion,
             inputDigest: ContextBuilder.inputDigest(scopeID: scopeID, profile: profile, entries: entries),
-            candidates: candidates, unassignedSourceIDs: [], conflictedSourceIDs: [], builtAt: start)
+            candidates: candidates, unassignedSourceIDs: [], conflictedSourceIDs: [], builtAt: startedAt)
         let projectKeys = Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0.projectKey) })
 
         // The batch plan comes from the engine rather than from a second grouping
@@ -212,7 +212,8 @@ public enum EvaluationRunner {
         var refusedReferences = 0
         for batch in batches {
             guard let outcome = execution.requests[batch.id] else { continue }
-            let refs = Dictionary(uniqueKeysWithValues: batch.entries.map { ($0.ref, $0.sourceID) })
+            var refs: [String: UUID] = [:]
+            for entry in batch.entries { refs[entry.ref] = entry.sourceID }
             if let proposal = outcome.proposal {
                 for entry in proposal.entries {
                     guard let sourceID = refs[entry.entryRef] else { refusedReferences += 1; continue }
@@ -263,7 +264,7 @@ public enum EvaluationRunner {
             extractorVersion: EvidenceRegistry.extractorVersion,
             redactionVersion: configuration.redaction.isIdentity ? nil : RedactionPlan.version,
             inputDigest: context.inputDigest, contextDigest: MappingEngine.contextDigest(context),
-            createdAt: start, state: state)
+            createdAt: startedAt, state: state)
         let manifest = Manifest(envelope: envelope, entries: validation.entries, report: validation.report)
 
         let cases = samples.map { sample in
@@ -577,29 +578,30 @@ public enum EvaluationRunner {
 
     private static func runDigest(dataset: GoldDataset, configuration: Configuration,
                                   samples: [EvaluationSample], isSubstitute: Bool) -> String {
-        var hasher = SHA256()
-        hasher.update(data: Data("forma.evaluation.run.v1".utf8))
-        hasher.update(data: Data(
-            "\(dataset.split.splitID)|\(dataset.split.datasetRevision)|\(dataset.split.casePack.id)"
-                + "|\(dataset.split.casePack.version)".utf8))
-        hasher.update(data: Data("\(configuration.profile.profileID)|\(configuration.profile.profileVersion)".utf8))
-        hasher.update(data: Data("provider=\(isSubstitute ? "substitute" : configuration.provider.rawValue)"
-                                     + "|model=\(isSubstitute ? "-" : configuration.model)"
-                                     + "|cloud=\(configuration.allowCloud)".utf8))
-        hasher.update(data: Data("concurrency=\(configuration.maximumConcurrency)"
-                                     + "|timeout_ms=\(milliseconds(configuration.perRequestTimeout))"
-                                     + "|entry_limit=\(configuration.entryLimit)"
-                                     + "|resamples=\(configuration.bootstrapResamples)"
-                                     + "|seed=\(configuration.bootstrapSeed)".utf8))
-        hasher.update(data: Data("retry=\(configuration.retry.maximumAttempts)"
-                                     + "|\(milliseconds(configuration.retry.initialBackoff))"
-                                     + "|\(configuration.retry.multiplier)"
-                                     + "|\(milliseconds(configuration.retry.maximumBackoff))".utf8))
-        hasher.update(data: Data("pricing=\(configuration.pricing?.id ?? CostEstimate.unpriced)".utf8))
+        // One material string rather than one `hasher.update` per field: the
+        // concatenations are what a reader compares across runs, and building them
+        // apart from the hash keeps the digest's inputs readable.
+        var material = "forma.evaluation.run.v1"
+        material += "|\(dataset.split.splitID)|\(dataset.split.datasetRevision)"
+        material += "|\(dataset.split.casePack.id)|\(dataset.split.casePack.version)"
+        material += "|\(configuration.profile.profileID)|\(configuration.profile.profileVersion)"
+        material += "|provider=\(isSubstitute ? "substitute" : configuration.provider.rawValue)"
+        material += "|model=\(isSubstitute ? "-" : configuration.model)"
+        material += "|cloud=\(configuration.allowCloud)"
+        material += "|concurrency=\(configuration.maximumConcurrency)"
+        material += "|timeout_ms=\(milliseconds(configuration.perRequestTimeout))"
+        material += "|entry_limit=\(configuration.entryLimit)"
+        material += "|resamples=\(configuration.bootstrapResamples)"
+        material += "|seed=\(configuration.bootstrapSeed)"
+        material += "|retry=\(configuration.retry.maximumAttempts)"
+        material += "|\(milliseconds(configuration.retry.initialBackoff))"
+        material += "|\(configuration.retry.multiplier)"
+        material += "|\(milliseconds(configuration.retry.maximumBackoff))"
+        material += "|pricing=\(configuration.pricing?.id ?? CostEstimate.unpriced)"
         for sample in samples {
-            hasher.update(data: Data("|\(sample.record.recordID)|\(sample.entry.id.uuidString)".utf8))
+            material += "|\(sample.record.recordID)|\(sample.entry.id.uuidString)"
         }
-        return String(hasher.finalize().hexadecimalDigest.prefix(32))
+        return String(SHA256.hash(data: Data(material.utf8)).hexadecimalDigest.prefix(32))
     }
 }
 
@@ -682,7 +684,7 @@ enum EvaluationFixture {
         return SourceEntry(
             id: id, rootID: rootID, relativePath: record.source.redactedRelativePath,
             normalizedRelativePath: record.source.redactedRelativePath, state: .present,
-            hydrationPending: false, sourceVersion: 1, snapshotRevision: snapshotRevision,
+            hydrationPending: false, sourceVersion: 1, snapshotRevision: Int64(snapshotRevision),
             provider: .local, snapshotFingerprint: fingerprint(for: record.recordID),
             sizeBytes: nil, modificationTimeNanoseconds: nil, sha256: nil)
     }

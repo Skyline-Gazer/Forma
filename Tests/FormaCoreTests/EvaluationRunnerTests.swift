@@ -154,10 +154,13 @@ struct EvaluationRunnerTests {
         let records = try self.records(6)
         let data = try dataset(records, evaluation: Set(records.map(\.recordID)))
         let slow = SubstituteAnswer(delay: .milliseconds(80))
+        // Built outside the task: the closure is `@Sendable`, and capturing this
+        // suite's `self` would be a data race the compiler is right to refuse.
+        let answerer = self.answerer(records, fallback: slow)
+        let configuration = self.configuration(profile: try profile, concurrency: 1)
         let task = Task {
-            try await EvaluationRunner.run(
-                dataset: data, answerer: answerer(records, fallback: slow),
-                configuration: configuration(profile: try profile, concurrency: 1))
+            try await EvaluationRunner.run(dataset: data, answerer: answerer,
+                                           configuration: configuration)
         }
         try await Task.sleep(for: .milliseconds(20))
         task.cancel()

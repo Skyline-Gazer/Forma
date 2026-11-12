@@ -276,7 +276,7 @@ public struct LatencyDistribution: Codable, Sendable, Equatable {
     }
 
     public init(samples: [Int], kind: MeasurementKind) {
-        let measured = samples.filter { $0 >= 0 }.map(Double.init)
+        let measured = samples.filter { $0 >= 0 }.map { Double($0) }
         self.kind = measured.isEmpty ? .unavailable : kind
         self.sampleCount = measured.count
         guard !measured.isEmpty else {
@@ -287,7 +287,7 @@ public struct LatencyDistribution: Codable, Sendable, Equatable {
             return
         }
         let sorted = measured.sorted()
-        averageMilliseconds = measured.reduce(0, +) / Double(measured.count)
+        averageMilliseconds = measured.reduce(0.0, +) / Double(measured.count)
         p50Milliseconds = Self.percentile(sorted, 0.50)
         p95Milliseconds = Self.percentile(sorted, 0.95)
         maximumMilliseconds = sorted.last
@@ -318,7 +318,7 @@ public struct FirstTokenLatency: Codable, Sendable, Equatable {
     }
 
     public init(samples: [Int], kind: MeasurementKind) {
-        let observed = samples.filter { $0 >= 0 }.map(Double.init)
+        let observed = samples.filter { $0 >= 0 }.map { Double($0) }
         self.kind = observed.isEmpty ? .unavailable : kind
         self.sampleCount = observed.count
         guard !observed.isEmpty else {
