@@ -58,25 +58,27 @@ enum EvaluationFixtures {
     }
 
     static func gold(_ id: String, expected: [MetadataFieldID: String?],
-                      allowUnknown: [MetadataFieldID] = [],
-                      cluster: String? = nil,
-                      category: GoldRecord.Category = .positive,
-                      reviewStatus: GoldRecord.ReviewStatus = .confirmed,
-                      profiles: [String] = [ProjectArchiveContract.id]) throws -> GoldRecord {
+                     allowUnknown: [MetadataFieldID] = [],
+                     cluster: String? = nil,
+                     category: GoldRecord.Category = .positive,
+                     reviewStatus: GoldRecord.ReviewStatus = .confirmed,
+                     profiles: [String] = [ProjectArchiveContract.id],
+                     project: String? = nil,
+                     usage: GoldRecord.Usage = .evaluation) throws -> GoldRecord {
         try GoldRecord(
             recordID: id, datasetRevision: "1.0.0", profiles: profiles,
             scenario: .init(category: category, description: "scenario for " + id),
             source: .init(projectClusterKey: cluster ?? "cluster-" + id, sourceUUID: nil, sha256: nil,
                           redactedRelativePath: "synthetic/\(id).docx", redactedFilename: "\(id).docx",
                           nearDuplicateGroup: nil),
-            expected: .init(state: .mapped, projectReference: "cl-pa-001", targetCategory: "01_招标文件",
+            expected: .init(state: .mapped, projectReference: project ?? "cl-pa-001", targetCategory: "01_招标文件",
                             targetType: "Tender Announcement", metadata: try values(expected),
                             allowedUnknownFields: Set(allowUnknown)),
             citations: [.init(label: "c1", excerpt: "脱敏片段", locator: nil)],
             annotation: .init(annotatorCode: "A1", annotatedOn: "2026-11-12", basis: "both"),
             review: .init(status: reviewStatus, redaction: .reviewed, reviewerCode: "R1",
                           reviewedOn: "2026-11-12"),
-            usage: .evaluation)
+            usage: usage)
     }
 
     /// A candidate entry, built so that the three components PLAN §8.2 requires of a

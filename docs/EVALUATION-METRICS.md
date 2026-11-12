@@ -1,7 +1,7 @@
 # Forma 离线评测口径与结论门禁（EVALUATION-METRICS）
 
-> 状态：P3-A 切片 2a。本文定义**指标的可执行口径**与**结论门禁**。
-> PLAN §8.2 给出指标名称与验收意图，本文给出分子分母。三者必须同步，顺序是：**先改 PLAN（需求源）→ 再改代码 → 最后更新本文**。本文不是实现真值的背书；口径的实际行为以代码为准，且下列性质各有用例固定：两套单位各自的分母（`coveragePopulation`、`precisionAutoPopulation`、`perFieldRows`）、可引用性单位（`sparsityCountsRecords`）、未命名 Profile 的运行不给出精确率而非 0%（`unattributedRunHasNoPrecisionRow`）、逐字段行按自己的证据判稀疏（`fieldRowSparsityFollowsItsEvidence`）、无定义抽样逐指标失效且与顺序无关（`emptyDrawVoidsInsteadOfSkipping`、`voidingIsOrderIndependent`）、无观测与无区间的区别（`measureWithoutPopulationHasNoInterval`、`clusterResampling`）、拒判原因的单位（`refusalsNameTheReasons`）、用例集来自版本化 split（`casesMustComeFromTheCountableSplit`）、否决与仅披露的划分是逐条选定的（`blockerPartitionIsDeliberate`）。
+> 状态：P3-A 切片 2b。本文定义**指标的可执行口径**、**离线运行器语义**与**结论门禁**。
+> PLAN §8.2 给出指标名称与验收意图，本文给出分子分母。三者必须同步，顺序是：**先改 PLAN（需求源）→ 再改代码 → 最后更新本文**。本文不是实现真值的背书；口径的实际行为以代码为准，且下列性质各有用例固定：两套单位各自的分母（`coveragePopulation`、`precisionAutoPopulation`、`perFieldRows`）、可引用性单位（`sparsityCountsRecords`）、未命名 Profile 的运行不给出精确率而非 0%（`unattributedRunHasNoPrecisionRow`）、逐字段行按自己的证据判稀疏（`fieldRowSparsityFollowsItsEvidence`）、无定义抽样逐指标失效且与顺序无关（`emptyDrawVoidsInsteadOfSkipping`、`voidingIsOrderIndependent`）、无观测与无区间的区别（`measureWithoutPopulationHasNoInterval`、`clusterResampling`）、拒判原因的单位（`refusalsNameTheReasons`）、用例集来自版本化 split（`casesMustComeFromTheCountableSplit`）、否决与仅披露的划分是逐条选定的（`blockerPartitionIsDeliberate`）、运行器把请求当批而不是当样本（`requestsAreBatchesNotAttempts`）、单次请求超时由运行器兜住（`deadlineBoundsAHungAnswer`）、取消不缩小分母（`cancellationIsDisclosed`）、并发上限可核对（`concurrencyIsBounded`）、缺失的 usage 不补零（`usageIsNeverInvented`）、非流式不冒充首字延迟（`firstTokenIsAbsentUnlessObserved`）、替身运行不得被引用（`standInRunIsRefused`）。
 
 ## 1. 目的与范围
 
@@ -11,17 +11,20 @@
 
 因此本文的第一职责是**固定每个指标看见什么、以什么单位计**：一条记录还是一个槽位观测。
 
-### 1.2 本切片做什么
+### 1.2 本切片做什么（2a：指标；2b：运行器）
 
 - 把一份金标准记录与引擎产出的一条 `ManifestEntry` 判成槽位级结论（§2）。
 - 按 PLAN §8.2 的名称计算七个比率，声明各自单位（`EvaluationMeasure.unit`），并公开分子分母（§3）。
 - 给出区间：Wilson 95%（比例）+ 按项目簇 bootstrap（相关性）（§4）。
 - 规定什么情况下**不许把数字当成质量结论**（§5、§6）。
+- 2b：把一份 `GoldDataset` 真正跑起来——批计划、有界并发、单次请求超时、可控重试与退避、取消、部分失败、运行身份与结果追溯，见 §10。
+- 2b：采集并记录 Request / Attempt / Batch / Run 四级执行事实与成本/Token/延迟，见 §10。
 
 ### 1.3 本切片不做什么
 
 - 不调用任何真实 Provider，不产生任何关于真实模型质量的结论。
-- 不含评测运行器（逐条送样、重试、并发、成本/Token/TTFT/P95 采集），见 §8。
+- 运行器不自带 Provider，也不构造任何 Provider 客户端：谁应答由调用方注入（§10.1）。默认与全部离线验证路径都走确定性替身。
+- 不做扫描/OneDrive/DEVONthink 的真机性能实测；2b 的执行数字是**运行器与算法层**的证据，不能替代 macOS 上 10,000 文件的扫描验收。
 - 不改变 `docs/GOLD-DATASET.md` 的数据集规则；本文只消费 `GoldDataset.Report`。
 
 ### 1.4 与 P3-A / P3-B 授权边界的对应
@@ -163,8 +166,8 @@ PLAN §8.2 在给出建议阈值的同时要求"**必须展示实际值与差距
 
 | 项 | 归属 | 前置条件 |
 | --- | --- | --- |
-| 评测运行器（逐条送样、重试、并发上限、超时） | P3-A 切片 2b | 无 |
-| 成本 / Token / TTFT / P95 采集 | P3-A 切片 2b | 无 |
+| ~~评测运行器（逐条送样、重试、并发上限、超时）~~ | P3-A 切片 2b：**已实现**，见 §10 | 无 |
+| ~~成本 / Token / TTFT / P95 采集~~ | P3-A 切片 2b：**已实现**，见 §10 | 无 |
 | 真实 Provider 适配与网络隔离开关 | P3-B | 凭据、外发授权、预算 |
 | ≥150 条独立核实的真实金标准样本 | P3-B | 隔离 DEVONthink 库、授权目录 |
 | 报告发布与看板 | P3-B | 上述全部 |
@@ -172,7 +175,7 @@ PLAN §8.2 在给出建议阈值的同时要求"**必须展示实际值与差距
 
 首段那串用例名不是装饰：`DocumentationIntegrityTests` 会读本文，断言每个名字都能在 `Tests` 源码里找到对应的 `func`（改名而未同步文档会让它失败）。
 
-本文的 §3、§5、§6 是三处**口径**，切片 2b 与 P3-B 不得另立定义；要改先改本文。
+本文的 §3、§5、§6 是三处**口径**，§10 是第四处（运行器语义）；切片 2b 与 P3-B 不得另立定义；要改先改本文。
 
 ## 9. 接口事实
 
@@ -191,5 +194,60 @@ PLAN §8.2 在给出建议阈值的同时要求"**必须展示实际值与差距
 | `EvaluationMetrics.refusals(_:)` → `Refusals` | 同上 | PLAN §8.2 的拒判原因；`byRecordState` 只数未自动落地的记录，`bySlotStatus` 遍历全部记录数未填的期望槽；两个字典不得合并（§3 第 5 条），后者的总数与 `missed_fill_rate` 的分子一致 |
 | `EvaluationRunIdentity` | `Sources/FormaCore/Evaluation/EvaluationReport.swift` | 替身标志是身份的字段，不是脚注 |
 | `EvaluationReport`（`Blocker`/`Finding`/`isQuotable`/`targets`） | 同上 | 门禁在报告层，不在调用方；`claimBlockers` 逐项披露，被否决的运行仍原样发布各切面（否决不是隐藏）；每条带所用的抽样次数与种子取自 `identity`，报表层不留第二份 |
+| `MappingAnswering.isSubstitute` | `Sources/FormaCore/Mapping/MappingEngine.swift` | 协议扩展默认返回 `true`：不声明就是替身，新 conformer 不会静默解锁质量结论；只有 `ProviderMappingClient` 显式返回 `false` |
+| `MappingAttempt.timeToFirstTokenMilliseconds` | `Sources/FormaCore/Mapping/ProviderMappingClient.swift` | 仅流式应答可填；非流式请求永远为 nil，`ProviderMappingClient` 从不设置它（§10.3） |
 
 共享夹具：`Tests/FormaCoreTests/EvaluationTestSupport.swift`（`EvaluationFixtures.gold/candidate/values/judgement/projectKeys`）。`candidate` 写出的 association basis 用生产原文格式，项目对错只能通过 `projectKeys(for:wrong:)` 表达——夹具自己把簇键塞进条目的话，测的就不是要跑的那条路了。指标与门禁两个 suite 必须用同一套构造器，否则会在 12 槽与 4 字下限这类细节上各自漂移。
+
+## 10. 离线运行器语义（切片 2b）
+
+本节定义**运行器怎么跑**，不改 §3、§5、§6 的分子分母。运行器只替换一条缝：谁应答。
+
+### 10.1 组合与默认
+
+`EvaluationRunner` 只做四件事：批计划（`MappingEngine.plannedBatches`，因此分组、opaque ref 与附加证据行与生产同一条代码路径）、校验（`ManifestValidator`）、判定（`CaseJudgement`）、门禁（`EvaluationReport`）。它没有 Provider 成员，也不构造 `ProviderMappingClient`：谁应答由调用方注入（`MappingAnswering`），因此"默认禁止真实 Provider 请求"是类型性质而不是需要记住的开关（`standInRunIsRefused`）。样本、上下文、证据行全部由 `EvaluationFixture` 合成，磁盘上不读任何东西；未实测的 `sizeBytes`/`sha256`/`modificationTimeNanoseconds` 一律 nil。
+
+替身通过 `MappingAnswering.isSubstitute` 暴露自己，该标志进入 `EvaluationRunIdentity.isSubstitute`，而 `EvaluationReport` 的门禁据此否决每一条质量结论。`isSubstitute` 的协议默认值是 `true`：fail closed。
+
+### 10.2 样本 / 请求 / attempt 三层
+
+| 层 | 单位 | 定义 |
+| --- | --- | --- |
+| 样本（sample） | 一条金标准记录 | 分母只由 `GoldDataset.Report.countableRecords` 决定，**重试与拆批都不改变它** |
+| 请求（request） | 一个 batch | `MappingEngine.plannedBatches` 产出的批；批计划把同一候选的文件放进同一批，超过 `entryLimit` 再拆 |
+| attempt | 一次 `MappingAnswering` 调用 | 首次请求 + 重试；批内的 Provider 自身重试（限流、单轮修复）计入 attempt 的 `requests`，不改变 attempt 数 |
+
+所以 `attemptCount` 永远 ≥ `issuedRequestCount` ≥ 1，`sampleCount` 与前两者无关。`requestCount` 是计划中的批数，`issuedRequestCount` 是真正发出的批数；取消发生在下发之前的部分算**未下发**，不算失败请求（`cancellationIsDisclosed`）。请求行 `EvaluationRequestObservation` 按批序保留 `recordIDs`，因此任何一个数字都能回到它覆盖的记录。
+
+### 10.3 延迟、首字与"没有观测"
+
+- `LatencyDistribution` 取**Provider 上报**的 `MappingAttempt.latencyMilliseconds`；为 0 视为"未上报"（0 是该字段的默认值，不是观测），因此替身全零延迟不会给出 p50 = 0 ms。
+- `FirstTokenLatency` 只有 `MappingAttempt.timeToFirstTokenMilliseconds` 非 nil 时才有样本。非流式请求只有一个观测——整段响应——把它当首字延迟会让慢的非流式 Provider 看起来首字很快，所以该字段对非流式路径永远为空，报表打印"未观测"而不是 0 ms（`firstTokenIsAbsentUnlessObserved`）。
+- 百分位沿用 §4 已经使用的最近秩约定（`sorted[Int(Double(count - 1) * q)]`），同一份报告里的区间与延迟不会被两套约定算出不同结果。
+- 任一层没有观测时，该层的所有分位数为 nil；`sampleCount = 0` 与 `estimate = 0` 是两种不同的陈述。
+
+### 10.4 Token 与成本
+
+| 事实 | 字段 | 规则 |
+| --- | --- | --- |
+| 来源 | `MeasurementKind` | `measured` / `simulated` / `extrapolated` / `unavailable`，四者互不混用 |
+| Token | `TokenUsage`（input/output/cacheRead/cacheCreation，各自可缺） | 未上报的槽是 nil，永不当 0；任一侧求和只会把来源降格，不会升格 |
+| 计价 | `TokenPricing`（id/provider/modelID/currency/effectiveOn/source/四个单价） | 由调用方给定；FormaCore 不自带任何价格 |
+| 成本 | `CostEstimate` | `amount = 实测 usage × 给定单价`；`isRealSpend` 仅在 `kind == .measured` 为真 |
+| 外推 | `thousandSampleExtrapolation` | `1000/N × 实测费用`（PLAN §8.2），`basis` 记录它从哪一层缩放而来，绝不作为支出发布（`costCarriesItsProvenance`） |
+
+替身上报的 usage 一律标 `simulated`，无论数字多大；缺 usage 时 `hasCounts == false`、`total == nil`、`amount == nil`，不编造 Token 数（`usageIsNeverInvented`）。
+
+### 10.5 并发、吞吐与部分失败
+
+`maximumConcurrency` 是配置上限，`observedConcurrency` 是运行器在下发时实际达到的峰值——两者都发布，否则并发实现的 bug 会伪装成配置。吞吐量按本次运行墙钟计算，是**这一次执行**的事实，不是 Provider 的能力结论。单个请求失败不会中止运行：记录留在分母里，`candidateState` 记为 `.unknown` 并由 §3 的 hold 与拒判原因口径承接（`requestsAreBatchesNotAttempts`）。
+
+单次请求超时由运行器用任务竞速实现，不依赖应答方自觉：超时后取消该调用，并保留被取消调用仍返回的记账（已计费的请求不能因为"不再等待"而从遥测里消失）（`deadlineBoundsAHungAnswer`）。
+
+### 10.6 运行身份与可导出报告
+
+`runID` 由数据集（split、casePack）、配置（Profile 版本、Provider/model、并发、超时、重试、批上限、抽样、种子、计价版本）与样本集共同派生，同一数据集 + 同一配置重跑得同一 `runID` 与同一 `manifestID`（`runIsReproducible`）。`EvaluationArtifact` 是导出体：身份、边界、遥测、报告，**不含 Manifest**（相对路径、组路径与证据摘录不进可分享文件）；替身与薄样本的否决随数字一起导出，不生成"只留结论"的摘要（`exportIsRedactedAndSelfDescribing`）。数据集边界单独成节：`promptSideRecords`、`withdrawnRecords`、`pendingAdjudication`、`unaccountedRecords` 与 `evaluated` 并列发布，被排除的材料从不进入应答，也不进入分母（`boundaryDisclosesExclusions`）。
+
+### 10.7 本节的限制
+
+本节全部数字来自合成样本与确定性替身，只证明运行器与算法层的正确性和开销，**不证明任何模型的质量**，也不能替代 macOS 上 10,000 文件扫描的性能验收（见 `docs/MACOS-VALIDATION-BACKLOG.md`）。

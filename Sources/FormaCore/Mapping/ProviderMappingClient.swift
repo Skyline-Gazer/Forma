@@ -19,10 +19,19 @@ public struct MappingAttempt: Sendable, Equatable {
     /// from "the answer needed fixing" instead of reading one number.
     public let rateLimitRetries: Int
     public let payloadDigest: String
+    /// Milliseconds until the first token, when a streaming call observed one.
+    ///
+    /// Nil for every non-streaming request, which is the whole point of the field
+    /// being separate from `latencyMilliseconds`: a request that returns its whole
+    /// answer at once has exactly one observation, and reporting it as a first-token
+    /// latency would make a slow provider look like it answered immediately. The
+    /// live client never sets this; only an answerer that really streams can.
+    public let timeToFirstTokenMilliseconds: Int?
 
     public init(proposal: MappingProposal?, violations: [ArtifactSchema.Violation] = [], error: FormaError? = nil,
                 modelID: String? = nil, usage: MappingUsage = MappingUsage(), latencyMilliseconds: Int = 0,
-                requests: Int = 0, rateLimitRetries: Int = 0, payloadDigest: String = "") {
+                requests: Int = 0, rateLimitRetries: Int = 0, payloadDigest: String = "",
+                timeToFirstTokenMilliseconds: Int? = nil) {
         self.proposal = proposal
         self.violations = violations
         self.error = error
@@ -32,6 +41,7 @@ public struct MappingAttempt: Sendable, Equatable {
         self.requests = requests
         self.rateLimitRetries = rateLimitRetries
         self.payloadDigest = payloadDigest
+        self.timeToFirstTokenMilliseconds = timeToFirstTokenMilliseconds
     }
 
     public var outcome: MappingOutcome {
