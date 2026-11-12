@@ -177,10 +177,13 @@ struct EvaluationMetricsTests {
         // PLAN §8.2: "12 字段分别报告". A pooled number hides the one field that is
         // failing, and for these profiles the failing field is rarely the project
         // name everyone watches.
+        // One field the engine gets right and one it gets wrong, so the two counts of a
+        // row differ: a rate that read its denominator as its numerator could not pass
+        // the wrong one off as 100%.
         let reference = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026", .salesowner: "张三"])
         let cases = [EvaluationFixtures.judgement(reference,
                                    entry: EvaluationFixtures.candidate([.completionyear: "2026",
-                                                                       .salesowner: "张三"], gold: reference))]
+                                                                       .salesowner: "李四"], gold: reference))]
         let request = EvaluationMetrics.Request(resamples: 50)
         let slices = EvaluationMetrics.slices(for: cases, request: request)
         // The field rows belong to the overall cut only (PLAN §8.2 puts "12 字段分别
@@ -194,6 +197,11 @@ struct EvaluationMetricsTests {
         let year = rows.first { $0.key == MetadataFieldID.completionyear.rawValue }
         #expect(year?.rate.denominator == 1)
         #expect(year?.rate.estimate == 1)
+        // A field nobody asserted anything about has no population, and says so.
+        let owner = rows.first { $0.key == MetadataFieldID.salesowner.rawValue }
+        #expect(owner?.rate.denominator == 1, "asserted, so it counts")
+        #expect(owner?.rate.numerator == 0, "and contradicted by the reference")
+        #expect(owner?.rate.estimate == 0)
         // A field nobody asserted anything about has no population, and says so.
         let unused = rows.first { $0.key == MetadataFieldID.bidderentity.rawValue }
         #expect(unused?.rate.denominator == 0)

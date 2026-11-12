@@ -447,34 +447,38 @@ public enum EvaluationMetrics {
         return output
     }
 
-    /// Twelve `field_precision` rows, because a pooled number hides the one field
-    /// that is actually failing - which for these profiles tends to be a date or an
-    /// amount rather than the project name everyone watches.
+    /// Twelve `field_precision` rows, because a pooled number hides the one field that
+    /// is actually failing - which for these profiles tends to be a date or an amount
+    /// rather than the project name everyone watches.
+    ///
+    /// One pass over the sample: a case's `fields` is built as
+    /// `MetadataFieldID.allCases.map { ... }`, so the field is an index into it, not a
+    /// search. Both counts stay in the row's own evidence - the records that asserted
+    /// something about this field, and the projects they came from - because filling
+    /// them from the whole cut would make `isSparse` measure the size of the run rather
+    /// than the thinness of the row.
     private static func fieldRows(_ sample: [Int], _ cases: [CaseJudgement]) -> [EvaluationSlice] {
-        var rows: [EvaluationSlice] = []
-        for field in MetadataFieldID.allCases {
-            var numerator = 0
-            var denominator = 0
-            var contributing: [Int] = []
-            for position in sample {
-                guard let slot = cases[position].fields.first(where: { $0.field == field }) else { continue }
+        let fieldCount = MetadataFieldID.allCases.count
+        var numerators = [Int](repeating: 0, count: fieldCount)
+        var denominators = [Int](repeating: 0, count: fieldCount)
+        var contributing: [[Int]] = Array(repeating: [], count: fieldCount)
+        for position in sample {
+            for (index, slot) in cases[position].fields.enumerated() {
                 let pair = EvaluationMeasure.fieldPrecision.population(in: slot)
-                numerator += pair.numerator
-                denominator += pair.denominator
-                if pair.denominator > 0 { contributing.append(position) }
+                numerators[index] += pair.numerator
+                denominators[index] += pair.denominator
+                if pair.denominator > 0 { contributing[index].append(position) }
             }
-            // Both counts stay in this row's own evidence: the records that asserted
-            // something about this field, and the projects they came from. Filling
-            // them from the whole cut would make `isSparse` measure the size of the
-            // run rather than the thinness of the row, and a field with two
-            // assertions out of forty records would be quotable on its own merits.
-            rows.append(EvaluationSlice(measure: .fieldPrecision, stratum: .field, key: field.rawValue,
-                                        caseCount: contributing.count,
-                                        clusterCount: Set(contributing.map { cases[$0].clusterKey }).count,
-                                        rate: EvaluationRate(numerator: numerator, denominator: denominator),
-                                        clusterInterval: nil))
         }
-        return rows
+        return MetadataFieldID.allCases.enumerated().map { index, field in
+            let asserted = contributing[index]
+            return EvaluationSlice(measure: .fieldPrecision, stratum: .field, key: field.rawValue,
+                                   caseCount: asserted.count,
+                                   clusterCount: Set(asserted.map { cases[$0].clusterKey }).count,
+                                   rate: EvaluationRate(numerator: numerators[index],
+                                                        denominator: denominators[index]),
+                                   clusterInterval: nil)
+        }
     }
 
     /// The strata to report, each as positions into `cases`. Overall first, then
