@@ -111,7 +111,7 @@
 | `insufficientIndependentSamples` | `reviewedCountable < 150` | 是 |
 | `undeclaredPromptOverlap` | 评测集与提示侧存在未声明交集 | 是 |
 | `unaccountedRecords` | 目录中存在三处清单都未登记的记录 | 是 |
-| `pendingAdjudicationExcluded` | 数据集把争议记录排除在可计数集合之外（PLAN §8.1 要求报告排除量）。披露行同时写出**两个数**：数据集排除 N 条、本次判定的 M 条记录里仍有 K 条争议（K 应为 0），并按**实际生效的门禁**说明本行是否还为排除作保：K>0 时指向 `caseSetNotDerivedFromSplit` 的否决；K=0 但用例集合已因越界或重复被否决时，明说"本行不为排除是否完整作保"（否则同一份报告会一边宣布这些数字给不出结论、一边在披露行里给出"争议已全部排除"的安心话）；两者皆无才写"已全部排除争议记录" | 否——仅披露 |
+| `pendingAdjudicationExcluded` | `GoldDataset` 的可计数集合不含 N 条争议记录（PLAN §8.1 要求报告排除量）。披露行同时写出本次判定的 M 条里有 K 条仍为争议，并按**实际生效的门禁**说明本行为哪一句作保：K>0 指向 `caseSetNotDerivedFromSplit` 的否决；K=0 而集合已因越界/重复被否决时写"不为「本次分母不含争议记录」作保"；两者皆无才写"故本次分母不含争议记录"。**排除动作发生在数据集层，这一行永远不等于"本次运行做过排除"**（旧措辞"数据集把 N 条争议记录排除在可计数集合之外"会被这样读，已改） | 否——仅披露 |
 | `caseSetNotDerivedFromSplit` | 被判定记录不在 `Report.countableRecordIDs` 内、同一记录被判定两次，或该记录自身仍为 `adjudication_pending` | 是 |
 | `stratumQuotasUnmet` | `Report.shortfalls` 非空：某些 Profile x 类别格少于 `GoldDataset.stratumTarget`（10）条，即未达 PLAN §8.1 的抽样计划。仅披露的算术理由：格数是 2 Profile x 8 类别 = 16，每格 10 条要 160 条，而 §8.1 的独立样本下限是 150——**总数达标与每格填满本就冲突**，用它否决会让质量结论在满足 PLAN 自身要求的数据集上也不可达；而薄格在 §5 的 30 条下限处本就不可单独引用，保护并不落空 | **否**——仅披露 |
 | `identityDisagreesWithDataset` | 运行身份与所测数据集不是同一批：`goldRevision`↔`datasetRevision`、`splitID`、`casePackVersion` 任一项不一致。PLAN §8.2 的门禁就是"这些标识全部一致"；判定用例只带记录号、带不出 revision，所以这一层没有别的检查会发现它 | 是 |

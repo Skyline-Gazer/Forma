@@ -108,7 +108,6 @@ public enum EvaluationMeasure: String, Codable, Sendable, CaseIterable, Comparab
     }
 }
 
-
 extension FieldJudgement.Verdict {
     /// The reference answer has a value here.
     var isExpectationSlot: Bool { self != .allowedUnknown && self != .invented }
@@ -168,12 +167,15 @@ public struct EvaluationSlice: Codable, Sendable, Equatable {
     public let stratum: Stratum
     /// The stratum's key - a Profile id, a scenario category, or nil for overall.
     public let key: String?
-    /// Records this row's own evidence rests on: the judged records of the cut for
-    /// every pooled row (equal to `rate.denominator` when `unit == .records`, and its
-    /// usual multiple when `unit == .slots`), and for a `field_precision` `.field` row
-    /// only the records that asserted something about that field. `isSparse` reads
-    /// this, so the unit has to be the row's own or the gate would measure how big
-    /// the run was instead of how thin the row is.
+    /// Records this row's own evidence rests on. For a pooled row that is the judged
+    /// records of the cut: equal to `rate.denominator` for a record-level measure, and
+    /// unrelated in size to it for a slot-level one, whose denominator counts slots -
+    /// 42 slots over 40 records is ordinary, not a multiple of anything. For a
+    /// `field_precision` `.field` row it is only the records that asserted something
+    /// about that field, which is what makes a field two records touched out of forty
+    /// sparse on its own evidence. `isSparse` reads this, so the unit has to be the
+    /// row's own or the gate would measure how big the run was instead of how thin the
+    /// row is.
     public let caseCount: Int
     /// Clusters this row's evidence rests on, published so a nil `clusterInterval`
     /// can be told apart: too few clusters to vary, this measure too thin in some draw,
@@ -203,7 +205,6 @@ public struct EvaluationSlice: Codable, Sendable, Equatable {
     /// anything. A measure with no observations is not "0%" and not a finding.
     public var isQuotableOnOwnMerits: Bool { !isSparse && rate.denominator > 0 }
 }
-
 
 /// Cluster-level resampling, and the rate that goes with it.
 ///
@@ -369,18 +370,12 @@ struct SplitMix64 {
 /// All measures over the overall set and each declared stratum.
 public enum EvaluationMetrics {
     public struct Request: Sendable {
-        /// Draws behind every `clusterInterval` in this run.
-        ///
-        /// A band is two order statistics of the resampled ratios. Two draws or fewer
-        /// put both indices on the same sample - a zero-width band - and a short run
-        /// above that still only reports the extremes of what those clusters happened to
-        /// produce. `ClusterBootstrap.minimumResamples` is where this harness stops
-        /// calling such a result a band: below it a run gets its rates with a nil
-        /// `clusterInterval`, for that reason rather than for thinness. Nothing raises
-        /// the caller's number - what a run asked for is published in
-        /// `EvaluationRunIdentity.bootstrapResamples` - because silently rewriting a
-        /// parameter of the measurement is the one change a reader has the fewest means
-        /// of discovering.
+        /// Draws behind every `clusterInterval` in this run; below
+        /// `ClusterBootstrap.minimumResamples` a row gets its rate with a nil band for
+        /// that reason rather than for thinness. That constant and §5 of
+        /// `docs/EVALUATION-METRICS.md` are where the reason is written once; nothing
+        /// here raises the caller's number, and in a report the number comes from
+        /// `EvaluationRunIdentity.bootstrapResamples`.
         public let resamples: Int
         public let seed: UInt64
         /// The Profile this run executed under, when the run named exactly one.
@@ -500,7 +495,6 @@ public enum EvaluationMetrics {
             .map { (.category, $0.rawValue, byCategory[$0]!) })
         return cuts
     }
-
 
     /// Reference state against the state the engine reached, one row per pair.
     /// PLAN §8.2 lists 拒判原因 beside the confusion matrix. The two answer

@@ -14,9 +14,9 @@ public struct EvaluationRunIdentity: Codable, Sendable, Equatable {
     /// True when the answers came from a deterministic stand-in rather than a
     /// model. Every quality claim is refused while this is true.
     public let isSubstitute: Bool
-    /// Draws behind every `clusterInterval` in the run. `EvaluationReport` computes
-    /// its slices with this number rather than with one of its own, so §5's third nil
-    /// cause - a short draw - is readable from the published value alone.
+    /// Draws behind every `clusterInterval` in the run, and the number
+    /// `EvaluationReport` computes with: the report takes no second copy, so §5's third
+    /// nil cause - a short draw - is readable from the published value alone.
     public let bootstrapResamples: Int
     public let bootstrapSeed: UInt64
 
@@ -215,12 +215,7 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
     /// The proposals above as this run measured them.
     public let targets: [Target]
 
-    /// The run identity is the only source for how the bands were drawn. Both numbers
-    /// used to also be parameters of this initialiser, so a caller could publish
-    /// `bootstrapResamples = 1` over slices computed from the default 2,000 draws -
-    /// and §5's third nil cause is read from the published number, which would then
-    /// have told a reader the run was short-drawn when nothing about it was short.
-    /// Deriving them here is what makes the contradiction impossible to express.
+    /// Bands are drawn with `identity.bootstrapResamples` and `identity.bootstrapSeed`.
     public init(cases: [CaseJudgement], identity: EvaluationRunIdentity, dataset: GoldDataset.Report) {
         let grouped = Dictionary(grouping: cases, by: \.clusterKey)
         self.identity = identity
@@ -297,15 +292,17 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
             let caseSetVetoed = blockers.contains { $0.kind == .caseSetNotDerivedFromSplit }
             let agreement: String
             if pending > 0 {
-                agreement = "，已由 caseSetNotDerivedFromSplit 否决本次结论。"
+                agreement = "；本次分母确实含争议记录，已由 caseSetNotDerivedFromSplit 否决本次结论。"
             } else if caseSetVetoed {
                 agreement = "；用例集合已因越界或重复判定被 caseSetNotDerivedFromSplit 否决，"
-                    + "本行不为排除是否完整作保。"
+                    + "本行不为「本次分母不含争议记录」作保。"
             } else {
-                agreement = "，即本次判定的用例已全部排除争议记录。"
+                agreement = "；本次判定的记录全部落在 countableRecordIDs 内且无争议条目，故本次分母不含"
+                    + "争议记录——本行只为这一句作保，排除动作本身发生在数据集层。"
             }
             blockers.append(Finding(kind: .pendingAdjudicationExcluded,
-                                    detail: "数据集把 \(dataset.pendingAdjudication) 条争议记录排除在可计数集合之外；"
+                                    detail: "`GoldDataset` 的可计数集合不含 \(dataset.pendingAdjudication) 条争议记录"
+                                        + "（分母由喂进来的用例决定，本行不代表本次运行做过排除）；"
                                         + "本次判定的 \(cases.count) 条记录中有 \(pending) 条仍为 "
                                         + "adjudication_pending" + agreement))
         }

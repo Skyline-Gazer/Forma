@@ -272,7 +272,7 @@ struct EvaluationReportTests {
         let row = try #require(report.claimBlockers.first { $0.kind == .pendingAdjudicationExcluded })
         #expect(row.detail.contains("3 条争议记录"))
         #expect(row.detail.contains("40 条记录中有 0 条"))
-        #expect(row.detail.contains("已全部排除争议记录"))
+        #expect(row.detail.contains("故本次分母不含争议记录"))
         #expect(report.isQualityClaimAllowed, "a disclosure still never vetoes by itself")
 
         // A runner whose split disagrees with the review states gets the veto from
@@ -286,7 +286,7 @@ struct EvaluationReportTests {
         #expect(!dirty.isQualityClaimAllowed)
         let line = try #require(dirty.claimBlockers.first { $0.kind == .pendingAdjudicationExcluded })
         #expect(line.detail.contains("1 条仍为 adjudication_pending"))
-        #expect(!line.detail.contains("已全部排除争议记录"))
+        #expect(!line.detail.contains("故本次分母不含争议记录"))
         #expect(line.detail.contains("caseSetNotDerivedFromSplit"))
 
         // The other way to lose the case set: every judged record is confirmed, but
@@ -300,8 +300,8 @@ struct EvaluationReportTests {
         #expect(!doubled.isQualityClaimAllowed, "the duplicate is what the veto is about")
         let quiet = try #require(doubled.claimBlockers.first { $0.kind == .pendingAdjudicationExcluded })
         #expect(quiet.detail.contains("0 条仍为 adjudication_pending"))
-        #expect(!quiet.detail.contains("已全部排除争议记录"), "no reassurance beside a refusal")
-        #expect(quiet.detail.contains("不为排除是否完整作保"))
+        #expect(!quiet.detail.contains("故本次分母不含争议记录"), "no reassurance beside a refusal")
+        #expect(quiet.detail.contains("本行不为「本次分母不含争议记录」作保"))
     }
 
     @Test("a dataset that misses its quota cells says so without losing the run")
