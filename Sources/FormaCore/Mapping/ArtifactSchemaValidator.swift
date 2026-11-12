@@ -217,9 +217,13 @@ public enum ArtifactSchemaValidator {
     private static let proposalResult = Result { try ArtifactSchema.load(resource: "proposal-1.0", schemaVersion: "1.0") }
     private static let manifestResult = Result { try ArtifactSchema.load(resource: "manifest-1.0", schemaVersion: "1.0") }
     private static let casePackResult = Result { try ArtifactSchema.load(resource: "casepack-1.0", schemaVersion: "1.0") }
+    private static let goldRecordResult = Result { try ArtifactSchema.load(resource: "gold-record-1.0", schemaVersion: "1.0") }
+    private static let goldSplitResult = Result { try ArtifactSchema.load(resource: "gold-split-1.0", schemaVersion: "1.0") }
 
     public static var profile: ArtifactSchema { get throws { try profileResult.get() } }
     public static var proposal: ArtifactSchema { get throws { try proposalResult.get() } }
     public static var manifest: ArtifactSchema { get throws { try manifestResult.get() } }
     public static var casePack: ArtifactSchema { get throws { try casePackResult.get() } }
+    public static var goldRecord: ArtifactSchema { get throws { try goldRecordResult.get() } }
+    public static var goldSplit: ArtifactSchema { get throws { try goldSplitResult.get() } }
 }

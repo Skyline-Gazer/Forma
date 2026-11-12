@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forma.local/schemas/gold-split-1.0.schema.json",
+  "title": "Forma Gold Split Manifest 1.0",
+  "description": "The fixed partition a measurement run was taken against: which gold records are in the evaluation set, which prompt examples exist, and why any candidate was removed. Reproducing a number needs this file, the gold revision and the model/profile identifiers - so every exclusion carries a reason a reviewer can re-test.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "split_id", "dataset_revision", "generated_on",
+    "casepack", "prompt_record_ids", "evaluation_record_ids", "removed_records"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "split_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,63}$"},
+    "dataset_revision": {"$ref": "#/$defs/revision"},
+    "generated_on": {"$ref": "#/$defs/date"},
+    "casepack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,63}$"},
+        "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"}
+      }
+    },
+    "prompt_record_ids": {
+      "type": "array", "maxItems": 512, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/ref"}
+    },
+    "evaluation_record_ids": {
+      "type": "array", "minItems": 1, "maxItems": 100000, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/ref"}
+    },
+    "removed_records": {
+      "type": "array", "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["record_id", "reason"],
+        "properties": {
+          "record_id": {"$ref": "#/$defs/ref"},
+          "reason": {
+            "enum": [
+              "prompt_cluster_overlap", "prompt_source_overlap", "prompt_hash_overlap",
+              "prompt_filename_family_overlap", "near_duplicate", "same_file_other_version",
+              "adjudication_unresolved", "privacy_review_failed", "duplicate_record_id"
+            ]
+          },
+          "counterparty_record_id": {"$ref": "#/$defs/ref"}
+        }
+      }
+    },
+    "notes": {"type": ["string", "null"], "maxLength": 2000}
+  },
+  "$defs": {
+    "ref": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+    "revision": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}
+  }
+}
