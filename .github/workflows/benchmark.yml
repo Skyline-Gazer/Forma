@@ -1,0 +1,110 @@
+# Offline runner scale benchmark. This workflow is intentionally separate from
+# CI: GitHub Actions macOS remains the only build/test authority, and this file
+# adds no compile, test, release or deployment stage to CNB.
+#
+# - pull_request: a light smoke matrix. It fails only on benchmark *contract*
+#   violations (denominators, concurrency ceiling, provenance, redaction), never
+#   on an absolute duration: a shared hosted runner's wall clock is not a gate.
+# - workflow_dispatch: the 10k synthetic scale run, one scenario per process so
+#   ru_maxrss is attributable to one measurement.
+#
+# Runner Scale Benchmark != Real File Scan Benchmark != Provider Benchmark.
+# See docs/EVALUATION-BENCHMARK.md.
+
+name: Benchmark
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      record_counts:
+        description: "Comma-separated record counts for the scale run"
+        required: false
+        default: "100,1000,10000"
+      concurrency:
+        description: "Comma-separated concurrency ceilings"
+        required: false
+        default: "1,2,4,8"
+
+permissions:
+  contents: read
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
+concurrency:
+  group: benchmark-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    if: github.event_name == 'pull_request'
+    name: Benchmark smoke (100 records)
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          sw_vers
+          echo "SWIFT_VERSION=$(swift --version | head -1)" >> "$GITHUB_ENV"
+          echo "XCODE_VERSION=$(xcodebuild -version | head -1)" >> "$GITHUB_ENV"
+      - name: Build the benchmark executable
+        run: swift build --target FormaBenchmark --force-resolved-versions
+      - name: Run the smoke matrix
+        run: |
+          swift run FormaBenchmark \
+            --sweep \
+            --runner github-hosted \
+            --swift-version "$SWIFT_VERSION" \
+            --xcode-version "$XCODE_VERSION" \
+            --json benchmark-smoke.json
+      - name: Upload machine-readable results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-smoke
+          path: benchmark-smoke.json
+          if-no-files-found: error
+
+  scale:
+    if: github.event_name == 'workflow_dispatch'
+    name: 10k synthetic scale (manual)
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain and hardware
+        run: |
+          xcodebuild -version
+          swift --version
+          sw_vers
+          sysctl -n hw.model machdep.cpu.core_count hw.memsize
+          echo "SWIFT_VERSION=$(swift --version | head -1)" >> "$GITHUB_ENV"
+          echo "XCODE_VERSION=$(xcodebuild -version | head -1)" >> "$GITHUB_ENV"
+      - name: Build the benchmark executable
+        run: swift build --target FormaBenchmark --force-resolved-versions
+      - name: Run the scale sweep (one process per cell)
+        run: |
+          mkdir -p benchmark-results
+          IFS=',' read -ra RECORDS <<< "${{ inputs.record_counts }}"
+          IFS=',' read -ra LIMITS <<< "${{ inputs.concurrency }}"
+          for n in "${RECORDS[@]}"; do
+            for c in "${LIMITS[@]}"; do
+              swift run FormaBenchmark \
+                --records "$n" --clusters 100 --entry-limit 100 \
+                --concurrency "$c" --bootstrap 20 --latency-ms 2 \
+                --label "scale-${n}-c${c}" \
+                --runner github-hosted \
+                --swift-version "$SWIFT_VERSION" \
+                --xcode-version "$XCODE_VERSION" \
+                --json "benchmark-results/scale-${n}-c${c}.json"
+            done
+          done
+      - name: Upload machine-readable results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-scale
+          path: benchmark-results/
+          if-no-files-found: error
