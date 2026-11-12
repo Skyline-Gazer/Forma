@@ -9,12 +9,29 @@ import Foundation
 /// verification: the live path is `ProviderMappingClient`, and its status is
 /// recorded separately.
 public protocol MappingAnswering: Sendable {
+    /// Whether the answers came from something other than a model.
+    ///
+    /// The engine itself does not care, and that is the point: batching,
+    /// validation and the manifest path are identical either way. The evaluation
+    /// layer does care, because a stand-in's numbers are still numbers and must
+    /// never be published as a model's. The default is the safe one - a type that
+    /// does not say it talks to a provider is treated as a stand-in, so a new
+    /// conformer cannot silently unlock quality claims.
+    var isSubstitute: Bool { get }
+
     func answer(provider: ProbeProvider, model: String, allowCloud: Bool, profile: MappingProfile,
                 context: ProjectContext, casePack: CasePack, batch: MappingBatch,
                 redaction: RedactionPlan) async -> MappingAttempt
 }
 
+public extension MappingAnswering {
+    var isSubstitute: Bool { true }
+}
+
 extension ProviderMappingClient: MappingAnswering {
+    /// The one conformer that really talks to a provider.
+    public var isSubstitute: Bool { false }
+
     public func answer(provider: ProbeProvider, model: String, allowCloud: Bool, profile: MappingProfile,
                        context: ProjectContext, casePack: CasePack, batch: MappingBatch,
                        redaction: RedactionPlan) async -> MappingAttempt {
