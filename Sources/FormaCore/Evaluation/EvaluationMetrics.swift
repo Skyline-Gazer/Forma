@@ -48,6 +48,11 @@ public enum EvaluationMeasure: String, Codable, Sendable, CaseIterable, Comparab
     /// `runProfile` is the Profile the run executed under, required by PLAN §8.2's
     /// definition of a correct file; nil means the run did not name exactly one, so
     /// `precision_auto` and `high_confidence_error_rate` have no population at all
+    /// - no records counted in either half, not a row of zeros - because an
+    /// unattributable run has not measured those two rates, and PLAN §8.2 marks
+    /// every zero denominator N/A. Reporting `0 / N` there would hand a reader an
+    /// "observed 0% precision" for the fact that the run forgot to say who ran it,
+    /// and `isQuotableOnOwnMerits` would then call it quotable.
     /// rather than a guess about the Profile component.
     func population(in judgement: CaseJudgement, runProfile: String?) -> (numerator: Int, denominator: Int) {
         let slots = judgement.fields
@@ -56,12 +61,16 @@ public enum EvaluationMeasure: String, Codable, Sendable, CaseIterable, Comparab
             // auto_mapped / total: one record, one policy-executable mapping.
             return (judgement.isAutoMapped ? 1 : 0, 1)
         case .precisionAuto:
-            guard judgement.isAutoMapped else { return (0, 0) }
+            guard judgement.isAutoMapped, let runProfile else { return (0, 0) }
             return (judgement.mainDecisionIsCorrect(runProfile: runProfile) ? 1 : 0, 1)
         case .highConfidenceErrorRate:
             // The model's own claim, over the records it made one; PLAN §8.2 keeps
-            // this separate from the policy verdict on purpose.
-            guard judgement.declaresHighConfidence, judgement.candidateState != nil else { return (0, 0) }
+            // this separate from the policy verdict on purpose. Whether that claim
+            // was right is the same unanswerable question `precision_auto` asks, so
+            // an unattributed run leaves this population empty too.
+            guard let runProfile, judgement.declaresHighConfidence, judgement.candidateState != nil else {
+                return (0, 0)
+            }
             return (judgement.mainDecisionIsCorrect(runProfile: runProfile) ? 0 : 1, 1)
         case .holdRate:
             // held / total. No entry is held as surely as an entry that was parked
@@ -159,9 +168,12 @@ public struct EvaluationSlice: Codable, Sendable, Equatable {
     public let stratum: Stratum
     /// The stratum's key - a Profile id, a scenario category, or nil for overall.
     public let key: String?
-    /// Records judged in this stratum. Equal to `rate.denominator` for the
-    /// record-level measures (`EvaluationMeasure.unit == .records`), and its usual
-    /// multiple for the slot-level ones.
+    /// Records this row's own evidence rests on: the judged records of the cut for
+    /// every pooled row (equal to `rate.denominator` when `unit == .records`, and its
+    /// usual multiple when `unit == .slots`), and for a `field_precision` `.field` row
+    /// only the records that asserted something about that field. `isSparse` reads
+    /// this, so the unit has to be the row's own or the gate would measure how big
+    /// the run was instead of how thin the row is.
     public let caseCount: Int
     /// Clusters this stratum judged, published so a nil `clusterInterval` can be
     /// told apart: too few clusters to vary, this measure too thin in some draw, or
@@ -365,8 +377,13 @@ public enum EvaluationMetrics {
 
         var output: [EvaluationSlice] = []
         for (stratum, key, sample) in cuts(of: cases) {
-            // A per-Profile cut knows its own Profile; elsewhere only a run that
-            // named exactly one does.
+            // A per-Profile cut knows its own Profile; the rest of the run knows it
+            // only if a single Profile was named. When it is not, the overall and
+            // category rows leave `precision_auto` and `high_confidence_error_rate`
+            // with no population - N/A, not 0% - and those two rates are read from
+            // the per-Profile cuts, which is what they are for: a run that mixed
+            // Vendor and Project Archive files has no single answer to "correct
+            // under which Profile".
             let runProfile = stratum == .profile ? key : request.runProfileID
             let populations: [[(numerator: Int, denominator: Int)]]
             if let built = tables[runProfile] {
@@ -405,15 +422,22 @@ public enum EvaluationMetrics {
         for field in MetadataFieldID.allCases {
             var numerator = 0
             var denominator = 0
+            var contributing: [Int] = []
             for position in sample {
                 guard let slot = cases[position].fields.first(where: { $0.field == field }) else { continue }
                 let pair = EvaluationMeasure.fieldPrecision.population(in: slot)
                 numerator += pair.numerator
                 denominator += pair.denominator
+                if pair.denominator > 0 { contributing.append(position) }
             }
+            // Both counts stay in this row's own evidence: the records that asserted
+            // something about this field, and the projects they came from. Filling
+            // them from the whole cut would make `isSparse` measure the size of the
+            // run rather than the thinness of the row, and a field with two
+            // assertions out of forty records would be quotable on its own merits.
             rows.append(EvaluationSlice(measure: .fieldPrecision, stratum: .field, key: field.rawValue,
-                                        caseCount: sample.count,
-                                        clusterCount: Set(sample.map { cases[$0].clusterKey }).count,
+                                        caseCount: contributing.count,
+                                        clusterCount: Set(contributing.map { cases[$0].clusterKey }).count,
                                         rate: EvaluationRate(numerator: numerator, denominator: denominator),
                                         clusterInterval: nil))
         }

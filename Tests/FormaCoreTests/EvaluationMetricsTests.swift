@@ -114,11 +114,15 @@ struct EvaluationMetricsTests {
         #expect(rate(.precisionAuto, [manual]) == EvaluationRate(numerator: 0, denominator: 0))
 
         // With no Profile named for the run the first component is unanswerable, so
-        // nothing counts as correct - the denominator stays, and the report shows the
-        // precision as 0 rather than the measure quietly assuming the Profile matched.
+        // the measure has no population at all. Not "0 of 1": that would publish an
+        // observed 0% precision for the fact that the run forgot to say who executed
+        // it, and `isQuotableOnOwnMerits` would call such a row quotable. PLAN §8.2
+        // marks every zero denominator N/A, and a per-Profile cut is where the number
+        // is available at all - see `profileCutUsesItsOwnProfile`.
         let unattributed = rate(.precisionAuto, [good], profile: nil)
-        #expect(unattributed.denominator == 1)
-        #expect(unattributed.numerator == 0)
+        #expect(unattributed == EvaluationRate(numerator: 0, denominator: 0),
+                "no records counted in either half")
+        #expect(unattributed.estimate == nil)
     }
 
     @Test("high confidence errors are the records the model was sure about and got wrong")
@@ -305,11 +309,11 @@ struct EvaluationMetricsTests {
             cases.append(EvaluationFixtures.judgement(singleton, entry: nil))
         }
 
-        let populations = EvaluationFixtures.populations(cases)
+        let populations = EvaluationFixtures.populations(cases, runProfile: ProjectArchiveContract.id)
         let keys = EvaluationFixtures.keys(cases)
         func hold(_ sample: [CaseJudgement]) -> ClosedRange<Double>? {
             ClusterBootstrap.summarize(measures: [.holdRate],
-                                       populations: EvaluationFixtures.populations(sample),
+                                       populations: EvaluationFixtures.populations(sample, runProfile: ProjectArchiveContract.id),
                                        indices: Array(sample.indices),
                                        keys: EvaluationFixtures.keys(sample),
                                        resamples: 200, seed: 0x9E37_79B9_7F4A_7C15)[.holdRate]?.interval
@@ -324,7 +328,7 @@ struct EvaluationMetricsTests {
         let few = Array(cases.prefix(3))
         #expect(hold(few) == nil)
         let fewSummary = ClusterBootstrap.summarize(measures: [.holdRate],
-                                                    populations: EvaluationFixtures.populations(few),
+                                                    populations: EvaluationFixtures.populations(few, runProfile: ProjectArchiveContract.id),
                                                     indices: Array(few.indices),
                                                     keys: EvaluationFixtures.keys(few))
         let fewClusters = try #require(fewSummary[.holdRate]?.clusterCount)
@@ -354,7 +358,7 @@ struct EvaluationMetricsTests {
                                                      gold: reference)
             cases.append(EvaluationFixtures.judgement(reference, entry: entry))
         }
-        let summary = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases),
+        let summary = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases, runProfile: ProjectArchiveContract.id),
                                                  indices: Array(cases.indices),
                                                  keys: EvaluationFixtures.keys(cases))
         #expect(summary[.precisionAuto]?.interval == nil)
@@ -376,7 +380,7 @@ struct EvaluationMetricsTests {
                                                         cluster: "vc\(index)")
             cases.append(EvaluationFixtures.judgement(reference, entry: nil))
         }
-        let summaries = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases),
+        let summaries = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases, runProfile: ProjectArchiveContract.id),
                                                    indices: Array(cases.indices),
                                                    keys: EvaluationFixtures.keys(cases))
         #expect(summaries[.coverage]?.interval != nil)
@@ -404,7 +408,7 @@ struct EvaluationMetricsTests {
                                                      publishable: index >= 3, gold: reference)
             cases.append(EvaluationFixtures.judgement(reference, entry: entry))
         }
-        let summaries = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases),
+        let summaries = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases, runProfile: ProjectArchiveContract.id),
                                                    indices: Array(cases.indices),
                                                    keys: EvaluationFixtures.keys(cases))
         #expect(summaries[.precisionAuto]?.rate.denominator == 3)
@@ -597,6 +601,69 @@ struct EvaluationMetricsTests {
                                              request: EvaluationMetrics.Request(resamples: 2))
         let again = try #require(twice.first { $0.measure == .coverage && $0.stratum == .overall })
         #expect(again.clusterInterval != nil, "two draws are enough for the band to vary")
+    }
+
+    @Test("a multi-profile run leaves the overall precision unmeasured rather than zero")
+    func unattributedRunHasNoPrecisionRow() throws {
+        // The consequence of the previous test, at the table level: a run that mixed
+        // two Profiles never said which one its files were judged under, so the
+        // pooled row must not read as an observed 0%. The per-Profile cuts do have
+        // the number, which is what they exist for.
+        let forVendor = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026"],
+                                                    profiles: [VendorLibraryContract.id])
+        let forArchive = try EvaluationFixtures.gold("g2", expected: [.completionyear: "2026"],
+                                                     profiles: [ProjectArchiveContract.id])
+        let vendorCase = EvaluationFixtures.judgement(
+            forVendor, entry: EvaluationFixtures.candidate([.completionyear: "2026"], gold: forVendor))
+        let archiveCase = EvaluationFixtures.judgement(
+            forArchive, entry: EvaluationFixtures.candidate([.completionyear: "2026"], gold: forArchive))
+        let slices = EvaluationMetrics.slices(for: [vendorCase, archiveCase])
+        let overall = try #require(slices.first { $0.measure == .precisionAuto && $0.stratum == .overall })
+        #expect(overall.rate.denominator == 0)
+        #expect(overall.rate.estimate == nil, "N/A, per PLAN §8.2")
+        #expect(!overall.isQuotableOnOwnMerits, "an unmeasured row is never quotable")
+        #expect(overall.clusterCount == 2, "two records, so cause (a) applies to the band too")
+        #expect(overall.clusterInterval == nil)
+
+        let archive = try #require(slices.first { $0.measure == .precisionAuto && $0.stratum == .profile
+            && $0.key == ProjectArchiveContract.id })
+        #expect(archive.rate == EvaluationRate(numerator: 1, denominator: 1))
+        // `coverage` does not depend on attribution, so it keeps its population: the
+        // run really did say how many files went out on their own.
+        let coverage = try #require(slices.first { $0.measure == .coverage && $0.stratum == .overall })
+        #expect(coverage.rate.denominator == 2)
+    }
+
+    @Test("a field row is sparse on its own evidence, not on the run's size")
+    func fieldRowSparsityFollowsItsEvidence() throws {
+        // Forty records make the cut look ample; the field where only two files
+        // asserted anything is not measured forty times. `isSparse` and quotability
+        // have to follow the row, or `sparseCaseLimit` guards nothing here.
+        let cases: [CaseJudgement] = try (0..<40).map { index in
+            let reference = try EvaluationFixtures.gold("f\(index)", expected: [.completionyear: "2026"])
+            let set: [MetadataFieldID: String?] = index < 2 ? [.completionyear: "2026", .tenderreference: "TB-\(index)"]
+                : [.completionyear: "2026"]
+            return EvaluationFixtures.judgement(reference,
+                                                entry: EvaluationFixtures.candidate(set, gold: reference))
+        }
+        let slices = EvaluationMetrics.slices(for: cases)
+        let tender = try #require(slices.first { $0.measure == .fieldPrecision && $0.stratum == .field
+            && $0.key == MetadataFieldID.tenderreference.rawValue })
+        #expect(tender.rate.denominator == 2)
+        #expect(tender.caseCount == 2)
+        #expect(tender.clusterCount == 2, "the row's clusters are the projects behind its own assertions")
+        #expect(tender.isSparse)
+        #expect(!tender.isQuotableOnOwnMerits)
+
+        let year = try #require(slices.first { $0.measure == .fieldPrecision && $0.stratum == .field
+            && $0.key == MetadataFieldID.completionyear.rawValue })
+        #expect(year.caseCount == 40)
+        #expect(!year.isSparse)
+        #expect(year.isQuotableOnOwnMerits)
+
+        let pooled = try #require(slices.first { $0.measure == .fieldPrecision && $0.stratum == .overall })
+        #expect(pooled.caseCount == 40, "the pooled row keeps the cut's record count")
+        #expect(pooled.rate.denominator == 42)
     }
 
     @Test("a profile cut judges files against the profile it names")

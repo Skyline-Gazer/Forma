@@ -1,7 +1,7 @@
 # Forma 离线评测口径与结论门禁（EVALUATION-METRICS）
 
 > 状态：P3-A 切片 2a。本文定义**指标的可执行口径**与**结论门禁**。
-> PLAN §8.2 给出指标名称与验收意图，本文给出分子分母。三者必须同步，顺序是：**先改 PLAN（需求源）→ 再改代码 → 最后更新本文**。本文不是实现真值的背书；口径的实际行为以代码为准，且下列性质各有用例固定：两套单位各自的分母（`coveragePopulation`、`precisionAutoPopulation`、`perFieldRows`）、可引用性单位（`sparsityCountsRecords`）、无定义抽样逐指标失效且与顺序无关（`emptyDrawVoidsInsteadOfSkipping`、`voidingIsOrderIndependent`）、无观测与无区间的区别（`measureWithoutPopulationHasNoInterval`、`clusterResampling`）、拒判原因的单位（`refusalsNameTheReasons`）、用例集来自版本化 split（`casesMustComeFromTheCountableSplit`）。
+> PLAN §8.2 给出指标名称与验收意图，本文给出分子分母。三者必须同步，顺序是：**先改 PLAN（需求源）→ 再改代码 → 最后更新本文**。本文不是实现真值的背书；口径的实际行为以代码为准，且下列性质各有用例固定：两套单位各自的分母（`coveragePopulation`、`precisionAutoPopulation`、`perFieldRows`）、可引用性单位（`sparsityCountsRecords`）、未命名 Profile 的运行不给出精确率而非 0%（`unattributedRunHasNoPrecisionRow`）、逐字段行按自己的证据判稀疏（`fieldRowSparsityFollowsItsEvidence`）、无定义抽样逐指标失效且与顺序无关（`emptyDrawVoidsInsteadOfSkipping`、`voidingIsOrderIndependent`）、无观测与无区间的区别（`measureWithoutPopulationHasNoInterval`、`clusterResampling`）、拒判原因的单位（`refusalsNameTheReasons`）、用例集来自版本化 split（`casesMustComeFromTheCountableSplit`）。
 
 ## 1. 目的与范围
 
@@ -74,13 +74,14 @@
 2. **一条记录"正确"要同时满足三个分量**（PLAN §8.2）：本次运行的 Profile ∈ 该记录标注的 `profiles`；项目归属与期望簇键一致；目标类别出现在条目 group path 里。三分量各自留成 `matchesProjectReference` / `matchesTargetCategory` / Profile 判定，坏数字要能追到是哪个分量弄坏的。
    - **项目分量按程序真正写下的东西读。** manifest 的 `project_candidate` association 里写的是提示发出的**不透明 ref**（`ManifestValidator` 的原文是 `"context revision N candidate <ref>"`），而参考答案记的是**项目簇键**（GOLD-DATASET「期望项目归属」）；两者靠运行上下文的 `ContextCandidate.id → projectKey` 表对齐，这张表由 `CaseJudgement(gold:entry:projectKeys:)` 从外部注入。判定同时接受条目自己写出的项目线索：`.projectname` 槽的值、group path 与 database name。
    - 没有这张表、而条目的项目线索只剩一个解不开的 ref 时，判为**不匹配**而不是略过：不可核查的归属不能算通过。同理 `runProfile == nil`（运行没有唯一命名一个 Profile）时 `precision_auto` 与 `high_confidence_error_rate` 的分子恒为 0，分母照实给出。
+   - **`runProfile == nil`（运行没有唯一命名一个 Profile）时这两项指标没有人口**：`precision_auto` 与 `high_confidence_error_rate` 的分子分母都是 0，报成 N/A 而不是 0%。写"0/40"等于给读者一个"观测到的 0% 精确率"，而事实只是运行没说这批文件是在哪个 Profile 下判的——按 §5 的可引用规则它还会被判为"确有观测"。多 Profile 运行由 **Profile 切面**给出这两个率（那一层的 `runProfile` 就是切面自己的 key），`coverage` / `hold_rate` / 槽位级三项不依赖归属，照常计。`EvaluationReport` 在身份里只有一个 Profile 时自动填入 `runProfileID`，多个时保持 nil 让上面这条生效。
    - 期望方留空（`project_reference` / `target_category` 为显式 `null`）的分量**真空满足**：harness 不能替标注员发明项目或类别，把它判成漏答是在为数据集自己的沉默扣分。
    - 一个文件被多个候选项目认领时，association 集合记的是**所有**认领者，不是程序挑中的那一个；这种歧义不会污染 `precision_auto`——冲突归属会阻断合格性，该记录落在分母之外（`computeEligibility` 的 `.conflict` 拒绝与 `associationReason` 失效路径）。残留风险只有调用方交来的表与它交来的 `conflictedSourceIDs` 不自洽。
 3. **`contradicted` 留在槽位级分母里，不进分子**（`field_precision`）。被自身证据反驳的值是引擎确实给出过的断言，忽略它会让精确率报出程序没有的把握；而它作为状态（`.conflict`）会让整个条目失去 `eligibleForAutoExecution`，所以同一条记录本来就不在文件级 `precision_auto` 的分母里。
 4. **"漏填"与"答错"分列两项，不得相加**：`missed_fill_rate` 的分子是 `withheld`（含候选只给空串/纯空白的槽，§7），`field_precision` 的分母只含候选断言，两者对同一个槽各说各话。`allowedUnknown`（期望方也放弃猜测的槽）不是期望槽，永远不进漏填分母——一致的未知不是漏答，这正是 PLAN 要求报告把两者分开的原因。
 5. **拒判原因与混淆矩阵并列，各自单位**（PLAN §8.2 的"分层"行同时列了两者）。`EvaluationMetrics.refusals(_:)` 给出两个字典：`byRecordState` 按记录停在哪个 `DecisionState`（无条目为 `absent`）计未自动落地的文件；`bySlotStatus` 按政策留下的 `FieldOutcome.Status`（无条目同样 `absent`）计那些期望却没填的槽。**两者永不相加**——一个是文件数、一个是槽位数，相加就是本节第 1 条要避免的那种混淆。混淆矩阵说的是"引擎到达哪个决定"，这一对说的是"为什么没把参考答案要的东西写出去"，读者据此分配复核工作。键全部来自 manifest 自己的词汇表，报表不新造标签。
 6. **搁置按条目计**：条目被扣在 `hold` / `unknown` 时该记录整体计 1，即使个别槽带着值——评审者从被扣住的条目里拿不到可用产出；无条目同样计 1（没有任何产出）。`unknown` / `invalidated` / 请求失败的分列计数由 `EvaluationMetrics.confusion(_:)` 给出（§9），不折进同一个数字。
-7. **`field_precision` 另有 12 条逐字段行**（`EvaluationSlice.stratum == .field`，`key` 为字段 rawValue；PLAN §8.2"12 字段分别报告"）。逐字段分母之和等于 pooled 分母，因此既不会重计也不会漏计。逐字段行只带 Wilson 区间，不带簇级区间——那里 nil 是**按构造**而非对稀薄的判断，pooled 行才报簇区间。
+7. **`field_precision` 另有 12 条逐字段行**（`EvaluationSlice.stratum == .field`，`key` 为字段 rawValue；PLAN §8.2"12 字段分别报告"）。逐字段分母之和等于 pooled 分母，因此既不会重计也不会漏计。逐字段行的 `caseCount` / `clusterCount` 数的是**对该字段有过候选断言的记录与项目簇**，不是整个切面的规模：否则 40 条记录里只有 2 条填过的字段会因为"切面有 40 条"而躲过 §5 的稀疏门禁，并可被单独引用。逐字段行只带 Wilson 区间，不带簇级区间——那里 nil 是**按构造**而非对稀薄的判断，pooled 行才报簇区间。
 
 ## 4. 区间
 
@@ -156,9 +157,9 @@
 | `EvaluationMeasure.unit` / `.population(in:runProfile:)` | `Sources/FormaCore/Evaluation/EvaluationMetrics.swift` | 单位由指标声明（`.records` / `.slots`）；单条判定的分子分母跨用例可加；`runProfile` 为 nil 时 `precision_auto` 与 `high_confidence_error_rate` 分子恒 0 |
 | `EvaluationMeasure.population(in:)`（逐字段） | 同上 | 只为 `field_precision` 的 12 条 `.field` 行服务；行分母之和 == pooled 分母 |
 | `EvaluationRate` | 同上 | 分母（槽位观测）为 0 ⇒ `estimate` 与 Wilson 端点为 nil |
-| `EvaluationSlice.caseCount` / `isSparse` / `sparseCaseLimit` | 同上 | 可引用性以**记录数**计；`sparseCaseLimit = 30` 是 harness 策略（§5） |
+| `EvaluationSlice.caseCount` / `isSparse` / `sparseCaseLimit` | 同上 | 可引用性以**该行自身证据的记录数**计（pooled 行 = 切面记录数；`.field` 行 = 对该字段有候选断言的记录数）；`sparseCaseLimit = 30` 是 harness 策略（§5） |
 | `ClusterBootstrap.summarize(measures:populations:indices:keys:resamples:seed:)` | 同上 | 唯一公开入口；`populations` 由调用方按 `allCases` 列序**每个运行 Profile 算一次**（`slices(for:)` 缓存到 `tables`，Profile 切面用自己那一层的 key，其余切面共用），切面只选行不重算；簇 < 5、任一无定义抽样、或 `resamples <= 1` ⇒ 该指标区间为 nil（§5 的 (a)(b)(c)） |
-| `EvaluationMetrics.slices(for:request:)` | 同上 | 切面 = overall ∪ 出现的每个 Profile ∪ 出现的每个类别（另有 §3 第 6 条的 12 条逐字段行）；一条记录属于两个 Profile 时在两个切面各出现一次，绝不计为两条记录；Profile 切面把**该切面的 Profile** 当作 `runProfile`，所以"在 Vendor Profile 下主决策对不对"是按那一层的 Profile 判的 |
+| `EvaluationMetrics.slices(for:request:)` | 同上 | 切面 = overall ∪ 出现的每个 Profile ∪ 出现的每个类别（另有 §3 第 7 条的 12 条逐字段行）；一条记录属于两个 Profile 时在两个切面各出现一次，绝不计为两条记录；Profile 切面把**该切面的 Profile** 当作 `runProfile`，其余切面用 `request.runProfileID`，为 nil 时 `precision_auto` 与 `high_confidence_error_rate` 在那些行**没有人口**（N/A，§3 第 2 条）；分子分母表按 `runProfile` 各算一次并缓存共用 |
 | `EvaluationMetrics.confusion(_:)` | 同上 | 键形如 `mapped->absent`；无条目用 `absent` |
 | `EvaluationMetrics.refusals(_:)` → `Refusals` | 同上 | PLAN §8.2 的拒判原因；`byRecordState` 数记录、`bySlotStatus` 数槽位，两个字典不得合并（§3 第 5 条） |
 | `EvaluationRunIdentity` | `Sources/FormaCore/Evaluation/EvaluationReport.swift` | 替身标志是身份的字段，不是脚注 |
