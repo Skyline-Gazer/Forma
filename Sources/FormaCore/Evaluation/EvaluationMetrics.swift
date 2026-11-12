@@ -281,11 +281,11 @@ public enum ClusterBootstrap {
         // dictionary order is not. Nothing in-process can observe that - Swift fixes one
         // dictionary's order for the life of the process, so no test would fail if the
         // sort went away; the run recorded twice on two machines would disagree.
-        let members = grouped.sorted { $0.key < $1.key }.map(\.value)
         var clusterTotals: [[(numerator: Int, denominator: Int)]] =
-            members.map { _ in Array(repeating: (numerator: 0, denominator: 0), count: measures.count) }
-        for (slot, offsets) in members.enumerated() {
-            for offset in offsets {
+            Array(repeating: Array(repeating: (numerator: 0, denominator: 0), count: measures.count),
+                  count: grouped.count)
+        for (slot, entry) in grouped.sorted(by: { $0.key < $1.key }).enumerated() {
+            for offset in entry.value {
                 let source = rows[indices[offset]].columns
                 for position in measures.indices {
                     clusterTotals[slot][position].numerator += source[columns[position]].numerator
