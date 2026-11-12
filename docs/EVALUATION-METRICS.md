@@ -1,7 +1,7 @@
 # Forma 离线评测口径与结论门禁（EVALUATION-METRICS）
 
 > 状态：P3-A 切片 2a。本文定义**指标的可执行口径**与**结论门禁**。
-> PLAN §8.2 给出指标名称与验收意图，本文给出分子分母。三者必须同步，顺序是：**先改 PLAN（需求源）→ 再改代码 → 最后更新本文**。本文不是实现真值的背书；口径的实际行为以代码为准，且下列性质各有用例固定：两套单位各自的分母（`coveragePopulation`、`precisionAutoPopulation`、`perFieldRows`）、可引用性单位（`sparsityCountsRecords`）、未命名 Profile 的运行不给出精确率而非 0%（`unattributedRunHasNoPrecisionRow`）、逐字段行按自己的证据判稀疏（`fieldRowSparsityFollowsItsEvidence`）、无定义抽样逐指标失效且与顺序无关（`emptyDrawVoidsInsteadOfSkipping`、`voidingIsOrderIndependent`）、无观测与无区间的区别（`measureWithoutPopulationHasNoInterval`、`clusterResampling`）、拒判原因的单位（`refusalsNameTheReasons`）、用例集来自版本化 split（`casesMustComeFromTheCountableSplit`）。
+> PLAN §8.2 给出指标名称与验收意图，本文给出分子分母。三者必须同步，顺序是：**先改 PLAN（需求源）→ 再改代码 → 最后更新本文**。本文不是实现真值的背书；口径的实际行为以代码为准，且下列性质各有用例固定：两套单位各自的分母（`coveragePopulation`、`precisionAutoPopulation`、`perFieldRows`）、可引用性单位（`sparsityCountsRecords`）、未命名 Profile 的运行不给出精确率而非 0%（`unattributedRunHasNoPrecisionRow`）、逐字段行按自己的证据判稀疏（`fieldRowSparsityFollowsItsEvidence`）、无定义抽样逐指标失效且与顺序无关（`emptyDrawVoidsInsteadOfSkipping`、`voidingIsOrderIndependent`）、无观测与无区间的区别（`measureWithoutPopulationHasNoInterval`、`clusterResampling`）、拒判原因的单位（`refusalsNameTheReasons`）、用例集来自版本化 split（`casesMustComeFromTheCountableSplit`）、否决与仅披露的划分是逐条选定的（`blockerPartitionIsDeliberate`）。
 
 ## 1. 目的与范围
 
@@ -118,6 +118,8 @@
 | `eligibilityStateInconsistent` | 候选在未达 `validated` 的条目上带有可自动发布的槽位 | 是 |
 
 `isQualityClaimAllowed = 不存在否决型阻塞`。
+
+九类里两类只披露不否决（表中"否"）。这一划分本身由 `blockerPartitionIsDeliberate` 钉住：`preventsQualityClaim` 读的是一个显式集合，新增一类不会静默继承任何一边——想让它只披露，必须同时改表、改集合、改用例。
 
 `caseSetNotDerivedFromSplit` 是上一条得以成立的前提：排除动作发生在 `GoldDataset`，报告层只披露数量；若没有"用例必须落在可计数集合内"的核验，披露就只是一句无人为之背书的话。重复判定同一条记录也走这个 blocker——同一个来源计两次会直接改写所有分母。
 

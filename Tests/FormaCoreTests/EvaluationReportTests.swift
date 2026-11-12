@@ -304,6 +304,20 @@ struct EvaluationReportTests {
         #expect(quiet.detail.contains("本行不为「本次分母不含争议记录」作保"))
     }
 
+    @Test("which findings veto is chosen case by case rather than by default")
+    func blockerPartitionIsDeliberate() {
+        // `preventsQualityClaim` is set membership, so a new Blocker case would land on
+        // the veto side without anyone deciding it - the safe direction, but not a
+        // decided one. Pinned here as the partition §6's table publishes: nine reasons,
+        // exactly two of which only disclose. Adding or reclassifying one has to come
+        // through both the table and this case.
+        #expect(EvaluationReport.Blocker.allCases.count == 9)
+        #expect(Set(EvaluationReport.Blocker.allCases.filter { !$0.preventsQualityClaim }) == EvaluationReport.Blocker.disclosureOnly)
+        #expect(EvaluationReport.Blocker.disclosureOnly == [.pendingAdjudicationExcluded, .stratumQuotasUnmet])
+        #expect(EvaluationReport.Blocker.allCases.filter(\.preventsQualityClaim).count == 7,
+                "seven reasons still cancel a quality claim")
+    }
+
     @Test("a dataset that misses its quota cells says so without losing the run")
     func quotaShortfallsAreDisclosed() throws {
         let gaps = [GoldDataset.Shortfall(profile: ProjectArchiveContract.id, category: .nearDuplicate,
