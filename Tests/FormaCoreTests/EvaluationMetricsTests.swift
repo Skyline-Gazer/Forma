@@ -14,69 +14,139 @@ struct EvaluationMetricsTests {
     /// All twelve slots have to be present. Assigning `nil` into a
     /// `[Key: String?]` removes the key instead of storing a null, which is the
     /// trap the same helper fell into in `GoldDatasetTests`.
-    private func rate(_ measure: EvaluationMeasure, _ cases: [CaseJudgement]) -> EvaluationRate {
+    /// The record-level rates need a Profile to be meaningful, so the helper names
+    /// one: `ProjectArchiveContract.id` is what every fixture record belongs to.
+    private func rate(_ measure: EvaluationMeasure, _ cases: [CaseJudgement],
+                      profile: String? = ProjectArchiveContract.id) -> EvaluationRate {
         var numerator = 0
         var denominator = 0
         for judgement in cases {
-            let population = measure.population(in: judgement)
+            let population = measure.population(in: judgement, runProfile: profile)
             numerator += population.numerator
             denominator += population.denominator
         }
         return EvaluationRate(numerator: numerator, denominator: denominator)
     }
 
-    @Test("coverage sees only the slots the answer expects, and not a contradicted one")
+    @Test("coverage is one record, once, if the policy would execute it")
     func coveragePopulation() throws {
+        // PLAN §8.2: coverage = auto_mapped / total. A record is worth one, however
+        // many of its twelve fields came out right, because the quantity being
+        // thresholded is "how much of the corpus moves without a human" - not "how
+        // much of each file did it guess".
         let reference = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026", .department: "采购部"])
-        let answered = EvaluationFixtures.candidate([.completionyear: "2026", .department: "采购部"], conflicted: [.department], gold: reference)
-        let judgement = CaseJudgement(gold: reference, entry: answered)
+        let mapped = EvaluationFixtures.judgement(reference,
+                                   entry: EvaluationFixtures.candidate([.completionyear: "2026", .department: "采购部"],
+                                                                      gold: reference))
+        #expect(rate(.coverage, [mapped]) == EvaluationRate(numerator: 1, denominator: 1))
 
-        let measured = rate(.coverage, [judgement])
-        // Two expected slots; the contradicted one is outside the numerator, and
-        // both still count in the denominator - a contradiction is a claim the
-        // engine made, and coverage that ignored it would report reach it lacks.
-        // (The conflict note has to be four characters or longer: `Bounded.text`
-        // discards shorter values as carrying no information.)
+        // Not eligible for auto execution, so nothing moves on its own - even with
+        // every field correct. It stays in the denominator: coverage over a run that
+        // auto-mapped nothing is 0%, not "unmeasured".
+        let manual = EvaluationFixtures.judgement(reference,
+                                   entry: EvaluationFixtures.candidate([.completionyear: "2026", .department: "采购部"],
+                                                                      publishable: false, gold: reference))
+        #expect(rate(.coverage, [manual]) == EvaluationRate(numerator: 0, denominator: 1))
+
+        let absent = EvaluationFixtures.judgement(reference, entry: nil)
+        #expect(rate(.coverage, [absent]) == EvaluationRate(numerator: 0, denominator: 1))
+    }
+
+    @Test("a contradicted slot stays in the field denominator and out of the numerator")
+    func contradictedStaysCounted() throws {
+        // The slot-level half, where contradiction actually shows up: the engine
+        // asserted something, so the assertion is counted; it does not count as
+        // right. (The conflict note has to be four characters or longer, since
+        // `Bounded.text` discards shorter values as carrying no information.)
+        let reference = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026", .department: "采购部"])
+        let judgement = EvaluationFixtures.judgement(reference,
+                                      entry: EvaluationFixtures.candidate([.completionyear: "2026", .department: "采购部"],
+                                                                         conflicted: [.department], gold: reference))
+        let measured = rate(.fieldPrecision, [judgement])
         #expect(measured.denominator == 2)
         #expect(measured.numerator == 1)
         #expect(judgement.fields.first { $0.field == .department }?.verdict == .contradicted)
+        // Both are expectation slots, so a contradiction still counts as a slot the
+        // answer needed - `allowedUnknown` is the only verdict outside that set.
+        #expect(rate(.missedFillRate, [judgement]).denominator == 2)
     }
 
-    @Test("precision_auto is restricted to what the program would publish")
+    @Test("a file is correct only when Profile, project and category all match")
     func precisionAutoPopulation() throws {
-        let reference = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026", .department: "采购部"])
-        let entry = EvaluationFixtures.candidate([.completionyear: "2026", .department: "错的"], status: .inherited,
-                              publishable: false, gold: reference)
-        let judgement = CaseJudgement(gold: reference, entry: entry)
+        let reference = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026"])
+        let good = EvaluationFixtures.judgement(reference,
+                                 entry: EvaluationFixtures.candidate([.completionyear: "2026"], gold: reference))
+        #expect(good.isAutoMapped)
+        #expect(good.mainDecisionIsCorrect(runProfile: ProjectArchiveContract.id))
+        #expect(rate(.precisionAuto, [good]) == EvaluationRate(numerator: 1, denominator: 1))
 
-        // Not eligible for auto execution, so neither slot enters the population:
-        // quoting a precision for publishes that would never happen is how a
-        // measurement ends up describing a path the app does not take.
-        #expect(rate(.precisionAuto, [judgement]).denominator == 0)
-        #expect(judgement.fields.allSatisfy { !$0.autoPublishable })
+        // Each component alone makes the file wrong, and each is a different bug: a
+        // mis-filed document, an association pointing at the wrong job, a run under a
+        // Profile the record was never annotated for.
+        let misplaced = EvaluationFixtures.judgement(reference,
+                                      entry: EvaluationFixtures.candidate([.completionyear: "2026"],
+                                                                         wrongPlacement: true, gold: reference))
+        #expect(!misplaced.matchesTargetCategory)
+        #expect(rate(.precisionAuto, [misplaced]).numerator == 0)
 
-        let publishable = CaseJudgement(gold: reference,
-                                        entry: EvaluationFixtures.candidate([.completionyear: "2026", .department: "错的"],
-                                                         gold: reference))
-        let measured = rate(.precisionAuto, [publishable])
-        #expect(measured.denominator == 2)
-        #expect(measured.numerator == 1)
+        // Mis-attribution is expressed in the table, not in the entry: production's
+        // manifest only ever carries the candidate reference.
+        let wrongProject = EvaluationFixtures.judgement(reference,
+                                                        entry: EvaluationFixtures.candidate([.completionyear: "2026"],
+                                                                                             gold: reference),
+                                                        wrongProject: true)
+        #expect(!wrongProject.matchesProjectReference)
+        #expect(rate(.precisionAuto, [wrongProject]).numerator == 0)
+
+        let vendorOnly = try EvaluationFixtures.gold("g2", expected: [.completionyear: "2026"],
+                                                    profiles: [VendorLibraryContract.id])
+        let misplacedProfile = EvaluationFixtures.judgement(vendorOnly,
+                                             entry: EvaluationFixtures.candidate([.completionyear: "2026"],
+                                                                                 gold: vendorOnly))
+        #expect(!misplacedProfile.mainDecisionIsCorrect(runProfile: ProjectArchiveContract.id))
+
+        // A record the program would not execute is outside the population entirely:
+        // 0 of 0, not 0 of 1 - precision over publishes that never happen is not a
+        // measurement of this program.
+        let manual = EvaluationFixtures.judgement(reference,
+                                   entry: EvaluationFixtures.candidate([.completionyear: "2026"],
+                                                                      publishable: false, gold: reference))
+        #expect(rate(.precisionAuto, [manual]) == EvaluationRate(numerator: 0, denominator: 0))
+
+        // With no Profile named for the run the first component is unanswerable, so
+        // nothing counts as correct - the denominator stays, and the report shows the
+        // precision as 0 rather than the measure quietly assuming the Profile matched.
+        let unattributed = rate(.precisionAuto, [good], profile: nil)
+        #expect(unattributed.denominator == 1)
+        #expect(unattributed.numerator == 0)
     }
 
-    @Test("high confidence errors are the wrong-but-confident share")
+    @Test("high confidence errors are the records the model was sure about and got wrong")
     func highConfidenceError() throws {
+        // PLAN §8.2 keeps this one about the model's own claim, and at file level:
+        // the denominator is the records whose entry declared high confidence, the
+        // numerator the ones of those whose main decision was wrong. A field being
+        // wrong inside an otherwise correct placement is not what this measures -
+        // that is `field_precision`'s business.
         let reference = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026", .department: "采购部"])
-        let judgement = CaseJudgement(gold: reference,
-                                      entry: EvaluationFixtures.candidate([.completionyear: "2026", .department: "错的"],
-                                                       gold: reference))
-        let measured = rate(.highConfidenceErrorRate, [judgement])
+        let confidentlyMisfiled = EvaluationFixtures.judgement(reference,
+                                                entry: EvaluationFixtures.candidate([.completionyear: "2026"],
+                                                                                   wrongPlacement: true,
+                                                                                   gold: reference))
+        #expect(confidentlyMisfiled.declaresHighConfidence)
+        let measured = rate(.highConfidenceErrorRate, [confidentlyMisfiled])
         #expect(measured.numerator == 1)
-        #expect(measured.denominator == 2)
-        #expect(measured.estimate == 0.5)
+        #expect(measured.denominator == 1)
 
-        let modest = CaseJudgement(gold: reference,
-                                   entry: EvaluationFixtures.candidate([.completionyear: "2026", .department: "错的"],
-                                                    confidence: .low, gold: reference))
+        let confidentlyRight = EvaluationFixtures.judgement(reference,
+                                             entry: EvaluationFixtures.candidate([.completionyear: "2026"],
+                                                                                gold: reference))
+        #expect(rate(.highConfidenceErrorRate, [confidentlyRight])
+                == EvaluationRate(numerator: 0, denominator: 1))
+
+        let modest = EvaluationFixtures.judgement(reference,
+                                   entry: EvaluationFixtures.candidate([.completionyear: "2026"],
+                                                                      confidence: .low, gold: reference))
         #expect(rate(.highConfidenceErrorRate, [modest]).denominator == 0)
     }
 
@@ -86,7 +156,7 @@ struct EvaluationMetricsTests {
                                  allowUnknown: [.department])
         let entry = EvaluationFixtures.candidate([.completionyear: "2026", .department: "填了没有的依据"],
                               gold: reference)
-        let judgement = CaseJudgement(gold: reference, entry: entry)
+        let judgement = EvaluationFixtures.judgement(reference, entry: entry)
 
         let measured = rate(.fieldPrecision, [judgement])
         #expect(measured.denominator == 2, "an assertion nobody asked for is still an assertion")
@@ -98,36 +168,78 @@ struct EvaluationMetricsTests {
         #expect(invented.numerator == 1)
     }
 
+    @Test("field precision is reported for each of the twelve fields")
+    func perFieldRows() throws {
+        // PLAN §8.2: "12 字段分别报告". A pooled number hides the one field that is
+        // failing, and for these profiles the failing field is rarely the project
+        // name everyone watches.
+        let reference = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026", .salesowner: "张三"])
+        let cases = [EvaluationFixtures.judgement(reference,
+                                   entry: EvaluationFixtures.candidate([.completionyear: "2026",
+                                                                       .salesowner: "张三"], gold: reference))]
+        let request = EvaluationMetrics.Request(resamples: 50)
+        let slices = EvaluationMetrics.slices(for: cases, request: request)
+        let rows = slices.filter { $0.measure == .fieldPrecision && $0.stratum == .field }
+        #expect(rows.count == MetadataFieldID.allCases.count)
+
+        let year = rows.first { $0.key == MetadataFieldID.completionyear.rawValue }
+        #expect(year?.rate.denominator == 1)
+        #expect(year?.rate.estimate == 1)
+        // A field nobody asserted anything about has no population, and says so.
+        let unused = rows.first { $0.key == MetadataFieldID.bidderentity.rawValue }
+        #expect(unused?.rate.denominator == 0)
+        #expect(unused?.rate.estimate == nil)
+        // Field rows carry Wilson only: the cluster interval exists for the pooled
+        // row, and a nil here is by construction rather than a verdict on thinness.
+        #expect(year?.clusterInterval == nil)
+        #expect(year?.clusterCount == 1)
+        // The twelve denominators add up to the pooled one, so nothing is counted
+        // twice and nothing is dropped on the way from field rows to the total.
+        let pooled = slices.first { $0.measure == .fieldPrecision && $0.stratum == .overall }
+        let summed = rows.reduce(0) { partial, row in partial + (row.rate.denominator ?? 0) }
+        #expect(summed == pooled?.rate.denominator)
+    }
+
     @Test("a whitespace-only value is a miss, not a wrong answer")
     func emptyValueIsNotAnAssertion() throws {
         let reference = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026"])
-        let blank = CaseJudgement(gold: reference,
+        let blank = EvaluationFixtures.judgement(reference,
                                   entry: EvaluationFixtures.candidate([.completionyear: "   "], gold: reference))
         let verdict = blank.fields.first { $0.field == .completionyear }?.verdict
         #expect(verdict == .withheld)
-        // Both consequences follow: it is not an assertion that could be scored
-        // right or wrong, and it is not auto-publishable material either.
+        // It is not an assertion that could be scored right or wrong...
         #expect(rate(.fieldPrecision, [blank]).denominator == 0)
-        #expect(rate(.coverage, [blank]).numerator == 0)
-        #expect(rate(.holdRate, [blank]).numerator == 1)
+        // ...it is a miss, which is the other measure's numerator - and the two are
+        // deliberately not summed.
+        #expect(rate(.missedFillRate, [blank]).numerator == 1)
+        // The file itself was still auto-mapped and still parked nowhere, so neither
+        // file-level rate calls it a hold or an unanswered record.
+        #expect(rate(.coverage, [blank]).numerator == 1)
+        #expect(rate(.holdRate, [blank]).numerator == 0)
     }
 
-    @Test("an entry parked in hold holds every expected value")
+    @Test("an entry parked in hold is one held record")
     func holdRateCountsStates() throws {
+        // PLAN §8.2: hold_rate = held / total, one record at a time, with the
+        // unknown / invalidated / request-failure counts reported beside it rather
+        // than folded into the same number.
         let reference = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026", .department: "采购部"])
-        let held = CaseJudgement(gold: reference,
-                                 entry: EvaluationFixtures.candidate([.completionyear: "2026"], state: .hold, gold: reference))
-        let measured = rate(.holdRate, [held])
-        // completionyear carries a value, yet the entry as a whole is parked: the
-        // reviewer gets nothing usable from it, and the metric has to agree.
-        #expect(measured.numerator == 2)
-        #expect(measured.denominator == 2)
+        let held = EvaluationFixtures.judgement(reference,
+                                 entry: EvaluationFixtures.candidate([.completionyear: "2026"], state: .hold,
+                                                                     gold: reference))
+        // One slot carries a value, yet the entry as a whole is parked: the reviewer
+        // receives nothing usable from it, and the rate has to agree.
+        #expect(rate(.holdRate, [held]) == EvaluationRate(numerator: 1, denominator: 1))
+        // The same record's slots, seen through the slot-level measure instead.
+        #expect(rate(.missedFillRate, [held]).numerator == 1)
 
-        let partial = CaseJudgement(gold: reference, entry: EvaluationFixtures.candidate([.completionyear: "2026"], gold: reference))
-        #expect(rate(.holdRate, [partial]).numerator == 1)
+        let partial = EvaluationFixtures.judgement(reference,
+                                    entry: EvaluationFixtures.candidate([.completionyear: "2026"],
+                                                                       gold: reference))
+        #expect(rate(.holdRate, [partial]).numerator == 0)
 
-        let absent = CaseJudgement(gold: reference, entry: nil)
-        #expect(rate(.holdRate, [absent]).numerator == 2)
+        let absent = EvaluationFixtures.judgement(reference, entry: nil)
+        #expect(rate(.holdRate, [absent]) == EvaluationRate(numerator: 1, denominator: 1))
     }
 
     @Test("the candidate-value gate counts records, not slots")
@@ -136,14 +248,14 @@ struct EvaluationMetricsTests {
         // by either reading. The interesting case is below, where the two units
         // disagree - and that is the whole reason the gate is on `caseCount`.
         let reference = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026"])
-        let cases = try (1...29).map { _ in CaseJudgement(gold: reference, entry: nil) }
+        let cases = try (1...29).map { _ in EvaluationFixtures.judgement(reference, entry: nil) }
         let found = try #require(EvaluationMetrics.slices(for: cases).first {
             $0.measure == .coverage && $0.stratum == .overall
         })
         #expect(found.caseCount == 29)
         #expect(found.isSparse)
 
-        let dense = try (1...30).map { _ in CaseJudgement(gold: reference, entry: nil) }
+        let dense = try (1...30).map { _ in EvaluationFixtures.judgement(reference, entry: nil) }
         let denseSlice = try #require(EvaluationMetrics.slices(for: dense).first {
             $0.measure == .coverage && $0.stratum == .overall
         })
@@ -161,14 +273,23 @@ struct EvaluationMetricsTests {
             .bidderentity: "中标单位甲", .salesowner: "销售乙", .tenderreference: "ZB-2026-001"
         ]
         let reference = try EvaluationFixtures.gold("heavy", expected: fields)
-        let cases = try (0..<5).map { _ in CaseJudgement(gold: reference, entry: nil) }
+        let cases = try (0..<5).map { _ in EvaluationFixtures.judgement(reference, entry: nil) }
+        // Read through a slot-level measure, which is where the mismatch lives:
+        // thirty slot observations from five records.
         let slice = try #require(EvaluationMetrics.slices(for: cases).first {
-            $0.measure == .coverage && $0.stratum == .overall
+            $0.measure == .missedFillRate && $0.stratum == .overall
         })
         #expect(slice.rate.denominator == 30)
+        #expect(EvaluationMeasure.missedFillRate.unit == .slots)
         #expect(slice.caseCount == 5)
         #expect(slice.isSparse)
         #expect(!slice.isQuotableOnOwnMerits)
+        // The record-level measures cannot be fooled this way: their denominator is
+        // the record count itself, so five records is always five.
+        let coverage = try #require(EvaluationMetrics.slices(for: cases).first {
+            $0.measure == .coverage && $0.stratum == .overall
+        })
+        #expect(coverage.rate.denominator == 5)
     }
 
     @Test("the bootstrap resamples whole project clusters")
@@ -178,10 +299,10 @@ struct EvaluationMetricsTests {
         // that most of this measurement is one project's shape.
         var cases: [CaseJudgement] = []
         let dominant = try EvaluationFixtures.gold("dominant", expected: [.completionyear: "2026"], cluster: "big-project")
-        for _ in 0..<40 { cases.append(CaseJudgement(gold: dominant, entry: nil)) }
+        for _ in 0..<40 { cases.append(EvaluationFixtures.judgement(dominant, entry: nil)) }
         for index in 1...4 {
             let singleton = try EvaluationFixtures.gold("s\(index)", expected: [.completionyear: "2026"], cluster: "single-\(index)")
-            cases.append(CaseJudgement(gold: singleton, entry: nil))
+            cases.append(EvaluationFixtures.judgement(singleton, entry: nil))
         }
 
         let populations = EvaluationFixtures.populations(cases)
@@ -231,7 +352,7 @@ struct EvaluationMetricsTests {
             // `precision_auto` has no population in any resample.
             let entry = EvaluationFixtures.candidate([.completionyear: "2026"], publishable: false,
                                                      gold: reference)
-            cases.append(CaseJudgement(gold: reference, entry: entry))
+            cases.append(EvaluationFixtures.judgement(reference, entry: entry))
         }
         let summary = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases),
                                                  indices: Array(cases.indices),
@@ -253,7 +374,7 @@ struct EvaluationMetricsTests {
         for index in 0..<12 {
             let reference = try EvaluationFixtures.gold("v\(index)", expected: [.completionyear: "2026"],
                                                         cluster: "vc\(index)")
-            cases.append(CaseJudgement(gold: reference, entry: nil))
+            cases.append(EvaluationFixtures.judgement(reference, entry: nil))
         }
         let summaries = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases),
                                                    indices: Array(cases.indices),
@@ -281,7 +402,7 @@ struct EvaluationMetricsTests {
                                                         cluster: "mc\(index)")
             let entry = EvaluationFixtures.candidate([.completionyear: "2026"],
                                                      publishable: index >= 3, gold: reference)
-            cases.append(CaseJudgement(gold: reference, entry: entry))
+            cases.append(EvaluationFixtures.judgement(reference, entry: entry))
         }
         let summaries = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases),
                                                    indices: Array(cases.indices),
@@ -307,7 +428,7 @@ struct EvaluationMetricsTests {
             let entry = index.isMultiple(of: 2)
                 ? EvaluationFixtures.candidate([.completionyear: "2026"], gold: reference)
                 : EvaluationFixtures.candidate([.completionyear: "2027"], gold: reference)
-            cases.append(CaseJudgement(gold: reference, entry: entry))
+            cases.append(EvaluationFixtures.judgement(reference, entry: entry))
         }
         // Half the clusters answer correctly, so the share of assertions that are
         // right sits at 0.5; coverage is 1.0 here, because the engine did reach
@@ -371,11 +492,11 @@ struct EvaluationMetricsTests {
         // Traditional and Simplified glyphs are different code points and are NOT
         // folded together: claiming otherwise here would quietly loosen what
         // counts as agreeing with the reference answer.
-        let variant = CaseJudgement(gold: reference,
+        let variant = EvaluationFixtures.judgement(reference,
                                     entry: EvaluationFixtures.candidate([.projectname: "示例項目_2026"], gold: reference))
         #expect(variant.fields.first { $0.field == .projectname }?.verdict == .wrong)
 
-        let suffixed = CaseJudgement(gold: reference,
+        let suffixed = EvaluationFixtures.judgement(reference,
                                      entry: EvaluationFixtures.candidate([.projectname: "示例项目_2026年"], gold: reference))
         #expect(suffixed.fields.first { $0.field == .projectname }?.verdict == .wrong)
 
@@ -389,8 +510,8 @@ struct EvaluationMetricsTests {
     @Test("a run with no candidate for a source is confusion-visible")
     func confusionRecordsAbsence() throws {
         let reference = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026"])
-        let cases = [CaseJudgement(gold: reference, entry: nil),
-                     CaseJudgement(gold: reference,
+        let cases = [EvaluationFixtures.judgement(reference, entry: nil),
+                     EvaluationFixtures.judgement(reference,
                                    entry: EvaluationFixtures.candidate([.completionyear: "2026"], state: .hold, gold: reference))]
         let matrix = EvaluationMetrics.confusion(cases)
         #expect(matrix["mapped->absent"] == 1)
@@ -401,7 +522,7 @@ struct EvaluationMetricsTests {
     func strataEnumeration() throws {
         let both = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026"], category: .nearDuplicate,
                             profiles: [ProjectArchiveContract.id, VendorLibraryContract.id])
-        let all = EvaluationMetrics.slices(for: [CaseJudgement(gold: both, entry: nil)])
+        let all = EvaluationMetrics.slices(for: [EvaluationFixtures.judgement(both, entry: nil)])
         let coverage = all.filter { $0.measure == .coverage }
         let vendorKey = VendorLibraryContract.id
         let duplicateCategory = GoldRecord.Category.nearDuplicate.rawValue

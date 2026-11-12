@@ -135,7 +135,7 @@ struct EvaluationReportTests {
         let reference = try EvaluationFixtures.gold("g5", expected: [.completionyear: "2026"])
         let parked = EvaluationFixtures.candidate([.completionyear: "2026"], state: .mapped,
                                                   publishable: true, gold: reference)
-        let cases = [CaseJudgement(gold: reference, entry: parked)]
+        let cases = [EvaluationFixtures.judgement(reference, entry: parked)]
         #expect(cases[0].candidateState == .mapped)
         #expect(cases[0].fields.contains { $0.autoPublishable })
 
@@ -143,13 +143,17 @@ struct EvaluationReportTests {
                                       dataset: healthy)
         #expect(!report.isQualityClaimAllowed)
         #expect(report.claimBlockers.map(\.kind) == [.eligibilityStateInconsistent])
-        // The judgement lives in the report; the measure itself is unchanged, so a
-        // reader can still see what the run computed and why it does not count.
-        #expect(report.slice(.precisionAuto)?.rate.denominator == 1)
+        // The judgement lives in the report; the measures themselves are unchanged,
+        // so a reader can still see what the run computed and why it does not count.
+        // Note the pair: the record is in `coverage`'s denominator (one record was
+        // judged) but not in `precision_auto`'s, because an entry that is not
+        // `validated` is not one the program would auto-map.
+        #expect(report.slice(.coverage)?.rate.denominator == 1)
+        #expect(report.slice(.precisionAuto)?.rate.denominator == 0)
 
         let validated = EvaluationFixtures.candidate([.completionyear: "2026"], state: .validated,
                                                      gold: reference)
-        let clean = EvaluationReport(cases: [CaseJudgement(gold: reference, entry: validated)],
+        let clean = EvaluationReport(cases: [EvaluationFixtures.judgement(reference, entry: validated)],
                                      identity: try identity(substitute: false), dataset: healthy)
         #expect(clean.claimBlockers.isEmpty)
     }
@@ -182,7 +186,7 @@ struct EvaluationReportTests {
         // passes only while nobody is careless.
         let pendingGold = try EvaluationFixtures.gold("g7", expected: [.completionyear: "2026"],
                                                      reviewStatus: .adjudicationPending)
-        let pendingCase = CaseJudgement(gold: pendingGold, entry: nil)
+        let pendingCase = EvaluationFixtures.judgement(pendingGold, entry: nil)
         #expect(pendingCase.pendingAdjudication)
         let others = try withheld(39)
         let mixed = EvaluationReport(cases: [pendingCase] + others,
@@ -234,7 +238,7 @@ struct EvaluationReportTests {
         #expect(!report.isQuotable(.precisionAuto))
         // The three measures this run has a population for. The other three never
         // saw a single assertion, so they stay out rather than reporting a zero.
-        #expect(report.quotableMeasures == [.coverage, .holdRate, .inventedFillRate])
+        #expect(report.quotableMeasures == [.coverage, .holdRate, .missedFillRate, .inventedFillRate])
     }
 
     @Test("the report survives the JSON round trip that stores it")

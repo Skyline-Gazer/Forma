@@ -102,7 +102,19 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         self.identity = identity
         self.cases = cases.count
         self.clusters = grouped.count
-        let computedSlices = EvaluationMetrics.slices(for: cases, request: request)
+        // A run that executed under exactly one Profile knows what PLAN §8.2 needs
+        // for "correct"; a multi-Profile run must say which, per stratum, because
+        // guessing from the record's own profile list would score every file correct
+        // simply by being listed somewhere.
+        let metricsRequest: EvaluationMetrics.Request
+        if request.runProfileID == nil, identity.profileVersionKeys.count == 1,
+           let only = identity.profileVersionKeys.keys.first {
+            metricsRequest = EvaluationMetrics.Request(resamples: request.resamples, seed: request.seed,
+                                                       runProfileID: only)
+        } else {
+            metricsRequest = request
+        }
+        let computedSlices = EvaluationMetrics.slices(for: cases, request: metricsRequest)
         self.slices = computedSlices
         self.confusion = EvaluationMetrics.confusion(cases)
         self.dataset = dataset

@@ -11,12 +11,38 @@ enum EvaluationFixtures {
     /// The table `EvaluationMetrics.slices(for:)` builds once per run: one row per
     /// case, one column per measure, in `allCases` order. Bootstrap tests need the
     /// same shape, and hand-rolling it in two places is how the two drift apart.
-    static func populations(_ cases: [CaseJudgement]) -> [[(numerator: Int, denominator: Int)]] {
-        cases.map { judgement in EvaluationMeasure.allCases.map { $0.population(in: judgement) } }
+    static func populations(_ cases: [CaseJudgement], runProfile: String? = nil)
+        -> [[(numerator: Int, denominator: Int)]] {
+        cases.map { judgement in
+            EvaluationMeasure.allCases.map { $0.population(in: judgement, runProfile: runProfile) }
+        }
     }
 
     /// The cluster keys of the same sample, in the same order.
     static func keys(_ cases: [CaseJudgement]) -> [String] { cases.map(\.clusterKey) }
+
+    /// The opaque candidate reference the prompt would have issued, and which the
+    /// manifest association then records. Five characters, because `Bounded.text`
+    /// discards anything shorter than four and the association would silently come
+    /// back reading "unspecified basis".
+    static let candidateRef = "cr-0001"
+
+    /// A judgement over the run's own candidate table, which is how the project
+    /// component of PLAN §8.2 gets checked: the entry carries a candidate reference
+    /// and the table says which project that reference named.
+    static func judgement(_ gold: GoldRecord, entry: ManifestEntry?, wrongProject: Bool = false)
+        -> CaseJudgement {
+        CaseJudgement(gold: gold, entry: entry, projectKeys: projectKeys(for: gold, wrong: wrongProject))
+    }
+
+    /// The run's candidate table, as `ProjectContext` would state it. `wrong`
+    /// resolves the same reference to a different project, which is how a fixture
+    /// expresses a mis-attributed file: the manifest always carries only the
+    /// reference, so the attribution is wrong or right according to the table the
+    /// run was built from, not according to any text inside the entry.
+    static func projectKeys(for gold: GoldRecord, wrong: Bool = false) -> [String: String] {
+        [candidateRef: wrong ? "cl-pa-999" : (gold.expected.projectReference ?? "cl-pa-001")]
+    }
 
     static func values(_ pairs: [MetadataFieldID: String?] = [:]) throws -> MetadataValues {
         try MetadataValues(Dictionary(uniqueKeysWithValues: MetadataFieldID.allCases.map {
@@ -36,7 +62,7 @@ enum EvaluationFixtures {
             source: .init(projectClusterKey: cluster ?? "cluster-" + id, sourceUUID: nil, sha256: nil,
                           redactedRelativePath: "synthetic/\(id).docx", redactedFilename: "\(id).docx",
                           nearDuplicateGroup: nil),
-            expected: .init(state: .mapped, projectReference: "PRJ", targetCategory: "01_招标文件",
+            expected: .init(state: .mapped, projectReference: "cl-pa-001", targetCategory: "01_招标文件",
                             targetType: "Tender Announcement", metadata: try values(expected),
                             allowedUnknownFields: Set(allowUnknown)),
             citations: [.init(label: "c1", excerpt: "脱敏片段", locator: nil)],
@@ -46,12 +72,19 @@ enum EvaluationFixtures {
             usage: .evaluation)
     }
 
-    /// A candidate entry whose every slot carries `status`, with the fields in
-    /// `set` filled from the reference answer's own vocabulary.
+    /// A candidate entry, built so that the three components PLAN §8.2 requires of a
+    /// correct file are intact by default: the group path carries the reference's
+    /// category, a `project_candidate` association carries the run's candidate
+    /// reference (in production's own wording, since the manifest records a reference
+    /// and never a cluster key), and the reference's `profiles` carry the run's
+    /// Profile. Break one to test the file-level rates: `wrongPlacement` moves the
+    /// file, `projectKeys(for:wrong:)` mis-resolves the association, and a reference
+    /// answer naming another Profile fails the third.
     static func candidate(_ set: [MetadataFieldID: String?], status: FieldOutcome.Status = .evidenced,
-                           state: DecisionState = .validated, publishable: Bool = true,
-                           confidence: DecisionConfidence = .high, citations: [String] = ["c1"],
-                           conflicted: [MetadataFieldID] = [], gold: GoldRecord) -> ManifestEntry {
+                          state: DecisionState = .validated, publishable: Bool = true,
+                          confidence: DecisionConfidence = .high, citations: [String] = ["c1"],
+                          conflicted: [MetadataFieldID] = [], wrongPlacement: Bool = false,
+                          gold: GoldRecord) -> ManifestEntry {
         var metadata = MetadataValues.allUnknown
         var fields: [FieldOutcome] = []
         for field in MetadataFieldID.allCases {
@@ -70,11 +103,18 @@ enum EvaluationFixtures {
                                        evidenceIDs: value == nil ? [] : citations,
                                        conflicts: conflicts))
         }
+        let category = gold.expected.targetCategory ?? "01_招标文件"
+        // The reference answer's own project key is not written into the entry: what
+        // production records is the opaque candidate reference, and the table the run
+        // was built from resolves it.
         return ManifestEntry(
             sourceID: UUID(), snapshotFingerprint: String(repeating: "a", count: 64), snapshotRevision: 2,
             sourceVersion: 1, relativePath: "p/\(gold.recordID).docx", state: state,
-            target: ManifestTarget(databaseName: "Project_Archive", groupPath: ["2026"], resolved: true),
-            metadata: metadata, fields: fields, associations: [],
+            target: ManifestTarget(databaseName: "Project_Archive",
+                                   groupPath: [wrongPlacement ? "09_其他" : category, "2026"], resolved: true),
+            metadata: metadata, fields: fields,
+            associations: [ManifestAssociation(kind: .projectCandidate, sourceID: UUID(),
+                                               basis: "context revision 3 candidate \(candidateRef)")],
             eligibleForAutoExecution: publishable, invalidatedReason: nil, confidence: confidence,
             providerReasoning: nil)
     }

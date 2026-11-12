@@ -112,7 +112,48 @@ public struct CaseJudgement: Codable, Sendable, Equatable {
     public let pendingAdjudication: Bool
     public let fields: [FieldJudgement]
 
-    public init(gold: GoldRecord, entry: ManifestEntry?) {
+    /// PLAN §8.2's `auto_mapped`: the program's own policy would execute this
+    /// mapping. That is the entry flag plus a `validated` state, and deliberately
+    /// **not** the model's self-reported confidence - the plan says so out loud
+    /// ("不能用模型自报 high 替代"), because a model that is confident about a
+    /// rejected placement still gets rejected.
+    public let isAutoMapped: Bool
+    /// The three components PLAN §8.2 requires for a file-level prediction to count
+    /// as correct. Each is stated separately so a wrong number can be traced to the
+    /// component that made it wrong instead of being a single opaque boolean.
+    ///
+    /// An expectation the reference answer does not state (`nil`) is satisfied
+    /// vacuously: the harness cannot invent a project or category the annotator
+    /// left unspecified, and calling that unspecified thing a miss would penalise
+    /// the run for the dataset's own silence.
+    public let matchesProjectReference: Bool
+    public let matchesTargetCategory: Bool
+    /// The entry's declared confidence, kept apart from `isAutoMapped` because
+    /// `high_confidence_error_rate` measures that claim, not the policy verdict.
+    public let declaresHighConfidence: Bool
+
+    /// Profile, project attribution, target category - all three, per PLAN §8.2.
+    /// `runProfile` is nil when the run does not name a single Profile, in which
+    /// case the first component cannot be established and no file counts as
+    /// correct: an unanswerable check is reported as no measurement, never as a
+    /// pass.
+    public func mainDecisionIsCorrect(runProfile: String?) -> Bool {
+        guard let runProfile else { return false }
+        return profiles.contains(runProfile) && matchesProjectReference && matchesTargetCategory
+    }
+
+    /// `projectKeys` is the run's candidate table: the opaque `candidate_ref` the
+    /// prompt issued mapped to the project cluster key it names, as
+    /// `ProjectContext.candidates` states it (`ContextCandidate.id` →
+    /// `ContextCandidate.projectKey`). It has to come from outside because the
+    /// manifest never records a cluster key in an association: `ManifestValidator`
+    /// writes `"context revision N candidate <ref>"`, while the reference answer
+    /// names the cluster key (GOLD-DATASET「期望项目归属」). A judgement built
+    /// without the table can still read the project from the metadata slot and the
+    /// placement, but an entry whose only project evidence is an unresolved ref is
+    /// judged as not matching - the alternative is scoring attribution correct
+    /// because nobody could check it.
+    public init(gold: GoldRecord, entry: ManifestEntry?, projectKeys: [String: String] = [:]) {
         self.recordID = gold.recordID
         self.profiles = gold.profiles
         self.category = gold.scenario.category
@@ -121,5 +162,44 @@ public struct CaseJudgement: Codable, Sendable, Equatable {
         self.candidateState = entry?.state
         self.pendingAdjudication = gold.isPendingAdjudication
         self.fields = MetadataFieldID.allCases.map { FieldJudgement(gold: gold, field: $0, entry: entry) }
+        self.isAutoMapped = entry.map { $0.state == .validated && $0.eligibleForAutoExecution } ?? false
+        self.declaresHighConfidence = entry?.confidence == .high
+        self.matchesProjectReference = CaseJudgement.matches(
+            gold.expected.projectReference,
+            in: entry.map { entry in
+                CaseJudgement.attributedProjectKeys(in: entry, projectKeys: projectKeys)
+                    + [entry.outcome(for: .projectname)?.value]
+                    + entry.target.groupPath + [entry.target.databaseName]
+            } ?? [])
+        self.matchesTargetCategory = CaseJudgement.matches(gold.expected.targetCategory,
+                                                           in: entry?.target.groupPath ?? [])
+    }
+
+    /// The cluster keys the entry's `project_candidate` associations stand for. The
+    /// ref appears as a whitespace-separated token of the association basis, the only
+    /// place production writes it; a basis naming several refs resolves to several
+    /// keys.
+    ///
+    /// Where a file has more than one candidate, the association set is every project
+    /// claiming it rather than the one the program picked, because
+    /// `evaluateAssociation` records `candidateIDs` for all of them. That ambiguity
+    /// does not reach `precision_auto`: a conflicted membership blocks eligibility, so
+    /// such a record sits outside the population. The residual risk is a table built
+    /// from a context whose conflicted set did not match its candidates.
+    private static func attributedProjectKeys(in entry: ManifestEntry,
+                                              projectKeys: [String: String]) -> [String?] {
+        entry.associations.filter { $0.kind == .projectCandidate }.flatMap { link in
+            let tokens = Set(link.basis.split(separator: " ").map(String.init))
+            return projectKeys.compactMap { reference, key in tokens.contains(reference) ? key : nil }
+        }
+    }
+
+    /// Same-value comparison as the validator's, against every candidate string the
+    /// entry offers for that role.
+    private static func matches(_ expected: String?, in candidates: [String?]) -> Bool {
+        guard let expected, !expected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return true
+        }
+        return candidates.contains { ValueNormalization.equal($0, expected) }
     }
 }

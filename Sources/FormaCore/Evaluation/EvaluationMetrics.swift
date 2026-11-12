@@ -1,69 +1,104 @@
-import Foundation
-
-/// The rates PLAN §8.2 defines, computed over judged cases.
+/// The rates of PLAN §8.2, at the unit that plan states them in.
 ///
-/// Each measure restricts its own population, and that is the whole reason this
-/// file exists: a single accuracy number would silently mix "the engine did not
-/// answer", "the engine answered wrongly", "the answer was contradicted by other
-/// evidence" and "the answer was a fill nobody asked for", which the contract
-/// treats - and the reviewer acts on - differently.
+/// Coverage, `precision_auto`, `hold_rate` and `high_confidence_error_rate` are
+/// about a **record** - one gold file, one main decision - because that is how the
+/// thresholds were written ("coverage = auto_mapped / total"). `field_precision`
+/// and the two fill rates are about a **slot**, and are reported per field as well
+/// as pooled. The units are not interchangeable: with forty records whose twelve
+/// slots each got one right answer, file-level coverage is nil while slot-level
+/// coverage reads 8%, and quoting the second under the first name would pass a
+/// threshold the run did not meet.
+///
+/// Each measure restricts its own population, and that is the reason this file
+/// exists: one accuracy number would silently mix "the engine did not answer", "it
+/// answered wrongly", "its own evidence contradicts the answer" and "it filled a
+/// slot nobody asked about", which the contract - and a reviewer acting on it -
+/// treats differently.
 public enum EvaluationMeasure: String, Codable, Sendable, CaseIterable, Comparable {
     case coverage
     case precisionAuto = "precision_auto"
     case highConfidenceErrorRate = "high_confidence_error_rate"
     case fieldPrecision = "field_precision"
     case holdRate = "hold_rate"
+    case missedFillRate = "missed_fill_rate"
     case inventedFillRate = "invented_fill_rate"
 
     public static func < (lhs: EvaluationMeasure, rhs: EvaluationMeasure) -> Bool {
         lhs.rawValue < rhs.rawValue
     }
 
-    /// Numerator and denominator over the slots of one case.
+    /// Whether this rate's numerator and denominator count records or slots.
     ///
-    /// When the engine produced no entry for the source at all - `candidateState`
-    /// is nil - every reference value counts as held, and nothing can be
-    /// contradicted or published, because there is nothing to publish.
-    func population(in judgement: CaseJudgement) -> (numerator: Int, denominator: Int) {
-        let held = judgement.candidateState.map { $0 == .hold || $0 == .unknown } ?? true
-        let slots = judgement.fields
-
+    /// Published because `EvaluationSlice.caseCount` coincides with the denominator
+    /// only for the record-level measures; a reader comparing the two needs to know
+    /// which unit they are looking at.
+    public var unit: Unit {
         switch self {
-        case .coverage:
-            // Reference has a value; the candidate gave one that nothing fought.
-            let denominator = slots.filter { $0.verdict.isExpectationSlot }.count
-            let numerator = slots.filter { $0.verdict == .correct || $0.verdict == .wrong }.count
-            return (numerator, denominator)
-        case .precisionAuto:
-            let denominator = slots.filter { ($0.verdict == .correct || $0.verdict == .wrong)
-                && $0.autoPublishable }.count
-            let numerator = slots.filter { $0.verdict == .correct && $0.autoPublishable }.count
-            return (numerator, denominator)
-        case .highConfidenceErrorRate:
-            let denominator = slots.filter { ($0.verdict == .correct || $0.verdict == .wrong)
-                && $0.highConfidence }.count
-            let numerator = slots.filter { $0.verdict == .wrong && $0.highConfidence }.count
-            return (numerator, denominator)
-        case .fieldPrecision:
-            // Every non-empty candidate, contradicted and invented included: this
-            // is "of what the engine asserted, how much was right".
-            let denominator = slots.filter { $0.verdict.isCandidateAssertion }.count
-            let numerator = slots.filter { $0.verdict == .correct }.count
-            return (numerator, denominator)
-        case .holdRate:
-            let denominator = slots.filter { $0.verdict.isExpectationSlot }.count
-            let withheld = slots.filter { $0.verdict == .withheld }.count
-            // An entry parked in `hold`/`unknown` holds every slot it left filled
-            // too, which is why the case-level state counts, not just empty values.
-            let numerator = held ? denominator : withheld
-            return (numerator, denominator)
-        case .inventedFillRate:
-            let denominator = slots.filter { $0.verdict.isNullExpectation }.count
-            let numerator = slots.filter { $0.verdict == .invented }.count
-            return (numerator, denominator)
+        case .coverage, .precisionAuto, .highConfidenceErrorRate, .holdRate: .records
+        case .fieldPrecision, .missedFillRate, .inventedFillRate: .slots
         }
     }
+
+    public enum Unit: String, Codable, Sendable {
+        case records, slots
+    }
+
+    /// Numerator and denominator contributed by one case.
+    ///
+    /// `runProfile` is the Profile the run executed under, required by PLAN §8.2's
+    /// definition of a correct file; nil means the run did not name exactly one, so
+    /// `precision_auto` and `high_confidence_error_rate` have no population at all
+    /// rather than a guess about the Profile component.
+    func population(in judgement: CaseJudgement, runProfile: String?) -> (numerator: Int, denominator: Int) {
+        let slots = judgement.fields
+        switch self {
+        case .coverage:
+            // auto_mapped / total: one record, one policy-executable mapping.
+            return (judgement.isAutoMapped ? 1 : 0, 1)
+        case .precisionAuto:
+            guard judgement.isAutoMapped else { return (0, 0) }
+            return (judgement.mainDecisionIsCorrect(runProfile: runProfile) ? 1 : 0, 1)
+        case .highConfidenceErrorRate:
+            // The model's own claim, over the records it made one; PLAN §8.2 keeps
+            // this separate from the policy verdict on purpose.
+            guard judgement.declaresHighConfidence, judgement.candidateState != nil else { return (0, 0) }
+            return (judgement.mainDecisionIsCorrect(runProfile: runProfile) ? 0 : 1, 1)
+        case .holdRate:
+            // held / total. No entry is held as surely as an entry that was parked
+            // mid-decision: the reviewer received nothing either way.
+            let held = judgement.candidateState.map { $0 == .hold || $0 == .unknown } ?? true
+            return (held ? 1 : 0, 1)
+        case .fieldPrecision:
+            // Every non-empty candidate, contradicted and invented included: of what
+            // the engine asserted, how much was right.
+            let asserted = slots.filter { $0.verdict.isCandidateAssertion }.count
+            let correct = slots.filter { $0.verdict == .correct }.count
+            return (correct, asserted)
+        case .missedFillRate:
+            // PLAN §8.2's 漏填: the reference had a value and the candidate did not.
+            // `allowedUnknown` slots - where the reference declined to guess - are
+            // not expectation slots, so they stay out of this denominator entirely:
+            // an agreed unknown is not a miss, which is the distinction the plan asks
+            // the report to keep visible.
+            let expected = slots.filter { $0.verdict.isExpectationSlot }.count
+            let missed = slots.filter { $0.verdict == .withheld }.count
+            return (missed, expected)
+        case .inventedFillRate:
+            // Slots with no expectation, filled or wrongly filled.
+            let nullExpectation = slots.filter { $0.verdict.isNullExpectation }.count
+            let invented = slots.filter { $0.verdict == .invented }.count
+            return (invented, nullExpectation)
+        }
+    }
+
+    /// The same measure restricted to one field, for `field_precision`'s per-field
+    /// rows (PLAN §8.2: "12 字段分别报告").
+    func population(in field: FieldJudgement) -> (numerator: Int, denominator: Int) {
+        let asserted = field.verdict.isCandidateAssertion
+        return (field.verdict == .correct ? 1 : 0, asserted ? 1 : 0)
+    }
 }
+
 
 extension FieldJudgement.Verdict {
     /// The reference answer has a value here.
@@ -77,11 +112,9 @@ extension FieldJudgement.Verdict {
 
 /// A fraction with the observation count attached.
 ///
-/// The denominator is never published alone: every one of these rates counts
-/// field-level slots, so a five-record run can show a denominator in the tens and
-/// a 150-record run can show a denominator of zero for `precision_auto`. What a
-/// rate cannot say is how many *records* produced it - that is on
-/// `EvaluationSlice.caseCount`, and it is the number the candidate-value gate uses.
+/// Which unit the denominator counts - records or slots - is stated by
+/// `EvaluationMeasure.unit`, and `EvaluationSlice` publishes both the rate and the
+/// record count so a reader never has to infer one from the other.
 public struct EvaluationRate: Codable, Sendable, Equatable {
     public let numerator: Int
     public let denominator: Int
@@ -115,15 +148,20 @@ public struct EvaluationRate: Codable, Sendable, Equatable {
 /// One measure at one cut of the data.
 public struct EvaluationSlice: Codable, Sendable, Equatable {
     public enum Stratum: String, Codable, Sendable, CaseIterable {
-        case overall, profile, category
+        /// `field` rows exist for `field_precision` only: PLAN §8.2 asks for the
+        /// twelve fields separately, and the pooled row above them is the one with a
+        /// cluster interval. A field row therefore carries Wilson and the counts, and
+        /// reports `clusterInterval == nil` by construction, not by thinness.
+        case overall, profile, category, field
     }
 
     public let measure: EvaluationMeasure
     public let stratum: Stratum
     /// The stratum's key - a Profile id, a scenario category, or nil for overall.
     public let key: String?
-    /// Records judged in this stratum. Distinct from `rate.denominator`, which
-    /// counts slots.
+    /// Records judged in this stratum. Equal to `rate.denominator` for the
+    /// record-level measures (`EvaluationMeasure.unit == .records`), and its usual
+    /// multiple for the slot-level ones.
     public let caseCount: Int
     /// Clusters this stratum judged, published so a nil `clusterInterval` can be
     /// told apart: too few clusters to vary, or this measure too thin.
@@ -149,6 +187,7 @@ public struct EvaluationSlice: Codable, Sendable, Equatable {
     /// anything. A measure with no observations is not "0%" and not a finding.
     public var isQuotableOnOwnMerits: Bool { !isSparse && rate.denominator > 0 }
 }
+
 
 /// Cluster-level resampling, and the rate that goes with it.
 ///
@@ -287,9 +326,16 @@ public enum EvaluationMetrics {
     public struct Request: Sendable {
         public let resamples: Int
         public let seed: UInt64
-        public init(resamples: Int = 2_000, seed: UInt64 = 0x9E37_79B9_7F4A_7C15) {
+        /// The Profile this run executed under, when the run named exactly one.
+        /// PLAN §8.2 makes "correct" include the Profile component, so without it
+        /// `precision_auto` and `high_confidence_error_rate` have no population; the
+        /// per-Profile strata fill it in from their own key regardless.
+        public let runProfileID: String?
+        public init(resamples: Int = 2_000, seed: UInt64 = 0x9E37_79B9_7F4A_7C15,
+                    runProfileID: String? = nil) {
             self.resamples = resamples
             self.seed = seed
+            self.runProfileID = runProfileID
         }
     }
 
@@ -297,13 +343,16 @@ public enum EvaluationMetrics {
     /// reads that table, because a cut is a selection, not a new measurement.
     public static func slices(for cases: [CaseJudgement], request: Request = Request()) -> [EvaluationSlice] {
         let measures = EvaluationMeasure.allCases
-        let populations: [[(numerator: Int, denominator: Int)]] = cases.map { judgement in
-            measures.map { $0.population(in: judgement) }
-        }
         let keys = cases.map(\.clusterKey)
 
         var output: [EvaluationSlice] = []
         for (stratum, key, sample) in cuts(of: cases) {
+            // A per-Profile cut knows its own Profile; elsewhere only a run that
+            // named exactly one does.
+            let runProfile = stratum == .profile ? key : request.runProfileID
+            let populations: [[(numerator: Int, denominator: Int)]] = cases.map { judgement in
+                measures.map { $0.population(in: judgement, runProfile: runProfile) }
+            }
             let summaries = ClusterBootstrap.summarize(measures: measures, populations: populations,
                                                        indices: sample, keys: keys,
                                                        resamples: request.resamples, seed: request.seed)
@@ -313,8 +362,34 @@ public enum EvaluationMetrics {
                                               caseCount: sample.count, clusterCount: summary.clusterCount,
                                               rate: summary.rate, clusterInterval: summary.interval))
             }
+            if stratum == .overall {
+                output.append(contentsOf: fieldRows(sample, cases))
+            }
         }
         return output
+    }
+
+    /// Twelve `field_precision` rows, because a pooled number hides the one field
+    /// that is actually failing - which for these profiles tends to be a date or an
+    /// amount rather than the project name everyone watches.
+    private static func fieldRows(_ sample: [Int], _ cases: [CaseJudgement]) -> [EvaluationSlice] {
+        var rows: [EvaluationSlice] = []
+        for field in MetadataFieldID.allCases {
+            var numerator = 0
+            var denominator = 0
+            for position in sample {
+                guard let slot = cases[position].fields.first(where: { $0.field == field }) else { continue }
+                let pair = EvaluationMeasure.fieldPrecision.population(in: slot)
+                numerator += pair.numerator
+                denominator += pair.denominator
+            }
+            rows.append(EvaluationSlice(measure: .fieldPrecision, stratum: .field, key: field.rawValue,
+                                        caseCount: sample.count,
+                                        clusterCount: Set(sample.map { cases[$0].clusterKey }).count,
+                                        rate: EvaluationRate(numerator: numerator, denominator: denominator),
+                                        clusterInterval: nil))
+        }
+        return rows
     }
 
     /// The strata to report, each as positions into `cases`. Overall first, then
