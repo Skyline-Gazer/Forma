@@ -265,7 +265,7 @@ struct EvaluationRunnerTests {
 
         // The same run with a reported first token: the column exists, and it is
         // not the total response time.
-        let streaming = SubstituteAnswer(firstTokenMilliseconds: 40, reportedLatencyMilliseconds: 900)
+        let streaming = SubstituteAnswer(reportedLatencyMilliseconds: 900, firstTokenMilliseconds: 40)
         let observed = try await EvaluationRunner.run(
             dataset: data, answerer: answerer(records, fallback: streaming),
             configuration: configuration(profile: try profile))
@@ -377,10 +377,11 @@ struct EvaluationRunnerTests {
         let run = try await EvaluationRunner.run(dataset: data, answerer: answerer(records),
                                                  configuration: configuration(profile: try profile))
         let bytes = try run.export()
-        let text = String(decoding: bytes, encoding: .utf8)
+        let text = String(decoding: bytes, as: UTF8.self)
 
         // The manifest's own paths are exactly what a shareable report may not carry.
         #expect(!text.contains("synthetic/"))
+        let artifact = try FormaJSON.decode(EvaluationArtifact.self, from: bytes)
         #expect(artifact.runID == run.runID)
         #expect(artifact.identity.isSubstitute)
         #expect(artifact.report.claimBlockers.contains { $0.kind == .substituteAnswers })
