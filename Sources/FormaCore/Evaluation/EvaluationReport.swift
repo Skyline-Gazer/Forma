@@ -14,12 +14,17 @@ public struct EvaluationRunIdentity: Codable, Sendable, Equatable {
     /// True when the answers came from a deterministic stand-in rather than a
     /// model. Every quality claim is refused while this is true.
     public let isSubstitute: Bool
+    /// Draws behind every `clusterInterval` in the run. `EvaluationReport` computes
+    /// its slices with this number rather than with one of its own, so §5's third nil
+    /// cause - a short draw - is readable from the published value alone.
     public let bootstrapResamples: Int
     public let bootstrapSeed: UInt64
 
     public init(goldRevision: String, splitID: String, casePackID: String, casePackVersion: String,
                 profileVersionKeys: [String: String], provider: String, modelID: String?, isSubstitute: Bool,
                 bootstrapResamples: Int, bootstrapSeed: UInt64) {
+        precondition(bootstrapResamples >= 1,
+                     "the identity names the draws the report will compute with; zero names none")
         self.goldRevision = goldRevision
         self.splitID = splitID
         self.casePackID = casePackID
@@ -131,8 +136,13 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
     /// `EvaluationSlice.sparseCaseLimit` for what that threshold is and is not.
     public let quotableMeasures: [EvaluationMeasure]
 
-    public init(cases: [CaseJudgement], identity: EvaluationRunIdentity, dataset: GoldDataset.Report,
-                request: EvaluationMetrics.Request = EvaluationMetrics.Request()) {
+    /// The run identity is the only source for how the bands were drawn. Both numbers
+    /// used to also be parameters of this initialiser, so a caller could publish
+    /// `bootstrapResamples = 1` over slices computed from the default 2,000 draws -
+    /// and §5's third nil cause is read from the published number, which would then
+    /// have told a reader the run was short-drawn when nothing about it was short.
+    /// Deriving them here is what makes the contradiction impossible to express.
+    public init(cases: [CaseJudgement], identity: EvaluationRunIdentity, dataset: GoldDataset.Report) {
         let grouped = Dictionary(grouping: cases, by: \.clusterKey)
         self.identity = identity
         self.cases = cases.count
@@ -141,14 +151,11 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         // for "correct"; a multi-Profile run must say which, per stratum, because
         // guessing from the record's own profile list would score every file correct
         // simply by being listed somewhere.
-        let metricsRequest: EvaluationMetrics.Request
-        if request.runProfileID == nil, identity.profileVersionKeys.count == 1,
-           let only = identity.profileVersionKeys.keys.first {
-            metricsRequest = EvaluationMetrics.Request(resamples: request.resamples, seed: request.seed,
-                                                       runProfileID: only)
-        } else {
-            metricsRequest = request
-        }
+        let metricsRequest = EvaluationMetrics.Request(resamples: identity.bootstrapResamples,
+                                                       seed: identity.bootstrapSeed,
+                                                       runProfileID: identity.profileVersionKeys.count == 1
+                                                           ? identity.profileVersionKeys.keys.first
+                                                           : nil)
         let computedSlices = EvaluationMetrics.slices(for: cases, request: metricsRequest)
         self.slices = computedSlices
         self.confusion = EvaluationMetrics.confusion(cases)

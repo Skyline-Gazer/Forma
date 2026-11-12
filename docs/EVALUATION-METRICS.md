@@ -86,8 +86,8 @@
 ## 4. 区间
 
 - **Wilson 95%**（`EvaluationRate.wilson95Lower/Upper`）：这些比率贴近 0 或 1，正态近似会给出越出 [0,1] 的对称区间，把十几条观测的确信度报虚。区间值由 `wilsonBoundsTheStandardWay` 按教科书数值钉死（5/20 ⇒ 0.1119–0.4687 等）——此前一个把 `/n` 写成 `/(1 + z²/n)` 的错误实现会让**所有**区间退化成 [0,1]，却仍能通过任何"端点是否落在单位区间内"的断言。
-- **按项目簇 bootstrap**（`ClusterBootstrap.summarize`，入口只有一个）：带是重抽样比率分布的两个顺序统计量。**两次及以下**抽样时 2.5% 与 97.5% 的下标落在同一个样本上，报出来的是**宽度为零的"置信带"**；再多几次的近秩分位数则只是那批簇的极值（20 次时下界就是样本最小值），照样被读成 95% 带。`ClusterBootstrap.minimumResamples = 20` 是本 harness 停止把这种结果称为"带"的地方——它不是数学边界，与 `minimumClusters`、`sparseCaseLimit` 同为策略值（§5），PLAN 未规定重抽样次数；`Request.init` 只拒绝 `resamples < 1`（要 0 次抽样不是"少一列"，而是根本没要这次测量），其余不垫高。重抽样的单位是 `clusterKey`（项目簇），不是记录。同一项目的多个文件不是独立观测；按记录抽会把"一个项目的形状"读成普遍性。簇数 < 5（`minimumClusters`）时返回 nil——少于这个簇，区间宽度是种子的产物而不是数据的。任一次重抽样的分母为 0 ⇒ **该指标的整体区间为 nil**（这一层薄到给不出簇级区间），而不是把那次抽样丢掉后照报：丢掉后剩下的恰好都是"有答案的簇"，区间会在最需要报宽的地方被压窄。失效逐指标独立、且与抽样顺序无关——某指标被判无定义不会带走同一次抽样里其他指标的份额（`invented_fill_rate` 排在 `precision_auto` 之后，正是顺序敏感会露馅的位置）；该性质由 `EvaluationMetricsTests.voidingIsOrderIndependent` 固定，把实现退回"清空 + break"时该用例会失败。七个指标共用同一组抽样索引（索引只与种子和簇数有关）。分位点（2.5%/97.5%）直接取自重抽样分布，不做正态拟合：少量簇的比率分布是块状的，**块本身就是发现**。
-- 抽样使用 `SplitMix64`，种子与重抽样次数写入 `EvaluationRunIdentity`；`SystemRandomNumberGenerator` 跨版本不保证序列，而一次测量必须能从记录里复跑。
+- **按项目簇 bootstrap**（`ClusterBootstrap.summarize`，入口只有一个）：带是重抽样比率分布的两个顺序统计量。**两次及以下**抽样时 2.5% 与 97.5% 的下标落在同一个样本上，报出来的是**宽度为零的"置信带"**；再多几次的近秩分位数则只是那批簇的极值（20 次时下界就是样本最小值），照样被读成 95% 带。`ClusterBootstrap.minimumResamples = 20` 是本 harness 停止把这种结果称为"带"的地方——它不是数学边界，与 `minimumClusters`、`sparseCaseLimit` 同为策略值（§5），PLAN 未规定重抽样次数；`Request.init` 与 `EvaluationRunIdentity.init` 都只拒绝 `resamples < 1`（要 0 次抽样不是"少一列"，而是根本没要这次测量），其余不垫高。重抽样的单位是 `clusterKey`（项目簇），不是记录。同一项目的多个文件不是独立观测；按记录抽会把"一个项目的形状"读成普遍性。簇数 < 5（`minimumClusters`）时返回 nil——少于这个簇，区间宽度是种子的产物而不是数据的。任一次重抽样的分母为 0 ⇒ **该指标的整体区间为 nil**（这一层薄到给不出簇级区间），而不是把那次抽样丢掉后照报：丢掉后剩下的恰好都是"有答案的簇"，区间会在最需要报宽的地方被压窄。失效逐指标独立、且与抽样顺序无关——某指标被判无定义不会带走同一次抽样里其他指标的份额（`invented_fill_rate` 排在 `precision_auto` 之后，正是顺序敏感会露馅的位置）；该性质由 `EvaluationMetricsTests.voidingIsOrderIndependent` 固定，把实现退回"清空 + break"时该用例会失败。七个指标共用同一组抽样索引（索引只与种子和簇数有关）。分位点（2.5%/97.5%）直接取自重抽样分布，不做正态拟合：少量簇的比率分布是块状的，**块本身就是发现**。
+- 抽样使用 `SplitMix64`；`SystemRandomNumberGenerator` 跨版本不保证序列，而一次测量必须能从记录里复跑。种子与重抽样次数**只有 `EvaluationRunIdentity` 一份**：`EvaluationReport.init` 不再接受 `EvaluationMetrics.Request`，报表里的每一条带就是用发布出来的那两个数算的。此前两处各存一份（`Request` 默认 2000，身份由调用方另填），于是"发布 1 次抽样、实际按 2000 次算带"这种矛盾在类型上就能写出来，而 §5 的第三个 nil 原因（短抽样）恰恰是读者从发布值读的——那个数说谎，(c) 就永远不会出现，读者对带的信任度判断直接失真。`EvaluationRunIdentity.init` 也拒绝 `bootstrapResamples < 1`，因为它现在就是本次计算用的次数。
 
 ## 5. 稀疏与"可引用"
 
@@ -165,6 +165,6 @@
 | `EvaluationMetrics.confusion(_:)` | 同上 | 键形如 `mapped->absent`；无条目用 `absent` |
 | `EvaluationMetrics.refusals(_:)` → `Refusals` | 同上 | PLAN §8.2 的拒判原因；`byRecordState` 只数未自动落地的记录，`bySlotStatus` 遍历全部记录数未填的期望槽；两个字典不得合并（§3 第 5 条），后者的总数与 `missed_fill_rate` 的分子一致 |
 | `EvaluationRunIdentity` | `Sources/FormaCore/Evaluation/EvaluationReport.swift` | 替身标志是身份的字段，不是脚注 |
-| `EvaluationReport`（`Blocker`/`Finding`/`isQuotable`） | 同上 | 门禁在报告层，不在调用方；`claimBlockers` 逐项披露，被否决的运行仍原样发布各切面（否决不是隐藏） |
+| `EvaluationReport`（`Blocker`/`Finding`/`isQuotable`） | 同上 | 门禁在报告层，不在调用方；`claimBlockers` 逐项披露，被否决的运行仍原样发布各切面（否决不是隐藏）；每条带所用的抽样次数与种子取自 `identity`，报表层不留第二份 |
 
 共享夹具：`Tests/FormaCoreTests/EvaluationTestSupport.swift`（`EvaluationFixtures.gold/candidate/values/judgement/projectKeys`）。`candidate` 写出的 association basis 用生产原文格式，项目对错只能通过 `projectKeys(for:wrong:)` 表达——夹具自己把簇键塞进条目的话，测的就不是要跑的那条路了。指标与门禁两个 suite 必须用同一套构造器，否则会在 12 槽与 4 字下限这类细节上各自漂移。

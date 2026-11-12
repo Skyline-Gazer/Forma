@@ -332,22 +332,31 @@ struct EvaluationReportTests {
         #expect(mislabelled.slice(.coverage)?.rate.denominator == 40)
     }
 
-    @Test("a run that asked for no bands records what it asked for")
-    func resamplesArePublishedWithTheRun() throws {
+    @Test("the run identity is what governs the bands")
+    func resamplesComeFromTheRunIdentity() throws {
         // §5's third nil cause is only honest while a reader can tell it apart from
-        // "too thin" using the report alone - hence the resample count belongs to the
-        // run identity next to the slice that has no interval.
-        let report = EvaluationReport(cases: try withheld(40),
-                                      identity: try identity(substitute: false, resamples: 1),
-                                      dataset: try dataset(reviewed: 160),
-                                      request: EvaluationMetrics.Request(resamples: 1))
-        let coverage = try #require(report.slice(.coverage))
+        // "too thin" using the report alone - which requires the published number to
+        // be the number that was used. There is no parameter left that could say
+        // otherwise, so the two reports below differ in their identity alone.
+        let cases = try withheld(40)
+        let short = EvaluationReport(cases: cases,
+                                     identity: try identity(substitute: false, resamples: 1),
+                                     dataset: try dataset(reviewed: 160))
+        let coverage = try #require(short.slice(.coverage))
         #expect(coverage.clusterInterval == nil)
         #expect(coverage.clusterCount >= 5, "so thinness is not the reason there is no band")
         #expect(coverage.isQuotableOnOwnMerits, "a missing band is not a missing measurement")
-        // The two halves belong to one run: the identity carries the number the
-        // slices were computed with, which is what lets a reader rule out (b).
-        #expect(report.identity.bootstrapResamples == 1)
-        #expect(report.isQuotable(.coverage))
+        #expect(short.identity.bootstrapResamples == 1)
+        #expect(short.isQuotable(.coverage))
+
+        let long = EvaluationReport(cases: cases,
+                                    identity: try identity(substitute: false, resamples: 2_000),
+                                    dataset: try dataset(reviewed: 160))
+        // Same cases, same clusters, same gate: only the draws differ. A report that
+        // ignored the identity would return nil here as well, and the first half
+        // above would then have passed for the wrong reason.
+        #expect(long.slice(.coverage)?.clusterInterval != nil)
+        #expect(long.clusters == short.clusters)
+        #expect(long.cases == short.cases)
     }
 }
