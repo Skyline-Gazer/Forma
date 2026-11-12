@@ -93,18 +93,16 @@ public struct EvaluationRate: Codable, Sendable, Equatable {
         self.numerator = numerator
         self.denominator = denominator
         self.estimate = denominator > 0 ? Double(numerator) / Double(denominator) : nil
-        // Wilson rather than the normal approximation: these rates sit near 0 and
-        // 1, where the symmetric interval runs outside the valid range and reports
-        // confidence a sample of a dozen does not carry.
+        // Wilson rather than the normal approximation: these rates sit near 0 and 1,
+        // where a symmetric band runs outside the valid range and reports a
+        // confidence a sample of a dozen does not carry. The bounds are the standard
+        // interval with its exact values pinned by `wilsonBoundsTheStandardWay` - a
+        // bracket that always spans [0, 1] satisfies every "is it inside the unit
+        // interval" assertion ever written, which is how a wrong divisor here stayed
+        // green.
         guard denominator > 0, let p = estimate else {
             wilson95Lower = nil; wilson95Upper = nil; return
         }
-        // Wilson, not the normal approximation: these rates sit near 0 and 1,
-        // where a symmetric band runs outside the valid range and reports a
-        // confidence a sample of a dozen does not carry. The bounds are the
-        // standard interval - the exact values are pinned by `wilsonBoundsThe
-        // StandardWay`, because a bracket that always spans [0, 1] would satisfy
-        // every "is it inside the unit interval" assertion ever written.
         let n = Double(denominator), z = 1.959_963_985_268_05
         let scale = z * z / n
         let centre = (p + scale / 2) / (1 + scale)
