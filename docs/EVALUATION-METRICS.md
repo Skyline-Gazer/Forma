@@ -58,8 +58,8 @@
 | 指标 | 分母 | 分子 | 附加限制 |
 | --- | --- | --- | --- |
 | `coverage` | 期望槽 | `correct` + `wrong` | — |
-| `precision_auto` | `correct`+`wrong` 且该槽可自动发布 | `correct` 且可自动发布 | 见下"可自动发布" |
-| `high_confidence_error_rate` | `correct`+`wrong` 且条目为高置信 | `wrong` 且高置信 | — |
+| `precision_auto` | `correct`+`wrong` 且该槽**可自动发布** | `correct` 且**可自动发布** | 可自动发布 = 条目 `eligibleForAutoExecution` == true ∧ 该槽 `status ∈ {evidenced, inherited}` ∧ 该槽 `evidenceIDs` 非空 |
+| `high_confidence_error_rate` | `correct`+`wrong` 且条目 `confidence == .high` | `wrong` 且条目 `confidence == .high` | — |
 | `field_precision` | 候选断言 | `correct` | — |
 | `hold_rate` | 期望槽 | 见下"搁置" | — |
 | `invented_fill_rate` | 空期望槽 | `invented` | — |
@@ -67,13 +67,14 @@
 三个必须写下来的判断：
 
 1. **`coverage` 的分子含 `wrong`，不含 `contradicted`。** coverage 回答"引擎够到了多少该答的槽位"，答错也算够到；被自身证据反驳则不算——那是程序自己都不认的产出。**0% 的 coverage 是合法可引用的结果**（被问到 42 个槽、一个没答），不是"没测到"。
-2. **可自动发布** = 条目 `eligibleForAutoExecution` **且** 该槽状态 ∈ {`evidenced`, `inherited`} **且** 该槽有引用。`precision_auto` 因此度量的是"程序真的会自动写出去的那部分有多准"——只算条目级开关会让指标描述一条程序根本不走的路径。
+2. **可自动发布** = 条目 `eligibleForAutoExecution` **且** 该槽 `status ∈ {evidenced, inherited}` **且** 该槽 `evidenceIDs` 非空。条目级开关由 `ManifestValidator.computeEligibility` 在登记时算出并存进条目（快照匹配、引用可用、无 `.conflict` 槽、必填齐备等），指标层**不重算条目级规则**，只补上条目级开关没有的那一半：这一格自己的状态与引用。
+   为什么必须有这一半：`contradicted` 槽已被 `correct/wrong` 的筛选排除在外，`.conflict` 状态更是直接让条目失去开关；剩下能进分母而又不该算"会自动写出去"的，是状态为 `rejected_by_policy` / `not_applicable` / `unknown` 却带着值的槽——按条目级开关它们会被计入"程序会自动发布"，从而把 `precision_auto` 抬高。执行路径（真正写出 DEVONthink/OneDrive）尚未实现，因此这一条是**指标先行定义的契约**：将来实现执行器时，写入的槽位集合必须与之相同，否则 `precision_auto` 度量的就不是程序真正发布的东西。
 3. **搁置**：条目状态为 `hold` 或 `unknown` 时，该条目的**全部**期望槽计为搁置（即使个别槽带着值）——评审者从被扣住的条目里拿不到任何可用产出。否则条目级搁置会在指标里隐身。
 
 ## 4. 区间
 
 - **Wilson 95%**（`EvaluationRate.wilson95Lower/Upper`）：这些比率贴近 0 或 1，正态近似会给出越出 [0,1] 的对称区间，把十几条观测的确信度报虚。
-- **按项目簇 bootstrap**（`ClusterBootstrap.interval`）：重抽样的单位是 `clusterKey`（项目簇），不是记录。同一项目的多个文件不是独立观测；按记录抽会把"一个项目的形状"读成普遍性。簇数 < 5（`minimumClusters`）时返回 nil——少于这个簇，区间宽度是种子的产物而不是数据的。分位点（2.5%/97.5%）直接取自重抽样分布，不做正态拟合：少量簇的比率分布是块状的，**块本身就是发现**。
+- **按项目簇 bootstrap**（`ClusterBootstrap.interval`）：重抽样的单位是 `clusterKey`（项目簇），不是记录。同一项目的多个文件不是独立观测；按记录抽会把"一个项目的形状"读成普遍性。簇数 < 5（`minimumClusters`）时返回 nil——少于这个簇，区间宽度是种子的产物而不是数据的。任一次重抽样的分母为 0 时该指标的区间也是 nil，**不是把这次抽样丢掉**：丢掉后剩下的都是"有答案的簇"，区间会在层次最薄、最需要报宽的地方被压窄。六个指标共用同一组抽样索引（索引只与种子和簇数有关），但各自独立失效——某指标遇到无定义抽样不会顺带走掉其他指标的这一次抽样。分位点（2.5%/97.5%）直接取自重抽样分布，不做正态拟合：少量簇的比率分布是块状的，**块本身就是发现**。
 - 抽样使用 `SplitMix64`，种子与重抽样次数写入 `EvaluationRunIdentity`；`SystemRandomNumberGenerator` 跨版本不保证序列，而一次测量必须能从记录里复跑。
 
 ## 5. 稀疏与"可引用"

@@ -171,6 +171,30 @@ struct EvaluationMetricsTests {
         #expect(ClusterBootstrap.interval(cases: Array(cases.prefix(3)), measure: .holdRate) == nil)
     }
 
+    @Test("an undefined resample voids one measure without voiding the sample")
+    func voidedIntervalIsPerMeasure() throws {
+        // No candidate entries at all: `precision_auto` has no population in any
+        // resample, while `coverage` still sees every expected slot. A shared
+        // "one bad draw kills the batch" rule would throw away the interval that
+        // does exist; a shared "skip the bad draw" rule would report a band that
+        // only measures the clusters which happened to answer.
+        var cases: [CaseJudgement] = []
+        for index in 0..<12 {
+            let reference = try EvaluationFixtures.gold("v\(index)", expected: [.completionyear: "2026"],
+                                                        cluster: "vc\(index)")
+            cases.append(CaseJudgement(gold: reference, entry: nil))
+        }
+        let intervals = ClusterBootstrap.intervals(cases: cases, measures: EvaluationMeasure.allCases)
+        #expect(intervals[.coverage] != nil)
+        #expect(intervals[.precisionAuto] == nil)
+        #expect(intervals[.highConfidenceErrorRate] == nil)
+        // Every cluster withholds, so the only ratio the resample can produce is 0.
+        #expect(intervals[.coverage] == 0...0)
+        // The shared-draw path and the single-measure path must agree, or the
+        // optimisation quietly changed what an interval means.
+        #expect(intervals[.coverage] == ClusterBootstrap.interval(cases: cases, measure: .coverage))
+    }
+
     @Test("the interval brackets the estimate it belongs to")
     func intervalBracketsEstimate() throws {
         var cases: [CaseJudgement] = []

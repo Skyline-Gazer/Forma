@@ -2,7 +2,7 @@ import Foundation
 
 /// One field of one reference answer judged against one candidate.
 ///
-/// The seven verdicts are not a convenience: PLAN §8.2 defines each metric over a
+/// The six verdicts are not a convenience: PLAN §8.2 defines each metric over a
 /// differently restricted population - `coverage` excludes contradicted candidates,
 /// `precision_auto` additionally restricts to what the program would publish,
 /// `field_precision` does not - and a single "was it right" boolean cannot serve
@@ -54,7 +54,9 @@ public struct FieldJudgement: Codable, Sendable, Equatable {
     /// contradicted or auto-publishable, because there is no candidate to publish.
     public init(gold: GoldRecord, field: MetadataFieldID, entry: ManifestEntry?) {
         let goldValue = gold.expected.metadata[field] ?? nil
-        let outcome = entry?.fields.first { $0.field == field }
+        // The entry's own accessor, so "which outcome describes this field" has
+        // one definition even if the lookup ever becomes anything but a linear scan.
+        let outcome = entry?.outcome(for: field)
         // An empty or whitespace-only value is not a claim about the field, so it
         // is withheld rather than wrong. `ValueNormalization.equal` already
         // refuses to let an empty string agree with anything; letting it count as
