@@ -123,9 +123,12 @@ public struct EvaluationSlice: Codable, Sendable, Equatable {
     /// Records judged in this stratum. Distinct from `rate.denominator`, which
     /// counts slots.
     public let caseCount: Int
+    /// Clusters this stratum judged, published so a nil `clusterInterval` can be
+    /// told apart: too few clusters to vary, or this measure too thin.
+    public let clusterCount: Int
     public let rate: EvaluationRate
-    /// Cluster-level bootstrap interval, nil when there are too few clusters for
-    /// resampling to mean anything.
+    /// Cluster-level bootstrap interval; see §5 of `docs/EVALUATION-METRICS.md` for
+    /// the two reasons it can be nil.
     public let clusterInterval: ClosedRange<Double>?
 
     /// Below this many judged *records*, a rate is a candidate value only.
@@ -168,6 +171,11 @@ public enum ClusterBootstrap {
     public struct Summary: Sendable, Equatable {
         public let rate: EvaluationRate
         public let interval: ClosedRange<Double>?
+        /// Clusters in the sample. A nil interval with `clusterCount` below
+        /// `minimumClusters` means the stratum cannot vary; one with enough clusters
+        /// means this measure was too thin to survive every draw. The two need
+        /// separating, because only the second says anything about the measure.
+        public let clusterCount: Int
     }
 
     /// Rate and interval for the requested measures over one sample.
@@ -186,6 +194,14 @@ public enum ClusterBootstrap {
         // A subset request still reads the columns built for the full order.
         let columns = measures.map { EvaluationMeasure.allCases.firstIndex(of: $0)! }
 
+        // Positions within this sample, grouped by cluster key. Computed before the
+        // totals so a stratum with nothing to vary still reports why.
+        var grouped: [String: [Int]] = [:]
+        for position in indices.indices {
+            grouped[keys[indices[position]], default: []].append(position)
+        }
+        let clusterCount = grouped.count
+
         var output: [EvaluationMeasure: Summary] = [:]
         for (position, measure) in measures.enumerated() {
             var numerator = 0
@@ -195,15 +211,10 @@ public enum ClusterBootstrap {
                 denominator += populations[index][columns[position]].denominator
             }
             output[measure] = Summary(rate: EvaluationRate(numerator: numerator, denominator: denominator),
-                                      interval: nil)
+                                      interval: nil, clusterCount: clusterCount)
         }
 
-        // Positions within this sample, grouped by cluster key.
-        var grouped: [String: [Int]] = [:]
-        for position in indices.indices {
-            grouped[keys[indices[position]], default: []].append(position)
-        }
-        guard grouped.count >= minimumClusters, resamples > 1 else { return output }
+        guard clusterCount >= minimumClusters, resamples > 1 else { return output }
         let clusters = grouped.keys.sorted().map { grouped[$0]! }
 
         var clusterTotals: [[(numerator: Int, denominator: Int)]] = []
@@ -246,7 +257,8 @@ public enum ClusterBootstrap {
             let sorted = ratios[position].sorted()
             let lower = sorted[Int(Double(sorted.count - 1) * 0.025)]
             let upper = sorted[Int(Double(sorted.count - 1) * 0.975)]
-            output[measure] = Summary(rate: output[measure]!.rate, interval: lower...upper)
+            output[measure] = Summary(rate: output[measure]!.rate, interval: lower...upper,
+                                      clusterCount: clusterCount)
         }
         return output
     }
@@ -296,8 +308,8 @@ public enum EvaluationMetrics {
             for measure in measures {
                 let summary = summaries[measure]!
                 output.append(EvaluationSlice(measure: measure, stratum: stratum, key: key,
-                                              caseCount: sample.count, rate: summary.rate,
-                                              clusterInterval: summary.interval))
+                                              caseCount: sample.count, clusterCount: summary.clusterCount,
+                                              rate: summary.rate, clusterInterval: summary.interval))
             }
         }
         return output

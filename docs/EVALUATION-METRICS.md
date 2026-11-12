@@ -1,7 +1,7 @@
 # Forma 离线评测口径与结论门禁（EVALUATION-METRICS）
 
 > 状态：P3-A 切片 2a。本文定义**指标的可执行口径**与**结论门禁**。
-> PLAN §8.2 给出指标名称与验收意图，本文给出分子分母。三者必须同步，顺序是：**先改 PLAN（需求源）→ 再改代码 → 最后更新本文**。本文不是实现真值的背书；口径的实际行为以代码为准，且下列性质各有用例固定：可引用性单位（`sparsityCountsRecords`）、失效与抽样顺序无关（`voidingIsOrderIndependent`、`voidedIntervalIsPerMeasure`）、用例集来自版本化 split（`casesMustComeFromTheCountableSplit`）。
+> PLAN §8.2 给出指标名称与验收意图，本文给出分子分母。三者必须同步，顺序是：**先改 PLAN（需求源）→ 再改代码 → 最后更新本文**。本文不是实现真值的背书；口径的实际行为以代码为准，且下列性质各有用例固定：可引用性单位（`sparsityCountsRecords`）、无定义抽样逐指标失效且与顺序无关（`emptyDrawVoidsInsteadOfSkipping`、`voidingIsOrderIndependent`）、无观测与无区间的区别（`measureWithoutPopulationHasNoInterval`、`clusterResampling`）、用例集来自版本化 split（`casesMustComeFromTheCountableSplit`）。
 
 ## 1. 目的与范围
 
@@ -86,7 +86,8 @@
 
 - **单位是记录数，不是槽位数**：`EvaluationSlice.caseCount` 是本切面被判定的记录条数，`isSparse = caseCount < 30`。指标的 `rate.denominator` 数的是**槽位观测**——150 条 × 12 槽会让它上千，而 3 条记录也能凑出 36，用槽位数当门禁会两头失真（薄样本被放行、干净样本里 `precision_auto` 这类天然小分母的指标被永久封死）。
 - Wilson 区间仍然按槽位观测数计算：那是这批观测自身的置信宽度，与"够不够格下结论"是两个问题，两处的单位各写在文档里。
-- 分母为 0 时 `estimate == nil` 且 Wilson 端点为 nil（没测过的东西不存在"0 分"这种质量结论）；`clusterInterval` 另按 §4 的规则失效。
+- 分母为 0 时 `estimate == nil` 且 Wilson 端点为 nil（没测过的东西不存在"0 分"这种质量结论）。
+- `clusterInterval` 为 nil 有**两个不同的原因**，读者必须能分开：**(a)** 本切面簇数 < `ClusterBootstrap.minimumClusters`（5），簇太少、无可变异性；**(b)** 至少一次重抽样的分母为 0，即该指标在这一层过薄（§4）。两者都只关掉簇级区间，**不影响 `isQuotableOnOwnMerits`**：记录数达标的切面照样可以引用率（配 Wilson），只是没有簇级区间可报。每个切面都随区间一起给出 `clusterCount`：`(a)` 时它 < 5，`(b)` 时它 ≥ 5——能区分这两件事正是这个字段存在的理由。`isQuotableOnOwnMerits` 不看它，因为"能不能引用这条率"与"有没有簇级区间"是两个问题。
 - 可引用性（`EvaluationSlice.isQuotableOnOwnMerits`）= 记录数达标 **且** 该指标确有观测（`rate.denominator > 0`）。两半缺一不可：只有前半，`precision_auto` 在"没有任何可自动发布产出"的运行里会因为 40 条记录而变得可引用，而它其实什么都没看过。
 - `EvaluationReport.isQuotable(_:stratum:key:)` **逐数**判定，而不是整份报告一票：总体 42 条、某反例类别只有 2 条是常态，而被引用的往往正是那一行。
 - `quotableMeasures` 只列总体切面下非稀疏的指标，供摘要直接取用。

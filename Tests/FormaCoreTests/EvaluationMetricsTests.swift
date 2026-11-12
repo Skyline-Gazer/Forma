@@ -198,8 +198,16 @@ struct EvaluationMetricsTests {
         #expect(interval == hold(cases), "the same seed has to reproduce the same interval")
 
         // Below five clusters there is nothing to vary, and an interval computed
-        // anyway would be a width invented by the resampler.
-        #expect(hold(Array(cases.prefix(3))) == nil)
+        // anyway would be a width invented by the resampler. The count is published
+        // beside the nil so a reader can tell that cause from the thin-measure one.
+        let few = Array(cases.prefix(3))
+        #expect(hold(few) == nil)
+        let fewSummary = ClusterBootstrap.summarize(measures: [.holdRate],
+                                                    populations: EvaluationFixtures.populations(few),
+                                                    indices: Array(few.indices),
+                                                    keys: EvaluationFixtures.keys(few))
+        let fewClusters = try #require(fewSummary[.holdRate]?.clusterCount)
+        #expect(fewClusters < ClusterBootstrap.minimumClusters)
 
         // Asking for one measure must not change its interval: the draws are shared
         // across the columns, so a subset request is a projection, not a resample.
@@ -235,13 +243,12 @@ struct EvaluationMetricsTests {
         #expect(summary[.precisionAuto]?.rate.denominator == 0)
     }
 
-    @Test("an undefined resample voids one measure without voiding the sample")
-    func voidedIntervalIsPerMeasure() throws {
-        // No candidate entries at all: `precision_auto` has no population in any
-        // resample, while `coverage` still sees every expected slot. A shared
-        // "one bad draw kills the batch" rule would throw away the interval that
-        // does exist; a shared "skip the bad draw" rule would report a band that
-        // only measures the clusters which happened to answer.
+    @Test("a measure with no population at all has no interval, its neighbours keep theirs")
+    func measureWithoutPopulationHasNoInterval() throws {
+        // No candidate entries at all: `precision_auto` has nothing to observe in
+        // any draw, while `coverage` still sees one expected slot per record. This
+        // is the "no population" case, not the "some draws are empty" case - the
+        // next test is that one.
         var cases: [CaseJudgement] = []
         for index in 0..<12 {
             let reference = try EvaluationFixtures.gold("v\(index)", expected: [.completionyear: "2026"],
@@ -256,6 +263,38 @@ struct EvaluationMetricsTests {
         #expect(summaries[.highConfidenceErrorRate]?.interval == nil)
         // Every cluster withholds, so the only ratio the resample can produce is 0.
         #expect(summaries[.coverage]?.interval == 0...0)
+    }
+
+    @Test("one empty draw voids the interval instead of being skipped")
+    func emptyDrawVoidsInsteadOfSkipping() throws {
+        // Three clusters can produce an auto-publishable assertion and three cannot
+        // (their entries are not eligible), so a resample that happens to pick only
+        // the ineligible clusters has a zero denominator for `precision_auto`. The
+        // old code skipped such a draw and reported percentiles over the rest - a
+        // band computed from the clusters that answered, which is narrower than the
+        // sample supports. Voiding says what is true: this stratum cannot give a
+        // cluster interval for this measure.
+        var cases: [CaseJudgement] = []
+        for index in 0..<6 {
+            let reference = try EvaluationFixtures.gold("m\(index)", expected: [.completionyear: "2026"],
+                                                        cluster: "mc\(index)")
+            let entry = EvaluationFixtures.candidate([.completionyear: "2026"],
+                                                     publishable: index >= 3, gold: reference)
+            cases.append(CaseJudgement(gold: reference, entry: entry))
+        }
+        let summaries = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases),
+                                                   indices: Array(cases.indices),
+                                                   keys: EvaluationFixtures.keys(cases))
+        #expect(summaries[.precisionAuto]?.rate.denominator == 3)
+        #expect(summaries[.precisionAuto]?.interval == nil,
+                "a draw of only the ineligible clusters leaves no ratio to place a bound on")
+        // The measures whose every draw was defined keep their intervals: voiding
+        // one column does not take the others down with it.
+        #expect(summaries[.coverage]?.interval != nil)
+        #expect(summaries[.fieldPrecision]?.interval != nil)
+        #expect(summaries[.holdRate]?.interval != nil)
+        #expect(summaries[.precisionAuto]?.clusterCount == 6,
+                "the sample had enough clusters to vary, so this nil means the measure was thin")
     }
 
     @Test("the interval brackets the estimate it belongs to")
