@@ -382,29 +382,28 @@ public struct ManifestValidator: Sendable {
     ///   value is compared against the part after the marker. Inheritance has to
     ///   be checkable, not merely permitted.
     /// - `mcp`: the value equals what the authorized read-only query returned.
+    /// Quote support is judged with the same string folding the metrics layer
+    /// uses for "the candidate agrees with the reference answer"
+    /// (`ValueNormalization.folded`), so a value cannot be supported by its quote
+    /// in one place and counted wrong in the other.
     private func quoteSupportsValue(_ value: String, _ records: [EvidenceRecord]) -> Bool {
-        let needle = normalize(value)
+        let needle = ValueNormalization.folded(value)
         guard !needle.isEmpty else { return false }
         return records.contains { record in
             guard let text = record.excerpt else { return false }
             switch record.source {
             case .content, .filename, .path:
-                return normalize(text).contains(needle)
+                return ValueNormalization.folded(text).contains(needle)
             case .fsMetadata:
-                return normalize(text).split(separator: ";").contains { normalize(String($0)).contains(needle) }
+                return ValueNormalization.folded(text).split(separator: ";")
+                    .contains { ValueNormalization.folded(String($0)).contains(needle) }
             case .sibling:
-                guard let marker = text.range(of: ": ") else { return normalize(text) == needle }
-                return normalize(String(text[marker.upperBound...])) == needle
+                guard let marker = text.range(of: ": ") else { return ValueNormalization.folded(text) == needle }
+                return ValueNormalization.folded(String(text[marker.upperBound...])) == needle
             case .mcp:
-                return normalize(text) == needle
+                return ValueNormalization.folded(text) == needle
             }
         }
-    }
-
-    private func normalize(_ value: String) -> String {
-        value.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
-                      locale: Locale(identifier: "en_US_POSIX"))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func value(of field: MetadataFieldID, in proposal: ProposalEntry) -> String? {
