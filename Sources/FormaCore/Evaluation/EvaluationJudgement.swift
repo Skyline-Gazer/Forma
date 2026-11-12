@@ -3,10 +3,12 @@ import Foundation
 /// One field of one reference answer judged against one candidate.
 ///
 /// The six verdicts are not a convenience: PLAN §8.2 defines each metric over a
-/// differently restricted population - `coverage` excludes contradicted candidates,
-/// `precision_auto` additionally restricts to what the program would publish,
-/// `field_precision` does not - and a single "was it right" boolean cannot serve
-/// all three without quietly redefining their denominators.
+/// differently restricted population, and a single "was it right" boolean cannot
+/// serve them without quietly redefining their denominators. What each one counts
+/// is defined once, in `docs/EVALUATION-METRICS.md` §3; the wording there is
+/// deliberately fussy (a contradicted slot, for instance, stays in `coverage`'s
+/// denominator and only fails to enter its numerator) because "excludes
+/// contradicted" read loosely shrinks a denominator someone will later quote.
 public struct FieldJudgement: Codable, Sendable, Equatable {
     public enum Verdict: String, Codable, Sendable, CaseIterable {
         /// Candidate states a value and it agrees with the reference answer.
@@ -104,6 +106,10 @@ public struct CaseJudgement: Codable, Sendable, Equatable {
     public let goldState: DecisionState
     /// nil when the engine returned nothing for this source.
     public let candidateState: DecisionState?
+    /// The reference answer was not agreed between annotators, so PLAN §8.1 keeps
+    /// it out of every accuracy denominator. Carried here because the report has to
+    /// be able to tell that a case set was filtered, rather than being told.
+    public let pendingAdjudication: Bool
     public let fields: [FieldJudgement]
 
     public init(gold: GoldRecord, entry: ManifestEntry?) {
@@ -113,6 +119,7 @@ public struct CaseJudgement: Codable, Sendable, Equatable {
         self.clusterKey = gold.source.projectClusterKey
         self.goldState = gold.expected.state
         self.candidateState = entry?.state
+        self.pendingAdjudication = gold.isPendingAdjudication
         self.fields = MetadataFieldID.allCases.map { FieldJudgement(gold: gold, field: $0, entry: entry) }
     }
 }

@@ -175,6 +175,26 @@ struct EvaluationReportTests {
         #expect(duplicate.claimBlockers.map(\.kind) == [.caseSetNotDerivedFromSplit])
         #expect(!duplicate.isQualityClaimAllowed)
 
+        // A record still marked `adjudication_pending` is refused even when the id
+        // list says it is countable. The disclosure that disputed material stayed out
+        // of the denominators cannot rest on the caller having built the id list and
+        // the review statuses the same way twice - that is the shape of a check that
+        // passes only while nobody is careless.
+        let pendingGold = try EvaluationFixtures.gold("g7", expected: [.completionyear: "2026"],
+                                                     reviewStatus: .adjudicationPending)
+        let pendingCase = CaseJudgement(gold: pendingGold, entry: nil)
+        #expect(pendingCase.pendingAdjudication)
+        let others = try withheld(39)
+        let mixed = EvaluationReport(cases: [pendingCase] + others,
+                                     identity: try identity(substitute: false),
+                                     dataset: dataset(reviewed: 160, pending: 1))
+        #expect(!mixed.isQualityClaimAllowed)
+        #expect(mixed.claimBlockers.map(\.kind).contains(.caseSetNotDerivedFromSplit))
+        #expect(mixed.claimBlockers.map(\.kind).contains(.pendingAdjudicationExcluded))
+        // The numbers stay visible with the reason they do not count: 40 records were
+        // fed in, and the report says so rather than quietly measuring 39.
+        #expect(mixed.cases == 40)
+
         // And the clean path stays clean, including the disclosure row next door:
         // the exclusion is the dataset's doing, and this check is what makes the
         // disclosure mean something.

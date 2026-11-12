@@ -28,6 +28,7 @@ enum EvaluationFixtures {
                       allowUnknown: [MetadataFieldID] = [],
                       cluster: String? = nil,
                       category: GoldRecord.Category = .positive,
+                      reviewStatus: GoldRecord.ReviewStatus = .confirmed,
                       profiles: [String] = [ProjectArchiveContract.id]) throws -> GoldRecord {
         try GoldRecord(
             recordID: id, datasetRevision: "1.0.0", profiles: profiles,
@@ -40,7 +41,7 @@ enum EvaluationFixtures {
                             allowedUnknownFields: Set(allowUnknown)),
             citations: [.init(label: "c1", excerpt: "脱敏片段", locator: nil)],
             annotation: .init(annotatorCode: "A1", annotatedOn: "2026-11-12", basis: "both"),
-            review: .init(status: .confirmed, redaction: .reviewed, reviewerCode: "R1",
+            review: .init(status: reviewStatus, redaction: .reviewed, reviewerCode: "R1",
                           reviewedOn: "2026-11-12"),
             usage: .evaluation)
     }

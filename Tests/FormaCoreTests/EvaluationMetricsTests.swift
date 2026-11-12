@@ -261,8 +261,9 @@ struct EvaluationMetricsTests {
         #expect(summaries[.coverage]?.interval != nil)
         #expect(summaries[.precisionAuto]?.interval == nil)
         #expect(summaries[.highConfidenceErrorRate]?.interval == nil)
-        // Every cluster withholds, so the only ratio the resample can produce is 0.
-        #expect(summaries[.coverage]?.interval == 0...0)
+        // What the surviving interval is made of, rather than its exact percentiles:
+        #expect(summaries[.coverage]?.rate.denominator == 12)
+        #expect(summaries[.coverage]?.rate.estimate == 0)
     }
 
     @Test("one empty draw voids the interval instead of being skipped")
@@ -327,6 +328,35 @@ struct EvaluationMetricsTests {
         // naive symmetric band that a small sample pushes past its ends.
         #expect(0...1 ~= slice.rate.wilson95Lower!)
         #expect(0...1 ~= slice.rate.wilson95Upper!)
+    }
+
+    @Test("the wilson bounds are the standard ones")
+    func wilsonBoundsTheStandardWay() throws {
+        // Computed independently from the textbook interval, not from this code:
+        // 5 of 20 is (0.1119, 0.4687), 1 of 10 is (0.0179, 0.4042), 0 of 20 is
+        // (0, 0.1611), 20 of 20 is (0.8389, 1). The earlier version of this
+        // calculation divided the spread by (1 + z^2/n) instead of by n, which made
+        // every interval span the whole unit line while still passing any test that
+        // only asked whether the bounds lay inside [0, 1] - which is the whole
+        // reason the numbers are written down here.
+        func bounds(_ numerator: Int, _ denominator: Int) -> (Double, Double)? {
+            let rate = EvaluationRate(numerator: numerator, denominator: denominator)
+            guard let low = rate.wilson95Lower, let high = rate.wilson95Upper else { return nil }
+            return (low, high)
+        }
+        func near(_ actual: (Double, Double)?, _ expected: (Double, Double)) -> Bool {
+            guard let actual else { return false }
+            return abs(actual.0 - expected.0) < 0.0002 && abs(actual.1 - expected.1) < 0.0002
+        }
+        #expect(near(bounds(5, 20), (0.1119, 0.4687)))
+        #expect(near(bounds(1, 10), (0.0179, 0.4042)))
+        #expect(near(bounds(0, 20), (0.0000, 0.1611)))
+        #expect(near(bounds(20, 20), (0.8389, 1.0000)))
+        #expect(near(bounds(150, 600), (0.2170, 0.2862)))
+        // No observations, no interval - and no estimate to put one around.
+        #expect(bounds(0, 0) == nil)
+        let empty = EvaluationRate(numerator: 0, denominator: 0)
+        #expect(empty.estimate == nil)
     }
 
     @Test("agreement means the same thing here as in the validator")

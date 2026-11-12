@@ -49,16 +49,17 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         case undeclaredPromptOverlap
         /// Records in the directory that the split accounts for nowhere.
         case unaccountedRecords
-        /// The dataset withheld disputed records from its countable set, as PLAN
-        /// §8.1 requires, and the number is reported here so a denominator can be
-        /// read against it. Disclosed, not disqualifying: a run with a few pending
+        /// Disputed records are kept out of every accuracy denominator, as PLAN
+        /// §8.1 requires, and the excluded volume is reported so a rate can be read
+        /// against it. Disclosed, not disqualifying: a run with a few pending
         /// adjudications still measured what it measured, and treating the honest
         /// exclusion as a defect would only discourage recording it.
         ///
-        /// The exclusion itself happens in `GoldDataset`, not in this initializer -
-        /// which is exactly why `caseSetNotDerivedFromSplit` exists: without it, a
-        /// caller could hand in cases that include the withheld records and the
-        /// sentence on the left would be a claim nothing checked.
+        /// Disclosing it is only honest because the exclusion is enforced two ways:
+        /// a judged record outside `Report.countableRecordIDs` is caught by
+        /// `caseSetNotDerivedFromSplit`, and a record still marked `adjudication_pending`
+        /// is caught there too, by its own flag - so the claim does not depend on the
+        /// caller having built that id list consistently with the review statuses.
         case pendingAdjudicationExcluded
         /// A judged record is not in the dataset's countable set, or the same record
         /// was judged more than once. Either way the denominators are no longer
@@ -128,14 +129,19 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         var seen = Set<String>()
         var offSplit = 0
         var duplicates = 0
+        var pending = 0
         for judgement in cases {
             if !allowed.contains(judgement.recordID) { offSplit += 1 }
             if !seen.insert(judgement.recordID).inserted { duplicates += 1 }
+            if judgement.pendingAdjudication { pending += 1 }
         }
-        if offSplit > 0 || duplicates > 0 {
+        if offSplit > 0 || duplicates > 0 || pending > 0 {
+            // Nothing is silently dropped here: the run is measured as it was fed,
+            // and the claim is refused. Quietly filtering would hide a runner that
+            // builds its case set wrongly, which is the mistake worth surfacing.
             blockers.append(Finding(kind: .caseSetNotDerivedFromSplit,
                                     detail: "\(offSplit) 条被判定记录不在数据集的可计数集合内，"
-                                        + "\(duplicates) 条被重复判定。"))
+                                        + "\(duplicates) 条被重复判定，\(pending) 条仍为 adjudication_pending。"))
         }
         if !dataset.undeclaredOverlaps.isEmpty {
             blockers.append(Finding(kind: .undeclaredPromptOverlap,
@@ -147,7 +153,9 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         }
         if dataset.pendingAdjudication > 0 {
             blockers.append(Finding(kind: .pendingAdjudicationExcluded,
-                                    detail: "\(dataset.pendingAdjudication) 条争议记录已按约定排除，分层结论不含它们。"))
+                                    detail: "数据集把 \(dataset.pendingAdjudication) 条争议记录排除在可计数集合之外，"
+                                        + "因此它们不在任何分母里；若有争议记录仍被判定，会另由 "
+                                        + "caseSetNotDerivedFromSplit 否决本次结论。"))
         }
         self.claimBlockers = blockers
         self.isQualityClaimAllowed = !blockers.contains { $0.kind.preventsQualityClaim }

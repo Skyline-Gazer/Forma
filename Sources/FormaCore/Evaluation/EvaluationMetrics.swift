@@ -96,17 +96,21 @@ public struct EvaluationRate: Codable, Sendable, Equatable {
         // Wilson rather than the normal approximation: these rates sit near 0 and
         // 1, where the symmetric interval runs outside the valid range and reports
         // confidence a sample of a dozen does not carry.
-        // Wilson's width is a statement about these observations, and the
-        // observations here are slots; the record-count gate is a separate question.
         guard denominator > 0, let p = estimate else {
             wilson95Lower = nil; wilson95Upper = nil; return
         }
+        // Wilson, not the normal approximation: these rates sit near 0 and 1,
+        // where a symmetric band runs outside the valid range and reports a
+        // confidence a sample of a dozen does not carry. The bounds are the
+        // standard interval - the exact values are pinned by `wilsonBoundsThe
+        // StandardWay`, because a bracket that always spans [0, 1] would satisfy
+        // every "is it inside the unit interval" assertion ever written.
         let n = Double(denominator), z = 1.959_963_985_268_05
         let scale = z * z / n
-        let centre = p + scale / 2
-        let margin = z * ((p * (1 - p) + scale / 4) / (1 + scale)).squareRoot()
-        wilson95Lower = max(0, (centre - margin) / (1 + scale))
-        wilson95Upper = min(1, (centre + margin) / (1 + scale))
+        let centre = (p + scale / 2) / (1 + scale)
+        let margin = z / (1 + scale) * ((p * (1 - p) + scale / 4) / n).squareRoot()
+        wilson95Lower = max(0, centre - margin)
+        wilson95Upper = min(1, centre + margin)
     }
 }
 
