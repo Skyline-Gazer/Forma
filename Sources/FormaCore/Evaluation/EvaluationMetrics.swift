@@ -73,8 +73,15 @@ public enum EvaluationMeasure: String, Codable, Sendable, CaseIterable, Comparab
             let held = judgement.candidateState.map { $0 == .hold || $0 == .unknown } ?? true
             return (held ? 1 : 0, 1)
         case .fieldPrecision:
-            let asserted = slots.filter { $0.verdict.isCandidateAssertion }.count
-            let correct = slots.filter { $0.verdict == .correct }.count
+            // The pooled row sums the same per-slot rule the `.field` rows use, so the two
+            // cannot drift: `population(in:)` is where the rule is written.
+            var correct = 0
+            var asserted = 0
+            for slot in slots {
+                let pair = population(in: slot)
+                correct += pair.numerator
+                asserted += pair.denominator
+            }
             return (correct, asserted)
         case .missedFillRate:
             let expected = slots.filter { $0.verdict.isExpectationSlot }.count
@@ -87,8 +94,8 @@ public enum EvaluationMeasure: String, Codable, Sendable, CaseIterable, Comparab
         }
     }
 
-    /// One slot's contribution to `field_precision`'s per-field rows; §3's table gives
-    /// the rule for both this and the pooled path above.
+    /// One slot's contribution to `field_precision`, both for the per-field rows and for
+    /// the pooled row, which sums it over a record's slots. §3's table gives the rule.
     func population(in field: FieldJudgement) -> (numerator: Int, denominator: Int) {
         let asserted = field.verdict.isCandidateAssertion
         return (field.verdict == .correct ? 1 : 0, asserted ? 1 : 0)

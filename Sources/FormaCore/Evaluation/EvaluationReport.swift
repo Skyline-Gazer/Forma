@@ -55,8 +55,7 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         /// Records in the directory that the split accounts for nowhere.
         case unaccountedRecords
         /// How much the dataset kept out of its countable set. Disclosed, never
-        /// disqualifying: §6's table says why, and what this row vouches for - which is
-        /// conditional - is stated where the row is built.
+        /// disqualifying; §6's table says why.
         case pendingAdjudicationExcluded
         /// A judged record is not in the dataset's countable set, or the same record
         /// was judged more than once. Either way the denominators are no longer
