@@ -183,6 +183,11 @@ struct EvaluationMetricsTests {
                                                                        .salesowner: "张三"], gold: reference))]
         let request = EvaluationMetrics.Request(resamples: 50)
         let slices = EvaluationMetrics.slices(for: cases, request: request)
+        // The field rows belong to the overall cut only (PLAN §8.2 puts "12 字段分别
+        // 报告" under `field_precision` and "每 Profile/类别" under 分层; the crossing
+        // grid is nobody's requirement).
+        #expect(slices.filter { $0.stratum == .field }.count == MetadataFieldID.allCases.count,
+                "one row per field in the whole table, not one per field per stratum")
         let rows = slices.filter { $0.measure == .fieldPrecision && $0.stratum == .field }
         #expect(rows.count == MetadataFieldID.allCases.count)
 
@@ -597,10 +602,22 @@ struct EvaluationMetricsTests {
         // The rate itself is untouched: a missing band is not a missing measurement.
         #expect(coverage.isQuotableOnOwnMerits)
 
-        let twice = EvaluationMetrics.slices(for: cases,
-                                             request: EvaluationMetrics.Request(resamples: 2))
-        let again = try #require(twice.first { $0.measure == .coverage && $0.stratum == .overall })
-        #expect(again.clusterInterval != nil, "two draws are enough for the band to vary")
+        // Two draws are a worse case than one, not a better one: the 2.5th and 97.5th
+        // percentile of two samples are the same sample under the index arithmetic, so
+        // a run of two would publish a zero-width band as a confidence band. The floor
+        // is what separates "no band" from a band that is an artefact of rounding, and
+        // it is harness policy (§5), not a clause from SPEC or PLAN.
+        let few = EvaluationMetrics.slices(for: cases,
+                                           request: EvaluationMetrics.Request(resamples: 2))
+        let thin = try #require(few.first { $0.measure == .coverage && $0.stratum == .overall })
+        #expect(thin.clusterInterval == nil)
+        #expect(thin.rate.denominator == 40, "the rate itself is still measured")
+
+        let atTheFloor = ClusterBootstrap.minimumResamples
+        let enough = EvaluationMetrics.slices(for: cases,
+                                             request: EvaluationMetrics.Request(resamples: atTheFloor))
+        let broad = try #require(enough.first { $0.measure == .coverage && $0.stratum == .overall })
+        #expect(broad.clusterInterval != nil, "at the floor the two indices land apart")
     }
 
     @Test("a multi-profile run leaves the overall precision unmeasured rather than zero")

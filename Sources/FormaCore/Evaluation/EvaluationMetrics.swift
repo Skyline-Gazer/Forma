@@ -52,8 +52,8 @@ public enum EvaluationMeasure: String, Codable, Sendable, CaseIterable, Comparab
     /// unattributable run has not measured those two rates, and PLAN §8.2 marks
     /// every zero denominator N/A. Reporting `0 / N` there would hand a reader an
     /// "observed 0% precision" for the fact that the run forgot to say who ran it,
-    /// and `isQuotableOnOwnMerits` would then call it quotable.
-    /// rather than a guess about the Profile component.
+    /// and `isQuotableOnOwnMerits` would then call it quotable. §3 item 2 of
+    /// `docs/EVALUATION-METRICS.md` is where this rule is written out.
     func population(in judgement: CaseJudgement, runProfile: String?) -> (numerator: Int, denominator: Int) {
         let slots = judgement.fields
         switch self {
@@ -221,6 +221,13 @@ public enum ClusterBootstrap {
     /// rather than an interval whose width is an artefact of the seed.
     public static let minimumClusters = 5
 
+    /// Below this many draws the 2.5th and 97.5th percentile of the resampled ratios
+    /// can resolve to the same sample, which would publish a zero-width band as a
+    /// confidence band. Twenty is where the two indices land apart for any arrangement
+    /// of draws, and like `minimumClusters` and `EvaluationSlice.sparseCaseLimit` this
+    /// is harness policy, not a clause lifted from SPEC or PLAN (§5).
+    public static let minimumResamples = 20
+
     /// One measure's rate over a sample, with its cluster interval.
     public struct Summary: Sendable, Equatable {
         public let rate: EvaluationRate
@@ -228,10 +235,11 @@ public enum ClusterBootstrap {
         /// Clusters in the sample, which tells a nil interval apart: `clusterCount`
         /// below `minimumClusters` means the stratum cannot vary, enough clusters
         /// means either this measure was too thin to survive every draw or the run
-        /// asked for fewer than two draws (`Request.resamples <= 1`), where no band
-        /// can exist at all. Nothing floors that request - it is recorded in
-        /// `EvaluationRunIdentity`, so a reader can tell the third cause from the
-        /// second by the run's own resample count rather than by a silent correction.
+        /// asked for fewer than `minimumResamples` draws, where the 2.5th and 97.5th
+        /// percentile of the resampled ratios can resolve to the same sample. Nothing
+        /// floors that request - it is recorded in `EvaluationRunIdentity`, so a
+        /// reader tells the third cause from the second by the run's own resample
+        /// count rather than by a silent correction.
         public let clusterCount: Int
     }
 
@@ -273,7 +281,7 @@ public enum ClusterBootstrap {
                                       interval: nil, clusterCount: clusterCount)
         }
 
-        guard clusterCount >= minimumClusters, resamples > 1 else { return output }
+        guard clusterCount >= minimumClusters, resamples >= minimumResamples else { return output }
         let clusters = grouped.keys.sorted().map { grouped[$0]! }
 
         var clusterTotals: [[(numerator: Int, denominator: Int)]] = []
@@ -344,14 +352,17 @@ public enum EvaluationMetrics {
     public struct Request: Sendable {
         /// Cluster draws behind every `clusterInterval` in this run.
         ///
-        /// One draw cannot make a band - the 2.5th and 97.5th percentile of a
-        /// single number are that number, which would report zero uncertainty - so a
-        /// request below two asks for the rates without the intervals, and every
-        /// slice then has a nil `clusterInterval` for that reason rather than for
-        /// thinness. Nothing floors the value: the number a run asked for is
-        /// published in `EvaluationRunIdentity.bootstrapResamples`, and silently
-        /// rewriting a parameter of the measurement is the one change a reader has
-        /// the fewest means of discovering.
+        /// Draws behind every `clusterInterval` in this run.
+        ///
+        /// A band is two order statistics of the resampled ratios, so it needs enough
+        /// draws for those indices to land apart; with a short run the 2.5th and the
+        /// 97.5th percentile can pick the same sample and report zero uncertainty.
+        /// `ClusterBootstrap.minimumResamples` is that floor, and a run below it gets
+        /// the rates without the bands - a nil `clusterInterval` for that reason
+        /// rather than for thinness. Nothing raises the caller's number: what a run
+        /// asked for is published in `EvaluationRunIdentity.bootstrapResamples`, and
+        /// silently rewriting a parameter of the measurement is the one change a
+        /// reader has the fewest means of discovering.
         public let resamples: Int
         public let seed: UInt64
         /// The Profile this run executed under, when the run named exactly one.
@@ -361,15 +372,18 @@ public enum EvaluationMetrics {
         public let runProfileID: String?
         public init(resamples: Int = 2_000, seed: UInt64 = 0x9E37_79B9_7F4A_7C15,
                     runProfileID: String? = nil) {
+            precondition(resamples >= 1, "a bootstrap needs at least one draw; zero asks for no measurement")
             self.resamples = resamples
             self.seed = seed
             self.runProfileID = runProfileID
         }
     }
 
-    /// The comparisons happen once per case and measure, per run Profile; every
-    /// stratum reading that Profile gets the same table, because a cut is a
-    /// selection, not a new measurement.
+    /// The comparisons happen once per case and measure for each distinct
+    /// attribution, then every stratum reading that attribution takes its rows from
+    /// the cache - a cut is a selection, not a new measurement. Cuts under different
+    /// attributions are genuinely different measurements and get different tables;
+    /// §3 item 2 of `docs/EVALUATION-METRICS.md` is where that consequence is written.
     public static func slices(for cases: [CaseJudgement], request: Request = Request()) -> [EvaluationSlice] {
         let measures = EvaluationMeasure.allCases
         let keys = cases.map(\.clusterKey)
@@ -389,10 +403,14 @@ public enum EvaluationMetrics {
             if let built = tables[runProfile] {
                 populations = built
             } else {
-                // `precision_auto` and `high_confidence_error_rate` are stated
-                // relative to the Profile the run executed under, so a per-Profile
-                // cut is the one place where the numbers genuinely differ; every
-                // other cut in the run shares this table.
+                // One table per distinct attribution, not one per stratum: the
+                // overall and category rows share whichever table matches the run's
+                // own, and each Profile cut gets its own because `precision_auto` and
+                // `high_confidence_error_rate` are stated relative to the Profile that
+                // executed. With nothing named for the run those two columns are empty
+                // in the nil-attribution table, which is what makes the pooled rows
+                // read N/A rather than 0%. Cuts under different attributions are
+                // different measurements, which is why they are not shared.
                 populations = cases.map { judgement in
                     measures.map { $0.population(in: judgement, runProfile: runProfile) }
                 }
