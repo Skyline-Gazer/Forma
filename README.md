@@ -4,7 +4,7 @@
 
 Forma 是一款使用 Swift 6 / SwiftUI 开发的 macOS 原生应用，目标是将非标准目录、文件清单与文档内容转换为可验证的结构化 Manifest，并在后续阶段经 DEVONthink 官方 MCP 安全落地。
 
-> **当前状态：P0/P1 与 P2 已在 `dev`，P2 验收报告已发布；来源扫描、身份、快照、证据抽取、只读能力探针、双 Profile 与 Schema 门禁、Context Builder、Evidence Registry、Manifest Validator、Provider Mapping Engine、CasePack、脱敏与外发预览、Manifest 导出与离线重校验、Correction Capture、原生 SwiftUI 工作界面均已合并并由 GitHub Actions 验证。真实 Provider 调用、隔离 DEVONthink 库对齐、授权 OneDrive 目录三项现场验证仍为 BLOCKED，GUI 人工交互为 NOT_VERIFIED，逐项判定见 [P2 验收报告](docs/P2-ACCEPTANCE.md) 与 [P0 / P1 验收报告](docs/P0-P1-ACCEPTANCE.md)。**P2 的交付状态与授权记录目前不一致**：[ROADMAP](docs/ROADMAP.md) 中 Owner 于 2026-11-11 写下的授权行原文为「P2、P3、I1、I2、R1 未授权」，P2 各 PR 是依后续指令合入 `dev` 的；该行需 Owner 用一句话确认（P2 = 已授权、P3/I1/I2/R1 = 未授权）后由文档 PR 更新，本轮不代为改写（见验收报告 §7 第 7 项）。ADS 以不可变 SHA 接入（[ads-pin.txt](ads-pin.txt)、[docs/ADS-ADOPTION.md](docs/ADS-ADOPTION.md)）；阶段授权与权限边界由 [docs/ROADMAP.md](docs/ROADMAP.md) 和 [AGENTS.md](AGENTS.md) 在仓库内记录。**
+> **当前状态：P0/P1 与 P2 已在 `dev`，P2 验收报告已发布；来源扫描、身份、快照、证据抽取、只读能力探针、双 Profile 与 Schema 门禁、Context Builder、Evidence Registry、Manifest Validator、Provider Mapping Engine、CasePack、脱敏与外发预览、Manifest 导出与离线重校验、Correction Capture、原生 SwiftUI 工作界面均已合并并由 GitHub Actions 验证。真实 Provider 调用、隔离 DEVONthink 库对齐、授权 OneDrive 目录三项现场验证仍为 BLOCKED，GUI 人工交互为 NOT_VERIFIED，逐项判定见 [P2 验收报告](docs/P2-ACCEPTANCE.md) 与 [P0 / P1 验收报告](docs/P0-P1-ACCEPTANCE.md)。**授权状态以 [ROADMAP 的「授权历史」](docs/ROADMAP.md) 为唯一权威来源**：2026-11-12 Owner 决策确认 P0/P1 已完成、P2 已授权且工程实现完成（外部现场验收项继续追踪，不等同于真实环境验证通过，也不宣称生产就绪）、P3-A 离线评测基础设施已授权、P3-B 真实模型评测与 I1/I2/R1 未授权。ADS 以不可变 SHA 接入（[ads-pin.txt](ads-pin.txt)、[docs/ADS-ADOPTION.md](docs/ADS-ADOPTION.md)）；阶段授权与权限边界由 [docs/ROADMAP.md](docs/ROADMAP.md) 和 [AGENTS.md](AGENTS.md) 在仓库内记录。**
 
 ## 文档入口
 

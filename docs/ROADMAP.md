@@ -1,8 +1,8 @@
 # Forma — Implementation Roadmap (Approved Planning Baseline)
 
-**状态：P0/P1 实施已获 Owner 授权，进行中。**  
-**基线：** [SPEC v0.1.1 FROZEN](SPEC.md) · [PLAN v0.1](PLAN.md) · [PLAN PR #1 merged](https://github.com/Skyline-Gazer/Forma/pull/1)  
-**Owner 决策确认日期：** 2026-11-11
+**状态：P0/P1/P2 已授权并完成工程实现；P3-A（离线评测基础设施）已授权进行中；P3-B 真实模型评测、I1/I2/R1 未授权。**  
+**基线：** [SPEC v0.1.1 FROZEN](SPEC.md) · [PLAN v0.1](PLAN.md) · [PLAN PR #1 merged](https://github.com/Skyline-Gazer/Forma/pull/1) · [P2 验收报告](P2-ACCEPTANCE.md)  
+**Owner 决策记录：** 2026-11-11（P0/P1 授权）· 2026-11-12（P2 收尾接受 + P3 拆分授权，见下方「授权历史」）
 
 ## 已批准的三项 Owner 决策
 
@@ -40,7 +40,15 @@ P2 的 E2/E3 可部分并行，但用户可操作的 Prototype 应形成完整 M
 
 ## 实施与治理边界
 
-- **当前授权范围（Owner，2026-11-11）：** 实施 P0（技术契约与基础工程）与 P1（Scanner / Source Identity / Snapshot / Evidence / 最小 GUI），在 `dev` 以可独立审查的 PR 集成，并配置 GitHub Actions macOS 构建与单元测试。P2、P3、I1、I2、R1 未授权。
+- **授权历史**
+  - **2026-11-11（原文保留，不改动当时的时间记录）：** 实施 P0（技术契约与基础工程）与 P1（Scanner / Source Identity / Snapshot / Evidence / 最小 GUI），在 `dev` 以可独立审查的 PR 集成，并配置 GitHub Actions macOS 构建与单元测试。P2、P3、I1、I2、R1 未授权。
+  - **2026-11-12（Owner 决策；取代上一条中「P2、P3 未授权」的现状效力，上一条作为历史证据保留）：**
+    - P0 / P1：已授权并完成。
+    - P2：已授权，工程实现完成；外部现场验收仍有未关闭项——Provider 真实调用、隔离 DEVONthink 库对齐、授权 OneDrive 目录三项保持 `BLOCKED`，GUI 人工交互保持 `NOT_VERIFIED`，且不得因阶段收尾而关闭；CI 编译成功与合成数据测试通过不得表述为真实环境验证通过，P2 不宣称生产就绪。
+    - **P3-A：正式授权启动离线评测准备工作**（金标准数据集规范与评测基础设施，允许合成数据与确定性替身）。
+    - **P3-B：真实模型评测暂未授权执行**，等待四项外部前置条件：Provider 真实 API 凭据与批准的模型、外发数据范围与费用预算；经确认的独立测试库 UUID 与只读范围；Owner 授权的真实扫描目录与访问边界；≥150 条经独立核实与脱敏的金标准样本。凭据一律经本地 Keychain 或经批准的 Secret 管理，不提交仓库。
+    - I1 / I2 / R1：未授权。
+    - 质量阈值（precision_auto ≥95%、coverage ≥70%、field_precision ≥98%、high_confidence_error_rate ≤2%）仍为待批候选值；正式 Gate 须在真实测量、分层、区间与风险分析后由 Owner 再次批准，Agent 不得自行宣布其已成为验收标准。
 - 首阶段 Prototype 只读隔离 DEVONthink 库，禁止任何写入；生产 Project_Archive 现有 991 条记录不可修改。
 - SPEC 产品契约有变化须先获 Owner 批准修订；一般实现细节以 PLAN 和对应 Issue 为准。
 - 公开仓库只允许脱敏/合成案例；真实资料留本地。
