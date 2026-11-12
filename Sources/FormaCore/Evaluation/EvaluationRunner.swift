@@ -284,9 +284,15 @@ public enum EvaluationRunner {
             createdAt: startedAt, state: state)
         let manifest = Manifest(envelope: envelope, entries: validation.entries, report: validation.report)
 
+        // `Manifest.entry(for:)` is a linear scan. Calling it once per sample is
+        // O(n²): the 2c scale benchmark measured ~18 s in this stage at 10,000
+        // records. Index once instead, keeping the first match so the result is
+        // exactly what `entry(for:)` would have returned.
+        let entriesBySource = Dictionary(manifest.entries.map { ($0.sourceID, $0) },
+                                         uniquingKeysWith: { first, _ in first })
         let judgementStart = ContinuousClock.now
         let cases = samples.map { sample in
-            CaseJudgement(gold: sample.record, entry: manifest.entry(for: sample.entry.id),
+            CaseJudgement(gold: sample.record, entry: entriesBySource[sample.entry.id],
                           projectKeys: projectKeys)
         }
         stageMeasurements.append(EvaluationStageMeasurement(

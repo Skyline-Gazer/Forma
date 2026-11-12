@@ -125,19 +125,47 @@ gh workflow run benchmark.yml --ref <branch> \
 
 > 只记录实际执行得到的数字；共享 Runner 的绝对耗时不作为合并 Gate。
 
-见本 PR 的 `workflow_dispatch` 运行产物（`benchmark-scale` artifact）与 PR 中的结果表。**执行前本节保持 NOT RUN，不预填、不外推。**
+**运行 A（优化前，2026-11-12，[run 43244063426](https://github.com/Skyline-Gazer/Forma/actions/runs/43244063426)，`workflow_dispatch`，分支 `p3a-slice-2c-benchmark`，12 个格子全部 `violations() == []`）**：
+
+环境：macOS 15.8.2 (24H232) / VirtualMac2,1 / 3 cores / Swift 6.2.4 / Xcode 26.3 / GitHub macos-15 共享 Runner。100 个簇，`entryLimit = 100`，`bootstrapResamples = 20`，替身模拟延迟 2 ms。
+
+| 场景 | 记录 | 并发上限/观测峰值 | 请求/已下发/attempt/retry | 失败 | 请求墙钟 ms | samples/s | P50/P95 ms | 基准总耗时 ms | 阶段和(下界) ms | 未覆盖 ms | 峰值 RSS MB |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| scale-100-c1 | 100 | 1/1 | 100/100/100/0 | 0 | 1379 | 72.5 | 2.0/2.0 | 1641 | 1555 | 86 | 13.7 |
+| scale-100-c2 | 100 | 2/2 | 100/100/100/0 | 0 | 500 | 200.0 | 2.0/2.0 | 782 | 673 | 109 | 13.8 |
+| scale-100-c4 | 100 | 4/4 | 100/100/100/0 | 0 | 340 | 294.1 | 2.0/2.0 | 805 | 658 | 147 | 14.1 |
+| scale-100-c8 | 100 | 8/8 | 100/100/100/0 | 0 | 194 | 515.5 | 2.0/2.0 | 498 | 386 | 112 | 14.0 |
+| scale-1000-c1 | 1000 | 1/1 | 100/100/100/0 | 0 | 2344 | 426.6 | 2.0/2.0 | 4435 | 3629 | 806 | 28.6 |
+| scale-1000-c2 | 1000 | 2/2 | 100/100/100/0 | 0 | 1224 | 817.0 | 2.0/2.0 | 2872 | 2229 | 643 | 29.2 |
+| scale-1000-c4 | 1000 | 4/4 | 100/100/100/0 | 0 | 428 | 2336.4 | 2.0/2.0 | 1775 | 1185 | 590 | 28.8 |
+| scale-1000-c8 | 1000 | 8/8 | 100/100/100/0 | 0 | 420 | 2381.0 | 2.0/2.0 | 1844 | 1370 | 474 | 28.8 |
+| scale-10000-c1 | 10000 | 1/1 | 100/100/100/0 | 0 | 8693 | 1150.4 | 2.0/2.0 | 38655 | 33740 | 4915 | 164.7 |
+| scale-10000-c2 | 10000 | 2/2 | 100/100/100/0 | 0 | 6266 | 1595.9 | 2.0/2.0 | 36264 | 30875 | 5389 | 158.3 |
+| scale-10000-c4 | 10000 | 4/4 | 100/100/100/0 | 0 | 2531 | 3951.0 | 2.0/2.0 | 28165 | 23324 | 4841 | 160.1 |
+| scale-10000-c8 | 10000 | 8/8 | 100/100/100/0 | 0 | 2872 | 3481.9 | 2.0/2.0 | 31731 | 26749 | 4982 | 162.2 |
+
+P50/P95 是替身 `reportedLatencyMilliseconds` 的 `simulated` 值（2 ms），不是 Provider 观测；`LatencyDistribution.kind == .simulated`。`unaccounted` 是总耗时里没有阶段覆盖的部分（摘要材料、样本准备、计时本身），因此阶段和只是下界。机器可读结果见该 run 的 `benchmark-scale` artifact（12 个 JSON，各有独立 `measurement_id`）。
+
+**运行 B（优化后）**：见 §9 与 PR 中的补充运行；**未执行前不填数字**。
 
 ## 8. 统计限制
 
 - 一次运行 = 一个测量；`measurement_id` 与 `executed_at` 使之不可与另一台机器的结果混成"同一次测量"。`benchmark_id` 只绑定逻辑输入。
 - 吞吐与 P50/P95 来自 `EvaluationTelemetry`，口径与 `docs/EVALUATION-METRICS.md` §10 完全一致；替身延迟一律 `simulated`。
-- 共享 GitHub Hosted Runner 的墙钟抖动大；`--baseline` 只打印倍率并标记 `>1.5x` 供人工复核，不阻断合并。
-- 峰值 RSS 是进程生命期最大值，`--sweep` 的多格子运行明确标记为不可用。
+- 共享 GitHub Hosted Runner 的墙钟抖动大（同一并发档位 c4/c8 在 10k 上相差数秒）；`--baseline` 只打印倍率并标记 `>1.5x` 供人工复核，不阻断合并。
+- 峰值 RSS 是进程生命期最大值，每格子一个进程；`--sweep` 的多格子运行明确标记为不可用。
 - 合成 fixture 的内存/耗时曲线只描述运行器与算法层，不预测真实 10,000 文件扫描（后者含 IO、hydration、PDF 抽取）。
+- 每格子恰好 100 个请求（100 个簇、每簇一批到十批），所以"记录数"轴主要放大校验/判定/报告阶段，而不是请求数。
 
 ## 9. 性能瓶颈与 M9 剩余
 
 > 本节只在实际基准执行后填写观测到的热点；未观测不写推测。
+
+运行 A 的 10,000 记录平均阶段耗时（4 个并发档位的平均）：`case_judgement` 17,980 ms、`request_execution` 5,091 ms、`manifest_validation` 3,683 ms、`fixture_preparation` 1,011 ms、`report_and_metrics` 551 ms、`batch_planning` 352 ms、`artifact_serialization` 5 ms。
+
+**定位**：`Manifest.entry(for:)` 是 `entries.first { ... }` 线性扫描，而 `EvaluationRunner.run` 每个样本调用一次 → O(n²)。这是运行 A 在 10k 上 `case_judgement` 独占约 18 s 的原因，且不是 Provider 或 IO 开销。按"先采样定位、再优化"的约束，本切片在 runner 里为 manifest 条目建一次索引（`Dictionary`，保留首个匹配，与 `entry(for:)` 语义完全一致），不改 `Manifest` 的公开 API，也不改任何判定规则。**运行 A 的数字是优化前的，不能当作当前代码的性能**。
+
+并发趋势（运行 A）：记录数固定时，提高并发确实压低 `request_execution`（10k：c1 8693 ms → c4 2531 ms），c8 未再提升，受共享 Runner 与模拟延迟抖动影响；`observedConcurrency` 始终等于配置值，1/2/4/8 全部满足上限。峰值 RSS 随记录数近似线性（100 → ~14 MB、1k → ~29 MB、10k → ~160 MB），且在整个并发扫描内几乎不变，说明内存主要与样本规模而非在飞请求数相关。
 
 M9 仍需真实 macOS 现场：真实 10,000 文件目录、硬件/系统/磁盘条件、元数据扫描墙钟、峰值内存、OneDrive 元数据扫描/hydration/缓存命中读取/SHA 抽取分列。见 `docs/MACOS-VALIDATION-BACKLOG.md` 的 M9 条目。
 
