@@ -221,11 +221,17 @@ public enum ClusterBootstrap {
     /// rather than an interval whose width is an artefact of the seed.
     public static let minimumClusters = 5
 
-    /// Below this many draws the 2.5th and 97.5th percentile of the resampled ratios
-    /// can resolve to the same sample, which would publish a zero-width band as a
-    /// confidence band. Twenty is where the two indices land apart for any arrangement
-    /// of draws, and like `minimumClusters` and `EvaluationSlice.sparseCaseLimit` this
-    /// is harness policy, not a clause lifted from SPEC or PLAN (§5).
+    /// The floor below which a run gets its rates without any cluster bands.
+    ///
+    /// At two draws or fewer the 2.5th and 97.5th percentile resolve to the same
+    /// sample and the band has zero width - a rounding artefact published as
+    /// uncertainty. Above that the indices separate, but nearest-rank percentiles of a
+    /// handful of draws are the sample extremes: with twenty draws the lower bound is
+    /// the minimum and the upper the maximum, which reads as a 95% band while stating
+    /// only what the few clusters observed. Twenty is where reporting that band stops
+    /// being defensible as a description of the sampling, not a mathematical boundary,
+    /// and like `minimumClusters` and `EvaluationSlice.sparseCaseLimit` it is harness
+    /// policy rather than a clause lifted from SPEC or PLAN (docs §5).
     public static let minimumResamples = 20
 
     /// One measure's rate over a sample, with its cluster interval.
@@ -235,8 +241,8 @@ public enum ClusterBootstrap {
         /// Clusters in the sample, which tells a nil interval apart: `clusterCount`
         /// below `minimumClusters` means the stratum cannot vary, enough clusters
         /// means either this measure was too thin to survive every draw or the run
-        /// asked for fewer than `minimumResamples` draws, where the 2.5th and 97.5th
-        /// percentile of the resampled ratios can resolve to the same sample. Nothing
+        /// asked for fewer than `minimumResamples` draws, where a band would be either
+        /// zero-width (two draws) or just the extremes of a handful of samples. Nothing
         /// floors that request - it is recorded in `EvaluationRunIdentity`, so a
         /// reader tells the third cause from the second by the run's own resample
         /// count rather than by a silent correction.
@@ -354,9 +360,11 @@ public enum EvaluationMetrics {
         ///
         /// Draws behind every `clusterInterval` in this run.
         ///
-        /// A band is two order statistics of the resampled ratios, so it needs enough
-        /// draws for those indices to land apart; with a short run the 2.5th and the
-        /// 97.5th percentile can pick the same sample and report zero uncertainty.
+        /// A band is two order statistics of the resampled ratios. Two draws or fewer
+        /// put both indices on the same sample - a zero-width band - and a short run
+        /// above that still only reports the extremes of what those clusters happened
+        /// to produce. `ClusterBootstrap.minimumResamples` is where this harness stops
+        /// calling that a band.
         /// `ClusterBootstrap.minimumResamples` is that floor, and a run below it gets
         /// the rates without the bands - a nil `clusterInterval` for that reason
         /// rather than for thinness. Nothing raises the caller's number: what a run
