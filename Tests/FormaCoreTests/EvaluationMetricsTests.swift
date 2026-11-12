@@ -537,4 +537,61 @@ struct EvaluationMetricsTests {
         #expect(vendor?.rate.denominator == 1)
         #expect(stratum?.rate.denominator == 1)
     }
+
+    @Test("a run that asks for one draw gets no band, and still a quotable rate")
+    func singleDrawHasNoBand() throws {
+        // §5's third nil cause. Without the published `clusterCount` and the
+        // resample count recorded in the run identity, "nobody asked for a band"
+        // would be indistinguishable from "this stratum is too thin to vary" - and
+        // the second is a finding about the data while the first is a fact about the
+        // request.
+        let cases: [CaseJudgement] = try (0..<40).map { index in
+            let reference = try EvaluationFixtures.gold("g\(index)", expected: [.completionyear: "2026"],
+                                                        cluster: "cluster-\(index)")
+            return EvaluationFixtures.judgement(reference,
+                                                entry: EvaluationFixtures.candidate([.completionyear: "2026"],
+                                                                                     gold: reference))
+        }
+        let slices = EvaluationMetrics.slices(for: cases,
+                                              request: EvaluationMetrics.Request(resamples: 1))
+        let coverage = try #require(slices.first { $0.measure == .coverage && $0.stratum == .overall })
+        #expect(coverage.clusterCount == 40)
+        #expect(coverage.rate.denominator == 40)
+        #expect(coverage.clusterInterval == nil)
+        // The rate itself is untouched: a missing band is not a missing measurement.
+        #expect(coverage.isQuotableOnOwnMerits)
+
+        let twice = EvaluationMetrics.slices(for: cases,
+                                             request: EvaluationMetrics.Request(resamples: 2))
+        let again = try #require(twice.first { $0.measure == .coverage && $0.stratum == .overall })
+        #expect(again.clusterInterval != nil, "two draws are enough for the band to vary")
+    }
+
+    @Test("a profile cut judges files against the profile it names")
+    func profileCutUsesItsOwnProfile() throws {
+        let forVendor = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026"],
+                                                    profiles: [VendorLibraryContract.id])
+        let forArchive = try EvaluationFixtures.gold("g2", expected: [.completionyear: "2026"],
+                                                     profiles: [ProjectArchiveContract.id])
+        let vendorCase = EvaluationFixtures.judgement(
+            forVendor, entry: EvaluationFixtures.candidate([.completionyear: "2026"], gold: forVendor))
+        let archiveCase = EvaluationFixtures.judgement(
+            forArchive, entry: EvaluationFixtures.candidate([.completionyear: "2026"], gold: forArchive))
+        let request = EvaluationMetrics.Request(runProfileID: VendorLibraryContract.id)
+        let slices = EvaluationMetrics.slices(for: [vendorCase, archiveCase], request: request)
+        let archiveKey = ProjectArchiveContract.id
+        let overall = try #require(slices.first { $0.measure == .precisionAuto && $0.stratum == .overall })
+        let archive = try #require(slices.first { $0.stratum == .profile && $0.key == archiveKey
+            && $0.measure == .precisionAuto })
+        // Pooled, the run published one file whose Profile is not the one it was
+        // annotated for.
+        #expect(overall.rate.denominator == 2)
+        #expect(overall.rate.numerator == 1)
+        // Under the archive's own cut, that same file is right: the Profile
+        // component is stated against the cut, not against whoever happened to run
+        // the batch. Both numbers are true, and the second only exists because a
+        // cut carries its own Profile.
+        #expect(archive.rate.denominator == 1)
+        #expect(archive.rate.numerator == 1)
+    }
 }

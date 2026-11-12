@@ -33,14 +33,15 @@ public struct FieldJudgement: Codable, Sendable, Equatable {
 
     public let field: MetadataFieldID
     public let verdict: Verdict
+    /// The one use of this flag is §6's `eligibilityStateInconsistent` check, which
+    /// asks whether a slot the program would publish sits on an entry that never
+    /// reached `validated`. No rate reads it.
     public let autoPublishable: Bool
-    public let highConfidence: Bool
 
-    public init(field: MetadataFieldID, verdict: Verdict, autoPublishable: Bool, highConfidence: Bool) {
+    public init(field: MetadataFieldID, verdict: Verdict, autoPublishable: Bool) {
         self.field = field
         self.verdict = verdict
         self.autoPublishable = autoPublishable
-        self.highConfidence = highConfidence
     }
 
     /// Judge one slot of a gold record against one engine entry.
@@ -85,7 +86,6 @@ public struct FieldJudgement: Codable, Sendable, Equatable {
         // only reason `precision_auto` is not simply the entry flag.
         self.autoPublishable = entry?.eligibleForAutoExecution == true
             && (outcome.map { Self.publishableStatuses.contains($0.status) && !$0.evidenceIDs.isEmpty } ?? false)
-        self.highConfidence = entry?.confidence == .high
     }
 
     /// The field statuses a publication decision may rest on. `unknown`,

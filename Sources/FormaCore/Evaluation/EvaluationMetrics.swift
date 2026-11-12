@@ -164,11 +164,12 @@ public struct EvaluationSlice: Codable, Sendable, Equatable {
     /// multiple for the slot-level ones.
     public let caseCount: Int
     /// Clusters this stratum judged, published so a nil `clusterInterval` can be
-    /// told apart: too few clusters to vary, or this measure too thin.
+    /// told apart: too few clusters to vary, this measure too thin in some draw, or
+    /// the run asked for fewer than two draws (§5).
     public let clusterCount: Int
     public let rate: EvaluationRate
     /// Cluster-level bootstrap interval; see §5 of `docs/EVALUATION-METRICS.md` for
-    /// the two reasons it can be nil.
+    /// the three reasons it can be nil.
     public let clusterInterval: ClosedRange<Double>?
 
     /// Below this many judged *records*, a rate is a candidate value only.
@@ -212,17 +213,22 @@ public enum ClusterBootstrap {
     public struct Summary: Sendable, Equatable {
         public let rate: EvaluationRate
         public let interval: ClosedRange<Double>?
-        /// Clusters in the sample. A nil interval with `clusterCount` below
-        /// `minimumClusters` means the stratum cannot vary; one with enough clusters
-        /// means this measure was too thin to survive every draw. The two need
-        /// separating, because only the second says anything about the measure.
+        /// Clusters in the sample, which tells a nil interval apart: `clusterCount`
+        /// below `minimumClusters` means the stratum cannot vary, enough clusters
+        /// means either this measure was too thin to survive every draw or the run
+        /// asked for fewer than two draws (`Request.resamples <= 1`), where no band
+        /// can exist at all. Nothing floors that request - it is recorded in
+        /// `EvaluationRunIdentity`, so a reader can tell the third cause from the
+        /// second by the run's own resample count rather than by a silent correction.
         public let clusterCount: Int
     }
 
     /// Rate and interval for the requested measures over one sample.
     ///
-    /// `populations` is the per-case slot tally for the whole corpus, in
-    /// `EvaluationMeasure.allCases` order, computed once by the caller; `indices`
+    /// `populations` is the per-case tally for the whole corpus, in
+    /// `EvaluationMeasure.allCases` order, computed once per run Profile by the
+    /// caller (it is the only input that varies between strata of the same corpus);
+    /// `indices`
     /// picks this stratum's rows out of it and `keys` names each row's cluster. No
     /// judgement is re-walked here, so measuring eleven strata costs no more slot
     /// comparisons than measuring one.
@@ -339,19 +345,31 @@ public enum EvaluationMetrics {
         }
     }
 
-    /// The slot comparisons happen once per case and measure; every stratum below
-    /// reads that table, because a cut is a selection, not a new measurement.
+    /// The comparisons happen once per case and measure, per run Profile; every
+    /// stratum reading that Profile gets the same table, because a cut is a
+    /// selection, not a new measurement.
     public static func slices(for cases: [CaseJudgement], request: Request = Request()) -> [EvaluationSlice] {
         let measures = EvaluationMeasure.allCases
         let keys = cases.map(\.clusterKey)
+        var tables: [String?: [[(numerator: Int, denominator: Int)]]] = [:]
 
         var output: [EvaluationSlice] = []
         for (stratum, key, sample) in cuts(of: cases) {
             // A per-Profile cut knows its own Profile; elsewhere only a run that
             // named exactly one does.
             let runProfile = stratum == .profile ? key : request.runProfileID
-            let populations: [[(numerator: Int, denominator: Int)]] = cases.map { judgement in
-                measures.map { $0.population(in: judgement, runProfile: runProfile) }
+            let populations: [[(numerator: Int, denominator: Int)]]
+            if let built = tables[runProfile] {
+                populations = built
+            } else {
+                // `precision_auto` and `high_confidence_error_rate` are stated
+                // relative to the Profile the run executed under, so a per-Profile
+                // cut is the one place where the numbers genuinely differ; every
+                // other cut in the run shares this table.
+                populations = cases.map { judgement in
+                    measures.map { $0.population(in: judgement, runProfile: runProfile) }
+                }
+                tables[runProfile] = populations
             }
             let summaries = ClusterBootstrap.summarize(measures: measures, populations: populations,
                                                        indices: sample, keys: keys,

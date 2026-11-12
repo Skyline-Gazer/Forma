@@ -82,7 +82,7 @@
 
 ## 4. 区间
 
-- **Wilson 95%**（`EvaluationRate.wilson95Lower/Upper`）：这些比率贴近 0 或 1，正态近似会给出越出 [0,1] 的对称区间，把十几条观测的确信度报虚。区间值由 `the wilson bounds are the standard ones` 按教科书数值钉死（5/20 ⇒ 0.1119–0.4687 等）——此前一个把 `/n` 写成 `/(1 + z²/n)` 的错误实现会让**所有**区间退化成 [0,1]，却仍能通过任何"端点是否落在单位区间内"的断言。
+- **Wilson 95%**（`EvaluationRate.wilson95Lower/Upper`）：这些比率贴近 0 或 1，正态近似会给出越出 [0,1] 的对称区间，把十几条观测的确信度报虚。区间值由 `wilsonBoundsTheStandardWay` 按教科书数值钉死（5/20 ⇒ 0.1119–0.4687 等）——此前一个把 `/n` 写成 `/(1 + z²/n)` 的错误实现会让**所有**区间退化成 [0,1]，却仍能通过任何"端点是否落在单位区间内"的断言。
 - **按项目簇 bootstrap**（`ClusterBootstrap.summarize`，入口只有一个）：重抽样的单位是 `clusterKey`（项目簇），不是记录。同一项目的多个文件不是独立观测；按记录抽会把"一个项目的形状"读成普遍性。簇数 < 5（`minimumClusters`）时返回 nil——少于这个簇，区间宽度是种子的产物而不是数据的。任一次重抽样的分母为 0 ⇒ **该指标的整体区间为 nil**（这一层薄到给不出簇级区间），而不是把那次抽样丢掉后照报：丢掉后剩下的恰好都是"有答案的簇"，区间会在最需要报宽的地方被压窄。失效逐指标独立、且与抽样顺序无关——某指标被判无定义不会带走同一次抽样里其他指标的份额（`invented_fill_rate` 排在 `precision_auto` 之后，正是顺序敏感会露馅的位置）；该性质由 `EvaluationMetricsTests.voidingIsOrderIndependent` 固定，把实现退回"清空 + break"时该用例会失败。七个指标共用同一组抽样索引（索引只与种子和簇数有关）。分位点（2.5%/97.5%）直接取自重抽样分布，不做正态拟合：少量簇的比率分布是块状的，**块本身就是发现**。
 - 抽样使用 `SplitMix64`，种子与重抽样次数写入 `EvaluationRunIdentity`；`SystemRandomNumberGenerator` 跨版本不保证序列，而一次测量必须能从记录里复跑。
 
@@ -93,7 +93,7 @@
 - **门禁的单位是记录数**：`EvaluationSlice.caseCount` 是本切面被判定的记录条数，`isSparse = caseCount < 30`。它不看 `rate.denominator`：§3 之后各指标的 `rate.denominator` 单位由 `EvaluationMeasure.unit`（`.records` / `.slots`）声明，同一个切面里既可能是记录也可能是槽位观测——3 条记录 × 12 槽能凑出 36 个槽位观测，150 条记录会让槽位分母上千，用槽位数当门禁两头失真（薄样本被放行、干净样本里天然小分母的指标被永久封死）。
 - Wilson 区间按**该指标自身的观测单位**计算（`EvaluationMeasure.unit`）：记录级比率就在记录数上取置信宽度，槽位级比率就在槽位数上。那是这批观测自身的置信宽度，与"够不够格下结论"是两个问题，两处的单位各写在文档里。
 - 分母为 0 时 `estimate == nil` 且 Wilson 端点为 nil（没测过的东西不存在"0 分"这种质量结论）。
-- `clusterInterval` 为 nil 有**两个不同的原因**，读者必须能分开：**(a)** 本切面簇数 < `ClusterBootstrap.minimumClusters`（5），簇太少、无可变异性；**(b)** 至少一次重抽样的分母为 0，即该指标在这一层过薄（§4）。两者都只关掉簇级区间，**不影响 `isQuotableOnOwnMerits`**：记录数达标的切面照样可以引用率（配 Wilson），只是没有簇级区间可报。每个切面都随区间一起给出 `clusterCount`：`(a)` 时它 < 5，`(b)` 时它 ≥ 5——能区分这两件事正是这个字段存在的理由。`isQuotableOnOwnMerits` 不看它，因为"能不能引用这条率"与"有没有簇级区间"是两个问题。
+- `clusterInterval` 为 nil 有**三个不同的原因**，读者必须能分开：**(a)** 本切面簇数 < `ClusterBootstrap.minimumClusters`（5），簇太少、无可变异性；**(b)** 至少一次重抽样的分母为 0，即该指标在这一层过薄（§4）；**(c)** `Request.resamples <= 1`，根本没有两次抽样可组带。三者都只关掉簇级区间，**不影响 `isQuotableOnOwnMerits`**：记录数达标的切面照样可以引用率（配 Wilson），只是没有簇级区间可报。每个切面都随区间一起给出 `clusterCount`：`(a)` 时它 < 5，`(b)` 与 `(c)` 时它 ≥ 5——这两者靠 `EvaluationRunIdentity` 记录的 `resamples` 区分，代码不会替调用方把抽样次数垫高，因为静默改写一次运行的参数正是最难被读者发现的改动。`isQuotableOnOwnMerits` 不看它，因为"能不能引用这条率"与"有没有簇级区间"是两个问题。
 - 可引用性（`EvaluationSlice.isQuotableOnOwnMerits`）= 记录数达标 **且** 该指标确有观测（`rate.denominator > 0`）。两半缺一不可：只有前半，`precision_auto` 在"没有任何可自动发布产出"的运行里会因为 40 条记录而变得可引用，而它其实什么都没看过。
 - `EvaluationReport.isQuotable(_:stratum:key:)` **逐数**判定，而不是整份报告一票：总体 42 条、某反例类别只有 2 条是常态，而被引用的往往正是那一行。
 - `quotableMeasures` 只列总体切面下非稀疏的指标，供摘要直接取用。
@@ -155,7 +155,7 @@
 | `EvaluationMeasure.population(in:)`（逐字段） | 同上 | 只为 `field_precision` 的 12 条 `.field` 行服务；行分母之和 == pooled 分母 |
 | `EvaluationRate` | 同上 | 分母（槽位观测）为 0 ⇒ `estimate` 与 Wilson 端点为 nil |
 | `EvaluationSlice.caseCount` / `isSparse` / `sparseCaseLimit` | 同上 | 可引用性以**记录数**计；`sparseCaseLimit = 30` 是 harness 策略（§5） |
-| `ClusterBootstrap.summarize(measures:populations:indices:keys:resamples:seed:)` | 同上 | 唯一公开入口；`populations` 由调用方按 `allCases` 列序算一次，切面只选行不重算；簇 < 5 或任一无定义抽样 ⇒ 该指标区间为 nil |
+| `ClusterBootstrap.summarize(measures:populations:indices:keys:resamples:seed:)` | 同上 | 唯一公开入口；`populations` 由调用方按 `allCases` 列序**每个运行 Profile 算一次**（`slices(for:)` 缓存到 `tables`，Profile 切面用自己那一层的 key，其余切面共用），切面只选行不重算；簇 < 5、任一无定义抽样、或 `resamples <= 1` ⇒ 该指标区间为 nil（§5 的 (a)(b)(c)） |
 | `EvaluationMetrics.slices(for:request:)` | 同上 | 切面 = overall ∪ 出现的每个 Profile ∪ 出现的每个类别（另有 §3 第 6 条的 12 条逐字段行）；一条记录属于两个 Profile 时在两个切面各出现一次，绝不计为两条记录；Profile 切面把**该切面的 Profile** 当作 `runProfile`，所以"在 Vendor Profile 下主决策对不对"是按那一层的 Profile 判的 |
 | `EvaluationMetrics.confusion(_:)` | 同上 | 键形如 `mapped->absent`；无条目用 `absent` |
 | `EvaluationRunIdentity` | `Sources/FormaCore/Evaluation/EvaluationReport.swift` | 替身标志是身份的字段，不是脚注 |
