@@ -138,7 +138,7 @@ struct GoldDatasetTests {
         // Both halves of the consequence: the record leaves every denominator,
         // and the report says which record leaked through which axis.
         #expect(subject.countableIDs == ["other"])
-        #expect(subject.report().undeclaredOverlaps.contains("leak~" + taught.caseID + ":family"))
+        #expect(subject.report().undeclaredOverlaps == ["leak~" + taught.caseID + ":[family]"])
         #expect(subject.report().countableRecords == 1)
     }
 
@@ -174,7 +174,7 @@ struct GoldDatasetTests {
                                   split: try split(evaluation: ["scored"], prompt: ["taught"]))
         // Names never match here, so only the hash could reveal the leak - and
         // the report has to say which axis it was, not just that something is off.
-        #expect(subject.report().undeclaredOverlaps.contains("scored~taught:sha"))
+        #expect(subject.report().undeclaredOverlaps == ["scored~taught:[sha]"])
         #expect(subject.countableIDs.isEmpty)
     }
 
@@ -203,7 +203,7 @@ struct GoldDatasetTests {
         let subject = try dataset(records: [taught, evaluation],
                                   split: split(evaluation: ["scored"], prompt: ["taught"]))
         #expect(subject.countableIDs.isEmpty)
-        #expect(subject.report().undeclaredOverlaps.contains("scored~taught:cluster"))
+        #expect(subject.report().undeclaredOverlaps == ["scored~taught:[cluster]"])
     }
 
     @Test("a renamed copy of the same document is a leak")
@@ -401,5 +401,36 @@ struct GoldDatasetTests {
         }
         // Two profiles is one record counted in both strata, never two records.
         #expect(Set(decoded.profiles).count == 2)
+    }
+
+    @Test("two axes colliding with one counterpart is one leak, reported once")
+    func multipleAxesAggregate() throws {
+        // Same cluster, same filename family, and both records carry the same
+        // hash: three axes match one counterpart. Before aggregation this
+        // printed three rows and read like three leaks.
+        let digest = String(repeating: "b", count: 64)
+        let taught = try record("taught", cluster: "shared", sha: digest, filename: "报告.docx", usage: .fewshot)
+        let scored = try record("scored", cluster: "shared", sha: digest, filename: "报告 副本.docx")
+        let subject = try dataset(records: [taught, scored],
+                                  split: try split(evaluation: ["scored"], prompt: ["taught"]))
+        // Three axes match - cluster, hash, and the filename family after the
+        // copy marker is stripped - and they must collapse into one row.
+        #expect(subject.report().undeclaredOverlaps == ["scored~taught:[cluster,family,sha]"])
+        #expect(subject.countableIDs.isEmpty)
+    }
+
+    @Test("a record cannot be both prompt-side and withdrawn")
+    func promptAndRemovedClash() throws {
+        let fewshot = try record("taught", filename: "taught.docx", usage: .fewshot)
+        let scored = try record("scored", filename: "scored.docx")
+        #expect(throws: FormaError.incompatible) {
+            try split(evaluation: ["scored"], prompt: ["taught"],
+                      removed: [.init(recordID: "taught", reason: .adjudicationUnresolved,
+                                      counterpartyRecordID: nil)])
+        }
+        // The three lists partition the dataset, which is what lets the report
+        // claim a record was left undecided rather than merely unseen.
+        let honest = try split(evaluation: ["scored"], prompt: ["taught"])
+        #expect(try dataset(records: [fewshot, scored], split: honest).report().unaccountedRecords.isEmpty)
     }
 }

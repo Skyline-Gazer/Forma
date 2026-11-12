@@ -440,7 +440,7 @@ PLAN §1 与 SPEC §6.1 第 5 条禁止 Embedding/Vector DB/RAG；PLAN §8.1 规
      unreviewed_pending       = 留在 `review/pending/`、未进入冻结集的记录数（§6.4）
    R adjudication_pending     = Report.pendingAdjudication（§4.4，排除但必须报告）
      removed_records          = 按 §5.2 九个原因码分别计数（含各自 counterparty 数）
-   R undeclared_overlaps      = Report.undeclaredOverlaps（格式 `<record_id>~<counterparty>:<axis>`，`axis` ∈ `cluster|uuid|sha|family|near`；**已决定要评分、但它与提示侧相交**）
+   R undeclared_overlaps      = Report.undeclaredOverlaps（格式 `<record_id>~<counterparty>:[axis,axis,…]`，`axis` ∈ `cluster|uuid|sha|family|near`，按对手聚合、轴名排序，**一次泄漏只有一行**；内容为**已决定要评分、但它与提示侧相交**）
      sha_pending_clusters     = §5.5 标记的簇数
      synthetic_only           = 标 synthetic 的合成记录数（单列，永不并入上面任何达标数）
 表 B 分层（逐 Profile）
@@ -653,11 +653,11 @@ PLAN §1 与 SPEC §6.1 第 5 条禁止 Embedding/Vector DB/RAG；PLAN §8.1 规
 3. 记录的 `dataset_revision` 与 manifest 不一致（混版）→ `FormaError.incompatible`；
 4. `evaluation_record_ids` 引用目录中不存在的记录 → `FormaError.invalidSource`；
 5. `prompt_record_ids` 中的 id 既不属于 shipped CasePack 的 `case_id`，也不属于任何 `usage = fewshot` 记录 → `FormaError.invalidSource`（manifest 不能声称一个从未计算过的隔离）；
-6. `GoldSplit` 自身拒绝：同一记录同时出现在 prompt 与 evaluation 两侧、或 `removed_records` 里的记录仍出现在 `evaluation_record_ids`（均 `FormaError.incompatible`）。**因此"已声明排除但仍在评测集"不是合法状态**，§5.2 的移除必须真正落实为两侧清单的修改。
+6. `GoldSplit` 自身拒绝：`prompt_record_ids`、`evaluation_record_ids`、`removed_records` **三处清单两两互斥**——同一记录不得同时出现在提示侧与评测侧、不得既作提示侧又被登记为撤下、不得既在撤下班表里又留在评测侧（均 `FormaError.incompatible`）。**因此"已声明排除但仍在评测集"不是合法状态**，§5.2 的移除必须真正落实为两侧清单的修改；第三组互斥也是 `unaccountedRecords` 那个声称的前提：三处并集就是"已作过决定"的全集，重复登记会让一个未决定的文件看起来已决定。
 
 **B 类（加载成功但不计数，报告必须处理）**
 
-7. 仍可计数的评测记录与提示侧存在交集 → 从 `countableIDs` 剔除，并以 `"<record_id>~<counterparty>:<axis>"` 出现在 `Report.undeclaredOverlaps`，`axis` 取值 `cluster|uuid|sha|family|near`；该清单非空即不得发布本报告（§8.2 表 A）。由于 A 类第 6 条排除了"已声明仍在集内"的形态，运行器不再核对 `reason` 与 `axis` 是否对应——那属于 §6.2 checklist 第 8 项的人工审计；
+7. 仍可计数的评测记录与提示侧存在交集 → 从 `countableIDs` 剔除，并以 `"<record_id>~<counterparty>:[axis,…]"` 出现在 `Report.undeclaredOverlaps`：一行代表**一次泄漏**，方括号内列出命中的全部轴（取值 `cluster|uuid|sha|family|near`，字典序）；同一对手在多个轴相撞不会重复出行，重复会被读成多条泄漏；该清单非空即不得发布本报告（§8.2 表 A）。由于 A 类第 6 条排除了"已声明仍在集内"的形态，运行器不再核对 `reason` 与 `axis` 是否对应——那属于 §6.2 checklist 第 8 项的人工审计；
 8. `review.status = adjudication_pending` → 不计数，数量进入 `pendingAdjudication`（§4.4）；
 9. `sha256`/`near_duplicate_group` 等可选身份键缺省 → 相应轴上没有键，该记录的隔离强度下降，仍须按 §5.5/§5.3 由人工补齐并计入表 A 的 `sha_pending_clusters`。
 
@@ -665,7 +665,7 @@ PLAN §1 与 SPEC §6.1 第 5 条禁止 Embedding/Vector DB/RAG；PLAN §8.1 规
 
 - 合格记录集合（`countableIDs`）；
 - `Report` 字段（实际形态与顺序，共 15 项）：`datasetRevision`、`splitID`、`casePackVersion`、`totalRecords`、`evaluationRecords`、`countableRecords`、`reviewedCountable`、`pendingAdjudication`、`perProfileCountable`、`perCategoryCountable`、`shortfalls`、`undeclaredOverlaps`、`unaccountedRecords`、`meetsIndependentTarget`、`requiredMinimum`；
-- **`unaccountedRecords` 与 `undeclaredOverlaps` 语义不同，报告必须分别处理**（§8.2 表 A 末）：前者是排序后的记录 id 列表，指"`records/` 里存在，但 split 既没放进 `evaluation_record_ids`/`prompt_record_ids`、也没写进 `removed_records`"——**没人对它作过决定**，它不进任何计数，所以台账不完整（`GoldDataset.unaccounted` = 目录记录 id 集合减去三处清单之并集）；后者是"**已决定要评分**但该记录与提示侧相交"，它已被从 `countableIDs` 剔除。两者的修复动作也不同：前者按 §5.6 把记录归入三处之一，后者按 §5.2 移出评测侧并写 `removed_records`。**任一列表非空即不得宣称台账完整或发布本报告**——这是本文"目录里没有一条记录处于未登记状态"的要求第一次由代码给出支撑（§3.6、§9.3），不再是纪律条款；
+- **`unaccountedRecords` 与 `undeclaredOverlaps` 语义不同，报告必须分别处理**（§8.2 表 A 末）：前者是排序后的记录 id 列表，指"`records/` 里存在，而三处两两互斥的清单（A6）既没放进 `evaluation_record_ids`/`prompt_record_ids`、也没写进 `removed_records`"——**没人对它作过决定**，它不进任何计数，所以台账不完整（`GoldDataset.unaccounted` = 目录记录 id 集合减去三处清单之并集）；后者是"**已决定要评分**但该记录与提示侧相交"，它已被从 `countableIDs` 剔除。两者的修复动作也不同：前者按 §5.6 把记录归入三处之一，后者按 §5.2 移出评测侧并写 `removed_records`。**任一列表非空即不得宣称台账完整或发布本报告**——这是本文"目录里没有一条记录处于未登记状态"的要求第一次由代码给出支撑（§3.6、§9.3），不再是纪律条款；
 - 本文要求、运行器**不**产出的补充台账（报告必须引用）：文档类别轴与 `ce-*` 轴计数（§2.3）、表 C 簇归属、表 D 依据与脱敏对照（§8.2）、CasePack 案例→项目簇人工核对结果（§5.1）；
 - 复现标识（§7.3 三件套）与 Profile `versionKey`。
 
@@ -697,4 +697,4 @@ PLAN §1 与 SPEC §6.1 第 5 条禁止 Embedding/Vector DB/RAG；PLAN §8.1 规
 
 ---
 
-**本文与实现的核对记录：** 2026-11-12 按当时的 `Sources/FormaCore/Evaluation/GoldRecord.swift`、`GoldSplit.swift`、`GoldDataset.swift` 与 `Sources/FormaCore/Mapping/Schemas/gold-record-1.0.schema.json`、`gold-split-1.0.schema.json` 复核 §4/§5/§8/§10 的字段名、枚举、拒绝条件与报告字段；§9.4 与 §9.5 两个 JSON 样例对上述两个 Schema 重新逐关键字校验通过（`gold-split-1.0` 修复 `$defs/date` 后，`generated_on = "2026-11-20"` 符合 `^[0-9]{4}-[0-9]{2}-[0-9]{2}$`）。本文不声称任何样本已采集、任何审核已完成、任何阈值已批准或任何评测已验收。
+**本文与实现的核对记录：** 2026-11-12 按当时的 `Sources/FormaCore/Evaluation/GoldRecord.swift`、`GoldSplit.swift`、`GoldDataset.swift` 与 `Sources/FormaCore/Mapping/Schemas/gold-record-1.0.schema.json`、`gold-split-1.0.schema.json` 复核 §4/§5/§8/§10 的字段名、枚举、拒绝条件与报告字段；§9.4 与 §9.5 两个 JSON 样例对上述两个 Schema 重新逐关键字校验通过（`gold-split-1.0` 修复 `$defs/date` 后，`generated_on = "2026-11-20"` 符合 `^[0-9]{4}-[0-9]{2}-[0-9]{2}$`）。2026-11-12 第二轮（CNB pull #12 两次发现后）再核：`GoldSplit.check` 现为三处清单**两两互斥**（本文 A6 已同步，此前只校验其中两组，故「既作提示侧又被登记撤下」可逃过）；`Report.undeclaredOverlaps` 改为**按对手聚合、轴名排序、一次泄漏一行**（本文表 A 与 B7 已同步），并有用例 `two axes colliding with one counterpart is one leak, reported once` 与 `a record cannot be both prompt-side and withdrawn` 固定两者。§9.4/§9.5 样例未受影响，仍通过。本文不声称任何样本已采集、任何审核已完成、任何阈值已批准或任何评测已验收。

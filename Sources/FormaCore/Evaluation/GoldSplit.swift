@@ -83,16 +83,16 @@ public struct GoldSplit: Codable, Sendable, Equatable {
 
     static func check(_ split: GoldSplit) throws {
         guard split.schemaVersion == "1.0" else { throw FormaError.incompatible }
-        // A record on both sides is the leak this whole type exists to prevent,
-        // and it cannot be excused by also appearing in `removed`: removal is a
-        // statement that the record left the evaluation set.
-        guard split.promptRecordIDs.isDisjoint(with: split.evaluationRecordIDs) else {
+        // The three lists partition the dataset: scored, taught, withdrawn. Each
+        // pair has to be disjoint, because `GoldDataset.unaccounted` reads their
+        // union as "someone decided about this record", and a record listed twice
+        // with two meanings would be counted as decided by both.
+        let removedIDs = Set(split.removed.map { $0.recordID })
+        guard split.promptRecordIDs.isDisjoint(with: split.evaluationRecordIDs),
+              split.promptRecordIDs.isDisjoint(with: removedIDs),
+              removedIDs.isDisjoint(with: split.evaluationRecordIDs) else {
             throw FormaError.incompatible
         }
-        let removedIDs = split.removed.map(\.recordID)
-        guard Set(removedIDs).count == removedIDs.count else { throw FormaError.incompatible }
-        guard split.removed.allSatisfy({ !split.evaluationRecordIDs.contains($0.recordID) }) else {
-            throw FormaError.incompatible
-        }
+        guard split.removed.count == removedIDs.count else { throw FormaError.incompatible }
     }
 }

@@ -158,15 +158,20 @@ public struct GoldDataset: Sendable {
         return keys
     }
 
-    /// The prompt-side records whose identity collides with this evaluation
-    /// record, keyed by the axis that collided.
-    static func overlaps(record: GoldRecord, promptKeys: [String: Set<String>]) -> [(axis: String, promptID: String)] {
+    /// The prompt-side records colliding with this evaluation record, one entry
+    /// per counterpart with every axis that matched.
+    ///
+    /// Aggregated rather than one row per axis: two records sharing a project
+    /// cluster *and* a filename family is one leak, and printing it twice makes a
+    /// reader count leaks from a list that does not list leaks.
+    static func overlaps(record: GoldRecord,
+                         promptKeys: [String: Set<String>]) -> [(promptID: String, axes: [String])] {
         let mine = record.independenceKeys
-        var found: [(String, String)] = []
+        var found: [(String, [String])] = []
         for (promptID, theirs) in promptKeys.sorted(by: { $0.key < $1.key }) {
-            for key in mine where theirs.contains(key) {
-                found.append((String(key.split(separator: ":", maxSplits: 1).first ?? ""), promptID))
-            }
+            let axes = Set(theirs.intersection(mine).map { String($0.split(separator: ":", maxSplits: 1).first ?? "") })
+                .sorted()
+            if !axes.isEmpty { found.append((promptID, axes)) }
         }
         return found
     }
@@ -204,8 +209,8 @@ public struct GoldDataset: Sendable {
             // both lists. So anything reaching here that overlaps the prompt side
             // is by definition undeclared, and naming it is the whole job.
             for record in evaluation where record.isCountable {
-                for (axis, promptID) in Self.overlaps(record: record, promptKeys: promptKeys) {
-                    undeclared.append("\(record.recordID)~\(promptID):\(axis)")
+                for hit in Self.overlaps(record: record, promptKeys: promptKeys) {
+                    undeclared.append("\(record.recordID)~\(hit.promptID):[\(hit.axes.joined(separator: ","))]")
                 }
             }
         }
