@@ -49,10 +49,22 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         case undeclaredPromptOverlap
         /// Records in the directory that the split accounts for nowhere.
         case unaccountedRecords
-        /// Disputed records were excluded from the denominators - disclosed, not
-        /// disqualifying: a run with a few pending adjudications still measures
-        /// what it measured, and hiding that fact would be the worse error.
+        /// The dataset withheld disputed records from its countable set, as PLAN
+        /// §8.1 requires, and the number is reported here so a denominator can be
+        /// read against it. Disclosed, not disqualifying: a run with a few pending
+        /// adjudications still measured what it measured, and treating the honest
+        /// exclusion as a defect would only discourage recording it.
+        ///
+        /// The exclusion itself happens in `GoldDataset`, not in this initializer -
+        /// which is exactly why `caseSetNotDerivedFromSplit` exists: without it, a
+        /// caller could hand in cases that include the withheld records and the
+        /// sentence on the left would be a claim nothing checked.
         case pendingAdjudicationExcluded
+        /// A judged record is not in the dataset's countable set, or the same record
+        /// was judged more than once. Either way the denominators are no longer
+        /// derived from the versioned split: withdrawn, disputed or prompt-side
+        /// material would be scored, or one record counted twice.
+        case caseSetNotDerivedFromSplit
         /// A candidate carries auto-publishable slots on an entry that is not
         /// `validated`, which is the same inconsistency `ManifestExport` reports as
         /// `eligibility_state`. Judged here rather than repaired here: a rate
@@ -79,8 +91,8 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
     public let dataset: GoldDataset.Report
     public let claimBlockers: [Finding]
     public let isQualityClaimAllowed: Bool
-    /// Measures whose overall denominator is large enough to quote at all
-    /// (SPEC §10.1.6: below 30 observations a value is candidate only).
+    /// Measures whose overall stratum judged enough records to quote at all; see
+    /// `EvaluationSlice.sparseCaseLimit` for what that threshold is and is not.
     public let quotableMeasures: [EvaluationMeasure]
 
     public init(cases: [CaseJudgement], identity: EvaluationRunIdentity, dataset: GoldDataset.Report,
@@ -112,6 +124,19 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
                                     detail: "\(inconsistent.count) 条候选在未达到 `validated` 的条目上带有可自动发布的槽位，"
                                         + "与导出校验的 eligibility_state 同一判据。"))
         }
+        let allowed = Set(dataset.countableRecordIDs)
+        var seen = Set<String>()
+        var offSplit = 0
+        var duplicates = 0
+        for judgement in cases {
+            if !allowed.contains(judgement.recordID) { offSplit += 1 }
+            if !seen.insert(judgement.recordID).inserted { duplicates += 1 }
+        }
+        if offSplit > 0 || duplicates > 0 {
+            blockers.append(Finding(kind: .caseSetNotDerivedFromSplit,
+                                    detail: "\(offSplit) 条被判定记录不在数据集的可计数集合内，"
+                                        + "\(duplicates) 条被重复判定。"))
+        }
         if !dataset.undeclaredOverlaps.isEmpty {
             blockers.append(Finding(kind: .undeclaredPromptOverlap,
                                     detail: "评测集中有 \(dataset.undeclaredOverlaps.count) 条记录与提示侧存在未声明交集。"))
@@ -128,8 +153,11 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         self.isQualityClaimAllowed = !blockers.contains { $0.kind.preventsQualityClaim }
         // Over the local value: referring to `slices` here would capture self
         // before the remaining properties exist.
+        let overall = computedSlices.filter { slice in
+            slice.stratum == .overall && slice.isQuotableOnOwnMerits
+        }
         self.quotableMeasures = EvaluationMeasure.allCases.filter { measure in
-            computedSlices.contains { $0.measure == measure && $0.stratum == .overall && !$0.rate.isSparse }
+            overall.contains { $0.measure == measure }
         }
     }
 
@@ -146,7 +174,7 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
     public func isQuotable(_ measure: EvaluationMeasure, stratum: EvaluationSlice.Stratum = .overall,
                            key: String? = nil) -> Bool {
         guard isQualityClaimAllowed, let found = slice(measure, stratum: stratum, key: key),
-              !found.rate.isSparse else { return false }
+              found.isQuotableOnOwnMerits else { return false }
         return true
     }
 }

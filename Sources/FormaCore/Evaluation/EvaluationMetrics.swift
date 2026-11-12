@@ -75,20 +75,19 @@ extension FieldJudgement.Verdict {
         || self == .invented }
 }
 
-/// A fraction with the sample size attached.
+/// A fraction with the observation count attached.
 ///
-/// The denominator is never dropped: SPEC §10.1.6 makes a rate over fewer than 30
-/// observations a candidate value only, and that judgement is impossible to make
-/// downstream if the count is not published beside the number.
+/// The denominator is never published alone: every one of these rates counts
+/// field-level slots, so a five-record run can show a denominator in the tens and
+/// a 150-record run can show a denominator of zero for `precision_auto`. What a
+/// rate cannot say is how many *records* produced it - that is on
+/// `EvaluationSlice.caseCount`, and it is the number the candidate-value gate uses.
 public struct EvaluationRate: Codable, Sendable, Equatable {
     public let numerator: Int
     public let denominator: Int
     public let estimate: Double?
     public let wilson95Lower: Double?
     public let wilson95Upper: Double?
-    public let isSparse: Bool
-
-    static let sparseLimit = 30
 
     init(numerator: Int, denominator: Int) {
         self.numerator = numerator
@@ -97,8 +96,10 @@ public struct EvaluationRate: Codable, Sendable, Equatable {
         // Wilson rather than the normal approximation: these rates sit near 0 and
         // 1, where the symmetric interval runs outside the valid range and reports
         // confidence a sample of a dozen does not carry.
+        // Wilson's width is a statement about these observations, and the
+        // observations here are slots; the record-count gate is a separate question.
         guard denominator > 0, let p = estimate else {
-            wilson95Lower = nil; wilson95Upper = nil; isSparse = true; return
+            wilson95Lower = nil; wilson95Upper = nil; return
         }
         let n = Double(denominator), z = 1.959_963_985_268_05
         let scale = z * z / n
@@ -106,7 +107,6 @@ public struct EvaluationRate: Codable, Sendable, Equatable {
         let margin = z * ((p * (1 - p) + scale / 4) / (1 + scale)).squareRoot()
         wilson95Lower = max(0, (centre - margin) / (1 + scale))
         wilson95Upper = min(1, (centre + margin) / (1 + scale))
-        isSparse = denominator < Self.sparseLimit
     }
 }
 
@@ -120,10 +120,29 @@ public struct EvaluationSlice: Codable, Sendable, Equatable {
     public let stratum: Stratum
     /// The stratum's key - a Profile id, a scenario category, or nil for overall.
     public let key: String?
+    /// Records judged in this stratum. Distinct from `rate.denominator`, which
+    /// counts slots.
+    public let caseCount: Int
     public let rate: EvaluationRate
     /// Cluster-level bootstrap interval, nil when there are too few clusters for
     /// resampling to mean anything.
     public let clusterInterval: ClosedRange<Double>?
+
+    /// Below this many judged *records*, a rate is a candidate value only.
+    ///
+    /// This is a harness policy, not a requirement lifted from SPEC or PLAN:
+    /// neither fixes a minimum cell size, and PLAN §13 item 1 lists the quality
+    /// thresholds as pending the Owner's decision. Stated here so the number is
+    /// arguable rather than hidden,
+    /// and so no reader mistakes it for a frozen clause.
+    public static let sparseCaseLimit = 30
+
+    public var isSparse: Bool { caseCount < Self.sparseCaseLimit }
+
+    /// Whether this number could be quoted on its own merits, before any judgement
+    /// about the run: enough records, and a population for the measure to have seen
+    /// anything. A measure with no observations is not "0%" and not a finding.
+    public var isQuotableOnOwnMerits: Bool { !isSparse && rate.denominator > 0 }
 }
 
 /// Cluster-level resampling, and the rate that goes with it.
@@ -151,46 +170,51 @@ public enum ClusterBootstrap {
         public let interval: ClosedRange<Double>?
     }
 
-    /// Rate and interval for every measure over one sample, from a single walk.
+    /// Rate and interval for the requested measures over one sample.
     ///
-    /// `indices` selects the sample so a stratum does not need its own copy of the
-    /// judgements; the slot comparison - the expensive part - then happens exactly
-    /// once per case and measure, and both the totals and the resampling reuse it.
-    public static func summarize(cases: [CaseJudgement], indices: [Int],
-                                 measures: [EvaluationMeasure] = EvaluationMeasure.allCases,
+    /// `populations` is the per-case slot tally for the whole corpus, in
+    /// `EvaluationMeasure.allCases` order, computed once by the caller; `indices`
+    /// picks this stratum's rows out of it and `keys` names each row's cluster. No
+    /// judgement is re-walked here, so measuring eleven strata costs no more slot
+    /// comparisons than measuring one.
+    public static func summarize(measures: [EvaluationMeasure] = EvaluationMeasure.allCases,
+                                 populations: [[(numerator: Int, denominator: Int)]],
+                                 indices: [Int], keys: [String],
                                  resamples: Int = 2_000, seed: UInt64 = 0x9E37_79B9_7F4A_7C15)
         -> [EvaluationMeasure: Summary] {
         guard !measures.isEmpty else { return [:] }
-        let populations: [[(numerator: Int, denominator: Int)]] = indices.map { index in
-            measures.map { $0.population(in: cases[index]) }
-        }
+        // A subset request still reads the columns built for the full order.
+        let columns = measures.map { EvaluationMeasure.allCases.firstIndex(of: $0)! }
 
         var output: [EvaluationMeasure: Summary] = [:]
         for (position, measure) in measures.enumerated() {
             var numerator = 0
             var denominator = 0
-            for row in populations {
-                numerator += row[position].numerator
-                denominator += row[position].denominator
+            for index in indices {
+                numerator += populations[index][columns[position]].numerator
+                denominator += populations[index][columns[position]].denominator
             }
             output[measure] = Summary(rate: EvaluationRate(numerator: numerator, denominator: denominator),
                                       interval: nil)
         }
 
-        let clusters = clusterIndices(of: cases, sample: indices, populationCount: populations.count)
-        guard clusters.count >= minimumClusters, resamples > 1 else { return output }
+        // Positions within this sample, grouped by cluster key.
+        var grouped: [String: [Int]] = [:]
+        for position in indices.indices {
+            grouped[keys[indices[position]], default: []].append(position)
+        }
+        guard grouped.count >= minimumClusters, resamples > 1 else { return output }
+        let clusters = grouped.keys.sorted().map { grouped[$0]! }
 
-        // Cluster totals, from the same walk: summing per cluster is what turns a
-        // resample into integer additions.
         var clusterTotals: [[(numerator: Int, denominator: Int)]] = []
         clusterTotals.reserveCapacity(clusters.count)
         for members in clusters {
             var row = Array(repeating: (numerator: 0, denominator: 0), count: measures.count)
             for member in members {
-                let source = populations[member]
+                let source = populations[indices[member]]
                 for position in row.indices {
-                    row[position].numerator += source[position].numerator
-                    row[position].denominator += source[position].denominator
+                    row[position].numerator += source[columns[position]].numerator
+                    row[position].denominator += source[columns[position]].denominator
                 }
             }
             clusterTotals.append(row)
@@ -216,48 +240,15 @@ public enum ClusterBootstrap {
         }
 
         for (position, measure) in measures.enumerated() {
+            // Not voided means every draw had a denominator, so there are exactly
+            // `resamples` ratios - more than one, because of the guard above.
             guard !voided[position] else { continue }
             let sorted = ratios[position].sorted()
-            guard sorted.count >= 2 else { continue }
-            // Percentile bounds, not a normal fit: the resampled distribution of a
-            // ratio over a handful of clusters is lumpy, and the lumps are the finding.
             let lower = sorted[Int(Double(sorted.count - 1) * 0.025)]
             let upper = sorted[Int(Double(sorted.count - 1) * 0.975)]
             output[measure] = Summary(rate: output[measure]!.rate, interval: lower...upper)
         }
         return output
-    }
-
-    /// The interval for one measure, for callers that want only it.
-    public static func interval(cases: [CaseJudgement], measure: EvaluationMeasure,
-                                resamples: Int = 2_000, seed: UInt64 = 0x9E37_79B9_7F4A_7C15)
-        -> ClosedRange<Double>? {
-        summarize(cases: cases, indices: Array(cases.indices), measures: [measure],
-                  resamples: resamples, seed: seed)[measure]?.interval
-    }
-
-    public static func intervals(cases: [CaseJudgement], measures: [EvaluationMeasure],
-                                 resamples: Int = 2_000, seed: UInt64 = 0x9E37_79B9_7F4A_7C15)
-        -> [EvaluationMeasure: ClosedRange<Double>] {
-        let summaries = summarize(cases: cases, indices: Array(cases.indices), measures: measures,
-                                  resamples: resamples, seed: seed)
-        // A voided measure is absent rather than mapped to a nil-valued dictionary:
-        // callers ask "is there an interval", and `nil` answers it either way.
-        return Dictionary(uniqueKeysWithValues: measures.compactMap { measure in
-            summaries[measure]?.interval.map { (measure, $0) }
-        })
-    }
-
-    /// Sample positions grouped by project cluster, ordered by cluster key so a
-    /// given seed always produces the same resample.
-    private static func clusterIndices(of cases: [CaseJudgement], sample: [Int],
-                                       populationCount: Int) -> [[Int]] {
-        var grouped: [String: [Int]] = [:]
-        for position in sample.indices {
-            grouped[cases[sample[position]].clusterKey, default: []].append(position)
-        }
-        // `grouping` never yields an empty bucket, so the key is always present.
-        return grouped.keys.sorted().map { grouped[$0]! }
     }
 }
 
@@ -288,15 +279,25 @@ public enum EvaluationMetrics {
         }
     }
 
+    /// The slot comparisons happen once per case and measure; every stratum below
+    /// reads that table, because a cut is a selection, not a new measurement.
     public static func slices(for cases: [CaseJudgement], request: Request = Request()) -> [EvaluationSlice] {
+        let measures = EvaluationMeasure.allCases
+        let populations: [[(numerator: Int, denominator: Int)]] = cases.map { judgement in
+            measures.map { $0.population(in: judgement) }
+        }
+        let keys = cases.map(\.clusterKey)
+
         var output: [EvaluationSlice] = []
         for (stratum, key, sample) in cuts(of: cases) {
-            let summaries = ClusterBootstrap.summarize(cases: cases, indices: sample,
+            let summaries = ClusterBootstrap.summarize(measures: measures, populations: populations,
+                                                       indices: sample, keys: keys,
                                                        resamples: request.resamples, seed: request.seed)
-            for measure in EvaluationMeasure.allCases {
+            for measure in measures {
                 let summary = summaries[measure]!
                 output.append(EvaluationSlice(measure: measure, stratum: stratum, key: key,
-                                              rate: summary.rate, clusterInterval: summary.interval))
+                                              caseCount: sample.count, rate: summary.rate,
+                                              clusterInterval: summary.interval))
             }
         }
         return output

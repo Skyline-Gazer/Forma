@@ -12,11 +12,20 @@ import Testing
 /// product quality.
 @Suite("Evaluation report claims")
 struct EvaluationReportTests {
+    /// The ids this suite judges: `withheld` produces `g0...` and the
+    /// counter-example batch `nd0...`. Listing them beside the generator is what
+    /// lets a test say "one of these is not in the split" without lying about the
+    /// rest.
+    private var allowedIDs: [String] { (0..<40).map { "g\($0)" } + ["nd0", "nd1"] }
+
     private func dataset(reviewed: Int, countable: Int? = nil, overlaps: [String] = [],
-                         unaccounted: [String] = [], pending: Int = 0) -> GoldDataset.Report {
+                         unaccounted: [String] = [], pending: Int = 0,
+                         allowed: [String]? = nil) -> GoldDataset.Report {
         GoldDataset.Report(datasetRevision: "1.0.0", splitID: "split-a", casePackVersion: "1.0.0",
                            totalRecords: reviewed + pending, evaluationRecords: reviewed + pending,
-                           countableRecords: countable ?? reviewed, reviewedCountable: reviewed,
+                           countableRecords: countable ?? reviewed,
+                           countableRecordIDs: allowed ?? allowedIDs,
+                           reviewedCountable: reviewed,
                            pendingAdjudication: pending,
                            perProfileCountable: [ProjectArchiveContract.id: reviewed],
                            perCategoryCountable: [GoldRecord.Category.positive.rawValue: reviewed],
@@ -37,11 +46,15 @@ struct EvaluationReportTests {
 
     /// `count` reference answers in `count` separate projects, none of which the
     /// engine answered at all - the cheapest shape that gives a hold rate with a
-    /// denominator worth naming.
-    private func withheld(_ count: Int, category: GoldRecord.Category = .positive) throws -> [CaseJudgement] {
+    /// denominator worth naming. `prefix` keeps a second batch of records distinct,
+    /// because reusing ids across batches would trip the duplicate check in
+    /// `casesMustComeFromTheCountableSplit` for the wrong reason.
+    private func withheld(_ count: Int, category: GoldRecord.Category = .positive,
+                          prefix: String = "g") throws -> [CaseJudgement] {
         try (0..<count).map { index in
-            CaseJudgement(gold: try EvaluationFixtures.gold("g\(index)", expected: [.completionyear: "2026"],
-                                                        category: category), entry: nil)
+            CaseJudgement(gold: try EvaluationFixtures.gold("\(prefix)\(index)",
+                                                            expected: [.completionyear: "2026"],
+                                                            category: category), entry: nil)
         }
     }
 
@@ -117,7 +130,9 @@ struct EvaluationReportTests {
         // while not `validated` as `eligibility_state`; the report layer refuses the
         // same shape instead of measuring it, because `precision_auto` over a
         // manifest the program would not write is not a rate about this program.
-        let reference = try EvaluationFixtures.gold("x1", expected: [.completionyear: "2026"])
+        // "g5" is inside `allowedIDs`: this test is about the eligibility shape, and
+        // an off-split id would trip the case-set blocker before the one under test.
+        let reference = try EvaluationFixtures.gold("g5", expected: [.completionyear: "2026"])
         let parked = EvaluationFixtures.candidate([.completionyear: "2026"], state: .mapped,
                                                   publishable: true, gold: reference)
         let cases = [CaseJudgement(gold: reference, entry: parked)]
@@ -139,10 +154,40 @@ struct EvaluationReportTests {
         #expect(clean.claimBlockers.isEmpty)
     }
 
+    @Test("cases have to come out of the split the report names")
+    func casesMustComeFromTheCountableSplit() throws {
+        // The dataset withholds disputed and withdrawn records from its countable
+        // set; a report that never checked which records it was handed would say
+        // "disputed records excluded" about a run that included them.
+        let leaked = EvaluationReport(cases: try withheld(1, prefix: "leak") + withheld(39),
+                                      identity: try identity(substitute: false),
+                                      dataset: dataset(reviewed: 160))
+        #expect(leaked.claimBlockers.map(\.kind) == [.caseSetNotDerivedFromSplit])
+        #expect(!leaked.isQualityClaimAllowed)
+        #expect(leaked.cases == 40, "the measurement is still reported, with the reason it does not count")
+
+        // Judging one record twice rewrites every denominator, so it is the same
+        // failure: the numbers are no longer derived from the versioned split.
+        var doubled = try withheld(40)
+        doubled.append(doubled[0])
+        let duplicate = EvaluationReport(cases: doubled, identity: try identity(substitute: false),
+                                         dataset: dataset(reviewed: 160))
+        #expect(duplicate.claimBlockers.map(\.kind) == [.caseSetNotDerivedFromSplit])
+        #expect(!duplicate.isQualityClaimAllowed)
+
+        // And the clean path stays clean, including the disclosure row next door:
+        // the exclusion is the dataset's doing, and this check is what makes the
+        // disclosure mean something.
+        let clean = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
+                                     dataset: dataset(reviewed: 160, pending: 3))
+        #expect(clean.claimBlockers.map(\.kind) == [.pendingAdjudicationExcluded])
+        #expect(clean.isQualityClaimAllowed)
+    }
+
     @Test("a two-record stratum is refused even inside a clean run")
     func sparseStratumRefusedPerNumber() throws {
         var cases = try withheld(40)
-        cases += try withheld(2, category: .nearDuplicate)
+        cases += try withheld(2, category: .nearDuplicate, prefix: "nd")
         let report = EvaluationReport(cases: cases, identity: try identity(substitute: false), dataset: healthy)
         #expect(report.isQualityClaimAllowed)
 
@@ -161,7 +206,11 @@ struct EvaluationReportTests {
         #expect(coverage?.rate.denominator == 42)
         #expect(coverage?.rate.estimate == 0)
         #expect(report.isQuotable(.coverage))
-        #expect(report.slice(.precisionAuto)?.rate.isSparse == true)
+        // No record parked a value in an auto-publishable slot, so the measure has
+        // no population - and an unobserved measure is not quotable at 0/0, however
+        // many records were judged.
+        #expect(report.slice(.precisionAuto)?.rate.denominator == 0)
+        #expect(report.slice(.precisionAuto)?.caseCount == 42)
         #expect(!report.isQuotable(.precisionAuto))
         // The three measures this run has a population for. The other three never
         // saw a single assertion, so they stay out rather than reporting a zero.

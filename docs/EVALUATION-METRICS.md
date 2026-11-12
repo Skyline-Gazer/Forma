@@ -1,7 +1,7 @@
 # Forma 离线评测口径与结论门禁（EVALUATION-METRICS）
 
 > 状态：P3-A 切片 2a。本文定义**指标的可执行口径**与**结论门禁**。
-> PLAN §8.2 给出指标名称与验收意图，本文给出分子分母；两处不一致时以本文为实现事实、以 PLAN 为需求出处，且必须先改 PLAN 再改代码。
+> PLAN §8.2 给出指标名称与验收意图，本文给出分子分母。三者必须同步，顺序是：**先改 PLAN（需求源）→ 再改代码 → 最后更新本文**。本文不是实现真值的背书；口径的实际行为以代码为准，且下列性质各有用例固定：可引用性单位（`sparsityCountsRecords`）、失效与抽样顺序无关（`voidingIsOrderIndependent`、`voidedIntervalIsPerMeasure`）、用例集来自版本化 split（`casesMustComeFromTheCountableSplit`）。
 
 ## 1. 目的与范围
 
@@ -67,21 +67,27 @@
 三个必须写下来的判断：
 
 1. **`coverage` 的分母计入 `contradicted`（引擎确实给出了一个值，够到了这一格），分子只含 `correct` + `wrong`。** 被自身证据反驳的槽位**留在分母里拉低覆盖率**，只是不进分子。coverage 回答"引擎够到了多少该答的槽位"，答错也算够到，被反驳不算够到。**0% 的 coverage 是合法可引用的结果**（被问到 42 个槽、一个没答），不是"没测到"。
-2. **可自动发布** = 条目 `eligibleForAutoExecution` **且** 该槽 `status ∈ {evidenced, inherited}` **且** 该槽 `evidenceIDs` 非空。条目级开关由 `ManifestValidator.computeEligibility` 在登记时算出并存进条目（快照匹配、引用可用、无 `.conflict` 槽、必填齐备等），指标层**不重算条目级规则**，只补上条目级开关没有的那一半：这一格自己的状态与引用。
+2. **可自动发布** = 条目 `eligibleForAutoExecution` **且** 该槽 `status ∈ {evidenced, inherited}` **且** 该槽 `evidenceIDs` 非空。条目级开关直接复用 `ManifestValidator.computeEligibility` 在登记时算出的结果（要求 `validated`、目标已解析、必填齐备、**没有任何槽处于 `.conflict`**、**全条目并集**的引用存在且仍匹配当前快照、高影响字段不得只靠继承）。槽级只补它确实没覆盖的两条：
+   - **本格自带引用**：条目级只看并集非空，因此一个不引用任何东西的槽完全可以住在合格条目里；
+   - **本格状态**：`unknown` / `rejected_by_policy` / `not_applicable` 带着值时条目级开关不会拒绝（它只整体拒绝含 `.conflict` 的条目）。
+   `.conflict` 因此是**冗余但无害**的排除项——它作为集合成员顺带出现，不是第二遍推导。
    为什么必须有这一半：`contradicted` 槽已被 `correct/wrong` 的筛选排除在外，`.conflict` 状态更是直接让条目失去开关；剩下能进分母而又不该算"会自动写出去"的，是状态为 `rejected_by_policy` / `not_applicable` / `unknown` 却带着值的槽——按条目级开关它们会被计入"程序会自动发布"，从而把 `precision_auto` 抬高。执行路径（真正写出 DEVONthink/OneDrive）尚未实现，因此这一条是**指标先行定义的契约**：将来实现执行器时，写入的槽位集合必须与之相同，否则 `precision_auto` 度量的就不是程序真正发布的东西。
 3. **搁置**：条目状态为 `hold` 或 `unknown` 时，该条目的**全部**期望槽计为搁置（即使个别槽带着值）——评审者从被扣住的条目里拿不到任何可用产出。否则条目级搁置会在指标里隐身。
 
 ## 4. 区间
 
 - **Wilson 95%**（`EvaluationRate.wilson95Lower/Upper`）：这些比率贴近 0 或 1，正态近似会给出越出 [0,1] 的对称区间，把十几条观测的确信度报虚。
-- **按项目簇 bootstrap**（`ClusterBootstrap.interval`）：重抽样的单位是 `clusterKey`（项目簇），不是记录。同一项目的多个文件不是独立观测；按记录抽会把"一个项目的形状"读成普遍性。簇数 < 5（`minimumClusters`）时返回 nil——少于这个簇，区间宽度是种子的产物而不是数据的。任一次重抽样的分母为 0 ⇒ **该指标的整体区间为 nil**（这一层薄到给不出簇级区间），而不是把那次抽样丢掉后照报：丢掉后剩下的恰好都是"有答案的簇"，区间会在最需要报宽的地方被压窄。失效逐指标独立、且与抽样顺序无关——某指标被判无定义不会带走同一次抽样里其他指标的份额（`invented_fill_rate` 排在 `precision_auto` 之后，正是顺序敏感会露馅的位置）。六个指标共用同一组抽样索引（索引只与种子和簇数有关）。分位点（2.5%/97.5%）直接取自重抽样分布，不做正态拟合：少量簇的比率分布是块状的，**块本身就是发现**。
+- **按项目簇 bootstrap**（`ClusterBootstrap.interval`）：重抽样的单位是 `clusterKey`（项目簇），不是记录。同一项目的多个文件不是独立观测；按记录抽会把"一个项目的形状"读成普遍性。簇数 < 5（`minimumClusters`）时返回 nil——少于这个簇，区间宽度是种子的产物而不是数据的。任一次重抽样的分母为 0 ⇒ **该指标的整体区间为 nil**（这一层薄到给不出簇级区间），而不是把那次抽样丢掉后照报：丢掉后剩下的恰好都是"有答案的簇"，区间会在最需要报宽的地方被压窄。失效逐指标独立、且与抽样顺序无关——某指标被判无定义不会带走同一次抽样里其他指标的份额（`invented_fill_rate` 排在 `precision_auto` 之后，正是顺序敏感会露馅的位置）；该性质由 `EvaluationMetricsTests.voidingIsOrderIndependent` 固定，把实现退回"清空 + break"时该用例会失败。六个指标共用同一组抽样索引（索引只与种子和簇数有关）。分位点（2.5%/97.5%）直接取自重抽样分布，不做正态拟合：少量簇的比率分布是块状的，**块本身就是发现**。
 - 抽样使用 `SplitMix64`，种子与重抽样次数写入 `EvaluationRunIdentity`；`SystemRandomNumberGenerator` 跨版本不保证序列，而一次测量必须能从记录里复跑。
 
 ## 5. 稀疏与"可引用"
 
-SPEC §10.1.6：观测数 < 30 的率只能是候选值。
+**本节的阈值是 harness 自定的策略，不是 SPEC/PLAN 条款。** SPEC 与 PLAN 都没有规定最小格样本量（SPEC §10.1.6 讲的是 ≥150 条独立评测集；PLAN §13 第 1 条把"质量接受阈值"列为待 Owner 决策，并写明"未批准前只能报告测量，不宣称最终质量通过"）。本文此前把它写成 SPEC 条款，属于引用失真，已更正。取 30 的理由是常见的最小格经验值，写在这里是为了可被争辩而不是被藏在代码里。
 
-- 每个 `EvaluationRate` 自带 `denominator` 与 `isSparse`；分母为 0 时 `estimate == nil`、`isSparse == true`（没测过的东西不存在"0 分"这种质量结论）。
+- **单位是记录数，不是槽位数**：`EvaluationSlice.caseCount` 是本切面被判定的记录条数，`isSparse = caseCount < 30`。指标的 `rate.denominator` 数的是**槽位观测**——150 条 × 12 槽会让它上千，而 3 条记录也能凑出 36，用槽位数当门禁会两头失真（薄样本被放行、干净样本里 `precision_auto` 这类天然小分母的指标被永久封死）。
+- Wilson 区间仍然按槽位观测数计算：那是这批观测自身的置信宽度，与"够不够格下结论"是两个问题，两处的单位各写在文档里。
+- 分母为 0 时 `estimate == nil` 且 Wilson 端点为 nil（没测过的东西不存在"0 分"这种质量结论）；`clusterInterval` 另按 §4 的规则失效。
+- 可引用性（`EvaluationSlice.isQuotableOnOwnMerits`）= 记录数达标 **且** 该指标确有观测（`rate.denominator > 0`）。两半缺一不可：只有前半，`precision_auto` 在"没有任何可自动发布产出"的运行里会因为 40 条记录而变得可引用，而它其实什么都没看过。
 - `EvaluationReport.isQuotable(_:stratum:key:)` **逐数**判定，而不是整份报告一票：总体 42 条、某反例类别只有 2 条是常态，而被引用的往往正是那一行。
 - `quotableMeasures` 只列总体切面下非稀疏的指标，供摘要直接取用。
 
@@ -95,10 +101,13 @@ SPEC §10.1.6：观测数 < 30 的率只能是候选值。
 | `insufficientIndependentSamples` | `reviewedCountable < 150` | 是 |
 | `undeclaredPromptOverlap` | 评测集与提示侧存在未声明交集 | 是 |
 | `unaccountedRecords` | 目录中存在三处清单都未登记的记录 | 是 |
-| `pendingAdjudicationExcluded` | 有争议记录被排除出分母 | 否——仅披露 |
+| `pendingAdjudicationExcluded` | 数据集把争议记录排除在可计数集合之外（PLAN §8.1 要求报告排除量） | 否——仅披露 |
+| `caseSetNotDerivedFromSplit` | 被判定记录不在 `Report.countableRecordIDs` 内，或同一记录被判定两次 | 是 |
 | `eligibilityStateInconsistent` | 候选在未达 `validated` 的条目上带有可自动发布的槽位 | 是 |
 
 `isQualityClaimAllowed = 不存在否决型阻塞`。
+
+`caseSetNotDerivedFromSplit` 是上一条得以成立的前提：排除动作发生在 `GoldDataset`，报告层只披露数量；若没有"用例必须落在可计数集合内"的核验，披露就只是一句无人为之背书的话。重复判定同一条记录也走这个 blocker——同一个来源计两次会直接改写所有分母。
 
 `eligibility_state` 与导出侧同源：`ManifestExport.revalidate` 把「条目自称可自动执行却不是 `validated`」判为 `eligibility_state` 违规。评测层遇到同一形状时**否决结论而不是替它兜底**——在一个程序自己不会写出的 manifest 上算出的 `precision_auto`，量的不是这个程序。判据放在报告层（`CaseJudgement.candidateState` 与槽位 `autoPublishable`），指标口径本身不动。
 
@@ -132,9 +141,9 @@ SPEC §10.1.6：观测数 < 30 的率只能是候选值。
 | --- | --- | --- |
 | `FieldJudgement`（+ `Verdict`）、`CaseJudgement` | `Sources/FormaCore/Evaluation/EvaluationJudgement.swift` | 判定顺序固定；`publishableStatuses = {evidenced, inherited}` |
 | `EvaluationMeasure.population(in:)` | `Sources/FormaCore/Evaluation/EvaluationMetrics.swift` | 单条判定的分子分母；跨用例可加 |
-| `EvaluationRate` | 同上 | 分母 0 ⇒ `estimate == nil` 且 `isSparse`；`sparseLimit = 30` |
-| `ClusterBootstrap.summarize(cases:indices:measures:resamples:seed:)` | 同上 | 一次遍历同时产出率与区间；`indices` 选样本，不复制判定 |
-| `ClusterBootstrap.interval(cases:measure:resamples:seed:)` | 同上 | 簇 < 5 返回 nil；同种子同区间；任一无定义抽样 ⇒ nil |
+| `EvaluationRate` | 同上 | 分母（槽位观测）为 0 ⇒ `estimate` 与 Wilson 端点为 nil |
+| `EvaluationSlice.caseCount` / `isSparse` / `sparseCaseLimit` | 同上 | 可引用性以**记录数**计；`sparseCaseLimit = 30` 是 harness 策略（§5） |
+| `ClusterBootstrap.summarize(measures:populations:indices:keys:resamples:seed:)` | 同上 | 唯一公开入口；`populations` 由调用方按 `allCases` 列序算一次，切面只选行不重算；簇 < 5 或任一无定义抽样 ⇒ 该指标区间为 nil |
 | `EvaluationMetrics.slices(for:request:)` | 同上 | 切面 = overall ∪ 出现的每个 Profile ∪ 出现的每个类别；一条记录属于两个 Profile 时在两个切面各出现一次，绝不计为两条记录 |
 | `EvaluationMetrics.confusion(_:)` | 同上 | 键形如 `mapped->absent`；无条目用 `absent` |
 | `EvaluationRunIdentity` | `Sources/FormaCore/Evaluation/EvaluationReport.swift` | 替身标志是身份的字段，不是脚注 |

@@ -8,6 +8,16 @@ import Foundation
 /// suite that re-derives them independently will eventually judge different
 /// things while both look green.
 enum EvaluationFixtures {
+    /// The table `EvaluationMetrics.slices(for:)` builds once per run: one row per
+    /// case, one column per measure, in `allCases` order. Bootstrap tests need the
+    /// same shape, and hand-rolling it in two places is how the two drift apart.
+    static func populations(_ cases: [CaseJudgement]) -> [[(numerator: Int, denominator: Int)]] {
+        cases.map { judgement in EvaluationMeasure.allCases.map { $0.population(in: judgement) } }
+    }
+
+    /// The cluster keys of the same sample, in the same order.
+    static func keys(_ cases: [CaseJudgement]) -> [String] { cases.map(\.clusterKey) }
+
     static func values(_ pairs: [MetadataFieldID: String?] = [:]) throws -> MetadataValues {
         try MetadataValues(Dictionary(uniqueKeysWithValues: MetadataFieldID.allCases.map {
             ($0, pairs[$0] ?? nil)

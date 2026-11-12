@@ -130,22 +130,45 @@ struct EvaluationMetricsTests {
         #expect(rate(.holdRate, [absent]).numerator == 2)
     }
 
-    @Test("a stratum under thirty observations is candidate only")
+    @Test("the candidate-value gate counts records, not slots")
     func sparseStratum() throws {
+        // Twenty-nine records, one expected slot each: twenty-nine of both, sparse
+        // by either reading. The interesting case is below, where the two units
+        // disagree - and that is the whole reason the gate is on `caseCount`.
         let reference = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026"])
         let cases = try (1...29).map { _ in CaseJudgement(gold: reference, entry: nil) }
-        let slice = EvaluationMetrics.slices(for: cases).first {
+        let found = try #require(EvaluationMetrics.slices(for: cases).first {
             $0.measure == .coverage && $0.stratum == .overall
-        }
-        let found = try #require(slice)
-        #expect(found.rate.denominator == 29)
-        #expect(found.rate.isSparse)
+        })
+        #expect(found.caseCount == 29)
+        #expect(found.isSparse)
 
         let dense = try (1...30).map { _ in CaseJudgement(gold: reference, entry: nil) }
         let denseSlice = try #require(EvaluationMetrics.slices(for: dense).first {
             $0.measure == .coverage && $0.stratum == .overall
         })
-        #expect(!denseSlice.rate.isSparse)
+        #expect(!denseSlice.isSparse)
+    }
+
+    @Test("five records with sixty slot observations are still five records")
+    func sparsityCountsRecords() throws {
+        // The confusion this gate used to be vulnerable to: a field-heavy gold row
+        // manufactures a slot denominator past any threshold while the number of
+        // independently verified samples stays tiny. Quoting that as a rate would
+        // let a five-record run look as solid as a five-hundred-record one.
+        let fields: [MetadataFieldID: String?] = [
+            .projectname: "示例项目", .completionyear: "2026", .department: "采购中心",
+            .bidderentity: "中标单位甲", .salesowner: "销售乙", .tenderreference: "ZB-2026-001"
+        ]
+        let reference = try EvaluationFixtures.gold("heavy", expected: fields)
+        let cases = try (0..<5).map { _ in CaseJudgement(gold: reference, entry: nil) }
+        let slice = try #require(EvaluationMetrics.slices(for: cases).first {
+            $0.measure == .coverage && $0.stratum == .overall
+        })
+        #expect(slice.rate.denominator == 30)
+        #expect(slice.caseCount == 5)
+        #expect(slice.isSparse)
+        #expect(!slice.isQuotableOnOwnMerits)
     }
 
     @Test("the bootstrap resamples whole project clusters")
@@ -161,14 +184,29 @@ struct EvaluationMetricsTests {
             cases.append(CaseJudgement(gold: singleton, entry: nil))
         }
 
-        let interval = try #require(ClusterBootstrap.interval(cases: cases, measure: .holdRate, resamples: 200))
+        let populations = EvaluationFixtures.populations(cases)
+        let keys = EvaluationFixtures.keys(cases)
+        func hold(_ sample: [CaseJudgement]) -> ClosedRange<Double>? {
+            ClusterBootstrap.summarize(measures: [.holdRate],
+                                       populations: EvaluationFixtures.populations(sample),
+                                       indices: Array(sample.indices),
+                                       keys: EvaluationFixtures.keys(sample),
+                                       resamples: 200, seed: 0x9E37_79B9_7F4A_7C15)[.holdRate]?.interval
+        }
+        let interval = try #require(hold(cases))
         #expect(interval.lowerBound <= interval.upperBound)
-        let repeated = try #require(ClusterBootstrap.interval(cases: cases, measure: .holdRate, resamples: 200))
-        #expect(interval == repeated, "the same seed has to reproduce the same interval")
+        #expect(interval == hold(cases), "the same seed has to reproduce the same interval")
 
         // Below five clusters there is nothing to vary, and an interval computed
         // anyway would be a width invented by the resampler.
-        #expect(ClusterBootstrap.interval(cases: Array(cases.prefix(3)), measure: .holdRate) == nil)
+        #expect(hold(Array(cases.prefix(3))) == nil)
+
+        // Asking for one measure must not change its interval: the draws are shared
+        // across the columns, so a subset request is a projection, not a resample.
+        let all = ClusterBootstrap.summarize(populations: populations, indices: Array(cases.indices),
+                                            keys: keys, resamples: 200,
+                                            seed: 0x9E37_79B9_7F4A_7C15)
+        #expect(all[.holdRate]?.interval == interval)
     }
 
     @Test("a voided measure does not take later measures' draws with it")
@@ -187,11 +225,12 @@ struct EvaluationMetricsTests {
                                                      gold: reference)
             cases.append(CaseJudgement(gold: reference, entry: entry))
         }
-        let intervals = ClusterBootstrap.intervals(cases: cases, measures: EvaluationMeasure.allCases)
-        #expect(intervals[.precisionAuto] == nil)
-        #expect(intervals[.coverage] != nil)
-        #expect(intervals[.inventedFillRate] != nil, "the last measure kept all of its draws")
-        let summary = ClusterBootstrap.summarize(cases: cases, indices: Array(cases.indices))
+        let summary = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases),
+                                                 indices: Array(cases.indices),
+                                                 keys: EvaluationFixtures.keys(cases))
+        #expect(summary[.precisionAuto]?.interval == nil)
+        #expect(summary[.coverage]?.interval != nil)
+        #expect(summary[.inventedFillRate]?.interval != nil, "the last measure kept all of its draws")
         #expect(summary[.inventedFillRate]?.rate.denominator == 110)
         #expect(summary[.precisionAuto]?.rate.denominator == 0)
     }
@@ -209,15 +248,14 @@ struct EvaluationMetricsTests {
                                                         cluster: "vc\(index)")
             cases.append(CaseJudgement(gold: reference, entry: nil))
         }
-        let intervals = ClusterBootstrap.intervals(cases: cases, measures: EvaluationMeasure.allCases)
-        #expect(intervals[.coverage] != nil)
-        #expect(intervals[.precisionAuto] == nil)
-        #expect(intervals[.highConfidenceErrorRate] == nil)
+        let summaries = ClusterBootstrap.summarize(populations: EvaluationFixtures.populations(cases),
+                                                   indices: Array(cases.indices),
+                                                   keys: EvaluationFixtures.keys(cases))
+        #expect(summaries[.coverage]?.interval != nil)
+        #expect(summaries[.precisionAuto]?.interval == nil)
+        #expect(summaries[.highConfidenceErrorRate]?.interval == nil)
         // Every cluster withholds, so the only ratio the resample can produce is 0.
-        #expect(intervals[.coverage] == 0...0)
-        // The shared-draw path and the single-measure path must agree, or the
-        // optimisation quietly changed what an interval means.
-        #expect(intervals[.coverage] == ClusterBootstrap.interval(cases: cases, measure: .coverage))
+        #expect(summaries[.coverage]?.interval == 0...0)
     }
 
     @Test("the interval brackets the estimate it belongs to")

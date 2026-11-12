@@ -48,8 +48,6 @@ public struct FieldJudgement: Codable, Sendable, Equatable {
     /// contradicted or auto-publishable, because there is no candidate to publish.
     public init(gold: GoldRecord, field: MetadataFieldID, entry: ManifestEntry?) {
         let goldValue = gold.expected.metadata[field] ?? nil
-        // The entry's own accessor, so "which outcome describes this field" has
-        // one definition even if the lookup ever becomes anything but a linear scan.
         let outcome = entry?.outcome(for: field)
         // An empty or whitespace-only value is not a claim about the field, so it
         // is withheld rather than wrong. `ValueNormalization.equal` already
@@ -75,10 +73,14 @@ public struct FieldJudgement: Codable, Sendable, Equatable {
 
         self.field = field
         self.verdict = verdict
-        // `eligibleForAutoExecution` is the Validator's verdict about the whole
-        // entry; a slot is publishable only if the entry is, and the slot itself
-        // stands on a citation of a supportable kind. Re-deriving either half here
-        // would let the measurement disagree with the program that decides.
+        // The entry-level half is taken as given: `computeEligibility` already
+        // requires `validated`, a resolved target, no slot in `.conflict`, and that
+        // *some* slot cites a record that still matches this snapshot. What it does
+        // not require is that the slot being measured cites anything itself - the
+        // citation set is a union across the entry - and it says nothing about a
+        // slot sitting in `unknown`, `rejected_by_policy` or `not_applicable` while
+        // carrying a value. Those two are the slot-level half added here, and the
+        // only reason `precision_auto` is not simply the entry flag.
         self.autoPublishable = entry?.eligibleForAutoExecution == true
             && (outcome.map { Self.publishableStatuses.contains($0.status) && !$0.evidenceIDs.isEmpty } ?? false)
         self.highConfidence = entry?.confidence == .high

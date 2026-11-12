@@ -30,6 +30,11 @@ public struct GoldDataset: Sendable {
         public let totalRecords: Int
         public let evaluationRecords: Int
         public let countableRecords: Int
+        /// The ids behind `countableRecords`, sorted. Counts alone cannot tell a
+        /// caller *which* records may be scored, and the evaluation harness has to
+        /// be able to prove that what it judged came out of this split rather than
+        /// assuming whoever built the cases filtered them.
+        public let countableRecordIDs: [String]
         /// Countable records whose material was reviewed rather than synthesised.
         /// PLAN §8.1's ≥150 is a requirement about *independent verification of
         /// real business material*, so the target is measured against this
@@ -218,6 +223,7 @@ public struct GoldDataset: Sendable {
         return Report(datasetRevision: split.datasetRevision, splitID: split.splitID,
                       casePackVersion: split.casePack.version, totalRecords: records.count,
                       evaluationRecords: evaluation.count, countableRecords: countable.count,
+                      countableRecordIDs: countable.map(\.recordID).sorted(),
                       reviewedCountable: countable.filter { $0.review.redaction == .reviewed }.count,
                       pendingAdjudication: pending, perProfileCountable: perProfile,
                       perCategoryCountable: perCategory, shortfalls: shortfalls,

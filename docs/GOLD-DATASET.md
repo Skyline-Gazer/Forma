@@ -435,6 +435,7 @@ PLAN §1 与 SPEC §6.1 第 5 条禁止 Embedding/Vector DB/RAG；PLAN §8.1 规
    R meets_independent_target = Report.meetsIndependentTarget（只由 reviewedCountable 与 150 比较得出，本文不另行判定）
    R reviewed_countable       = Report.reviewedCountable（真实脱敏 `reviewed` 且 confirmed、未被独立性排除的记录数）
    R countable_records        = Report.countableRecords（含 synthetic，只说明 harness 覆盖面，不参与达标）
+   R countable_record_ids     = Report.countableRecordIDs（可计数集合的 id 全集；评测报告的门禁据此核验"被判定的记录确实来自本次版本化 split"）
    R unaccounted_records      = Report.unaccountedRecords（排序后的记录 id 列表：`records/` 里存在，但 split 既没放进 `evaluation_record_ids`/`prompt_record_ids`，也没写进 `removed_records`——**没人对它作过决定**；见 §8.2 末、§10.4）
      qualified_reviewed       = 本文口径的合格数 = reviewedCountable 再扣除 §5.5 中 `sha256` 尚未补齐的记录（唯一性未证明），因此 ≤ reviewed_countable，两者必须并列公布
      unreviewed_pending       = 留在 `review/pending/`、未进入冻结集的记录数（§6.4）
@@ -664,7 +665,7 @@ PLAN §1 与 SPEC §6.1 第 5 条禁止 Embedding/Vector DB/RAG；PLAN §8.1 规
 ### 10.4 校验通过后交给指标层与报告层的东西
 
 - 合格记录集合（`countableIDs`）；
-- `Report` 字段（实际形态与顺序，共 15 项）：`datasetRevision`、`splitID`、`casePackVersion`、`totalRecords`、`evaluationRecords`、`countableRecords`、`reviewedCountable`、`pendingAdjudication`、`perProfileCountable`、`perCategoryCountable`、`shortfalls`、`undeclaredOverlaps`、`unaccountedRecords`、`meetsIndependentTarget`、`requiredMinimum`；
+- `Report` 字段（实际形态与顺序，共 16 项）：`datasetRevision`、`splitID`、`casePackVersion`、`totalRecords`、`evaluationRecords`、`countableRecords`、`countableRecordIDs`、`reviewedCountable`、`pendingAdjudication`、`perProfileCountable`、`perCategoryCountable`、`shortfalls`、`undeclaredOverlaps`、`unaccountedRecords`、`meetsIndependentTarget`、`requiredMinimum`；
 - **`unaccountedRecords` 与 `undeclaredOverlaps` 语义不同，报告必须分别处理**（§8.2 表 A 末）：前者是排序后的记录 id 列表，指"`records/` 里存在，而三处两两互斥的清单（A6）既没放进 `evaluation_record_ids`/`prompt_record_ids`、也没写进 `removed_records`"——**没人对它作过决定**，它不进任何计数，所以台账不完整（`GoldDataset.unaccounted` = 目录记录 id 集合减去三处清单之并集）；后者是"**已决定要评分**但该记录与提示侧相交"，它已被从 `countableIDs` 剔除。两者的修复动作也不同：前者按 §5.6 把记录归入三处之一，后者按 §5.2 移出评测侧并写 `removed_records`。**任一列表非空即不得宣称台账完整或发布本报告**——这是本文"目录里没有一条记录处于未登记状态"的要求第一次由代码给出支撑（§3.6、§9.3），不再是纪律条款；
 - 本文要求、运行器**不**产出的补充台账（报告必须引用）：文档类别轴与 `ce-*` 轴计数（§2.3）、表 C 簇归属、表 D 依据与脱敏对照（§8.2）、CasePack 案例→项目簇人工核对结果（§5.1）；
 - 复现标识（§7.3 三件套）与 Profile `versionKey`。
