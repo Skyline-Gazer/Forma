@@ -501,7 +501,10 @@ public enum EvaluationMetrics {
         /// Records that did not go out on their own, by the decision state they
         /// stopped in, plus `absent` for sources the engine produced nothing for.
         public let byRecordState: [String: Int]
-        /// Reference slots left unfilled, by the status the policy recorded for them.
+        /// Reference slots left unfilled, by the status the policy recorded for
+        /// them, counted over every judged record - including ones that went out on
+        /// their own with fields empty, which is where an incomplete auto-publish
+        /// shows up. Its total is `missed_fill_rate`'s numerator for the same set.
         public let bySlotStatus: [String: Int]
 
         /// The keys come from the manifest's own vocabulary - `DecisionState` and
@@ -513,9 +516,17 @@ public enum EvaluationMetrics {
         var states: [String: Int] = [:]
         var statuses: [String: Int] = [:]
         for judgement in cases {
-            guard !judgement.isAutoMapped else { continue }
-            let state = judgement.candidateState.map { $0.rawValue } ?? "absent"
-            states[state, default: 0] += 1
+            if !judgement.isAutoMapped {
+                let state = judgement.candidateState.map { $0.rawValue } ?? "absent"
+                states[state, default: 0] += 1
+            }
+            // The slot half is unconditional, because the two halves answer
+            // different questions. A record that went out on its own with three
+            // fields empty is not a refusal at file level and is exactly the
+            // reviewer's work at slot level - and skipping it here would hide the
+            // incomplete auto-publishes, which is the case the report most needs a
+            // reason for. It also makes this dictionary line up with
+            // `missed_fill_rate`'s numerator instead of with some subset of it.
             for field in judgement.fields where field.verdict == .withheld {
                 let status = field.status.map { $0.rawValue } ?? "absent"
                 statuses[status, default: 0] += 1

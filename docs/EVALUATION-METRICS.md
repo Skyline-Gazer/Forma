@@ -79,7 +79,7 @@
    - 一个文件被多个候选项目认领时，association 集合记的是**所有**认领者，不是程序挑中的那一个；这种歧义不会污染 `precision_auto`——冲突归属会阻断合格性，该记录落在分母之外（`computeEligibility` 的 `.conflict` 拒绝与 `associationReason` 失效路径）。残留风险只有调用方交来的表与它交来的 `conflictedSourceIDs` 不自洽。
 3. **`contradicted` 留在槽位级分母里，不进分子**（`field_precision`）。被自身证据反驳的值是引擎确实给出过的断言，忽略它会让精确率报出程序没有的把握；而它作为状态（`.conflict`）会让整个条目失去 `eligibleForAutoExecution`，所以同一条记录本来就不在文件级 `precision_auto` 的分母里。
 4. **"漏填"与"答错"分列两项，不得相加**：`missed_fill_rate` 的分子是 `withheld`（含候选只给空串/纯空白的槽，§7），`field_precision` 的分母只含候选断言，两者对同一个槽各说各话。`allowedUnknown`（期望方也放弃猜测的槽）不是期望槽，永远不进漏填分母——一致的未知不是漏答，这正是 PLAN 要求报告把两者分开的原因。
-5. **拒判原因与混淆矩阵并列，各自单位**（PLAN §8.2 的"分层"行同时列了两者）。`EvaluationMetrics.refusals(_:)` 给出两个字典：`byRecordState` 按记录停在哪个 `DecisionState`（无条目为 `absent`）计未自动落地的文件；`bySlotStatus` 按政策留下的 `FieldOutcome.Status`（无条目同样 `absent`）计那些期望却没填的槽。**两者永不相加**——一个是文件数、一个是槽位数，相加就是本节第 1 条要避免的那种混淆。混淆矩阵说的是"引擎到达哪个决定"，这一对说的是"为什么没把参考答案要的东西写出去"，读者据此分配复核工作。键全部来自 manifest 自己的词汇表，报表不新造标签。
+5. **拒判原因与混淆矩阵并列，各自单位**（PLAN §8.2 的"分层"行同时列了两者）。`EvaluationMetrics.refusals(_:)` 给出两个字典：`byRecordState` 按记录停在哪个 `DecisionState`（无条目为 `absent`）计未自动落地的文件；`bySlotStatus` 按政策留下的 `FieldOutcome.Status`（无条目同样 `absent`）计那些期望却没填的槽——**这一半遍历全部记录**，包括已经自动落地却漏了字段的文件：文件级它不是拒判，槽级它正是评审要补的那几格，跳过这批就会把报表最需要理由的情形（不完整的自动写出）藏起来，而且总数会与 `missed_fill_rate` 的分子不再相等（两处表格说的是同一次运行）。**两者永不相加**——一个是文件数、一个是槽位数，相加就是本节第 1 条要避免的那种混淆。混淆矩阵说的是"引擎到达哪个决定"，这一对说的是"为什么没把参考答案要的东西写出去"，读者据此分配复核工作。键全部来自 manifest 自己的词汇表，报表不新造标签。
 6. **搁置按条目计**：条目被扣在 `hold` / `unknown` 时该记录整体计 1，即使个别槽带着值——评审者从被扣住的条目里拿不到可用产出；无条目同样计 1（没有任何产出）。`unknown` / `invalidated` / 请求失败的分列计数由 `EvaluationMetrics.confusion(_:)` 给出（§9），不折进同一个数字。
 7. **`field_precision` 另有 12 条逐字段行**（`EvaluationSlice.stratum == .field`，`key` 为字段 rawValue；PLAN §8.2"12 字段分别报告"）。逐字段分母之和等于 pooled 分母，因此既不会重计也不会漏计。逐字段行的 `caseCount` / `clusterCount` 数的是**对该字段有过候选断言的记录与项目簇**，不是整个切面的规模：否则 40 条记录里只有 2 条填过的字段会因为"切面有 40 条"而躲过 §5 的稀疏门禁，并可被单独引用。逐字段行只出在 **overall 层**：PLAN §8.2 的"12 字段分别报告"挂在 `field_precision` 一行，而"每 Profile/类别"挂在"分层"一行，两者相交成的 field × Profile × 类别网格不是 PLAN 要求的东西，把它铺开会用几百行表格淹没真正薄的那几格（要按层看某一字段时，2b 的运行器可以按切面重跑同一套判据）。逐字段行只带 Wilson 区间，不带簇级区间——那里 nil 是**按构造**而非对稀薄的判断，pooled 行才报簇区间。
 
@@ -161,7 +161,7 @@
 | `ClusterBootstrap.summarize(measures:populations:indices:keys:resamples:seed:)` | 同上 | 唯一公开入口；`populations` 由调用方按 `allCases` 列序**每种归属算一次**并缓存（`slices(for:)` 的 `tables`：overall / category 用 `request.runProfileID` 那一层，Profile 切面用自己的 key——不同归属本就是不同的测量，不共用）；簇 < `minimumClusters`、任一无定义抽样、或 `resamples < minimumResamples` ⇒ 该指标区间为 nil（§5 的 (a)(b)(c)） |
 | `EvaluationMetrics.slices(for:request:)` | 同上 | 切面 = overall ∪ 出现的每个 Profile ∪ 出现的每个类别（另有 §3 第 7 条的 12 条逐字段行）；一条记录属于两个 Profile 时在两个切面各出现一次，绝不计为两条记录；Profile 切面把**该切面的 Profile** 当作 `runProfile`，其余切面用 `request.runProfileID`，为 nil 时 `precision_auto` 与 `high_confidence_error_rate` 在那些行**没有人口**（N/A，§3 第 2 条）；分子分母表按归属各算一次并缓存，不同归属不共用（它们本就是不同的测量） |
 | `EvaluationMetrics.confusion(_:)` | 同上 | 键形如 `mapped->absent`；无条目用 `absent` |
-| `EvaluationMetrics.refusals(_:)` → `Refusals` | 同上 | PLAN §8.2 的拒判原因；`byRecordState` 数记录、`bySlotStatus` 数槽位，两个字典不得合并（§3 第 5 条） |
+| `EvaluationMetrics.refusals(_:)` → `Refusals` | 同上 | PLAN §8.2 的拒判原因；`byRecordState` 只数未自动落地的记录，`bySlotStatus` 遍历全部记录数未填的期望槽；两个字典不得合并（§3 第 5 条），后者的总数与 `missed_fill_rate` 的分子一致 |
 | `EvaluationRunIdentity` | `Sources/FormaCore/Evaluation/EvaluationReport.swift` | 替身标志是身份的字段，不是脚注 |
 | `EvaluationReport`（`Blocker`/`Finding`/`isQuotable`） | 同上 | 门禁在报告层，不在调用方 |
 

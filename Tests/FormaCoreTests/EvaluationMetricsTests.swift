@@ -537,15 +537,22 @@ struct EvaluationMetricsTests {
         #expect(blank.byRecordState == ["absent": 1])
         #expect(blank.bySlotStatus["absent"] == 2)
 
-        // What went out on its own contributes to neither half.
-        let mapped = EvaluationMetrics.refusals([
-            EvaluationFixtures.judgement(reference,
-                                         entry: EvaluationFixtures.candidate([.completionyear: "2026",
-                                                                              .department: "采购部"],
-                                                                             gold: reference))
-        ])
-        #expect(mapped.byRecordState.isEmpty)
-        #expect(mapped.bySlotStatus.isEmpty)
+        // A record that went out on its own is not a refusal at file level, so the
+        // record half stays empty - but the fields it left unfilled are still the
+        // reviewer's work, so the slot half counts them. That asymmetry is the point:
+        // the incomplete auto-publish is exactly the case a reason table exists for,
+        // and skipping it would make these totals disagree with `missed_fill_rate`.
+        let mapped = EvaluationFixtures.judgement(reference,
+                                                  entry: EvaluationFixtures.candidate([.completionyear: "2026"],
+                                                                                       gold: reference))
+        #expect(mapped.isAutoMapped)
+        let refusal = EvaluationMetrics.refusals([mapped])
+        #expect(refusal.byRecordState.isEmpty)
+        #expect(refusal.bySlotStatus == [FieldOutcome.Status.unknown.rawValue: 1])
+        // The totals have to agree, or the two tables describe different runs.
+        let missed = try #require(EvaluationMetrics.slices(for: [mapped])
+            .first { $0.measure == .missedFillRate && $0.stratum == .overall })
+        #expect(missed.rate.numerator == refusal.bySlotStatus.values.reduce(0, +))
     }
 
     @Test("a run with no candidate for a source is confusion-visible")
