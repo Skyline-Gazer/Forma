@@ -6,7 +6,7 @@ import Testing
 /// The measurement definitions.
 ///
 /// Each rate here is a denominator somebody will quote in a decision, so these
-/// tests pin the populations rather than arithmetic: which slots a measure is
+/// tests pin the denominators rather than arithmetic: which slots a measure is
 /// allowed to see is the part that changes a conclusion without changing a line
 /// of output.
 @Suite("Evaluation metrics")
@@ -254,29 +254,30 @@ struct EvaluationMetricsTests {
     @Test("the grouping of records into projects changes the band")
     func resamplingDependsOnClusterIdentity() throws {
         // The same six rows, two ways of saying which project they came from. A
-        // bootstrap that treated `keys` as decoration would answer identically both
-        // times; the content of clustering is that a draw takes a project's fields
-        // with it, so one project carrying three empty rows drags every draw that
-        // includes it. This pins that the structure is read rather than merely
-        // published - nothing here noticed when that accumulation was rewritten.
-        // `populations` is full-width by contract - one column per measure, in
-        // `EvaluationMeasure.allCases` order - even when only one measure is requested.
+        // bootstrap that paired a row with whichever project sat next to it would
+        // answer identically both times; the content of clustering is that a draw
+        // takes a project's fields with it, so one project carrying three empty rows
+        // drags every draw that includes it. This pins that the structure is read
+        // rather than merely published - nothing here noticed when that accumulation
+        // was rewritten.
+        // `Row.columns` is full-width by contract - one entry per measure, in
+        // `EvaluationMeasure.allCases` order - even when only one measure is asked for.
         let field = EvaluationMeasure.allCases.firstIndex(of: .fieldPrecision)!
         func columns(_ numerator: Int, _ denominator: Int) -> [(numerator: Int, denominator: Int)] {
             EvaluationMeasure.allCases.indices.map { $0 == field ? (numerator, denominator) : (0, 0) }
         }
-        let populations = [columns(4, 4), columns(0, 4), columns(0, 4),
+        let tallies = [columns(4, 4), columns(0, 4), columns(0, 4),
                            columns(0, 4), columns(4, 4), columns(4, 4)]
-        let indices = Array(populations.indices)
+        let indices = Array(tallies.indices)
         // Five projects for six rows, so both requests clear `minimumClusters` and
         // the only difference between them is where the split falls.
         let byProject = ["p1", "p2", "p2", "p3", "p4", "p5"]
         let oneEach = ["p1", "p2", "p3", "p4", "p5", "p6"]
         let clustered = ClusterBootstrap.summarize(measures: [.fieldPrecision],
-                                                   rows: EvaluationFixtures.rows(populations, keys: byProject),
+                                                   rows: EvaluationFixtures.rows(tallies, keys: byProject),
                                                    indices: indices, resamples: 400, seed: 11)
         let scattered = ClusterBootstrap.summarize(measures: [.fieldPrecision],
-                                                   rows: EvaluationFixtures.rows(populations, keys: oneEach),
+                                                   rows: EvaluationFixtures.rows(tallies, keys: oneEach),
                                                    indices: indices, resamples: 400, seed: 11)
         let tight = try #require(clustered[.fieldPrecision]?.interval)
         let wide = try #require(scattered[.fieldPrecision]?.interval)

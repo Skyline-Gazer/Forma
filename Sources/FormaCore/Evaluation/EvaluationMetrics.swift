@@ -292,10 +292,14 @@ public enum ClusterBootstrap {
         }
         let clusterCount = grouped.count
 
-        // Sorted so a re-run with the same seed walks the clusters the same way. The
-        // pooled rate is then the sum of these cluster rows: one pass over the rows of
-        // this stratum, and the same integers either way.
-        let members = grouped.keys.sorted().compactMap { grouped[$0] }
+        // Sorted because the draw indices mean something: a published band has to be
+        // reproducible in another process, and dictionary order is not. Nothing
+        // in-process can observe that - Swift fixes one dictionary's order for the life
+        // of the process, so no test here would fail if the sort went away; it is the
+        // run recorded twice on two machines that would disagree. The pooled rate is
+        // then the sum of these cluster rows: one pass over the rows of this stratum,
+        // and the same integers either way.
+        let members = grouped.sorted { $0.key < $1.key }.map(\.value)
         var clusterTotals: [[(numerator: Int, denominator: Int)]] =
             members.map { _ in Array(repeating: (numerator: 0, denominator: 0), count: measures.count) }
         for (slot, offsets) in members.enumerated() {
