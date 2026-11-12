@@ -74,6 +74,15 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         /// about this program, so the run loses the claim instead of the metrics
         /// layer quietly inventing a filter that hides the disagreement.
         case eligibilityStateInconsistent
+        /// The run's identity does not describe the dataset it was measured against:
+        /// `goldRevision`/`splitID`/`casePackVersion` disagree with the dataset report
+        /// handed to the same `EvaluationReport`. PLAN §8.2's gate is stated over all
+        /// of these being the same, and nothing else in this layer can catch it - a
+        /// judged case carries a record id, not a revision, so a runner that pairs one
+        /// dataset's numbers with another's label would publish a reproducible-looking
+        /// report that no re-run could reproduce. Vetoing rather than relabelling: the
+        /// numbers stay visible, the claim goes.
+        case identityDisagreesWithDataset
 
         var preventsQualityClaim: Bool { self != .pendingAdjudicationExcluded }
     }
@@ -184,6 +193,15 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
                                     detail: "数据集把 \(dataset.pendingAdjudication) 条争议记录排除在可计数集合之外；"
                                         + "本次判定的 \(cases.count) 条记录中有 \(pending) 条仍为 "
                                         + "adjudication_pending" + agreement))
+        }
+        var disagreed: [String] = []
+        if identity.goldRevision != dataset.datasetRevision { disagreed.append("goldRevision/datasetRevision") }
+        if identity.splitID != dataset.splitID { disagreed.append("splitID") }
+        if identity.casePackVersion != dataset.casePackVersion { disagreed.append("casePackVersion") }
+        if !disagreed.isEmpty {
+            blockers.append(Finding(kind: .identityDisagreesWithDataset,
+                                    detail: "运行身份与所测数据集在 " + disagreed.joined(separator: "、")
+                                        + " 上不一致；这份数字属于哪一批样本无法确定，因此不给出质量结论。"))
         }
         self.claimBlockers = blockers
         self.isQualityClaimAllowed = !blockers.contains { $0.kind.preventsQualityClaim }

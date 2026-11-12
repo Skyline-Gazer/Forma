@@ -18,10 +18,14 @@ struct EvaluationReportTests {
     /// rest.
     private var allowedIDs: [String] { (0..<40).map { "g\($0)" } + ["nd0", "nd1"] }
 
-    private func dataset(reviewed: Int, countable: Int? = nil, overlaps: [String] = [],
-                         unaccounted: [String] = [], pending: Int = 0,
-                         allowed: [String]? = nil) -> GoldDataset.Report {
-        GoldDataset.Report(datasetRevision: "1.0.0", splitID: "split-a", casePackVersion: "1.0.0",
+    private func dataset(reviewed: Int, revision: String = "1.0.0", countable: Int? = nil,
+                         overlaps: [String] = [], unaccounted: [String] = [], pending: Int = 0,
+                         allowed: [String]? = nil) throws -> GoldDataset.Report {
+        // `casePackVersion` is not a free label here: `GoldDataset.load` fills it from
+        // `split.casePack.version`, and the report layer compares the two. `revision`
+        // exists so one test can name a different dataset than it judged.
+        let pack = try CasePack.shipped()
+        return GoldDataset.Report(datasetRevision: revision, splitID: "split-a", casePackVersion: pack.version,
                            totalRecords: reviewed + pending, evaluationRecords: reviewed + pending,
                            countableRecords: countable ?? reviewed,
                            countableRecordIDs: allowed ?? allowedIDs,
@@ -58,12 +62,12 @@ struct EvaluationReportTests {
         }
     }
 
-    private var healthy: GoldDataset.Report { dataset(reviewed: 160) }
+    private var healthy: GoldDataset.Report { get throws { try dataset(reviewed: 160) } }
 
     @Test("a stand-in's numbers cannot be read as model quality")
     func substituteIsRefused() throws {
         let report = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: true),
-                                      dataset: healthy)
+                                      dataset: try healthy)
         #expect(!report.isQualityClaimAllowed)
         #expect(report.claimBlockers.map(\.kind) == [.substituteAnswers])
         // The run still measures something - it exercises the harness - and the
@@ -72,7 +76,7 @@ struct EvaluationReportTests {
         #expect(!report.isQuotable(.holdRate))
 
         let real = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
-                                    dataset: healthy)
+                                    dataset: try healthy)
         #expect(real.isQualityClaimAllowed)
         #expect(real.claimBlockers.isEmpty)
     }
@@ -84,7 +88,7 @@ struct EvaluationReportTests {
         // condition a report would most like to gloss over.
         // Sixteen hundred rows the harness can score, none of them independently
         // verified: the denominators are real, the authority is not.
-        let synthetic = dataset(reviewed: 0, countable: 1_600)
+        let synthetic = try dataset(reviewed: 0, countable: 1_600)
         let report = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
                                       dataset: synthetic)
         #expect(synthetic.countableRecords == 1_600)
@@ -94,7 +98,7 @@ struct EvaluationReportTests {
 
         // One row short of the gate is one row short: the requirement is a count,
         // not a vibe, and rounding it up is how a gate stops being a gate.
-        let almost = dataset(reviewed: GoldDataset.independentTarget - 1)
+        let almost = try dataset(reviewed: GoldDataset.independentTarget - 1)
         let nearReport = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
                                           dataset: almost)
         #expect(!nearReport.isQualityClaimAllowed)
@@ -104,7 +108,7 @@ struct EvaluationReportTests {
     @Test("excluded disputes are disclosed without voiding the run")
     func pendingAdjudicationOnlyDiscloses() throws {
         let report = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
-                                      dataset: dataset(reviewed: 160, pending: 3))
+                                      dataset: try dataset(reviewed: 160, pending: 3))
         #expect(report.claimBlockers.map(\.kind) == [.pendingAdjudicationExcluded])
         #expect(report.isQualityClaimAllowed,
                 "the run measured what it measured; the exclusion is context, not a defect")
@@ -114,12 +118,12 @@ struct EvaluationReportTests {
     @Test("a leak or an unaccounted file voids the claim")
     func integrityFindingsVoid() throws {
         let leaked = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
-                                      dataset: dataset(reviewed: 160, overlaps: ["g7~case-3:[prompt]"]))
+                                      dataset: try dataset(reviewed: 160, overlaps: ["g7~case-3:[prompt]"]))
         #expect(!leaked.isQualityClaimAllowed)
         #expect(leaked.claimBlockers.map(\.kind) == [.undeclaredPromptOverlap])
 
         let drifting = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
-                                        dataset: dataset(reviewed: 160, unaccounted: ["g99"]))
+                                        dataset: try dataset(reviewed: 160, unaccounted: ["g99"]))
         #expect(!drifting.isQualityClaimAllowed)
         #expect(drifting.claimBlockers.map(\.kind) == [.unaccountedRecords])
     }
@@ -140,7 +144,7 @@ struct EvaluationReportTests {
         #expect(cases[0].fields.contains { $0.autoPublishable })
 
         let report = EvaluationReport(cases: cases, identity: try identity(substitute: false),
-                                      dataset: healthy)
+                                      dataset: try healthy)
         #expect(!report.isQualityClaimAllowed)
         #expect(report.claimBlockers.map(\.kind) == [.eligibilityStateInconsistent])
         // The judgement lives in the report; the measures themselves are unchanged,
@@ -154,7 +158,7 @@ struct EvaluationReportTests {
         let validated = EvaluationFixtures.candidate([.completionyear: "2026"], state: .validated,
                                                      gold: reference)
         let clean = EvaluationReport(cases: [EvaluationFixtures.judgement(reference, entry: validated)],
-                                     identity: try identity(substitute: false), dataset: healthy)
+                                     identity: try identity(substitute: false), dataset: try healthy)
         #expect(clean.claimBlockers.isEmpty)
     }
 
@@ -165,7 +169,7 @@ struct EvaluationReportTests {
         // "disputed records excluded" about a run that included them.
         let leaked = EvaluationReport(cases: try withheld(1, prefix: "leak") + withheld(39),
                                       identity: try identity(substitute: false),
-                                      dataset: dataset(reviewed: 160))
+                                      dataset: try dataset(reviewed: 160))
         #expect(leaked.claimBlockers.map(\.kind) == [.caseSetNotDerivedFromSplit])
         #expect(!leaked.isQualityClaimAllowed)
         #expect(leaked.cases == 40, "the measurement is still reported, with the reason it does not count")
@@ -175,7 +179,7 @@ struct EvaluationReportTests {
         var doubled = try withheld(40)
         doubled.append(doubled[0])
         let duplicate = EvaluationReport(cases: doubled, identity: try identity(substitute: false),
-                                         dataset: dataset(reviewed: 160))
+                                         dataset: try dataset(reviewed: 160))
         #expect(duplicate.claimBlockers.map(\.kind) == [.caseSetNotDerivedFromSplit])
         #expect(!duplicate.isQualityClaimAllowed)
 
@@ -191,7 +195,7 @@ struct EvaluationReportTests {
         let others = try withheld(39)
         let mixed = EvaluationReport(cases: [pendingCase] + others,
                                      identity: try identity(substitute: false),
-                                     dataset: dataset(reviewed: 160, pending: 1))
+                                     dataset: try dataset(reviewed: 160, pending: 1))
         #expect(!mixed.isQualityClaimAllowed)
         #expect(mixed.claimBlockers.map(\.kind).contains(.caseSetNotDerivedFromSplit))
         #expect(mixed.claimBlockers.map(\.kind).contains(.pendingAdjudicationExcluded))
@@ -203,7 +207,7 @@ struct EvaluationReportTests {
         // the exclusion is the dataset's doing, and this check is what makes the
         // disclosure mean something.
         let clean = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
-                                     dataset: dataset(reviewed: 160, pending: 3))
+                                     dataset: try dataset(reviewed: 160, pending: 3))
         #expect(clean.claimBlockers.map(\.kind) == [.pendingAdjudicationExcluded])
         #expect(clean.isQualityClaimAllowed)
     }
@@ -212,7 +216,7 @@ struct EvaluationReportTests {
     func sparseStratumRefusedPerNumber() throws {
         var cases = try withheld(40)
         cases += try withheld(2, category: .nearDuplicate, prefix: "nd")
-        let report = EvaluationReport(cases: cases, identity: try identity(substitute: false), dataset: healthy)
+        let report = EvaluationReport(cases: cases, identity: try identity(substitute: false), dataset: try healthy)
         #expect(report.isQualityClaimAllowed)
 
         // Overall: 42 expected slots, quotable. The counter-example category:
@@ -244,7 +248,7 @@ struct EvaluationReportTests {
     @Test("the report survives the JSON round trip that stores it")
     func codableRoundTrip() throws {
         let report = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
-                                      dataset: healthy)
+                                      dataset: try healthy)
         let data = try JSONEncoder().encode(report)
         let decoded = try JSONDecoder().decode(EvaluationReport.self, from: data)
         #expect(decoded == report)
@@ -262,7 +266,7 @@ struct EvaluationReportTests {
         // both counts: what the dataset left out, and how many judged records were
         // still disputed. The second is the number nobody had to check before.
         let report = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
-                                      dataset: dataset(reviewed: 160, pending: 3))
+                                      dataset: try dataset(reviewed: 160, pending: 3))
         let row = try #require(report.claimBlockers.first { $0.kind == .pendingAdjudicationExcluded })
         #expect(row.detail.contains("3 条争议记录"))
         #expect(row.detail.contains("40 条记录中有 0 条"))
@@ -276,12 +280,34 @@ struct EvaluationReportTests {
                                                    reviewStatus: .adjudicationPending)
         let dirty = EvaluationReport(cases: [EvaluationFixtures.judgement(disputed, entry: nil)],
                                      identity: try identity(substitute: false),
-                                     dataset: dataset(reviewed: 160, pending: 1))
+                                     dataset: try dataset(reviewed: 160, pending: 1))
         #expect(!dirty.isQualityClaimAllowed)
         let line = try #require(dirty.claimBlockers.first { $0.kind == .pendingAdjudicationExcluded })
         #expect(line.detail.contains("1 条仍为 adjudication_pending"))
         #expect(!line.detail.contains("已全部排除争议记录"))
         #expect(line.detail.contains("caseSetNotDerivedFromSplit"))
+    }
+
+    @Test("an identity that describes another dataset loses the claim")
+    func identityMustMatchTheDatasetItMeasured() throws {
+        // PLAN §8.2 states the gate over provider/model/prompt/schema/dataset
+        // revision/split being consistent; the dataset side of that pair is checkable
+        // right here, and nowhere else - a judged case carries a record id, not a
+        // revision. Without this the layer would happily publish one revision's
+        // denominators under another revision's label.
+        let clean = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
+                                     dataset: try dataset(reviewed: 160))
+        #expect(!clean.claimBlockers.contains { $0.kind == .identityDisagreesWithDataset })
+        #expect(clean.isQualityClaimAllowed)
+
+        let mislabelled = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
+                                           dataset: try dataset(reviewed: 160, revision: "1.0.1"))
+        #expect(!mislabelled.isQualityClaimAllowed)
+        let row = try #require(mislabelled.claimBlockers.first { $0.kind == .identityDisagreesWithDataset })
+        #expect(row.detail.contains("goldRevision/datasetRevision"))
+        // The numbers survive the veto: the run is reported as measured, it just
+        // cannot be quoted as a quality conclusion.
+        #expect(mislabelled.slice(.coverage)?.rate.denominator == 40)
     }
 
     @Test("a run that asked for no bands records what it asked for")
@@ -291,7 +317,7 @@ struct EvaluationReportTests {
         // run identity next to the slice that has no interval.
         let report = EvaluationReport(cases: try withheld(40),
                                       identity: try identity(substitute: false, resamples: 1),
-                                      dataset: dataset(reviewed: 160),
+                                      dataset: try dataset(reviewed: 160),
                                       request: EvaluationMetrics.Request(resamples: 1))
         let coverage = try #require(report.slice(.coverage))
         #expect(coverage.clusterInterval == nil)

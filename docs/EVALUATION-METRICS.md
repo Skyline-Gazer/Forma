@@ -113,6 +113,7 @@
 | `unaccountedRecords` | 目录中存在三处清单都未登记的记录 | 是 |
 | `pendingAdjudicationExcluded` | 数据集把争议记录排除在可计数集合之外（PLAN §8.1 要求报告排除量）。披露行同时写出**两个数**：数据集排除 N 条、本次判定的 M 条记录里仍有 K 条争议（K 应为 0），并按 K 说明本次用例是否已全部排除争议记录 | 否——仅披露 |
 | `caseSetNotDerivedFromSplit` | 被判定记录不在 `Report.countableRecordIDs` 内、同一记录被判定两次，或该记录自身仍为 `adjudication_pending` | 是 |
+| `identityDisagreesWithDataset` | 运行身份与所测数据集不是同一批：`goldRevision`↔`datasetRevision`、`splitID`、`casePackVersion` 任一项不一致。PLAN §8.2 的门禁就是"这些标识全部一致"；判定用例只带记录号、带不出 revision，所以这一层没有别的检查会发现它 | 是 |
 | `eligibilityStateInconsistent` | 候选在未达 `validated` 的条目上带有可自动发布的槽位 | 是 |
 
 `isQualityClaimAllowed = 不存在否决型阻塞`。
@@ -163,6 +164,6 @@
 | `EvaluationMetrics.confusion(_:)` | 同上 | 键形如 `mapped->absent`；无条目用 `absent` |
 | `EvaluationMetrics.refusals(_:)` → `Refusals` | 同上 | PLAN §8.2 的拒判原因；`byRecordState` 只数未自动落地的记录，`bySlotStatus` 遍历全部记录数未填的期望槽；两个字典不得合并（§3 第 5 条），后者的总数与 `missed_fill_rate` 的分子一致 |
 | `EvaluationRunIdentity` | `Sources/FormaCore/Evaluation/EvaluationReport.swift` | 替身标志是身份的字段，不是脚注 |
-| `EvaluationReport`（`Blocker`/`Finding`/`isQuotable`） | 同上 | 门禁在报告层，不在调用方 |
+| `EvaluationReport`（`Blocker`/`Finding`/`isQuotable`） | 同上 | 门禁在报告层，不在调用方；`claimBlockers` 逐项披露，被否决的运行仍原样发布各切面（否决不是隐藏） |
 
 共享夹具：`Tests/FormaCoreTests/EvaluationTestSupport.swift`（`EvaluationFixtures.gold/candidate/values/judgement/projectKeys`）。`candidate` 写出的 association basis 用生产原文格式，项目对错只能通过 `projectKeys(for:wrong:)` 表达——夹具自己把簇键塞进条目的话，测的就不是要跑的那条路了。指标与门禁两个 suite 必须用同一套构造器，否则会在 12 槽与 4 字下限这类细节上各自漂移。
