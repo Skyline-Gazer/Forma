@@ -39,11 +39,12 @@ struct EvaluationReportTests {
                            requiredMinimum: GoldDataset.independentTarget)
     }
 
-    private func identity(substitute: Bool, resamples: Int = 200) throws -> EvaluationRunIdentity {
+    private func identity(substitute: Bool, resamples: Int = 200,
+                          profiles: [String: String]? = nil) throws -> EvaluationRunIdentity {
         let pack = try CasePack.shipped()
         return EvaluationRunIdentity(goldRevision: "1.0.0", splitID: "split-a", casePackID: pack.id,
                                      casePackVersion: pack.version,
-                                     profileVersionKeys: [ProjectArchiveContract.id: "v1"],
+                                     profileVersionKeys: profiles ?? [ProjectArchiveContract.id: "v1"],
                                      provider: substitute ? "substitute" : "provider-x",
                                      modelID: substitute ? nil : "model-1", isSubstitute: substitute,
                                      bootstrapResamples: resamples, bootstrapSeed: 7)
@@ -287,6 +288,20 @@ struct EvaluationReportTests {
         #expect(line.detail.contains("1 条仍为 adjudication_pending"))
         #expect(!line.detail.contains("已全部排除争议记录"))
         #expect(line.detail.contains("caseSetNotDerivedFromSplit"))
+
+        // The other way to lose the case set: every judged record is confirmed, but
+        // one of them was judged twice. `pending` is zero, so a tail that read only
+        // that counter would still print "everything disputed is excluded" beside a
+        // report refusing any conclusion at all.
+        let clean = try withheld(40)
+        let doubled = EvaluationReport(cases: clean + [try #require(clean.first)],
+                                       identity: try identity(substitute: false),
+                                       dataset: try dataset(reviewed: 160, pending: 3))
+        #expect(!doubled.isQualityClaimAllowed, "the duplicate is what the veto is about")
+        let quiet = try #require(doubled.claimBlockers.first { $0.kind == .pendingAdjudicationExcluded })
+        #expect(quiet.detail.contains("0 条仍为 adjudication_pending"))
+        #expect(!quiet.detail.contains("已全部排除争议记录"), "no reassurance beside a refusal")
+        #expect(quiet.detail.contains("不为排除是否完整作保"))
     }
 
     @Test("a dataset that misses its quota cells says so without losing the run")
@@ -358,5 +373,73 @@ struct EvaluationReportTests {
         #expect(long.slice(.coverage)?.clusterInterval != nil)
         #expect(long.clusters == short.clusters)
         #expect(long.cases == short.cases)
+    }
+
+    @Test("PLAN §8.2's suggestions are published with the gap they measure")
+    func targetsCarryTheirOwnGap() throws {
+        let report = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
+                                      dataset: try dataset(reviewed: 160))
+        #expect(report.targets.map(\.measure) == [.precisionAuto, .coverage, .fieldPrecision,
+                                                 .highConfidenceErrorRate, .holdRate, .inventedFillRate])
+        #expect(report.targets.map(\.suggested) == [0.95, 0.70, 0.98, 0.02, 0.30, 0.0])
+        #expect(report.targets.map(\.direction) == [.atLeast, .atLeast, .atLeast, .atMost, .atMost, .atMost])
+        for target in report.targets {
+            let slice = try #require(report.slice(target.measure))
+            #expect(target.actual == slice.rate.estimate)
+            #expect(target.population == slice.rate.denominator)
+            #expect(target.caseCount == slice.caseCount)
+            #expect(target.clusterCount == slice.clusterCount)
+            #expect(target.interval == slice.clusterInterval)
+            switch (target.direction, target.actual) {
+            case (.atLeast, let value?): #expect(target.shortfall == target.suggested - value)
+            case (.atMost, let value?): #expect(target.shortfall == value - target.suggested)
+            case (_, nil): #expect(target.shortfall == nil)
+            }
+        }
+        // Nothing in this run was answered: the floors are missed by their whole
+        // distance, the ceiling on hold rate is passed by 100%. The claim survives
+        // regardless, because PLAN §8.2 keeps these as suggestions until the Owner
+        // adopts them and the gate is `claimBlockers`, not this table.
+        let coverage = try #require(report.targets.first { $0.measure == .coverage })
+        #expect(coverage.actual == 0)
+        #expect(coverage.shortfall == 0.70)
+        #expect(coverage.isMet == false)
+        let held = try #require(report.targets.first { $0.measure == .holdRate })
+        #expect(held.isMet == false, "a 100% hold rate is over the 30% ceiling")
+        #expect(report.isQualityClaimAllowed, "a missed suggestion is not a blocker")
+    }
+
+    @Test("a target with no population is not a missed target")
+    func targetsWithoutPopulationStayBlank() throws {
+        // PLAN §8.2 marks every zero denominator N/A. A run that mixed two Profiles
+        // never said which one its files were judged under, so its precision row has
+        // no population: it must not arrive as 0% - neither met nor unmet, just not
+        // measured - or a reader would see a failed floor where nothing failed.
+        let answered = try (0..<40).map { index -> CaseJudgement in
+            let gold = try EvaluationFixtures.gold("g\(index)", expected: [.completionyear: "2026"])
+            return EvaluationFixtures.judgement(
+                gold, entry: EvaluationFixtures.candidate([.completionyear: "2026"], gold: gold))
+        }
+        let single = EvaluationReport(cases: answered, identity: try identity(substitute: false),
+                                      dataset: try healthy)
+        let named = try #require(single.targets.first { $0.measure == .precisionAuto })
+        #expect(named.actual != nil, "one Profile named: the row has a population")
+        #expect(named.actual == single.slice(.precisionAuto)?.rate.estimate)
+
+        let mixed = EvaluationReport(
+            cases: answered,
+            identity: try identity(substitute: false,
+                                   profiles: [ProjectArchiveContract.id: "v1", VendorLibraryContract.id: "v1"]),
+            dataset: try healthy)
+        let blank = try #require(mixed.targets.first { $0.measure == .precisionAuto })
+        #expect(blank.actual == nil, "N/A, not 0%")
+        #expect(blank.shortfall == nil)
+        #expect(blank.isMet == nil, "an unmeasurable row cannot fail a floor")
+        #expect(blank.population == 0, "nothing was evaluable as correct-or-wrong")
+        #expect(blank.caseCount == 40, "and the gap between the two is the disclosure")
+        // The per-Profile cuts still carry the number, which is why the row is blank
+        // rather than the run being silent.
+        #expect(mixed.slice(.precisionAuto, stratum: .profile, key: ProjectArchiveContract.id)?.rate.estimate != nil)
+        #expect(mixed.isQualityClaimAllowed)
     }
 }

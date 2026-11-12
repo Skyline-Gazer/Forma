@@ -136,6 +136,85 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
     /// `EvaluationSlice.sparseCaseLimit` for what that threshold is and is not.
     public let quotableMeasures: [EvaluationMeasure]
 
+    /// PLAN §8.2's suggested business targets next to what this run measured.
+    ///
+    /// The clause is 必须展示实际值与差距, and it governs numbers the Owner has not
+    /// adopted - PLAN says 阈值是建议、不是已批准政策, and that no final quality gate may
+    /// be claimed as passed before approval. So this is a display surface: a missed
+    /// target vetoes nothing here, and `isQualityClaimAllowed` remains a function of
+    /// `claimBlockers` alone. Two lines of the same PLAN paragraph are deliberately
+    /// absent: 关键反例不能出现系统性混淆 and per-field reporting are not numeric
+    /// thresholds in the PLAN text, and manufacturing one would dress a harness guess
+    /// in PLAN's authority. The confusion matrix and the twelve `.field` rows are where
+    /// a reader judges those, each with its own `caseCount`.
+    public struct Target: Codable, Sendable, Equatable {
+        public enum Direction: String, Codable, Sendable {
+            /// Higher is better; the suggestion is a floor.
+            case atLeast
+            /// Lower is better; the suggestion is a ceiling.
+            case atMost
+        }
+
+        public let measure: EvaluationMeasure
+        public let direction: Direction
+        /// The number written in PLAN §8.2, unmodified.
+        public let suggested: Double
+        /// What the run measured overall; nil when the measure had no population,
+        /// which PLAN §8.2 marks N/A rather than zero.
+        public let actual: Double?
+        /// How far the run fell short of the suggestion: positive when the suggestion
+        /// is not met, zero or negative when it is, nil exactly with `actual` - there
+        /// is nothing to be short of in a measure the run could not evaluate.
+        public let shortfall: Double?
+        /// What `actual` was computed over - the row's own denominator, which for a
+        /// record-level measure is the number of files judged in that run. PLAN §8.2
+        /// asks for the sample size beside the zero-error observations; it is published
+        /// for every row rather than some.
+        public let population: Int
+        /// Records the row rests on, so a met target on three records does not read
+        /// like one on three hundred. Not the same as `population`: a row can be blank
+        /// for want of attribution while the run judged plenty of files.
+        public let caseCount: Int
+        public let clusterCount: Int
+        /// The run's cluster band for the measure, when it has one (§5).
+        public let interval: ClosedRange<Double>?
+
+        init(measure: EvaluationMeasure, direction: Direction, suggested: Double, slice: EvaluationSlice?) {
+            let actual = slice?.rate.estimate
+            self.measure = measure
+            self.direction = direction
+            self.suggested = suggested
+            self.actual = actual
+            switch (direction, actual) {
+            case (.atLeast, let value?): shortfall = suggested - value
+            case (.atMost, let value?): shortfall = value - suggested
+            case (_, nil): shortfall = nil
+            }
+            self.population = slice.map { $0.rate.denominator } ?? 0
+            self.caseCount = slice?.caseCount ?? 0
+            self.clusterCount = slice?.clusterCount ?? 0
+            self.interval = slice?.clusterInterval
+        }
+
+        /// Whether the suggestion is met, nil exactly when `actual` is.
+        public var isMet: Bool? { shortfall.map { $0 <= 0 } }
+
+        /// The numeric suggestions of PLAN §8.2, in the order PLAN lists them. The
+        /// last row is its zero-error line for invented fills, expressed as a ceiling
+        /// of none rather than as a rate to be beaten.
+        static let proposals: [(measure: EvaluationMeasure, direction: Direction, suggested: Double)] = [
+            (.precisionAuto, .atLeast, 0.95),
+            (.coverage, .atLeast, 0.70),
+            (.fieldPrecision, .atLeast, 0.98),
+            (.highConfidenceErrorRate, .atMost, 0.02),
+            (.holdRate, .atMost, 0.30),
+            (.inventedFillRate, .atMost, 0.0),
+        ]
+    }
+
+    /// The proposals above as this run measured them.
+    public let targets: [Target]
+
     /// The run identity is the only source for how the bands were drawn. Both numbers
     /// used to also be parameters of this initialiser, so a caller could publish
     /// `bootstrapResamples = 1` over slices computed from the default 2,000 draws -
@@ -210,13 +289,21 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
             // Both halves of the claim belong in this row, because the sentence it
             // publishes ("those records are in no denominator") is only true of the
             // run if the cases fed to it actually exclude them. `pending` is the
-            // count of judged records that are still `adjudication_pending`, which
-            // the check above turns into a veto when non-zero: the row states both
-            // numbers and whether they agree, so a reader never has to take the
-            // disclosure's word for the exclusion.
-            let agreement = pending == 0
-                ? "，即本次判定的用例已全部排除争议记录。"
-                : "，已由 caseSetNotDerivedFromSplit 否决本次结论。"
+            // count of judged records that are still `adjudication_pending`. The
+            // closing clause therefore reads the gate that is actually in force, not
+            // `pending` alone: a run whose case set was rejected for duplicates or
+            // off-split rows is already refused a conclusion, and this row must not
+            // then offer "everything disputed is excluded" as a clean bill beside it.
+            let caseSetVetoed = blockers.contains { $0.kind == .caseSetNotDerivedFromSplit }
+            let agreement: String
+            if pending > 0 {
+                agreement = "，已由 caseSetNotDerivedFromSplit 否决本次结论。"
+            } else if caseSetVetoed {
+                agreement = "；用例集合已因越界或重复判定被 caseSetNotDerivedFromSplit 否决，"
+                    + "本行不为排除是否完整作保。"
+            } else {
+                agreement = "，即本次判定的用例已全部排除争议记录。"
+            }
             blockers.append(Finding(kind: .pendingAdjudicationExcluded,
                                     detail: "数据集把 \(dataset.pendingAdjudication) 条争议记录排除在可计数集合之外；"
                                         + "本次判定的 \(cases.count) 条记录中有 \(pending) 条仍为 "
@@ -248,6 +335,10 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         }
         self.quotableMeasures = EvaluationMeasure.allCases.filter { measure in
             overall.contains { $0.measure == measure }
+        }
+        self.targets = Target.proposals.map { proposal in
+            Target(measure: proposal.measure, direction: proposal.direction, suggested: proposal.suggested,
+                   slice: computedSlices.first { $0.measure == proposal.measure && $0.stratum == .overall })
         }
     }
 

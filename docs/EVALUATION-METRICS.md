@@ -96,7 +96,7 @@
 - **门禁的单位是记录数**：`EvaluationSlice.caseCount` 是本切面被判定的记录条数，`isSparse = caseCount < 30`。它不看 `rate.denominator`：§3 之后各指标的 `rate.denominator` 单位由 `EvaluationMeasure.unit`（`.records` / `.slots`）声明，同一个切面里既可能是记录也可能是槽位观测——3 条记录 × 12 槽能凑出 36 个槽位观测，150 条记录会让槽位分母上千，用槽位数当门禁两头失真（薄样本被放行、干净样本里天然小分母的指标被永久封死）。
 - Wilson 区间按**该指标自身的观测单位**计算（`EvaluationMeasure.unit`）：记录级比率就在记录数上取置信宽度，槽位级比率就在槽位数上。那是这批观测自身的置信宽度，与"够不够格下结论"是两个问题，两处的单位各写在文档里。
 - 分母为 0 时 `estimate == nil` 且 Wilson 端点为 nil（没测过的东西不存在"0 分"这种质量结论）。PLAN §8.2 要求"所有零分母标 N/A"：`nil` 就是那个 N/A，报表不得把它印成 0，也不得印成 100%。
-- `clusterInterval` 为 nil 有**三个不同的原因**，读者必须能分开（这三条只描述会计算簇级带的 pooled 行；`.field` 行按构造没有带，见 §3 第 7 条）：**(a)** 本切面簇数 < `ClusterBootstrap.minimumClusters`（5），簇太少、无可变异性；**(b)** 至少一次重抽样的分母为 0，即该指标在这一层过薄（§4）；**(c)** `Request.resamples < ClusterBootstrap.minimumResamples`（20），抽样太少：两次及以下零宽，再多也只是簇样本的极值；`resamples < 1` 由 `Request.init` 直接拒绝，不留这一档。三者都只关掉簇级区间，**不影响 `isQuotableOnOwnMerits`**：记录数达标的切面照样可以引用率（配 Wilson），只是没有簇级区间可报（`resamplesArePublishedWithTheRun`）。`(c)` 是请求可以合法表达的一种形态——**只要率、不要带**——因此重抽样层既不 `precondition` 崩溃也不把参数垫高：一次跑批不该因为关掉一列而整体中止，而静默改写运行参数正是最难被读者发现的改动。每个切面都随区间一起给出 `clusterCount`：`(a)` 时它 < 5，`(b)` 与 `(c)` 时它 ≥ 5，这两者靠 `EvaluationRunIdentity.bootstrapResamples` 区分——那个数与算出这批切面所用的 `Request.resamples` 一道发布，读者用同一份报告就能把「太薄」与「没人要带」分开（`singleDrawHasNoBand` 钉住率不受影响，`resamplesArePublishedWithTheRun` 钉住身份与切面来自同一次请求）。`resamples: 2` 与 `resamples: 1` 同属 (c)：一次抽样是"没有带"，两次是"带是舍入产物"，对读者的处置一样——只引用率，不引用带。`isQuotableOnOwnMerits` 不看它，因为"能不能引用这条率"与"有没有簇级区间"是两个问题。
+- `clusterInterval` 为 nil 有**三个不同的原因**，读者必须能分开（这三条只描述会计算簇级带的 pooled 行；`.field` 行按构造没有带，见 §3 第 7 条）：**(a)** 本切面簇数 < `ClusterBootstrap.minimumClusters`（5），簇太少、无可变异性；**(b)** 至少一次重抽样的分母为 0，即该指标在这一层过薄（§4）；**(c)** `identity.bootstrapResamples < ClusterBootstrap.minimumResamples`（20），抽样太少：两次及以下零宽，再多也只是簇样本的极值；`resamples < 1` 由 `Request.init` 直接拒绝，不留这一档。三者都只关掉簇级区间，**不影响 `isQuotableOnOwnMerits`**：记录数达标的切面照样可以引用率（配 Wilson），只是没有簇级区间可报（`resamplesComeFromTheRunIdentity`）。`(c)` 是请求可以合法表达的一种形态——**只要率、不要带**——因此重抽样层既不 `precondition` 崩溃也不把参数垫高：一次跑批不该因为关掉一列而整体中止，而静默改写运行参数正是最难被读者发现的改动。每个切面都随区间一起给出 `clusterCount`：`(a)` 时它 < 5，`(b)` 与 `(c)` 时它 ≥ 5，这两者靠 `EvaluationRunIdentity.bootstrapResamples` 区分——那个数与算出这批切面所用的抽样次数一道发布（**同一个来源**：`EvaluationReport` 的次数取自 `EvaluationRunIdentity.bootstrapResamples`，报表层不留第二份，见 §4），读者用同一份报告就能把「太薄」与「没人要带」分开（`singleDrawHasNoBand` 钉住率不受影响，`resamplesComeFromTheRunIdentity` 钉住带确实按身份里的次数计算——两半只差那一个数：1 次时没有带，2000 次时有带）。`resamples: 2` 与 `resamples: 1` 同属 (c)：一次抽样是"没有带"，两次是"带是舍入产物"，对读者的处置一样——只引用率，不引用带。`isQuotableOnOwnMerits` 不看它，因为"能不能引用这条率"与"有没有簇级区间"是两个问题。
 - 可引用性（`EvaluationSlice.isQuotableOnOwnMerits`）= 记录数达标 **且** 该指标确有观测（`rate.denominator > 0`）。两半缺一不可：只有前半，`precision_auto` 在"没有任何可自动发布产出"的运行里会因为 40 条记录而变得可引用，而它其实什么都没看过。
 - `EvaluationReport.isQuotable(_:stratum:key:)` **逐数**判定，而不是整份报告一票：总体 42 条、某反例类别只有 2 条是常态，而被引用的往往正是那一行。
 - `quotableMeasures` 只列总体切面下非稀疏的指标，供摘要直接取用。
@@ -111,7 +111,7 @@
 | `insufficientIndependentSamples` | `reviewedCountable < 150` | 是 |
 | `undeclaredPromptOverlap` | 评测集与提示侧存在未声明交集 | 是 |
 | `unaccountedRecords` | 目录中存在三处清单都未登记的记录 | 是 |
-| `pendingAdjudicationExcluded` | 数据集把争议记录排除在可计数集合之外（PLAN §8.1 要求报告排除量）。披露行同时写出**两个数**：数据集排除 N 条、本次判定的 M 条记录里仍有 K 条争议（K 应为 0），并按 K 说明本次用例是否已全部排除争议记录 | 否——仅披露 |
+| `pendingAdjudicationExcluded` | 数据集把争议记录排除在可计数集合之外（PLAN §8.1 要求报告排除量）。披露行同时写出**两个数**：数据集排除 N 条、本次判定的 M 条记录里仍有 K 条争议（K 应为 0），并按**实际生效的门禁**说明本行是否还为排除作保：K>0 时指向 `caseSetNotDerivedFromSplit` 的否决；K=0 但用例集合已因越界或重复被否决时，明说"本行不为排除是否完整作保"（否则同一份报告会一边宣布这些数字给不出结论、一边在披露行里给出"争议已全部排除"的安心话）；两者皆无才写"已全部排除争议记录" | 否——仅披露 |
 | `caseSetNotDerivedFromSplit` | 被判定记录不在 `Report.countableRecordIDs` 内、同一记录被判定两次，或该记录自身仍为 `adjudication_pending` | 是 |
 | `stratumQuotasUnmet` | `Report.shortfalls` 非空：某些 Profile x 类别格少于 `GoldDataset.stratumTarget`（10）条，即未达 PLAN §8.1 的抽样计划。仅披露的算术理由：格数是 2 Profile x 8 类别 = 16，每格 10 条要 160 条，而 §8.1 的独立样本下限是 150——**总数达标与每格填满本就冲突**，用它否决会让质量结论在满足 PLAN 自身要求的数据集上也不可达；而薄格在 §5 的 30 条下限处本就不可单独引用，保护并不落空 | **否**——仅披露 |
 | `identityDisagreesWithDataset` | 运行身份与所测数据集不是同一批：`goldRevision`↔`datasetRevision`、`splitID`、`casePackVersion` 任一项不一致。PLAN §8.2 的门禁就是"这些标识全部一致"；判定用例只带记录号、带不出 revision，所以这一层没有别的检查会发现它 | 是 |
@@ -126,6 +126,24 @@
 `eligibility_state` 与导出侧同源：`ManifestExport.revalidate` 把「条目自称可自动执行却不是 `validated`」判为 `eligibility_state` 违规。评测层遇到同一形状时**否决结论而不是替它兜底**——在一个程序自己不会写出的 manifest 上算出的 `precision_auto`，量的不是这个程序。判据放在报告层（`CaseJudgement.candidateState` 与槽位 `autoPublishable`），指标口径本身不动。
 
 为什么争议排除只披露：一次运行确实测了它测的东西，把"有 3 条待裁决"当成整次运行作废，只会诱导人不登记争议。反之，**替身与样本不足必须否决**：合成数据可以把管线跑通、可以把分母做大，但不能认证任何质量门槛——这条与 `GoldDataset.meetsIndependentTarget` 只用 `reviewedCountable` 的口径一致。
+
+
+### 6.1 建议阈值与差距（`EvaluationReport.targets`）
+
+PLAN §8.2 在给出建议阈值的同时要求"**必须展示实际值与差距**"，并规定"阈值是建议、不是已批准政策；Owner 未批准前不能声称最终质量 Gate 已通过"。本层照此发布一张显示表，**不参与门禁**：`isQualityClaimAllowed` 只由 `claimBlockers` 决定，一条建议没达到不会否决，全达到了也不会放行。
+
+| 指标 | 方向 | PLAN 建议值 |
+| --- | --- | --- |
+| `precision_auto` | 下限 | 0.95 |
+| `coverage` | 下限 | 0.70 |
+| `field_precision` | 下限 | 0.98 |
+| `high_confidence_error_rate` | 上限 | 0.02 |
+| `hold_rate` | 上限 | 0.30 |
+| `invented_fill_rate` | 上限 | 0（"观察错误数为 0"） |
+
+每行除建议值外还带**本次实测**、**差距**（`shortfall`：正数=未达，≤0=已达；实际值为 nil 时它也是 nil——没测过的东西谈不上差距）、**人口**（该率真正的分母）与**判定记录数**、以及该指标的簇级区间。人口与记录数分开是必要的：一次混跑两个 Profile 的运行，`precision_auto` 的人口为 0、判定记录数仍是 40，写成"40 条都没达标"是把"无法判定"报成"判输了"，与 §3 的 N/A 规矩冲突。
+
+同一段 PLAN 里还有两条**故意不做成表**：`关键反例不能出现系统性混淆` 与逐字段分别报告——PLAN 没给它们数值，硬造一个就是把 harness 的猜测披上 PLAN 的权威。它们的落点是 `confusion`（含每类别记录数）与 12 条 `.field` 行（各带自己的 `caseCount`/稀疏判定），由读者按分布读，而不是由本层判"通过/不通过"。
 
 ## 7. "相等"只有一个定义
 
@@ -165,6 +183,6 @@
 | `EvaluationMetrics.confusion(_:)` | 同上 | 键形如 `mapped->absent`；无条目用 `absent` |
 | `EvaluationMetrics.refusals(_:)` → `Refusals` | 同上 | PLAN §8.2 的拒判原因；`byRecordState` 只数未自动落地的记录，`bySlotStatus` 遍历全部记录数未填的期望槽；两个字典不得合并（§3 第 5 条），后者的总数与 `missed_fill_rate` 的分子一致 |
 | `EvaluationRunIdentity` | `Sources/FormaCore/Evaluation/EvaluationReport.swift` | 替身标志是身份的字段，不是脚注 |
-| `EvaluationReport`（`Blocker`/`Finding`/`isQuotable`） | 同上 | 门禁在报告层，不在调用方；`claimBlockers` 逐项披露，被否决的运行仍原样发布各切面（否决不是隐藏）；每条带所用的抽样次数与种子取自 `identity`，报表层不留第二份 |
+| `EvaluationReport`（`Blocker`/`Finding`/`isQuotable`/`targets`） | 同上 | 门禁在报告层，不在调用方；`claimBlockers` 逐项披露，被否决的运行仍原样发布各切面（否决不是隐藏）；每条带所用的抽样次数与种子取自 `identity`，报表层不留第二份 |
 
 共享夹具：`Tests/FormaCoreTests/EvaluationTestSupport.swift`（`EvaluationFixtures.gold/candidate/values/judgement/projectKeys`）。`candidate` 写出的 association basis 用生产原文格式，项目对错只能通过 `projectKeys(for:wrong:)` 表达——夹具自己把簇键塞进条目的话，测的就不是要跑的那条路了。指标与门禁两个 suite 必须用同一套构造器，否则会在 12 槽与 4 字下限这类细节上各自漂移。
