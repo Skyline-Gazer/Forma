@@ -507,6 +507,38 @@ struct EvaluationMetricsTests {
         #expect(!ValueNormalization.equal("", "示例项目_2026"), "an empty value agrees with nothing")
     }
 
+    @Test("refusals say why the run did not publish, in two separate units")
+    func refusalsNameTheReasons() throws {
+        let reference = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026", .department: "采购部"])
+
+        // Answered but parked: one record stopped in `hold`, and the two slots the
+        // reference needed are unknown to the policy. The record count and the slot
+        // count are different quantities about the same file, which is exactly why
+        // they are two dictionaries and not one number.
+        let parked = EvaluationMetrics.refusals([
+            EvaluationFixtures.judgement(reference,
+                                         entry: EvaluationFixtures.candidate([:], state: .hold, gold: reference))
+        ])
+        #expect(parked.byRecordState == [DecisionState.hold.rawValue: 1])
+        #expect(parked.bySlotStatus == [FieldOutcome.Status.unknown.rawValue: 2])
+
+        // No entry at all: the slot key is `absent` too, because the reason is the
+        // missing candidate rather than a decision about a value.
+        let blank = EvaluationMetrics.refusals([EvaluationFixtures.judgement(reference, entry: nil)])
+        #expect(blank.byRecordState == ["absent": 1])
+        #expect(blank.bySlotStatus["absent"] == 2)
+
+        // What went out on its own contributes to neither half.
+        let mapped = EvaluationMetrics.refusals([
+            EvaluationFixtures.judgement(reference,
+                                         entry: EvaluationFixtures.candidate([.completionyear: "2026",
+                                                                              .department: "采购部"],
+                                                                             gold: reference))
+        ])
+        #expect(mapped.byRecordState.isEmpty)
+        #expect(mapped.bySlotStatus.isEmpty)
+    }
+
     @Test("a run with no candidate for a source is confusion-visible")
     func confusionRecordsAbsence() throws {
         let reference = try EvaluationFixtures.gold("g1", expected: [.completionyear: "2026"])

@@ -88,6 +88,10 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
     public let clusters: Int
     public let slices: [EvaluationSlice]
     public let confusion: [String: Int]
+    /// PLAN §8.2's 拒判原因, beside the confusion matrix: why the run did not publish
+    /// what the reference answer expected, in records that stopped somewhere and the
+    /// slots they left empty.
+    public let refusals: EvaluationMetrics.Refusals
     /// The dataset's own integrity findings, kept beside the rates they qualify.
     public let dataset: GoldDataset.Report
     public let claimBlockers: [Finding]
@@ -117,6 +121,7 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         let computedSlices = EvaluationMetrics.slices(for: cases, request: metricsRequest)
         self.slices = computedSlices
         self.confusion = EvaluationMetrics.confusion(cases)
+        self.refusals = EvaluationMetrics.refusals(cases)
         self.dataset = dataset
 
         var blockers: [Finding] = []

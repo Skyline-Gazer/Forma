@@ -37,12 +37,15 @@ public struct FieldJudgement: Codable, Sendable, Equatable {
     /// asks whether a slot the program would publish sits on an entry that never
     /// reached `validated`. No rate reads it.
     public let autoPublishable: Bool
-
-    public init(field: MetadataFieldID, verdict: Verdict, autoPublishable: Bool) {
-        self.field = field
-        self.verdict = verdict
-        self.autoPublishable = autoPublishable
-    }
+    /// The policy's own verdict on this slot, as the manifest recorded it, or nil
+    /// when the engine produced no entry for the source at all.
+    ///
+    /// `verdict` says how the slot relates to the reference answer; this says what
+    /// the program did with it, which is the half PLAN §8.2 asks the report to break
+    /// out as 拒判原因: a withheld slot that the policy refused for missing evidence
+    /// and one the engine never answered are the same verdict and different work for
+    /// a reviewer.
+    public let status: FieldOutcome.Status?
 
     /// Judge one slot of a gold record against one engine entry.
     ///
@@ -76,14 +79,18 @@ public struct FieldJudgement: Codable, Sendable, Equatable {
 
         self.field = field
         self.verdict = verdict
+        self.status = outcome?.status
         // The entry-level half is taken as given: `computeEligibility` already
         // requires `validated`, a resolved target, no slot in `.conflict`, and that
         // *some* slot cites a record that still matches this snapshot. What it does
         // not require is that the slot being measured cites anything itself - the
-        // citation set is a union across the entry - and it says nothing about a
-        // slot sitting in `unknown`, `rejected_by_policy` or `not_applicable` while
-        // carrying a value. Those two are the slot-level half added here, and the
-        // only reason `precision_auto` is not simply the entry flag.
+        // citation set is a union across the entry - and it says nothing about a slot
+        // sitting in `rejected_by_policy` or `not_applicable`. So this flag is the
+        // per-slot question §6's `eligibilityStateInconsistent` check asks ("would
+        // the program have written this value out, on an entry it never validated?")
+        // and nothing else: no rate reads it, because PLAN §8.2 defines `auto_mapped`
+        // over the file, and `autoMappedImpliesPublishableSlots` pins the
+        // correspondence between the two levels instead of blending them.
         self.autoPublishable = entry?.eligibleForAutoExecution == true
             && (outcome.map { Self.publishableStatuses.contains($0.status) && !$0.evidenceIDs.isEmpty } ?? false)
     }

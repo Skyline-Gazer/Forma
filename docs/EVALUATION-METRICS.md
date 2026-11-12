@@ -1,7 +1,7 @@
 # Forma 离线评测口径与结论门禁（EVALUATION-METRICS）
 
 > 状态：P3-A 切片 2a。本文定义**指标的可执行口径**与**结论门禁**。
-> PLAN §8.2 给出指标名称与验收意图，本文给出分子分母。三者必须同步，顺序是：**先改 PLAN（需求源）→ 再改代码 → 最后更新本文**。本文不是实现真值的背书；口径的实际行为以代码为准，且下列性质各有用例固定：两套单位各自的分母（`coveragePopulation`、`precisionAutoPopulation`、`perFieldRows`）、可引用性单位（`sparsityCountsRecords`）、无定义抽样逐指标失效且与顺序无关（`emptyDrawVoidsInsteadOfSkipping`、`voidingIsOrderIndependent`）、无观测与无区间的区别（`measureWithoutPopulationHasNoInterval`、`clusterResampling`）、用例集来自版本化 split（`casesMustComeFromTheCountableSplit`）。
+> PLAN §8.2 给出指标名称与验收意图，本文给出分子分母。三者必须同步，顺序是：**先改 PLAN（需求源）→ 再改代码 → 最后更新本文**。本文不是实现真值的背书；口径的实际行为以代码为准，且下列性质各有用例固定：两套单位各自的分母（`coveragePopulation`、`precisionAutoPopulation`、`perFieldRows`）、可引用性单位（`sparsityCountsRecords`）、无定义抽样逐指标失效且与顺序无关（`emptyDrawVoidsInsteadOfSkipping`、`voidingIsOrderIndependent`）、无观测与无区间的区别（`measureWithoutPopulationHasNoInterval`、`clusterResampling`）、拒判原因的单位（`refusalsNameTheReasons`）、用例集来自版本化 split（`casesMustComeFromTheCountableSplit`）。
 
 ## 1. 目的与范围
 
@@ -78,8 +78,9 @@
    - 一个文件被多个候选项目认领时，association 集合记的是**所有**认领者，不是程序挑中的那一个；这种歧义不会污染 `precision_auto`——冲突归属会阻断合格性，该记录落在分母之外（`computeEligibility` 的 `.conflict` 拒绝与 `associationReason` 失效路径）。残留风险只有调用方交来的表与它交来的 `conflictedSourceIDs` 不自洽。
 3. **`contradicted` 留在槽位级分母里，不进分子**（`field_precision`）。被自身证据反驳的值是引擎确实给出过的断言，忽略它会让精确率报出程序没有的把握；而它作为状态（`.conflict`）会让整个条目失去 `eligibleForAutoExecution`，所以同一条记录本来就不在文件级 `precision_auto` 的分母里。
 4. **"漏填"与"答错"分列两项，不得相加**：`missed_fill_rate` 的分子是 `withheld`（含候选只给空串/纯空白的槽，§7），`field_precision` 的分母只含候选断言，两者对同一个槽各说各话。`allowedUnknown`（期望方也放弃猜测的槽）不是期望槽，永远不进漏填分母——一致的未知不是漏答，这正是 PLAN 要求报告把两者分开的原因。
-5. **搁置按条目计**：条目被扣在 `hold` / `unknown` 时该记录整体计 1，即使个别槽带着值——评审者从被扣住的条目里拿不到可用产出；无条目同样计 1（没有任何产出）。`unknown` / `invalidated` / 请求失败的分列计数由 `EvaluationMetrics.confusion(_:)` 给出（§9），不折进同一个数字。
-6. **`field_precision` 另有 12 条逐字段行**（`EvaluationSlice.stratum == .field`，`key` 为字段 rawValue；PLAN §8.2"12 字段分别报告"）。逐字段分母之和等于 pooled 分母，因此既不会重计也不会漏计。逐字段行只带 Wilson 区间，不带簇级区间——那里 nil 是**按构造**而非对稀薄的判断，pooled 行才报簇区间。
+5. **拒判原因与混淆矩阵并列，各自单位**（PLAN §8.2 的"分层"行同时列了两者）。`EvaluationMetrics.refusals(_:)` 给出两个字典：`byRecordState` 按记录停在哪个 `DecisionState`（无条目为 `absent`）计未自动落地的文件；`bySlotStatus` 按政策留下的 `FieldOutcome.Status`（无条目同样 `absent`）计那些期望却没填的槽。**两者永不相加**——一个是文件数、一个是槽位数，相加就是本节第 1 条要避免的那种混淆。混淆矩阵说的是"引擎到达哪个决定"，这一对说的是"为什么没把参考答案要的东西写出去"，读者据此分配复核工作。键全部来自 manifest 自己的词汇表，报表不新造标签。
+6. **搁置按条目计**：条目被扣在 `hold` / `unknown` 时该记录整体计 1，即使个别槽带着值——评审者从被扣住的条目里拿不到可用产出；无条目同样计 1（没有任何产出）。`unknown` / `invalidated` / 请求失败的分列计数由 `EvaluationMetrics.confusion(_:)` 给出（§9），不折进同一个数字。
+7. **`field_precision` 另有 12 条逐字段行**（`EvaluationSlice.stratum == .field`，`key` 为字段 rawValue；PLAN §8.2"12 字段分别报告"）。逐字段分母之和等于 pooled 分母，因此既不会重计也不会漏计。逐字段行只带 Wilson 区间，不带簇级区间——那里 nil 是**按构造**而非对稀薄的判断，pooled 行才报簇区间。
 
 ## 4. 区间
 
@@ -93,7 +94,7 @@
 
 - **门禁的单位是记录数**：`EvaluationSlice.caseCount` 是本切面被判定的记录条数，`isSparse = caseCount < 30`。它不看 `rate.denominator`：§3 之后各指标的 `rate.denominator` 单位由 `EvaluationMeasure.unit`（`.records` / `.slots`）声明，同一个切面里既可能是记录也可能是槽位观测——3 条记录 × 12 槽能凑出 36 个槽位观测，150 条记录会让槽位分母上千，用槽位数当门禁两头失真（薄样本被放行、干净样本里天然小分母的指标被永久封死）。
 - Wilson 区间按**该指标自身的观测单位**计算（`EvaluationMeasure.unit`）：记录级比率就在记录数上取置信宽度，槽位级比率就在槽位数上。那是这批观测自身的置信宽度，与"够不够格下结论"是两个问题，两处的单位各写在文档里。
-- 分母为 0 时 `estimate == nil` 且 Wilson 端点为 nil（没测过的东西不存在"0 分"这种质量结论）。
+- 分母为 0 时 `estimate == nil` 且 Wilson 端点为 nil（没测过的东西不存在"0 分"这种质量结论）。PLAN §8.2 要求"所有零分母标 N/A"：`nil` 就是那个 N/A，报表不得把它印成 0，也不得印成 100%。
 - `clusterInterval` 为 nil 有**三个不同的原因**，读者必须能分开：**(a)** 本切面簇数 < `ClusterBootstrap.minimumClusters`（5），簇太少、无可变异性；**(b)** 至少一次重抽样的分母为 0，即该指标在这一层过薄（§4）；**(c)** `Request.resamples <= 1`，根本没有两次抽样可组带。三者都只关掉簇级区间，**不影响 `isQuotableOnOwnMerits`**：记录数达标的切面照样可以引用率（配 Wilson），只是没有簇级区间可报（`resamplesArePublishedWithTheRun`）。`(c)` 是请求可以合法表达的一种形态——**只要率、不要带**——因此重抽样层既不 `precondition` 崩溃也不把参数垫高：一次跑批不该因为关掉一列而整体中止，而静默改写运行参数正是最难被读者发现的改动。每个切面都随区间一起给出 `clusterCount`：`(a)` 时它 < 5，`(b)` 与 `(c)` 时它 ≥ 5，这两者靠 `EvaluationRunIdentity.bootstrapResamples` 区分——那个数与算出这批切面所用的 `Request.resamples` 一道发布，读者用同一份报告就能把「太薄」与「没人要带」分开（`singleDrawHasNoBand` 钉住率不受影响，`resamplesArePublishedWithTheRun` 钉住身份与切面来自同一次请求）。`isQuotableOnOwnMerits` 不看它，因为"能不能引用这条率"与"有没有簇级区间"是两个问题。
 - 可引用性（`EvaluationSlice.isQuotableOnOwnMerits`）= 记录数达标 **且** 该指标确有观测（`rate.denominator > 0`）。两半缺一不可：只有前半，`precision_auto` 在"没有任何可自动发布产出"的运行里会因为 40 条记录而变得可引用，而它其实什么都没看过。
 - `EvaluationReport.isQuotable(_:stratum:key:)` **逐数**判定，而不是整份报告一票：总体 42 条、某反例类别只有 2 条是常态，而被引用的往往正是那一行。
@@ -159,6 +160,7 @@
 | `ClusterBootstrap.summarize(measures:populations:indices:keys:resamples:seed:)` | 同上 | 唯一公开入口；`populations` 由调用方按 `allCases` 列序**每个运行 Profile 算一次**（`slices(for:)` 缓存到 `tables`，Profile 切面用自己那一层的 key，其余切面共用），切面只选行不重算；簇 < 5、任一无定义抽样、或 `resamples <= 1` ⇒ 该指标区间为 nil（§5 的 (a)(b)(c)） |
 | `EvaluationMetrics.slices(for:request:)` | 同上 | 切面 = overall ∪ 出现的每个 Profile ∪ 出现的每个类别（另有 §3 第 6 条的 12 条逐字段行）；一条记录属于两个 Profile 时在两个切面各出现一次，绝不计为两条记录；Profile 切面把**该切面的 Profile** 当作 `runProfile`，所以"在 Vendor Profile 下主决策对不对"是按那一层的 Profile 判的 |
 | `EvaluationMetrics.confusion(_:)` | 同上 | 键形如 `mapped->absent`；无条目用 `absent` |
+| `EvaluationMetrics.refusals(_:)` → `Refusals` | 同上 | PLAN §8.2 的拒判原因；`byRecordState` 数记录、`bySlotStatus` 数槽位，两个字典不得合并（§3 第 5 条） |
 | `EvaluationRunIdentity` | `Sources/FormaCore/Evaluation/EvaluationReport.swift` | 替身标志是身份的字段，不是脚注 |
 | `EvaluationReport`（`Blocker`/`Finding`/`isQuotable`） | 同上 | 门禁在报告层，不在调用方 |
 

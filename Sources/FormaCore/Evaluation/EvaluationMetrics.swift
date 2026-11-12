@@ -443,6 +443,37 @@ public enum EvaluationMetrics {
 
 
     /// Reference state against the state the engine reached, one row per pair.
+    /// PLAN §8.2 lists 拒判原因 beside the confusion matrix. The two answer
+    /// different questions - confusion says which decision the engine reached, this
+    /// says why the run did not publish what the reference answer expected - and they
+    /// are reported in their own units, never summed.
+    public struct Refusals: Codable, Sendable, Equatable {
+        /// Records that did not go out on their own, by the decision state they
+        /// stopped in, plus `absent` for sources the engine produced nothing for.
+        public let byRecordState: [String: Int]
+        /// Reference slots left unfilled, by the status the policy recorded for them.
+        public let bySlotStatus: [String: Int]
+
+        /// The keys come from the manifest's own vocabulary - `DecisionState` and
+        /// `FieldOutcome.Status` raw values, plus `absent` for the engine having
+        /// produced nothing - so a reader can look every one of them up.
+    }
+
+    public static func refusals(_ cases: [CaseJudgement]) -> Refusals {
+        var states: [String: Int] = [:]
+        var statuses: [String: Int] = [:]
+        for judgement in cases {
+            guard !judgement.isAutoMapped else { continue }
+            let state = judgement.candidateState.map { $0.rawValue } ?? "absent"
+            states[state, default: 0] += 1
+            for field in judgement.fields where field.verdict == .withheld {
+                let status = field.status.map { $0.rawValue } ?? "absent"
+                statuses[status, default: 0] += 1
+            }
+        }
+        return Refusals(byRecordState: states, bySlotStatus: statuses)
+    }
+
     public static func confusion(_ cases: [CaseJudgement]) -> [String: Int] {
         Dictionary(grouping: cases, by: { "\($0.goldState.rawValue)->\($0.candidateState?.rawValue ?? "absent")" })
             .mapValues(\.count)
