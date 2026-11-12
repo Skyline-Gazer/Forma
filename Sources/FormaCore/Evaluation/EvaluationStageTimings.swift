@@ -138,6 +138,6 @@ public struct EvaluationStageTimings: Codable, Sendable, Equatable {
     public static func now() -> ContinuousClock.Instant { ContinuousClock.now }
 
     public static func milliseconds(from start: ContinuousClock.Instant) -> Int {
-        Int(RetryPolicy.milliseconds(start.duration(to: .now)))
+        Int(EvaluationRunner.RetryPolicy.milliseconds(start.duration(to: .now)))
     }
 }

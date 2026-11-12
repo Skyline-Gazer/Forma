@@ -194,7 +194,7 @@ public enum EvaluationBenchmarkFixture {
         return try GoldRecord(
             recordID: recordID, datasetRevision: spec.version,
             profiles: [ProjectArchiveContract.id, VendorLibraryContract.id],
-            scenario: .init(category: category(index: index, draw: draw), description: "synthetic benchmark record"),
+            scenario: .init(category: scenarioCategory(index: index, draw: draw), description: "synthetic benchmark record"),
             source: .init(projectClusterKey: clusterKey, sourceUUID: nil, sha256: nil,
                           redactedRelativePath: "synthetic/\(clusterKey)/\(recordID).pdf",
                           redactedFilename: "\(recordID).pdf", nearDuplicateGroup: nil),
@@ -210,7 +210,7 @@ public enum EvaluationBenchmarkFixture {
     /// The stratum a record belongs to. The first records spread over every
     /// category in order, then the tail is drawn so a stratum count is not an
     /// artefact of `recordCount % 8`.
-    private static func category(index: Int, draw: () -> Double) -> GoldRecord.Category {
+    private static func scenarioCategory(index: Int, draw: () -> Double) -> GoldRecord.Category {
         let spread = GoldRecord.Category.allCases
         if index < spread.count { return spread[index] }
         return spread[Int(draw() * Double(spread.count)) % spread.count]
