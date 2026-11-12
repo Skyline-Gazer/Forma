@@ -1,13 +1,10 @@
 /// The rates of PLAN §8.2, at the unit that plan states them in.
 ///
-/// Coverage, `precision_auto`, `hold_rate` and `high_confidence_error_rate` are
-/// about a **record** - one gold file, one main decision - because that is how the
-/// thresholds were written ("coverage = auto_mapped / total"). `field_precision`
-/// and the two fill rates are about a **slot**, and are reported per field as well
-/// as pooled. The units are not interchangeable: with forty records whose twelve
-/// slots each got one right answer, file-level coverage is nil while slot-level
-/// coverage reads 8%, and quoting the second under the first name would pass a
-/// threshold the run did not meet.
+/// Which measure is a record and which is a slot is `EvaluationMeasure.unit`'s to say,
+/// and §3's table is where the choice is justified. What neither can show is why the
+/// split is not cosmetic: with forty records whose twelve slots each got one right
+/// answer, record-level coverage is nil while slot-level coverage reads 8%, and quoting
+/// the second under the first name would pass a threshold the run did not meet.
 ///
 /// Each measure restricts its own population, and that is the reason this file
 /// exists: one accuracy number would silently mix "the engine did not answer", "it
@@ -45,15 +42,12 @@ public enum EvaluationMeasure: String, Codable, Sendable, CaseIterable, Comparab
 
     /// Numerator and denominator contributed by one case.
     ///
-    /// `runProfile` is the Profile the run executed under, required by PLAN §8.2's
-    /// definition of a correct file; nil means the run did not name exactly one, so
-    /// `precision_auto` and `high_confidence_error_rate` have no population at all
-    /// - no records counted in either half, not a row of zeros - because an
-    /// unattributable run has not measured those two rates, and PLAN §8.2 marks
-    /// every zero denominator N/A. Reporting `0 / N` there would hand a reader an
-    /// "observed 0% precision" for the fact that the run forgot to say who ran it,
-    /// and `isQuotableOnOwnMerits` would then call it quotable. §3 item 2 of
-    /// `docs/EVALUATION-METRICS.md` is where this rule is written out.
+    /// `runProfile` nil means the run did not name exactly one Profile, so
+    /// `precision_auto` and `high_confidence_error_rate` have no population: zero over
+    /// zero, never `0 / N`. Reporting the latter would hand a reader an "observed 0%
+    /// precision" for the fact that the run forgot to say who ran it, and
+    /// `isQuotableOnOwnMerits` would then call it quotable. §3 item 2 of
+    /// `docs/EVALUATION-METRICS.md` writes the rule out.
     func population(in judgement: CaseJudgement, runProfile: String?) -> (numerator: Int, denominator: Int) {
         let slots = judgement.fields
         switch self {

@@ -16,7 +16,6 @@ Forma 是一款使用 Swift 6 / SwiftUI 开发的 macOS 原生应用，目标是
 - [ADS 接入与 CNB 评审拓扑](docs/ADS-ADOPTION.md) — 提供方职责、固定 SHA 与评审证据
 - [独立金标准数据集规范](docs/GOLD-DATASET.md) — 采样单位、脱敏、标注字段、split 划分与泄漏判定
 - [离线评测口径与结论门禁](docs/EVALUATION-METRICS.md) — 每个比率看见哪些槽位、区间与稀疏规则、什么情况下不许当成质量结论
-- [P2 验收报告](docs/P2-ACCEPTANCE.md) — 逐项判定、评审发现统计与三项现场验证的 BLOCKED 原因
 - [P0 / P1 验收报告](docs/P0-P1-ACCEPTANCE.md) — 实际执行结果、PASS/FAIL/BLOCKED/NOT_VERIFIED 判定与限制
 - [ADS 与 CNB 评审验收报告](docs/ADS-CNB-ACCEPTANCE.md) — 接入一致性、评审闭环、SHA 绑定与三项独立结论
 
