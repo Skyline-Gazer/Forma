@@ -41,6 +41,11 @@ public struct GoldDataset: Sendable {
         public let perCategoryCountable: [String: Int]
         public let shortfalls: [Shortfall]
         public let undeclaredOverlaps: [String]
+        /// Records in the directory that the split accounts for nowhere - not
+        /// scored, not prompt-side, not withdrawn. Silence about a file is not
+        /// the same as a decision about it, and a dataset can grow one by
+        /// accident, which is when the denominators stop being derivable.
+        public let unaccountedRecords: [String]
         public let meetsIndependentTarget: Bool
         public let requiredMinimum: Int
     }
@@ -212,8 +217,18 @@ public struct GoldDataset: Sendable {
                       pendingAdjudication: pending, perProfileCountable: perProfile,
                       perCategoryCountable: perCategory, shortfalls: shortfalls,
                       undeclaredOverlaps: undeclared,
+                      unaccountedRecords: Self.unaccounted(records: records, split: split).sorted(),
                       meetsIndependentTarget: countable.filter { $0.review.redaction == .reviewed }.count
                           >= Self.independentTarget,
                       requiredMinimum: Self.independentTarget)
+    }
+
+    /// Records the split mentions nowhere. Kept separate from the leak list: a
+    /// leak says a record must not be scored, an unaccounted record says nobody
+    /// decided anything about it yet.
+    static func unaccounted(records: [GoldRecord], split: GoldSplit) -> Set<String> {
+        let accounted = split.evaluationRecordIDs.union(split.promptRecordIDs)
+            .union(split.removed.map { $0.recordID })
+        return Set(records.map { $0.recordID }).subtracting(accounted)
     }
 }

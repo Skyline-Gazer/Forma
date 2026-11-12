@@ -216,6 +216,30 @@ struct GoldDatasetTests {
         #expect(subject.countableIDs.isEmpty)
     }
 
+    @Test("a record the split never decided about is reported, not ignored")
+    func unaccountedRecord() throws {
+        let scored = try record("scored", filename: "scored.docx")
+        let forgotten = try record("forgotten", filename: "forgotten.docx")
+        let subject = try dataset(records: [scored, forgotten], split: split(evaluation: ["scored"]))
+
+        // An absent decision is not a negative decision: the file sits in the
+        // directory, contributes to no denominator, and would leave the ledger
+        // unreproducible for anyone recomputing it from the manifest.
+        #expect(subject.report().unaccountedRecords == ["forgotten"])
+        #expect(subject.countableIDs == ["scored"])
+
+        // Listing it anywhere - scored, prompt-side or withdrawn - closes it.
+        let withdrawn = try dataset(records: [scored, forgotten],
+                                    split: split(evaluation: ["scored"],
+                                                 removed: [.init(recordID: "forgotten",
+                                                                 reason: .adjudicationUnresolved,
+                                                                 counterpartyRecordID: nil)]))
+        #expect(withdrawn.report().unaccountedRecords.isEmpty)
+        // Withdrawing it also means it is scored by nobody, so no denominator
+        // may quietly grow: only `scored` remains countable.
+        #expect(withdrawn.countableIDs == ["scored"])
+    }
+
     @Test("one record cannot be both taught and scored")
     func splitOnBothSides() throws {
         let both = try record("g1", filename: "one.docx")

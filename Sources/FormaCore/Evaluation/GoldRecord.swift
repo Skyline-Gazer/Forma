@@ -56,6 +56,9 @@ public struct GoldRecord: Codable, Sendable, Equatable {
     /// where an empty prediction is right rather than a miss: a field the source
     /// genuinely does not state must not be scored as an error when the engine
     /// holds it, and must not be scored as a hit when a value is invented.
+    /// Nullable slots are written as explicit nulls by `encode(to:)`: the
+    /// synthesized version would omit them, and the schema's `required` list
+    /// treats an absent key as a violation.
     public struct Expected: Codable, Sendable, Equatable {
         public let state: DecisionState
         public let projectReference: String?
@@ -79,17 +82,17 @@ public struct GoldRecord: Codable, Sendable, Equatable {
             self.allowedUnknownFields = allowedUnknownFields
         }
 
-        /// `target_type` is spelled without a camelCase alias on purpose: the
-        /// decoder would otherwise accept a missing key as nil, and a record
-        /// whose expected document type was never written is not the same thing
-        /// as a record whose document type is null.
+        /// The three nullable slots arrive through `decodeIfPresent` of an
+        /// optional, which is the only pair that tells an explicit JSON null
+        /// apart from a key the writer forgot: the schema lists all of them as
+        /// `required`, and a record that never stated an expected document type
+        /// must not be scored as one whose document type is known to be absent.
         public init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             state = try container.decode(DecisionState.self, forKey: .state)
             projectReference = try container.decodeIfPresent(String?.self, forKey: .projectReference) ?? nil
             targetCategory = try container.decodeIfPresent(String?.self, forKey: .targetCategory) ?? nil
-            guard container.contains(.target_type) else { throw FormaError.invalidOutput }
-            targetType = try container.decode(String?.self, forKey: .target_type)
+            targetType = try container.decodeIfPresent(String?.self, forKey: .target_type) ?? nil
             metadata = try container.decode(MetadataValues.self, forKey: .metadata)
             allowedUnknownFields = try container.decodeIfPresent(Set<MetadataFieldID>.self,
                                                                   forKey: .allowedUnknownFields) ?? []
