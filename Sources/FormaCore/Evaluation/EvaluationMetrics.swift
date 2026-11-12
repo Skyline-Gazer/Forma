@@ -126,90 +126,138 @@ public struct EvaluationSlice: Codable, Sendable, Equatable {
     public let clusterInterval: ClosedRange<Double>?
 }
 
-/// Percentile interval from resampling whole project clusters.
+/// Cluster-level resampling, and the rate that goes with it.
 ///
 /// Records within one project are not independent observations, so a per-record
 /// interval overstates certainty about a corpus of template families. Resampling
-/// clusters with replacement answers the question the gate actually asks: how
-/// much of this number is one project's shape.
+/// whole clusters with replacement answers the question the gate actually asks:
+/// how much of this number is one project's shape.
 ///
-/// Two things about this are deliberate. The resampled unit is a cluster, and the
-/// resampled quantity is the pair of integer totals - so a resample sums cluster
-/// totals instead of re-walking every case, which keeps a six-measure report at
-/// `resamples x clusters` integer work rather than re-running the judgements six
-/// times over. And a resample whose denominator is zero makes the whole interval
-/// nil: dropping those draws and reporting a percentile range over the rest would
-/// quietly measure only the clusters that happened to answer, narrowing the band
-/// exactly when the stratum is too thin to support one.
+/// Two properties are deliberate. The resampled quantity is a pair of integer
+/// totals, so a resample adds cluster sums instead of re-walking judgements, and
+/// the draws depend only on the seed and the cluster count - never on the measure.
+/// And a draw with an empty denominator voids that one measure's interval rather
+/// than being skipped: the surviving draws of such a sample are exactly the
+/// clusters that happened to answer, which narrows the band precisely in the thin
+/// strata where it should widen.
 public enum ClusterBootstrap {
     /// Fewer than this many clusters and the resample cannot vary: report nil
     /// rather than an interval whose width is an artefact of the seed.
     public static let minimumClusters = 5
 
-    /// Intervals for several measures over one sample, from one set of draws.
-    ///
-    /// The draws do not depend on the measure, so computing them per measure would
-    /// spend the same random numbers repeatedly and could drift apart in any future
-    /// edit that made the generator stateful across calls.
-    public static func intervals(cases: [CaseJudgement], measures: [EvaluationMeasure],
-                                 resamples: Int = 2_000, seed: UInt64 = 0x9E37_79B9_7F4A_7C15)
-        -> [EvaluationMeasure: ClosedRange<Double>] {
-        guard resamples > 1 else { return [:] }
-        let clusters = clusterIndices(of: cases)
-        guard clusters.count >= minimumClusters else { return [:] }
-        guard !measures.isEmpty else { return [:] }
+    /// One measure's rate over a sample, with its cluster interval.
+    public struct Summary: Sendable, Equatable {
+        public let rate: EvaluationRate
+        public let interval: ClosedRange<Double>?
+    }
 
-        // One pass over the cases per cluster, then the resample only adds integers.
-        let totals: [[(numerator: Int, denominator: Int)]] = clusters.map { indices in
-            measures.map { measure in
-                indices.reduce((0, 0)) { soFar, index in
-                    let next = measure.population(in: cases[index])
-                    return (soFar.0 + next.numerator, soFar.1 + next.denominator)
+    /// Rate and interval for every measure over one sample, from a single walk.
+    ///
+    /// `indices` selects the sample so a stratum does not need its own copy of the
+    /// judgements; the slot comparison - the expensive part - then happens exactly
+    /// once per case and measure, and both the totals and the resampling reuse it.
+    public static func summarize(cases: [CaseJudgement], indices: [Int],
+                                 measures: [EvaluationMeasure] = EvaluationMeasure.allCases,
+                                 resamples: Int = 2_000, seed: UInt64 = 0x9E37_79B9_7F4A_7C15)
+        -> [EvaluationMeasure: Summary] {
+        guard !measures.isEmpty else { return [:] }
+        let populations: [[(numerator: Int, denominator: Int)]] = indices.map { index in
+            measures.map { $0.population(in: cases[index]) }
+        }
+
+        var output: [EvaluationMeasure: Summary] = [:]
+        for (position, measure) in measures.enumerated() {
+            var numerator = 0
+            var denominator = 0
+            for row in populations {
+                numerator += row[position].numerator
+                denominator += row[position].denominator
+            }
+            output[measure] = Summary(rate: EvaluationRate(numerator: numerator, denominator: denominator),
+                                      interval: nil)
+        }
+
+        let clusters = clusterIndices(of: cases, sample: indices, populationCount: populations.count)
+        guard clusters.count >= minimumClusters, resamples > 1 else { return output }
+
+        // Cluster totals, from the same walk: summing per cluster is what turns a
+        // resample into integer additions.
+        var clusterTotals: [[(numerator: Int, denominator: Int)]] = []
+        clusterTotals.reserveCapacity(clusters.count)
+        for members in clusters {
+            var row = Array(repeating: (numerator: 0, denominator: 0), count: measures.count)
+            for member in members {
+                let source = populations[member]
+                for position in row.indices {
+                    row[position].numerator += source[position].numerator
+                    row[position].denominator += source[position].denominator
                 }
             }
+            clusterTotals.append(row)
         }
 
         var generator = SplitMix64(seed: seed)
         var ratios: [[Double]] = measures.map { _ in [] }
+        // Voiding is per measure: an undefined draw for `precision_auto` must not
+        // also take away the draws of every measure listed after it.
+        var voided = measures.map { _ in false }
         for _ in 0..<resamples {
             let picks = (0..<clusters.count).map { _ in Int(generator.next() % UInt64(clusters.count)) }
-            for (position, measure) in measures.enumerated() {
+            for position in measures.indices where !voided[position] {
                 var numerator = 0
                 var denominator = 0
                 for pick in picks {
-                    numerator += totals[pick][position].numerator
-                    denominator += totals[pick][position].denominator
+                    numerator += clusterTotals[pick][position].numerator
+                    denominator += clusterTotals[pick][position].denominator
                 }
-                // An undefined draw is not skipped: see the type comment.
-                guard denominator > 0 else { ratios[position] = []; break }
-                ratios[position].append(Double(numerator) / Double(denominator))
+                if denominator == 0 { voided[position] = true }
+                else { ratios[position].append(Double(numerator) / Double(denominator)) }
             }
         }
 
-        var output: [EvaluationMeasure: ClosedRange<Double>] = [:]
         for (position, measure) in measures.enumerated() {
+            guard !voided[position] else { continue }
             let sorted = ratios[position].sorted()
             guard sorted.count >= 2 else { continue }
             // Percentile bounds, not a normal fit: the resampled distribution of a
             // ratio over a handful of clusters is lumpy, and the lumps are the finding.
             let lower = sorted[Int(Double(sorted.count - 1) * 0.025)]
             let upper = sorted[Int(Double(sorted.count - 1) * 0.975)]
-            output[measure] = lower...upper
+            output[measure] = Summary(rate: output[measure]!.rate, interval: lower...upper)
         }
         return output
     }
 
+    /// The interval for one measure, for callers that want only it.
     public static func interval(cases: [CaseJudgement], measure: EvaluationMeasure,
                                 resamples: Int = 2_000, seed: UInt64 = 0x9E37_79B9_7F4A_7C15)
         -> ClosedRange<Double>? {
-        intervals(cases: cases, measures: [measure], resamples: resamples, seed: seed)[measure]
+        summarize(cases: cases, indices: Array(cases.indices), measures: [measure],
+                  resamples: resamples, seed: seed)[measure]?.interval
     }
 
-    /// Case indices grouped by project cluster, ordered by cluster key so a given
-    /// seed always produces the same resample.
-    private static func clusterIndices(of cases: [CaseJudgement]) -> [[Int]] {
-        let grouped = Dictionary(grouping: cases.indices, by: { cases[$0].clusterKey })
-        return grouped.keys.sorted().map { grouped[$0] ?? [] }
+    public static func intervals(cases: [CaseJudgement], measures: [EvaluationMeasure],
+                                 resamples: Int = 2_000, seed: UInt64 = 0x9E37_79B9_7F4A_7C15)
+        -> [EvaluationMeasure: ClosedRange<Double>] {
+        let summaries = summarize(cases: cases, indices: Array(cases.indices), measures: measures,
+                                  resamples: resamples, seed: seed)
+        // A voided measure is absent rather than mapped to a nil-valued dictionary:
+        // callers ask "is there an interval", and `nil` answers it either way.
+        return Dictionary(uniqueKeysWithValues: measures.compactMap { measure in
+            summaries[measure]?.interval.map { (measure, $0) }
+        })
+    }
+
+    /// Sample positions grouped by project cluster, ordered by cluster key so a
+    /// given seed always produces the same resample.
+    private static func clusterIndices(of cases: [CaseJudgement], sample: [Int],
+                                       populationCount: Int) -> [[Int]] {
+        var grouped: [String: [Int]] = [:]
+        for position in sample.indices {
+            grouped[cases[sample[position]].clusterKey, default: []].append(position)
+        }
+        // `grouping` never yields an empty bucket, so the key is always present.
+        return grouped.keys.sorted().map { grouped[$0]! }
     }
 }
 
@@ -241,56 +289,38 @@ public enum EvaluationMetrics {
     }
 
     public static func slices(for cases: [CaseJudgement], request: Request = Request()) -> [EvaluationSlice] {
-        // Grouping happens once, not once per measure: the cuts are properties of
-        // the sample, and re-deriving them six times invites them to disagree.
-        let byProfile = Dictionary(grouping: cases.flatMap { judgement in
-            judgement.profiles.map { ($0, judgement) }
-        }, by: { $0.0 })
-        let profiles = byProfile.keys.sorted()
-        let byCategory = Dictionary(grouping: cases, by: \.category)
-        let categories = byCategory.keys.sorted { $0.rawValue < $1.rawValue }
-
         var output: [EvaluationSlice] = []
-        for (stratum, key, members) in cuts(profiles: profiles, byProfile: byProfile,
-                                            categories: categories, byCategory: byCategory, cases: cases) {
-            output.append(contentsOf: slice(members, stratum: stratum, key: key, request: request))
+        for (stratum, key, sample) in cuts(of: cases) {
+            let summaries = ClusterBootstrap.summarize(cases: cases, indices: sample,
+                                                       resamples: request.resamples, seed: request.seed)
+            for measure in EvaluationMeasure.allCases {
+                let summary = summaries[measure]!
+                output.append(EvaluationSlice(measure: measure, stratum: stratum, key: key,
+                                              rate: summary.rate, clusterInterval: summary.interval))
+            }
         }
         return output
     }
 
-    /// The strata to report, with their cases. Overall first, then the cuts.
-    private static func cuts(profiles: [String],
-                             byProfile: [String: [(String, CaseJudgement)]],
-                             categories: [GoldRecord.Category],
-                             byCategory: [GoldRecord.Category: [CaseJudgement]],
-                             cases: [CaseJudgement])
-        -> [(EvaluationSlice.Stratum, String?, [CaseJudgement])] {
-        var cuts: [(EvaluationSlice.Stratum, String?, [CaseJudgement])] = [(.overall, nil, cases)]
-        cuts.append(contentsOf: profiles.map { profile in
-            (.profile, profile, byProfile[profile]?.map { $0.1 } ?? [])
-        })
-        cuts.append(contentsOf: categories.map { category in
-            (.category, category.rawValue, byCategory[category] ?? [])
-        })
-        return cuts
-    }
-
-    /// Every measure at one cut. The judgements are walked once for all measures
-    /// and the bootstrap draws are shared between them.
-    private static func slice(_ cases: [CaseJudgement], stratum: EvaluationSlice.Stratum, key: String?,
-                              request: Request) -> [EvaluationSlice] {
-        let measures = EvaluationMeasure.allCases
-        let intervals = ClusterBootstrap.intervals(cases: cases, measures: measures,
-                                                   resamples: request.resamples, seed: request.seed)
-        return measures.map { measure in
-            let pair = cases.reduce((0, 0)) { soFar, judgement in
-                let next = measure.population(in: judgement)
-                return (soFar.0 + next.numerator, soFar.1 + next.denominator)
+    /// The strata to report, each as positions into `cases`. Overall first, then
+    /// the cuts that actually have members; a record belonging to two profiles
+    /// appears in both strata and is still one record in each.
+    private static func cuts(of cases: [CaseJudgement]) -> [(EvaluationSlice.Stratum, String?, [Int])] {
+        var byProfile: [String: [Int]] = [:]
+        for position in cases.indices {
+            for profile in cases[position].profiles {
+                byProfile[profile, default: []].append(position)
             }
-            return EvaluationSlice(measure: measure, stratum: stratum, key: key,
-                                   rate: EvaluationRate(numerator: pair.0, denominator: pair.1),
-                                   clusterInterval: intervals[measure])
         }
+        var byCategory: [GoldRecord.Category: [Int]] = [:]
+        for position in cases.indices {
+            byCategory[cases[position].category, default: []].append(position)
+        }
+        var cuts: [(EvaluationSlice.Stratum, String?, [Int])] = [(.overall, nil, Array(cases.indices))]
+        cuts.append(contentsOf: byProfile.keys.sorted().map { (.profile, $0, byProfile[$0]!) })
+        cuts.append(contentsOf: byCategory.keys.sorted { $0.rawValue < $1.rawValue }
+            .map { (.category, $0.rawValue, byCategory[$0]!) })
+        return cuts
     }
 
 

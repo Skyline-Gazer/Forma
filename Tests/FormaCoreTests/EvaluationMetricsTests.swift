@@ -171,6 +171,31 @@ struct EvaluationMetricsTests {
         #expect(ClusterBootstrap.interval(cases: Array(cases.prefix(3)), measure: .holdRate) == nil)
     }
 
+    @Test("a voided measure does not take later measures' draws with it")
+    func voidingIsOrderIndependent() throws {
+        // `precision_auto` is second in `allCases` and `invented_fill_rate` last, so
+        // an implementation that abandons the whole resample on the first empty
+        // denominator - or clears the ratios it already collected - loses the later
+        // measure's interval even though every one of its draws was defined.
+        var cases: [CaseJudgement] = []
+        for index in 0..<10 {
+            let reference = try EvaluationFixtures.gold("o\(index)", expected: [.completionyear: "2026"],
+                                                        cluster: "oc\(index)")
+            // Not eligible for auto execution: no slot is publishable, so
+            // `precision_auto` has no population in any resample.
+            let entry = EvaluationFixtures.candidate([.completionyear: "2026"], publishable: false,
+                                                     gold: reference)
+            cases.append(CaseJudgement(gold: reference, entry: entry))
+        }
+        let intervals = ClusterBootstrap.intervals(cases: cases, measures: EvaluationMeasure.allCases)
+        #expect(intervals[.precisionAuto] == nil)
+        #expect(intervals[.coverage] != nil)
+        #expect(intervals[.inventedFillRate] != nil, "the last measure kept all of its draws")
+        let summary = ClusterBootstrap.summarize(cases: cases, indices: Array(cases.indices))
+        #expect(summary[.inventedFillRate]?.rate.denominator == 110)
+        #expect(summary[.precisionAuto]?.rate.denominator == 0)
+    }
+
     @Test("an undefined resample voids one measure without voiding the sample")
     func voidedIntervalIsPerMeasure() throws {
         // No candidate entries at all: `precision_auto` has no population in any

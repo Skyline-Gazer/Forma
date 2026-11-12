@@ -111,6 +111,34 @@ struct EvaluationReportTests {
         #expect(drifting.claimBlockers.map(\.kind) == [.unaccountedRecords])
     }
 
+    @Test("a candidate that should not exist voids the run")
+    func eligibilityStateInconsistency() throws {
+        // `ManifestExport.revalidate` reports an entry that claims auto-execution
+        // while not `validated` as `eligibility_state`; the report layer refuses the
+        // same shape instead of measuring it, because `precision_auto` over a
+        // manifest the program would not write is not a rate about this program.
+        let reference = try EvaluationFixtures.gold("x1", expected: [.completionyear: "2026"])
+        let parked = EvaluationFixtures.candidate([.completionyear: "2026"], state: .mapped,
+                                                  publishable: true, gold: reference)
+        let cases = [CaseJudgement(gold: reference, entry: parked)]
+        #expect(cases[0].candidateState == .mapped)
+        #expect(cases[0].fields.contains { $0.autoPublishable })
+
+        let report = EvaluationReport(cases: cases, identity: try identity(substitute: false),
+                                      dataset: healthy)
+        #expect(!report.isQualityClaimAllowed)
+        #expect(report.claimBlockers.map(\.kind) == [.eligibilityStateInconsistent])
+        // The judgement lives in the report; the measure itself is unchanged, so a
+        // reader can still see what the run computed and why it does not count.
+        #expect(report.slice(.precisionAuto)?.rate.denominator == 1)
+
+        let validated = EvaluationFixtures.candidate([.completionyear: "2026"], state: .validated,
+                                                     gold: reference)
+        let clean = EvaluationReport(cases: [CaseJudgement(gold: reference, entry: validated)],
+                                     identity: try identity(substitute: false), dataset: healthy)
+        #expect(clean.claimBlockers.isEmpty)
+    }
+
     @Test("a two-record stratum is refused even inside a clean run")
     func sparseStratumRefusedPerNumber() throws {
         var cases = try withheld(40)

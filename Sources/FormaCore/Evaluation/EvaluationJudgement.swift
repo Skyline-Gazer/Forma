@@ -31,18 +31,12 @@ public struct FieldJudgement: Codable, Sendable, Equatable {
 
     public let field: MetadataFieldID
     public let verdict: Verdict
-    /// Whether this slot is excluded from every denominator. Only the slots the
-    /// reference answer itself declares unknown, where neither an empty nor a
-    /// filled candidate is evidence about the model.
-    public let excluded: Bool
     public let autoPublishable: Bool
     public let highConfidence: Bool
 
-    public init(field: MetadataFieldID, verdict: Verdict, excluded: Bool, autoPublishable: Bool,
-                highConfidence: Bool) {
+    public init(field: MetadataFieldID, verdict: Verdict, autoPublishable: Bool, highConfidence: Bool) {
         self.field = field
         self.verdict = verdict
-        self.excluded = excluded
         self.autoPublishable = autoPublishable
         self.highConfidence = highConfidence
     }
@@ -65,7 +59,6 @@ public struct FieldJudgement: Codable, Sendable, Equatable {
         let candidateValue = (outcome?.value).flatMap { value in
             value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : value
         }
-        let allowsUnknown = gold.expected.allowedUnknownFields.contains(field)
 
         let verdict: Verdict
         if goldValue == nil, candidateValue == nil {
@@ -82,7 +75,6 @@ public struct FieldJudgement: Codable, Sendable, Equatable {
 
         self.field = field
         self.verdict = verdict
-        self.excluded = allowsUnknown && goldValue == nil
         // `eligibleForAutoExecution` is the Validator's verdict about the whole
         // entry; a slot is publishable only if the entry is, and the slot itself
         // stands on a citation of a supportable kind. Re-deriving either half here

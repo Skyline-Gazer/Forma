@@ -1,11 +1,6 @@
 import Foundation
 
-/// What produced a measurement, recorded with the numbers.
-///
-/// PLAN §8.1 requires a run to be re-derivable from its dataset revision, split,
-/// Profile and model identity, and a substitute has to be visible in the same
-/// field that a reader would otherwise assume names a real model. So the
-/// substitute is not a footnote here: it is a property of the identity.
+/// What produced a measurement, recorded with the numbers (PLAN §8.1).
 public struct EvaluationRunIdentity: Codable, Sendable, Equatable {
     public let goldRevision: String
     public let splitID: String
@@ -38,14 +33,11 @@ public struct EvaluationRunIdentity: Codable, Sendable, Equatable {
     }
 }
 
-/// Judged cases turned into a reportable measurement.
+/// Judged cases turned into a measurement, and the gate between "measured" and
+/// "claimable".
 ///
-/// The report owns the difference between "measured" and "claimable". A run can
-/// produce every number and still be unfit for a quality statement - a thin
-/// sample, an evaluation set that touches the prompt set, or answers from a
-/// stand-in. Those conditions are computed here rather than left to whoever
-/// writes the summary, because the tempting version of a summary is the one that
-/// omits them.
+/// The gate lives here rather than in whoever writes a summary, because the
+/// tempting version of a summary is the one that omits the conditions.
 public struct EvaluationReport: Codable, Sendable, Equatable {
     /// Why a run cannot carry a quality claim, or what it must disclose.
     public enum Blocker: String, Codable, Sendable, CaseIterable {
@@ -61,6 +53,13 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
         /// disqualifying: a run with a few pending adjudications still measures
         /// what it measured, and hiding that fact would be the worse error.
         case pendingAdjudicationExcluded
+        /// A candidate carries auto-publishable slots on an entry that is not
+        /// `validated`, which is the same inconsistency `ManifestExport` reports as
+        /// `eligibility_state`. Judged here rather than repaired here: a rate
+        /// measured over a manifest the program would refuse to write is not a rate
+        /// about this program, so the run loses the claim instead of the metrics
+        /// layer quietly inventing a filter that hides the disagreement.
+        case eligibilityStateInconsistent
 
         var preventsQualityClaim: Bool { self != .pendingAdjudicationExcluded }
     }
@@ -104,6 +103,14 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
             blockers.append(Finding(kind: .insufficientIndependentSamples,
                                     detail: "独立核实的真实样本为 \(dataset.reviewedCountable) 条，低于 PLAN §8.1 要求的 "
                                         + "\(dataset.requiredMinimum) 条。"))
+        }
+        let inconsistent = cases.filter { judgement in
+            judgement.candidateState != .validated && judgement.fields.contains(where: \.autoPublishable)
+        }
+        if !inconsistent.isEmpty {
+            blockers.append(Finding(kind: .eligibilityStateInconsistent,
+                                    detail: "\(inconsistent.count) 条候选在未达到 `validated` 的条目上带有可自动发布的槽位，"
+                                        + "与导出校验的 eligibility_state 同一判据。"))
         }
         if !dataset.undeclaredOverlaps.isEmpty {
             blockers.append(Finding(kind: .undeclaredPromptOverlap,

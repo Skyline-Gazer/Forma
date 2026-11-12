@@ -66,7 +66,7 @@
 
 三个必须写下来的判断：
 
-1. **`coverage` 的分子含 `wrong`，不含 `contradicted`。** coverage 回答"引擎够到了多少该答的槽位"，答错也算够到；被自身证据反驳则不算——那是程序自己都不认的产出。**0% 的 coverage 是合法可引用的结果**（被问到 42 个槽、一个没答），不是"没测到"。
+1. **`coverage` 的分母计入 `contradicted`（引擎确实给出了一个值，够到了这一格），分子只含 `correct` + `wrong`。** 被自身证据反驳的槽位**留在分母里拉低覆盖率**，只是不进分子。coverage 回答"引擎够到了多少该答的槽位"，答错也算够到，被反驳不算够到。**0% 的 coverage 是合法可引用的结果**（被问到 42 个槽、一个没答），不是"没测到"。
 2. **可自动发布** = 条目 `eligibleForAutoExecution` **且** 该槽 `status ∈ {evidenced, inherited}` **且** 该槽 `evidenceIDs` 非空。条目级开关由 `ManifestValidator.computeEligibility` 在登记时算出并存进条目（快照匹配、引用可用、无 `.conflict` 槽、必填齐备等），指标层**不重算条目级规则**，只补上条目级开关没有的那一半：这一格自己的状态与引用。
    为什么必须有这一半：`contradicted` 槽已被 `correct/wrong` 的筛选排除在外，`.conflict` 状态更是直接让条目失去开关；剩下能进分母而又不该算"会自动写出去"的，是状态为 `rejected_by_policy` / `not_applicable` / `unknown` 却带着值的槽——按条目级开关它们会被计入"程序会自动发布"，从而把 `precision_auto` 抬高。执行路径（真正写出 DEVONthink/OneDrive）尚未实现，因此这一条是**指标先行定义的契约**：将来实现执行器时，写入的槽位集合必须与之相同，否则 `precision_auto` 度量的就不是程序真正发布的东西。
 3. **搁置**：条目状态为 `hold` 或 `unknown` 时，该条目的**全部**期望槽计为搁置（即使个别槽带着值）——评审者从被扣住的条目里拿不到任何可用产出。否则条目级搁置会在指标里隐身。
@@ -74,7 +74,7 @@
 ## 4. 区间
 
 - **Wilson 95%**（`EvaluationRate.wilson95Lower/Upper`）：这些比率贴近 0 或 1，正态近似会给出越出 [0,1] 的对称区间，把十几条观测的确信度报虚。
-- **按项目簇 bootstrap**（`ClusterBootstrap.interval`）：重抽样的单位是 `clusterKey`（项目簇），不是记录。同一项目的多个文件不是独立观测；按记录抽会把"一个项目的形状"读成普遍性。簇数 < 5（`minimumClusters`）时返回 nil——少于这个簇，区间宽度是种子的产物而不是数据的。任一次重抽样的分母为 0 时该指标的区间也是 nil，**不是把这次抽样丢掉**：丢掉后剩下的都是"有答案的簇"，区间会在层次最薄、最需要报宽的地方被压窄。六个指标共用同一组抽样索引（索引只与种子和簇数有关），但各自独立失效——某指标遇到无定义抽样不会顺带走掉其他指标的这一次抽样。分位点（2.5%/97.5%）直接取自重抽样分布，不做正态拟合：少量簇的比率分布是块状的，**块本身就是发现**。
+- **按项目簇 bootstrap**（`ClusterBootstrap.interval`）：重抽样的单位是 `clusterKey`（项目簇），不是记录。同一项目的多个文件不是独立观测；按记录抽会把"一个项目的形状"读成普遍性。簇数 < 5（`minimumClusters`）时返回 nil——少于这个簇，区间宽度是种子的产物而不是数据的。任一次重抽样的分母为 0 ⇒ **该指标的整体区间为 nil**（这一层薄到给不出簇级区间），而不是把那次抽样丢掉后照报：丢掉后剩下的恰好都是"有答案的簇"，区间会在最需要报宽的地方被压窄。失效逐指标独立、且与抽样顺序无关——某指标被判无定义不会带走同一次抽样里其他指标的份额（`invented_fill_rate` 排在 `precision_auto` 之后，正是顺序敏感会露馅的位置）。六个指标共用同一组抽样索引（索引只与种子和簇数有关）。分位点（2.5%/97.5%）直接取自重抽样分布，不做正态拟合：少量簇的比率分布是块状的，**块本身就是发现**。
 - 抽样使用 `SplitMix64`，种子与重抽样次数写入 `EvaluationRunIdentity`；`SystemRandomNumberGenerator` 跨版本不保证序列，而一次测量必须能从记录里复跑。
 
 ## 5. 稀疏与"可引用"
@@ -96,8 +96,11 @@ SPEC §10.1.6：观测数 < 30 的率只能是候选值。
 | `undeclaredPromptOverlap` | 评测集与提示侧存在未声明交集 | 是 |
 | `unaccountedRecords` | 目录中存在三处清单都未登记的记录 | 是 |
 | `pendingAdjudicationExcluded` | 有争议记录被排除出分母 | 否——仅披露 |
+| `eligibilityStateInconsistent` | 候选在未达 `validated` 的条目上带有可自动发布的槽位 | 是 |
 
 `isQualityClaimAllowed = 不存在否决型阻塞`。
+
+`eligibility_state` 与导出侧同源：`ManifestExport.revalidate` 把「条目自称可自动执行却不是 `validated`」判为 `eligibility_state` 违规。评测层遇到同一形状时**否决结论而不是替它兜底**——在一个程序自己不会写出的 manifest 上算出的 `precision_auto`，量的不是这个程序。判据放在报告层（`CaseJudgement.candidateState` 与槽位 `autoPublishable`），指标口径本身不动。
 
 为什么争议排除只披露：一次运行确实测了它测的东西，把"有 3 条待裁决"当成整次运行作废，只会诱导人不登记争议。反之，**替身与样本不足必须否决**：合成数据可以把管线跑通、可以把分母做大，但不能认证任何质量门槛——这条与 `GoldDataset.meetsIndependentTarget` 只用 `reviewedCountable` 的口径一致。
 
@@ -130,7 +133,8 @@ SPEC §10.1.6：观测数 < 30 的率只能是候选值。
 | `FieldJudgement`（+ `Verdict`）、`CaseJudgement` | `Sources/FormaCore/Evaluation/EvaluationJudgement.swift` | 判定顺序固定；`publishableStatuses = {evidenced, inherited}` |
 | `EvaluationMeasure.population(in:)` | `Sources/FormaCore/Evaluation/EvaluationMetrics.swift` | 单条判定的分子分母；跨用例可加 |
 | `EvaluationRate` | 同上 | 分母 0 ⇒ `estimate == nil` 且 `isSparse`；`sparseLimit = 30` |
-| `ClusterBootstrap.interval(cases:measure:resamples:seed:)` | 同上 | 簇 < 5 返回 nil；同种子同区间 |
+| `ClusterBootstrap.summarize(cases:indices:measures:resamples:seed:)` | 同上 | 一次遍历同时产出率与区间；`indices` 选样本，不复制判定 |
+| `ClusterBootstrap.interval(cases:measure:resamples:seed:)` | 同上 | 簇 < 5 返回 nil；同种子同区间；任一无定义抽样 ⇒ nil |
 | `EvaluationMetrics.slices(for:request:)` | 同上 | 切面 = overall ∪ 出现的每个 Profile ∪ 出现的每个类别；一条记录属于两个 Profile 时在两个切面各出现一次，绝不计为两条记录 |
 | `EvaluationMetrics.confusion(_:)` | 同上 | 键形如 `mapped->absent`；无条目用 `absent` |
 | `EvaluationRunIdentity` | `Sources/FormaCore/Evaluation/EvaluationReport.swift` | 替身标志是身份的字段，不是脚注 |
