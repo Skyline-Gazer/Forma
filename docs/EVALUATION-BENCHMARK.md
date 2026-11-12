@@ -146,7 +146,41 @@ gh workflow run benchmark.yml --ref <branch> \
 
 P50/P95 是替身 `reportedLatencyMilliseconds` 的 `simulated` 值（2 ms），不是 Provider 观测；`LatencyDistribution.kind == .simulated`。`unaccounted` 是总耗时里没有阶段覆盖的部分（摘要材料、样本准备、计时本身），因此阶段和只是下界。机器可读结果见该 run 的 `benchmark-scale` artifact（12 个 JSON，各有独立 `measurement_id`）。
 
-**运行 B（优化后）**：见 §9 与 PR 中的补充运行；**未执行前不填数字**。
+**运行 B（优化后，[run 43247366145](https://github.com/Skyline-Gazer/Forma/actions/runs/43247366145)，同一 workflow、同一机器型号、同一 12 个格子，全部 `violations() == []`）**：同一格子的 `benchmark_id` 与运行 A 完全一致（例如 `scale-100-c1` 两次都是 `833319b4…`），`measurement_id` 各不相同——逻辑身份可复现，逐次测量仍独立。
+
+| 场景 | 记录 | 并发上限/观测峰值 | 请求/已下发/attempt/retry | 失败 | 请求墙钟 ms | samples/s | 基准总耗时 ms | 阶段和(下界) ms | 未覆盖 ms | 峰值 RSS MB |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| scale-100-c1 | 100 | 1/1 | 100/100/100/0 | 0 | 1351 | 74.0 | 1568 | 1493 | 75 | 13.8 |
+| scale-100-c2 | 100 | 2/2 | 100/100/100/0 | 0 | 693 | 144.3 | 856 | 796 | 60 | 14.1 |
+| scale-100-c4 | 100 | 4/4 | 100/100/100/0 | 0 | 164 | 609.8 | 351 | 274 | 77 | 14.1 |
+| scale-100-c8 | 100 | 8/8 | 100/100/100/0 | 0 | 228 | 438.6 | 484 | 373 | 111 | 14.5 |
+| scale-1000-c1 | 1000 | 1/1 | 100/100/100/0 | 0 | 1905 | 524.9 | 3440 | 2789 | 651 | 28.4 |
+| scale-1000-c2 | 1000 | 2/2 | 100/100/100/0 | 0 | 930 | 1075.3 | 2277 | 1775 | 502 | 29.2 |
+| scale-1000-c4 | 1000 | 4/4 | 100/100/100/0 | 0 | 427 | 2341.9 | 1584 | 1124 | 460 | 28.9 |
+| scale-1000-c8 | 1000 | 8/8 | 100/100/100/0 | 0 | 350 | 2857.1 | 1507 | 1046 | 461 | 29.0 |
+| scale-10000-c1 | 10000 | 1/1 | 100/100/100/0 | 0 | 9435 | 1059.9 | 22079 | 16881 | 5198 | 163.0 |
+| scale-10000-c2 | 10000 | 2/2 | 100/100/100/0 | 0 | 4639 | 2155.6 | 16052 | 11347 | 4705 | 167.3 |
+| scale-10000-c4 | 10000 | 4/4 | 100/100/100/0 | 0 | 3177 | 3147.6 | 15887 | 10300 | 5587 | 169.1 |
+| scale-10000-c8 | 10000 | 8/8 | 100/100/100/0 | 0 | 3288 | 3041.4 | 15013 | 9776 | 5237 | 156.3 |
+
+**运行 S（PR smoke 矩阵，[run 43247351283](https://github.com/Skyline-Gazer/Forma/actions/runs/43247351283)，100 条，12 个格子，全部 `violations() == []`）**：故障注入的统计守恒实测如下（`peak_memory` 因 `--sweep` 多格子共享进程明确为 `unavailable`，7 个阶段仍全部 `measured`）。
+
+| 场景 | 请求/已下发/attempt/retry | 成功/失败 | 超时/取消 attempt | 观测/配置并发 |
+| --- | --- | --- | --- | --- |
+| smoke-c1 | 10/10/10/0 | 10/0 | 0/0 | 1/1 |
+| smoke-c2 | 10/10/10/0 | 10/0 | 0/0 | 2/2 |
+| smoke-c4 | 10/10/10/0 | 10/0 | 0/0 | 4/4 |
+| smoke-c8 | 10/10/10/0 | 10/0 | 0/0 | 8/8 |
+| fault-success | 10/10/10/0 | 10/0 | 0/0 | 4/4 |
+| fault-retry | 10/10/18/8 | 6/4 | 0/0 | 4/4 |
+| fault-timeout | 10/10/10/0 | 6/4 | 0/0 | 4/4 |
+| fault-permanent_unavailable | 10/10/10/0 | 6/4 | 0/0 | 4/4 |
+| fault-delayed | 10/10/10/0 | 10/0 | 0/0 | 4/4 |
+| fault-partial | 10/10/10/0 | 10/0 | 0/0 | 4/4 |
+| fault-cancelled | 10/0/0/0 | 0/0 | 0/0 | 0/4 |
+| fault-not_issued | 10/0/0/0 | 0/0 | 0/0 | 0/4 |
+
+`fault-retry` 中 4 个被注入的请求各做 3 次 attempt（共 18 attempts、8 retries），失败数仍为 4，样本数不变；取消与 not-issued 都是 10 个计划请求、0 个已下发、0 个失败，未下发与失败严格分开。所有失败样本保留在合法分母中。
 
 ## 8. 统计限制
 
@@ -165,7 +199,9 @@ P50/P95 是替身 `reportedLatencyMilliseconds` 的 `simulated` 值（2 ms），
 
 **定位**：`Manifest.entry(for:)` 是 `entries.first { ... }` 线性扫描，而 `EvaluationRunner.run` 每个样本调用一次 → O(n²)。这是运行 A 在 10k 上 `case_judgement` 独占约 18 s 的原因，且不是 Provider 或 IO 开销。按"先采样定位、再优化"的约束，本切片在 runner 里为 manifest 条目建一次索引（`Dictionary`，保留首个匹配，与 `entry(for:)` 语义完全一致），不改 `Manifest` 的公开 API，也不改任何判定规则。**运行 A 的数字是优化前的，不能当作当前代码的性能**。
 
-并发趋势（运行 A）：记录数固定时，提高并发确实压低 `request_execution`（10k：c1 8693 ms → c4 2531 ms），c8 未再提升，受共享 Runner 与模拟延迟抖动影响；`observedConcurrency` 始终等于配置值，1/2/4/8 全部满足上限。峰值 RSS 随记录数近似线性（100 → ~14 MB、1k → ~29 MB、10k → ~160 MB），且在整个并发扫描内几乎不变，说明内存主要与样本规模而非在飞请求数相关。
+运行 B（优化后）10k 平均阶段耗时：`request_execution` 5,135 ms、`manifest_validation` 3,776 ms、`case_judgement` 1,270 ms、`fixture_preparation` 1,006 ms、`report_and_metrics` 508 ms、`batch_planning` 378 ms、`artifact_serialization` 4 ms。`case_judgement` 从 17,980 ms 降到 1,270 ms（约 14×），其余阶段在两次运行的 Runner 抖动范围内基本不变；10k 平均总耗时从约 33.7 s 降到约 17.3 s（约 2×）。这证明热点来自查找复杂度而非 Provider 或 IO。
+
+并发趋势：记录数固定时，提高并发压低 `request_execution`（运行 A 10k：c1 8693 ms → c4 2531 ms；运行 B 10k：c1 9435 ms → c4 3177 ms），c8 未再稳定提升，受共享 Runner 与模拟延迟抖动影响；`observedConcurrency` 始终等于配置值，1/2/4/8 全部满足上限。峰值 RSS 随记录数近似线性（100 → ~14 MB、1k → ~29 MB、10k → ~160 MB），且在整个并发扫描内几乎不变，说明内存主要与样本规模而非在飞请求数相关。
 
 M9 仍需真实 macOS 现场：真实 10,000 文件目录、硬件/系统/磁盘条件、元数据扫描墙钟、峰值内存、OneDrive 元数据扫描/hydration/缓存命中读取/SHA 抽取分列。见 `docs/MACOS-VALIDATION-BACKLOG.md` 的 M9 条目。
 
