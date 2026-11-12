@@ -456,4 +456,25 @@ struct EvaluationReportTests {
         #expect(mixed.slice(.precisionAuto, stratum: .profile, key: ProjectArchiveContract.id)?.rate.estimate != nil)
         #expect(mixed.isQualityClaimAllowed)
     }
+
+    @Test("a target prints its gap even where the row cannot be quoted")
+    func targetsPublishGapsOnUnquotableRows() throws {
+        // Twenty judged records: §5's floor is thirty, so the coverage row cannot be
+        // quoted on its own merits - and its gap is printed anyway. Hiding a missed
+        // suggestion behind a thin row would be the quiet fallback this layer refuses
+        // everywhere else, and `isQuotable` answers the other half from the same facts.
+        let report = EvaluationReport(cases: try withheld(20), identity: try identity(substitute: false),
+                                      dataset: try dataset(reviewed: 150))
+        let row = try #require(report.slice(.coverage))
+        #expect(row.caseCount == 20)
+        #expect(!row.isQuotableOnOwnMerits, "below the thirty-record floor")
+        #expect(!report.isQuotable(.coverage), "and the report gate reads that same row")
+        let target = try #require(report.targets.first { $0.measure == .coverage })
+        #expect(target.actual == 0)
+        #expect(target.shortfall == 0.70)
+        #expect(target.isMet == false)
+        #expect(target.population == 20)
+        #expect(target.caseCount == 20)
+        #expect(report.isQualityClaimAllowed, "a missed suggestion is still not a blocker")
+    }
 }
