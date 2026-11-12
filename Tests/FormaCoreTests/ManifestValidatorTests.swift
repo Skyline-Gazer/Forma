@@ -467,4 +467,40 @@ struct ManifestValidatorTests {
                 "a validated manifest must satisfy the artifact schema: \(violations.map { $0.logSummary })")
         #expect(manifest.envelope.grantsExecution == false)
     }
+
+    @Test("an entry the evaluator calls auto-mapped has something it would publish")
+    func autoMappedImpliesPublishableSlots() throws {
+        // `CaseJudgement.isAutoMapped` reads the entry's state and eligibility flag
+        // and no slot at all (docs/EVALUATION-METRICS.md §3 item 1). That is faithful
+        // rather than sloppy because of two facts about this subject: a field keeps
+        // its value only on `.evidenced` or `.inherited`, both of which carry the
+        // citations that made the eligibility check pass, and `validated` requires
+        // every `required_for_validated` field to be valued. Pinned here because a
+        // profile with no required field would otherwise make coverage count a file
+        // the reviewer receives nothing usable from, and no evaluation test would
+        // notice - the metric and the program would simply disagree about what
+        // "goes out on its own" means.
+        let harness = try archive()
+        let inherited = try evidence("ev_inherit", source: .sibling,
+                                     value: "inherited from 示例项目_2026/02_投标/公告.pdf: 示例项目_2026",
+                                     file: harness.entries[0], candidate: "c1")
+        var records = harness.registry[harness.entries[0].id] ?? []
+        records.append(inherited)
+        let answer = proposal(metadata: [.projectname: "示例项目_2026", .completionyear: "2026"],
+                              citations: citations([(.projectname, "ev_inherit"), (.completionyear, "ev_year"),
+                                                    (.documentcategory, "ev_category"),
+                                                    (.documenttype, "ev_type")]))
+        let entry = validate(harness, answer: answer,
+                             evidenceOverride: [harness.entries[0].id: records]).entries[0]
+        #expect(entry.state == .validated)
+        #expect(entry.eligibleForAutoExecution)
+
+        let publishable = entry.fields.filter {
+            FieldJudgement.publishableStatuses.contains($0.status) && !$0.evidenceIDs.isEmpty
+        }
+        #expect(!publishable.isEmpty)
+        let valued = entry.fields.filter { $0.value != nil }
+        #expect(valued.allSatisfy { FieldJudgement.publishableStatuses.contains($0.status) })
+        #expect(Set(valued.map(\.field)).isSubset(of: Set(publishable.map(\.field))))
+    }
 }

@@ -164,10 +164,20 @@ public struct EvaluationReport: Codable, Sendable, Equatable {
                                     detail: "目录中有 \(dataset.unaccountedRecords.count) 条记录未被 split 的三处清单登记。"))
         }
         if dataset.pendingAdjudication > 0 {
+            // Both halves of the claim belong in this row, because the sentence it
+            // publishes ("those records are in no denominator") is only true of the
+            // run if the cases fed to it actually exclude them. `pending` is the
+            // count of judged records that are still `adjudication_pending`, which
+            // the check above turns into a veto when non-zero: the row states both
+            // numbers and whether they agree, so a reader never has to take the
+            // disclosure's word for the exclusion.
+            let agreement = pending == 0
+                ? "，因此排除确实发生，这些记录不在任何分母里。"
+                : "，已由 caseSetNotDerivedFromSplit 否决本次结论。"
             blockers.append(Finding(kind: .pendingAdjudicationExcluded,
-                                    detail: "数据集把 \(dataset.pendingAdjudication) 条争议记录排除在可计数集合之外，"
-                                        + "因此它们不在任何分母里；若有争议记录仍被判定，会另由 "
-                                        + "caseSetNotDerivedFromSplit 否决本次结论。"))
+                                    detail: "数据集把 \(dataset.pendingAdjudication) 条争议记录排除在可计数集合之外；"
+                                        + "本次判定的 \(cases.count) 条记录中有 \(pending) 条仍为 "
+                                        + "adjudication_pending" + agreement))
         }
         self.claimBlockers = blockers
         self.isQualityClaimAllowed = !blockers.contains { $0.kind.preventsQualityClaim }

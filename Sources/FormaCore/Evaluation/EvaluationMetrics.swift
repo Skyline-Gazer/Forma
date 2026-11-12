@@ -330,6 +330,16 @@ struct SplitMix64 {
 /// All measures over the overall set and each declared stratum.
 public enum EvaluationMetrics {
     public struct Request: Sendable {
+        /// Cluster draws behind every `clusterInterval` in this run.
+        ///
+        /// One draw cannot make a band - the 2.5th and 97.5th percentile of a
+        /// single number are that number, which would report zero uncertainty - so a
+        /// request below two asks for the rates without the intervals, and every
+        /// slice then has a nil `clusterInterval` for that reason rather than for
+        /// thinness. Nothing floors the value: the number a run asked for is
+        /// published in `EvaluationRunIdentity.bootstrapResamples`, and silently
+        /// rewriting a parameter of the measurement is the one change a reader has
+        /// the fewest means of discovering.
         public let resamples: Int
         public let seed: UInt64
         /// The Profile this run executed under, when the run named exactly one.

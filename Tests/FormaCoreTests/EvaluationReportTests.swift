@@ -34,14 +34,14 @@ struct EvaluationReportTests {
                            requiredMinimum: GoldDataset.independentTarget)
     }
 
-    private func identity(substitute: Bool) throws -> EvaluationRunIdentity {
+    private func identity(substitute: Bool, resamples: Int = 200) throws -> EvaluationRunIdentity {
         let pack = try CasePack.shipped()
         return EvaluationRunIdentity(goldRevision: "1.0.0", splitID: "split-a", casePackID: pack.id,
                                      casePackVersion: pack.version,
                                      profileVersionKeys: [ProjectArchiveContract.id: "v1"],
                                      provider: substitute ? "substitute" : "provider-x",
                                      modelID: substitute ? nil : "model-1", isSubstitute: substitute,
-                                     bootstrapResamples: 200, bootstrapSeed: 7)
+                                     bootstrapResamples: resamples, bootstrapSeed: 7)
     }
 
     /// `count` reference answers in `count` separate projects, none of which the
@@ -253,5 +253,52 @@ struct EvaluationReportTests {
         // Identity has to survive byte-for-byte: two runs whose Profile versions
         // differ are two measurements, and a lost field would merge them.
         #expect(decoded.identity == report.identity)
+    }
+
+    @Test("the pending disclosure states both halves of its own claim")
+    func pendingDisclosureIsAuditable() throws {
+        // The row says disputed records are in no denominator. That is only a fact
+        // about this run if the cases actually exclude them, so the row publishes
+        // both counts: what the dataset left out, and how many judged records were
+        // still disputed. The second is the number nobody had to check before.
+        let report = EvaluationReport(cases: try withheld(40), identity: try identity(substitute: false),
+                                      dataset: dataset(reviewed: 160, pending: 3))
+        let row = try #require(report.claimBlockers.first { $0.kind == .pendingAdjudicationExcluded })
+        #expect(row.detail.contains("3 条争议记录"))
+        #expect(row.detail.contains("40 条记录中有 0 条"))
+        #expect(row.detail.contains("排除确实发生"))
+        #expect(report.isQualityClaimAllowed, "a disclosure still never vetoes by itself")
+
+        // A runner whose split disagrees with the review states gets the veto from
+        // `caseSetNotDerivedFromSplit`, and the disclosure is not allowed to keep
+        // claiming the exclusion happened.
+        let disputed = try EvaluationFixtures.gold("g0", expected: [.completionyear: "2026"],
+                                                   reviewStatus: .adjudicationPending)
+        let dirty = EvaluationReport(cases: [EvaluationFixtures.judgement(disputed, entry: nil)],
+                                     identity: try identity(substitute: false),
+                                     dataset: dataset(reviewed: 160, pending: 1))
+        #expect(!dirty.isQualityClaimAllowed)
+        let line = try #require(dirty.claimBlockers.first { $0.kind == .pendingAdjudicationExcluded })
+        #expect(line.detail.contains("1 条仍为 adjudication_pending"))
+        #expect(!line.detail.contains("排除确实发生"))
+    }
+
+    @Test("a run that asked for no bands records what it asked for")
+    func resamplesArePublishedWithTheRun() throws {
+        // §5's third nil cause is only honest while a reader can tell it apart from
+        // "too thin" using the report alone - hence the resample count belongs to the
+        // run identity next to the slice that has no interval.
+        let report = EvaluationReport(cases: try withheld(40),
+                                      identity: try identity(substitute: false, resamples: 1),
+                                      dataset: dataset(reviewed: 160),
+                                      request: EvaluationMetrics.Request(resamples: 1))
+        let coverage = try #require(report.slice(.coverage))
+        #expect(coverage.clusterInterval == nil)
+        #expect(coverage.clusterCount >= 5, "so thinness is not the reason there is no band")
+        #expect(coverage.isQuotableOnOwnMerits, "a missing band is not a missing measurement")
+        // The two halves belong to one run: the identity carries the number the
+        // slices were computed with, which is what lets a reader rule out (b).
+        #expect(report.identity.bootstrapResamples == 1)
+        #expect(report.isQuotable(.coverage))
     }
 }
