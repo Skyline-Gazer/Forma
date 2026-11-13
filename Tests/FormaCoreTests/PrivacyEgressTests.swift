@@ -469,7 +469,7 @@ struct PrivacyEgressTests {
                                                           bootstrapResamples: 20, bootstrapSeed: 7))
         let bytes = try run.export()
         let current = try FormaJSON.decode(EvaluationArtifact.self, from: bytes)
-        #expect(current.schemaVersion == "1.1")
+        #expect(current.schemaVersion == "1.2")
         #expect(current.stages?.stages.count == 5)
         // A 1.0 export has no stage_timings key. Dropping it must decode as an
         // absent observation, never an invented timing.

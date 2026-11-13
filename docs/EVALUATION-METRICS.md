@@ -11,7 +11,7 @@
 
 因此本文的第一职责是**固定每个指标看见什么、以什么单位计**：一条记录还是一个槽位观测。
 
-### 1.2 本切片做什么（2a：指标；2b：运行器；2c：规模基准）
+### 1.2 本切片做什么（2a：指标；2b：运行器；2c：规模基准；2g：覆盖与血缘）
 - 把一份金标准记录与引擎产出的一条 `ManifestEntry` 判成槽位级结论（§2）。
 - 按 PLAN §8.2 的名称计算七个比率，声明各自单位（`EvaluationMeasure.unit`），并公开分子分母（§3）。
 - 给出区间：Wilson 95%（比例）+ 按项目簇 bootstrap（相关性）（§4）。
@@ -19,6 +19,7 @@
 - 2b：把一份 `GoldDataset` 真正跑起来——批计划、有界并发、单次请求超时、可控重试与退避、取消、部分失败、运行身份与结果追溯，见 §10。
 - 2b：采集并记录 Request / Attempt / Batch / Run 四级执行事实与成本/Token/延迟，见 §10。
 - 2c：可复现的合成夹具（100 / 1k / 10k）、分阶段计时、并发扫描与故障注入量化、版本化结果结构，见 §11；实验定义与命令见 `docs/EVALUATION-BENCHMARK.md`。
+- 2g：把「哪些场景被测、哪些没测」变成导出里的普查，并让再版工件声明它的前序运行，见 §10.6；不新增任何分子分母。
 
 ### 1.3 本切片不做什么
 
@@ -173,6 +174,8 @@ PLAN §8.2 在给出建议阈值的同时要求"**必须展示实际值与差距
 | ≥150 条独立核实的真实金标准样本 | P3-B | 隔离 DEVONthink 库、授权目录 |
 | 报告发布与看板 | P3-B | 上述全部 |
 | 场景配额的可交叉计数（一条记录同时计入多个场景） | 冻结 schema（`gold-record-1.0`） | `scenario` 为单值对象，需 schema 升版才能表达；当前按互斥格子计数，见 §6 |
+| ~~场景覆盖普查（哪些场景一条未判、哪些未被计数、哪些部分未判）~~ | P3-A 切片 2g：**已实现**，见 §10.6.1 | 无 |
+| ~~再版工件的父运行声明~~ | P3-A 切片 2g：**已实现**，见 §10.6.2 | 运行存储与链路校验仍未实现 |
 
 首段那串用例名不是装饰：`DocumentationIntegrityTests` 会读本文，断言每个名字都能在 `Tests` 源码里找到对应的 `func`（改名而未同步文档会让它失败）。
 
@@ -247,7 +250,26 @@ PLAN §8.2 在给出建议阈值的同时要求"**必须展示实际值与差距
 
 ### 10.6 运行身份与可导出报告
 
-`runID` 由数据集（split、casePack）、配置（Profile 版本、Provider/model、并发、超时、重试、批上限、抽样、种子、计价版本）与样本集共同派生，同一数据集 + 同一配置重跑得同一 `runID` 与同一 `manifestID`（`runIsReproducible`）。`EvaluationArtifact` 是导出体：身份、边界、遥测、报告，**不含 Manifest**（相对路径、组路径与证据摘录不进可分享文件）；替身与薄样本的否决随数字一起导出，不生成"只留结论"的摘要（`exportIsRedactedAndSelfDescribing`）。数据集边界单独成节：`promptSideRecords`、`withdrawnRecords`、`pendingAdjudication`、`unaccountedRecords` 与 `evaluated` 并列发布，被排除的材料从不进入应答，也不进入分母（`boundaryDisclosesExclusions`）。
+`runID` 由数据集（split、casePack）、配置（Profile 版本、Provider/model、并发、超时、重试、批上限、抽样、种子、计价版本）与样本集共同派生，同一数据集 + 同一配置重跑得同一 `runID` 与同一 `manifestID`（`runIsReproducible`）。`EvaluationArtifact` 是导出体：身份、边界、遥测、报告、覆盖普查与声明的父运行，**不含 Manifest**（相对路径、组路径与证据摘录不进可分享文件）；替身与薄样本的否决随数字一起导出，不生成"只留结论"的摘要（`exportIsRedactedAndSelfDescribing`）。数据集边界单独成节：`promptSideRecords`、`withdrawnRecords`、`pendingAdjudication`、`unaccountedRecords` 与 `evaluated` 并列发布，被排除的材料从不进入应答，也不进入分母（`boundaryDisclosesExclusions`）。
+
+#### 10.6.1 覆盖普查（`EvaluationCoverage`）
+
+`slices` 只对**已经出现**的场景给出比率行；一个场景一条都没判时，它和"不需要这个场景"在表里长得一样。`EvaluationCoverage` 补的是这个区别，它是**普查**（计数），不是新比率，也不进入 §3：
+
+| 字段 | 来源 | 含义 |
+| --- | --- | --- |
+| `cells[].countable` | `GoldDataset.Report.perCategoryCountable` | 该场景在 split 中可计数的记录数 |
+| `cells[].evaluated` | 本轮 `CaseJudgement.category` 计数 | 本轮真正判了多少条 |
+| `untested` | `countable == 0` | split 没有该场景的样本 |
+| `unreached` | `countable > 0` 且 `evaluated == 0` | 有样本，一条都没判 |
+| `partial` | `0 < evaluated < countable` | 部分样本没有进入判定 |
+| `undeclared` | `perCategoryCountable` 中 schema 未声明的键 | schema 不匹配，不是空场景 |
+
+`cells` 以 `GoldRecord.Category.allCases` 的顺序给出，未声明键按字典序追加，所以没有场景会被静默丢弃。`untestedScenariosAreNamed`、`unreachedScenarioIsNamed`、`partialScenarioIsNamed`、`undeclaredKeyIsReported` 与 `countsComeFromBothSides` 钉住上述对应关系；普查的 `sum(evaluated)` 等于本轮判定的用例数，它不改变任何分母。
+
+#### 10.6.2 工件版本与父运行
+
+`EvaluationArtifact.schema_version` 为 `1.2` 时新增 `coverage` 与 `parent_run_id`。两者都是可选：`1.0` / `1.1` 的导出仍然解码，缺省即"未曾计算普查"与"未声明前序"，解码时不补造。`parent_run_id` 是**声明**，不是链路校验——本切片没有运行存储，无法验证它指向的工件；`olderExportStillDecodes` 与 `artifactWithoutLineage` 分别钉住旧版解码与不声明的情形。
 
 ### 10.7 本节的限制
 

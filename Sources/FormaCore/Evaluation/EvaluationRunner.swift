@@ -798,8 +798,10 @@ public struct EvaluationBoundary: Codable, Sendable, Equatable {
 /// reviewer needs to decide whether the run can be quoted, and nothing that
 /// identifies a customer's documents.
 public struct EvaluationArtifact: Codable, Sendable, Equatable {
-    /// "1.1" adds `stage_timings`. A 1.0 export has no such key, so `stages` is
-    /// optional and an older artifact still decodes without a fabricated timing.
+    /// "1.1" adds `stage_timings`; "1.2" adds `coverage` and `parent_run_id`.
+    /// Every added key is optional, so a 1.0 or 1.1 export still decodes - an
+    /// absent coverage census is *not computed*, and an absent parent is *not
+    /// declared*, neither of which is fabricated on decode.
     public let schemaVersion: String
     public let runID: String
     public let identity: EvaluationRunIdentity
@@ -807,15 +809,24 @@ public struct EvaluationArtifact: Codable, Sendable, Equatable {
     public let telemetry: EvaluationTelemetry
     public let report: EvaluationReport
     public let stages: EvaluationStageTimings?
+    /// Which scenarios this run measured, beside the ones the split holds.
+    public let coverage: EvaluationCoverage?
+    /// The run this artifact was re-issued from, when a caller says so. There is
+    /// no store here to verify it: the field records a declaration, and absence
+    /// records that none was made.
+    public let parentRunID: String?
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version", runID = "run_id", identity, boundary, telemetry, report
         case stages = "stage_timings"
+        case coverage
+        case parentRunID = "parent_run_id"
     }
 
-    public init(schemaVersion: String = "1.1", runID: String, identity: EvaluationRunIdentity,
+    public init(schemaVersion: String = "1.2", runID: String, identity: EvaluationRunIdentity,
                 boundary: EvaluationBoundary, telemetry: EvaluationTelemetry, report: EvaluationReport,
-                stages: EvaluationStageTimings? = nil) {
+                stages: EvaluationStageTimings? = nil, coverage: EvaluationCoverage? = nil,
+                parentRunID: String? = nil) {
         self.schemaVersion = schemaVersion
         self.runID = runID
         self.identity = identity
@@ -823,6 +834,8 @@ public struct EvaluationArtifact: Codable, Sendable, Equatable {
         self.telemetry = telemetry
         self.report = report
         self.stages = stages
+        self.coverage = coverage
+        self.parentRunID = parentRunID
     }
 }
 
@@ -850,9 +863,16 @@ public struct EvaluationRun: Sendable {
     /// The §6 gate, re-stated for callers that only hold the run.
     public var isQualityClaimAllowed: Bool { report.isQualityClaimAllowed }
 
-    public var artifact: EvaluationArtifact {
+    public var artifact: EvaluationArtifact { artifact(parentRunID: nil) }
+
+    /// The export with an explicitly declared predecessor. The census is
+    /// recomputed here rather than stored on the run: it is a function of the
+    /// cases and the dataset, and a second copy could disagree with them.
+    public func artifact(parentRunID: String?) -> EvaluationArtifact {
         EvaluationArtifact(runID: runID, identity: identity, boundary: boundary, telemetry: telemetry,
-                           report: report, stages: stages)
+                           report: report, stages: stages,
+                           coverage: EvaluationCoverage.compute(cases: cases, dataset: report.dataset),
+                           parentRunID: parentRunID)
     }
 
     /// The run as JSON, for a shareable report.

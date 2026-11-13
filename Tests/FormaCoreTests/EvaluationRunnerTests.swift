@@ -391,9 +391,9 @@ struct EvaluationRunnerTests {
         #expect(!artifact.report.isQualityClaimAllowed)
         #expect(artifact.boundary.evaluated == 2)
         #expect(artifact.telemetry.sampleCount == 2)
-        // 1.1 adds the stage breakdown. It is a run fact, not a manifest, so the
-        // redaction contract above still holds.
-        #expect(artifact.schemaVersion == "1.1")
+        // 1.1 adds the stage breakdown, 1.2 the coverage census. Both are run
+        // facts, not manifests, so the redaction contract above still holds.
+        #expect(artifact.schemaVersion == "1.2")
         #expect(artifact.stages?.stages.count == 5)
         #expect(artifact.stages?.sumOfStageMilliseconds != nil)
     }
