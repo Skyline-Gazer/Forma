@@ -216,7 +216,9 @@ ADS-style 独立评审（`ADSHardeningReview2`）审阅 `e340617..b7a62a3` 的 9
 
 ### 8.3 Red → Green Evidence
 
-红灯（仅反例测试，不改实现）：[CI 43470329974](https://github.com/Skyline-Gazer/Forma/actions/runs/43470329974)。绿灯（最终 head）：见 §8.7。
+红灯（仅反例测试，不改实现）：[CI 43472679882](https://github.com/Skyline-Gazer/Forma/actions/runs/43472679882) —— 11 个反例以行为断言失败：A1（目标 SHA 值不同仍补写并报 import）、A3（database 变化仍补写并报 import）、A4（父组变化仍补写并报 conflict_hold）、B1–B5（SHA 为 nil / missing / unauthorized / unreadable / hydration pending 均仍补写并报 import）、B7（SHA 变化被归入 `source_changed` 而非 `source_sha_mismatch`）。A2、A5、A6、B6、B8、B9 在红灯下已通过，作为回归护栏保留，未删除或弱化。首个红灯运行 [43470329974](https://github.com/Skyline-Gazer/Forma/actions/runs/43470329974) 暴露了夹具里"缺失字段"其实并不缺失的问题，已修正夹具后重跑取得干净红灯。
+
+绿灯（最终 head）：见 §8.8。
 
 ### 8.4 Read-before-write Proof
 

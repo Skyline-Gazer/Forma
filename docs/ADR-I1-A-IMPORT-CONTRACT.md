@@ -261,7 +261,7 @@ CREATE TABLE import_leases (
 1. 授权以独立 `ImportAuthorization` 对象表达，而不是复用 `ManifestEnvelope.grantsExecution`（后者恒为 `false`，且解码器拒绝 `true`）。
 2. `ImportOperationKind` 目前只有 `create_record`；Metadata 写入是同一操作内的阶段，不是第二个键。若 I1-B 需要"补写 Metadata"作为独立可重试操作，需扩展本 ADR。
 3. （2026-11-13 硬化授权）Preflight 许可改为绑定事实的 `ImportPreflightClearance`，执行器逐项核对后才允许写入；`ImportCreateRequest` 携带 `ImportSourceBinding`（获授权的源文件、字节 SHA、快照、读取会话），**不**假定 DEVONthink 文件导入工具的参数形状——该形状在 I1-B 核实前仍是未决对应关系。
-4. （2026-11-14，I1-B0 已授权缺陷修复）`finish()` 在任何补写前完整核验目标 UUID / database / 父组 / 已验证且值相等的 SHA；`resume()` 改为完整来源核验与等效事实绑定校验。`ImportSourceFacts` 增加 `readSessionID` / `byteCount`，均为可选、旧调用保持兼容。以上为**实现层**，不改 SPEC 产品语义。
+4. （2026-11-14，I1-B0 已授权缺陷修复）`finish()` 在任何补写前完整核验目标 UUID / database / 父组 / 已验证且值相等的 SHA；`resume()` 改为完整来源核验与等效事实绑定校验。`ImportSourceFacts` 增加 `readSessionID` / `byteCount`，均为可选：旧调用**编译**兼容，但恢复路径要求二者非 nil 且与 `ImportSourceBinding` 一致——这是 I1-B1 接线时必须由生产侧提供的当前事实，不能用默认值假造。以上为**实现层**，不改 SPEC 产品语义。
 
 ## 10. 验收（I1-A）
 

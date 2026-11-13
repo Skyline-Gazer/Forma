@@ -77,13 +77,19 @@ struct ImportB0BoundaryTests {
 
     /// The six assertions every counterexample makes.
     private func expectNoWrite(_ stack: Stack, _ intent: ImportIntent, _ result: ImportExecutionResult,
-                               outcome: String, reason: String) async throws {
+                               outcome: String, reason: String,
+                               before: [FakeImportTransport.Stored]) async throws {
         #expect(result.outcome?.rawValue == outcome, "outcome")
         #expect(result.reason?.rawValue == reason, "reason")
         #expect(await stack.transport.createCalls == 0, "createCalls")
         #expect(await stack.transport.metadataCalls == 0, "metadataCalls")
         let stored = try stack.ledger.operation(keyDigest: intent.key.digest)
         #expect(stored?.phase == result.phase, "ledger phase")
+        // No write event was emitted, and the simulated external record is
+        // byte-for-byte what it was before the recovery.
+        let events = await stack.transport.eventLog()
+        #expect(!events.contains("create") && !events.contains("metadata"), "no write events")
+        #expect(await stack.transport.storedRecords() == before, "record unchanged")
     }
 
     // MARK: - Task A: target verification before a metadata write
@@ -97,10 +103,12 @@ struct ImportB0BoundaryTests {
                    metadata: ["completion_year": "2026"])
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
 
+        let before = await stack.transport.storedRecords()
         let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
 
         try await expectNoWrite(stack, intent, result, outcome: "conflict_hold",
-                                reason: "target_sha_mismatch")
+                                reason: "target_sha_mismatch",
+                                before: before)
         let records = await stack.transport.storedRecords()
         #expect((records.first?.metadata["title"] ?? nil) == nil, "simulated record unchanged")
     }
@@ -112,10 +120,12 @@ struct ImportB0BoundaryTests {
         await seed(stack, shaVerified: false, metadata: ["completion_year": "2026"])
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
 
+        let before = await stack.transport.storedRecords()
         let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
 
         try await expectNoWrite(stack, intent, result, outcome: "verify_required",
-                                reason: "hash_unverified")
+                                reason: "hash_unverified",
+                                before: before)
     }
 
     @Test("A3: a target in another database blocks the write")
@@ -126,10 +136,12 @@ struct ImportB0BoundaryTests {
                    metadata: ["completion_year": "2026"])
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
 
+        let before = await stack.transport.storedRecords()
         let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
 
         try await expectNoWrite(stack, intent, result, outcome: "verify_required",
-                                reason: "target_location_changed")
+                                reason: "target_location_changed",
+                                before: before)
     }
 
     @Test("A4: a target under another parent group blocks the write")
@@ -140,10 +152,12 @@ struct ImportB0BoundaryTests {
                    metadata: ["completion_year": "2026"])
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
 
+        let before = await stack.transport.storedRecords()
         let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
 
         try await expectNoWrite(stack, intent, result, outcome: "verify_required",
-                                reason: "target_location_changed")
+                                reason: "target_location_changed",
+                                before: before)
     }
 
     @Test("A5: an externally changed field is preserved")
@@ -153,10 +167,12 @@ struct ImportB0BoundaryTests {
         await seed(stack, metadata: ["completion_year": "2019"])
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
 
+        let before = await stack.transport.storedRecords()
         let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
 
         try await expectNoWrite(stack, intent, result, outcome: "conflict_hold",
-                                reason: "external_modification")
+                                reason: "external_modification",
+                                before: before)
         let records = await stack.transport.storedRecords()
         #expect(records.first?.metadata["completion_year"] == "2019", "external value preserved")
     }
@@ -175,6 +191,11 @@ struct ImportB0BoundaryTests {
         #expect(await stack.transport.createCalls == 0)
         #expect(await stack.transport.metadataCalls == 1, "the missing slot is written")
         #expect(await stack.transport.readCalls >= 1, "independent read precedes the write")
+        let events = await stack.transport.eventLog()
+        let firstRead = events.firstIndex(of: "read")
+        let firstWrite = events.firstIndex(of: "metadata")
+        #expect(firstRead != nil && firstWrite != nil && firstRead! < firstWrite!,
+                "read precedes metadata write")
         #expect(try stack.ledger.operation(keyDigest: intent.key.digest)?.phase == .readbackVerified)
     }
 
@@ -186,10 +207,12 @@ struct ImportB0BoundaryTests {
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
         await stack.transport.setReadUUIDOverride("uuid-somebody-else")
 
+        let before = await stack.transport.storedRecords()
         let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
 
         try await expectNoWrite(stack, intent, result, outcome: "verify_required",
-                                reason: "target_identity_mismatch")
+                                reason: "target_identity_mismatch",
+                                before: before)
     }
 
     // MARK: - Task B: source verification before recovery
@@ -198,8 +221,10 @@ struct ImportB0BoundaryTests {
                                       source: ImportSourceFacts, reason: String) async throws {
         await seed(stack, metadata: ["completion_year": "2026"])
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
+        let before = await stack.transport.storedRecords()
         let result = try await stack.executor.resume(intent, source: source)
-        try await expectNoWrite(stack, intent, result, outcome: "verify_required", reason: reason)
+        try await expectNoWrite(stack, intent, result, outcome: "verify_required", reason: reason,
+                                before: before)
         let records = await stack.transport.storedRecords()
         #expect((records.first?.metadata["title"] ?? nil) == nil, "simulated record unchanged")
     }
@@ -334,10 +359,12 @@ struct ImportB0BoundaryTests {
         try stack.ledger.transition(keyDigest: intent.key.digest, to: .preflighted, at: ImportFixtures.now)
         try stack.ledger.transition(keyDigest: intent.key.digest, to: .intentPersisted, at: ImportFixtures.now)
 
+        let before = await stack.transport.storedRecords()
         let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
 
         try await expectNoWrite(stack, intent, result, outcome: "verify_required",
-                                reason: "authorization_changed")
+                                reason: "authorization_changed",
+                                before: before)
     }
 
     @Test("B9: a cancellation during recovery starts no write")
@@ -349,11 +376,186 @@ struct ImportB0BoundaryTests {
         await stack.transport.setReadCancellation(true)
 
         let task = Task { try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts()) }
-        _ = try? await task.value
-
+        await #expect(throws: CancellationError.self) { try await task.value }
         #expect(await stack.transport.createCalls == 0)
         #expect(await stack.transport.metadataCalls == 0)
         let records = await stack.transport.storedRecords()
         #expect((records.first?.metadata["title"] ?? nil) == nil, "simulated record unchanged")
     }
+
+    // MARK: - Paths 1, 4, 5 and the remaining verification branches
+
+    @Test("B13: the initial create carries the authorized source binding")
+    func createCarriesSourceBinding() async throws {
+        let stack = try await makeStack()
+        let intent = try intent(stack)
+        let result = try await stack.executor.execute(intent,
+                                                     clearance: try ImportFixtures.clearance(for: intent))
+        #expect(result.outcome == .importRecord)
+        #expect(await stack.transport.createCalls == 1)
+        let request = await stack.transport.lastCreateRequest
+        #expect(request?.source.contentSHA256 == intent.source.contentSHA256)
+        #expect(request?.source.snapshotFingerprint == intent.source.snapshotFingerprint)
+        #expect(request?.source.readSessionID == intent.source.readSessionID)
+        #expect(request?.source.byteCount == intent.source.byteCount)
+    }
+
+    @Test("B14: resume without a known UUID stays read-only and verifies the source")
+    func resumeWithoutUUIDIsReadOnly() async throws {
+        let stack = try await makeStack()
+        let intent = try intent(stack)
+        await seed(stack, metadata: ["completion_year": "2026", "title": "Tender"])
+        let record = ImportOperationRecord(
+            runID: stack.runID, key: intent.key, targetDatabase: intent.targetDatabase,
+            targetGroupPath: intent.groupPath, intendedMetadataDigest: "d",
+            intendedMetadataJSON: "{}", sourceSHA256: intent.source.contentSHA256,
+            authorizationDigest: intent.authorizationDigest, createdAt: ImportFixtures.now)
+        try stack.ledger.recordIntent(record)
+        try stack.ledger.transition(keyDigest: intent.key.digest, to: .preflighted, at: ImportFixtures.now)
+        try stack.ledger.transition(keyDigest: intent.key.digest, to: .intentPersisted, at: ImportFixtures.now)
+
+        let before = await stack.transport.storedRecords()
+        let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
+
+        #expect(result.outcome == .skipVerified)
+        try await expectNoWrite(stack, intent, result, outcome: "skip_verified",
+                                reason: "already_verified", before: before)
+
+        // A stale session is rejected before any lookup or write. Use a fresh
+        // operation: the row above is terminal, so a second resume would return
+        // its recorded state before the source check.
+        let second = try await makeStack()
+        let secondIntent = try intent(second)
+        await seed(second, metadata: ["completion_year": "2026", "title": "Tender"])
+        let secondRecord = ImportOperationRecord(
+            runID: second.runID, key: secondIntent.key, targetDatabase: secondIntent.targetDatabase,
+            targetGroupPath: secondIntent.groupPath, intendedMetadataDigest: "d",
+            intendedMetadataJSON: "{}", sourceSHA256: secondIntent.source.contentSHA256,
+            authorizationDigest: secondIntent.authorizationDigest, createdAt: ImportFixtures.now)
+        try second.ledger.recordIntent(secondRecord)
+        try second.ledger.transition(keyDigest: secondIntent.key.digest, to: .preflighted,
+                                    at: ImportFixtures.now)
+        try second.ledger.transition(keyDigest: secondIntent.key.digest, to: .intentPersisted,
+                                    at: ImportFixtures.now)
+        let stale = try await second.executor.resume(
+            secondIntent, source: ImportFixtures.sourceFacts(readSessionID: "stale"))
+        #expect(stale.reason?.rawValue == "read_session_invalid")
+        #expect(await second.transport.createCalls == 0)
+        #expect(await second.transport.metadataCalls == 0)
+    }
+
+    @Test("B15: recovery after an unknown create verifies the target SHA value")
+    func unknownCreateRecoveryChecksTargetSHA() async throws {
+        let stack = try await makeStack()
+        let intent = try intent(stack)
+        await stack.transport.setFault(.createAfterApply)
+        await stack.transport.setReadSHAOverride(String(repeating: "d", count: 64))
+
+        let result = try await stack.executor.execute(intent,
+                                                     clearance: try ImportFixtures.clearance(for: intent))
+
+        #expect(result.outcome?.rawValue == "conflict_hold")
+        #expect(result.reason?.rawValue == "target_sha_mismatch")
+        #expect(await stack.transport.createCalls == 1)
+        #expect(await stack.transport.metadataCalls == 0)
+        let events = await stack.transport.eventLog()
+        #expect(!events.contains("metadata"), "no metadata write on a changed target")
+    }
+
+    @Test("B16: a ledger v1 row without an authorization digest is not resumable")
+    func authorizationUnverifiable() async throws {
+        let stack = try await makeStack()
+        let intent = try intent(stack)
+        await seed(stack, metadata: ["completion_year": "2026"])
+        let record = ImportOperationRecord(
+            runID: stack.runID, key: intent.key, targetDatabase: intent.targetDatabase,
+            targetGroupPath: intent.groupPath, intendedMetadataDigest: "d",
+            intendedMetadataJSON: "{}", sourceSHA256: intent.source.contentSHA256,
+            createdAt: ImportFixtures.now)
+        try stack.ledger.recordIntent(record)
+        try stack.ledger.transition(keyDigest: intent.key.digest, to: .preflighted, at: ImportFixtures.now)
+        try stack.ledger.transition(keyDigest: intent.key.digest, to: .intentPersisted, at: ImportFixtures.now)
+
+        let before = await stack.transport.storedRecords()
+        let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
+
+        try await expectNoWrite(stack, intent, result, outcome: "verify_required",
+                                reason: "authorization_unverifiable", before: before)
+    }
+
+    @Test("B17: a stored row for another target is not resumable")
+    func storedTargetDrift() async throws {
+        let stack = try await makeStack()
+        let intent = try intent(stack)
+        await seed(stack, metadata: ["completion_year": "2026"])
+        let record = ImportOperationRecord(
+            runID: stack.runID, key: intent.key, targetDatabase: intent.targetDatabase,
+            targetGroupPath: ["09_其他"], intendedMetadataDigest: "d",
+            intendedMetadataJSON: "{}", sourceSHA256: intent.source.contentSHA256,
+            authorizationDigest: intent.authorizationDigest, createdAt: ImportFixtures.now)
+        try stack.ledger.recordIntent(record)
+        try stack.ledger.transition(keyDigest: intent.key.digest, to: .preflighted, at: ImportFixtures.now)
+        try stack.ledger.transition(keyDigest: intent.key.digest, to: .intentPersisted, at: ImportFixtures.now)
+
+        let before = await stack.transport.storedRecords()
+        let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
+
+        try await expectNoWrite(stack, intent, result, outcome: "verify_required",
+                                reason: "target_location_changed", before: before)
+    }
+
+    @Test("B18: a stored row bound to other source bytes is not resumable")
+    func storedSourceSHADrift() async throws {
+        let stack = try await makeStack()
+        let intent = try intent(stack)
+        await seed(stack, metadata: ["completion_year": "2026"])
+        let record = ImportOperationRecord(
+            runID: stack.runID, key: intent.key, targetDatabase: intent.targetDatabase,
+            targetGroupPath: intent.groupPath, intendedMetadataDigest: "d",
+            intendedMetadataJSON: "{}", sourceSHA256: String(repeating: "d", count: 64),
+            authorizationDigest: intent.authorizationDigest, createdAt: ImportFixtures.now)
+        try stack.ledger.recordIntent(record)
+        try stack.ledger.transition(keyDigest: intent.key.digest, to: .preflighted, at: ImportFixtures.now)
+        try stack.ledger.transition(keyDigest: intent.key.digest, to: .intentPersisted, at: ImportFixtures.now)
+
+        let before = await stack.transport.storedRecords()
+        let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
+
+        try await expectNoWrite(stack, intent, result, outcome: "verify_required",
+                                reason: "source_sha_mismatch", before: before)
+    }
+
+    @Test("B19: a record without an identity anchor is not written to")
+    func identityUnconfirmedBeforeWrite() async throws {
+        let stack = try await makeStack()
+        let intent = try intent(stack)
+        await seed(stack, metadata: ["completion_year": "2026"],
+                   association: "a different project")
+        try persistKnownUUID(stack, intent, uuid: "uuid-target")
+
+        let before = await stack.transport.storedRecords()
+        let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
+
+        try await expectNoWrite(stack, intent, result, outcome: "verify_required",
+                                reason: "identity_unconfirmed", before: before)
+    }
+
+    @Test("B20: a target that changes between the write and the readback is held")
+    func readbackVerificationFailure() async throws {
+        let stack = try await makeStack()
+        let intent = try intent(stack)
+        await seed(stack, metadata: ["completion_year": "2026"])
+        try persistKnownUUID(stack, intent, uuid: "uuid-target")
+        await stack.transport.setCorruptSHAAfterWrite(true)
+
+        let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
+
+        #expect(result.outcome?.rawValue == "conflict_hold")
+        #expect(result.reason?.rawValue == "target_sha_mismatch")
+        #expect(await stack.transport.createCalls == 0)
+        #expect(await stack.transport.metadataCalls == 1, "one safe write, no second attempt")
+        let events = await stack.transport.eventLog()
+        #expect(events.filter { $0 == "metadata" }.count == 1, "no blind retry")
+    }
+
 }

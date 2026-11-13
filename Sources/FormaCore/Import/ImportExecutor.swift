@@ -145,6 +145,10 @@ public actor ImportExecutor {
                                      intent: ImportIntent) -> ImportReason? {
         guard let digest = stored.authorizationDigest else { return .authorizationUnverifiable }
         guard digest == intent.authorizationDigest else { return .authorizationChanged }
+        // The key carries a snapshot, not a content digest. Without this check a
+        // caller could re-base every later comparison to a different source SHA.
+        guard let recordedSHA = stored.sourceSHA256 else { return .sourceSHAUnavailable }
+        guard recordedSHA == intent.source.contentSHA256 else { return .sourceSHAMismatch }
         guard stored.targetDatabase == intent.targetDatabase,
               stored.targetGroupPath == intent.groupPath else { return .targetLocationChanged }
         guard stored.sourceID == intent.key.sourceID,
@@ -397,12 +401,12 @@ public actor ImportExecutor {
         // because a write that already happened cannot be undone by a later
         // discovery.
         if let failure = Self.targetFailure(snapshot, intent: intent, uuid: uuid) {
-            return try stopBeforeWrite(stored, uuid: uuid, snapshot: snapshot,
-                                       attempts: attempts, reason: failure)
+            return try recordVerificationFailure(stored, uuid: uuid, snapshot: snapshot,
+                                                attempts: attempts, reason: failure)
         }
         if let failure = Self.storedBindingFailure(current, intent: intent) {
-            return try stopBeforeWrite(stored, uuid: uuid, snapshot: snapshot,
-                                       attempts: attempts, reason: failure)
+            return try recordVerificationFailure(stored, uuid: uuid, snapshot: snapshot,
+                                                attempts: attempts, reason: failure)
         }
 
         // The record must be ours before anything is written to it. A record
@@ -464,8 +468,8 @@ public actor ImportExecutor {
 
         // The readback proves the same facts again, from the independent client.
         if let failure = Self.targetFailure(after, intent: intent, uuid: uuid) {
-            return try stopBeforeWrite(stored, uuid: uuid, snapshot: after,
-                                       attempts: attempts, reason: failure)
+            return try recordVerificationFailure(stored, uuid: uuid, snapshot: after,
+                                                attempts: attempts + 1, reason: failure)
         }
 
         let matches = after.matches(groupPath: intent.groupPath, metadata: intent.metadata,
@@ -539,10 +543,12 @@ public actor ImportExecutor {
         return nil
     }
 
-    /// Refuses a metadata write with a reason a reviewer can act on. A verified
-    /// but different digest is a conflict hold; everything else is an
+    /// Records a failed target verification with a reason a reviewer can act
+    /// on. Used before a metadata write (zero writes) and again at the readback
+    /// (where a write may already have happened — hence the caller's `attempts`).
+    /// A verified but different digest is a conflict hold; everything else is an
     /// unverified or changed boundary that needs a read-only check first.
-    private func stopBeforeWrite(_ stored: ImportOperationRecord, uuid: String,
+    private func recordVerificationFailure(_ stored: ImportOperationRecord, uuid: String,
                                  snapshot: ImportRecordSnapshot, attempts: Int,
                                  reason: ImportReason) throws -> ImportExecutionResult {
         try recordObservation(operation: stored, snapshot: snapshot, matches: false)
