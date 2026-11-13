@@ -121,7 +121,7 @@
 
 ### 7.3 修复后测试
 
-绿灯证据：[CI 43453832289](https://github.com/Skyline-Gazer/Forma/actions/runs/43453832289)（FormaCore tests + macOS app build 全绿）。修复后新增/改写的用例：`ImportHardeningTests`（10）、`ImportExecutorTests`（13）、`ImportFaultMatrixTests`（4）、`ImportArbitrationTests`（10，新增"字节无法证明则不验证"）、`ImportPreflightTests`（19，改为断言绑定许可）。
+绿灯证据：[CI 43458644319](https://github.com/Skyline-Gazer/Forma/actions/runs/43458644319)（FormaCore tests + macOS app build 全绿，最终 head）。前一绿灯运行 [43453832289](https://github.com/Skyline-Gazer/Forma/actions/runs/43453832289) 记录评审前的状态。修复后新增/改写的用例：`ImportHardeningTests`（10）、`ImportExecutorTests`（13）、`ImportFaultMatrixTests`（4）、`ImportArbitrationTests`（10，新增"字节无法证明则不验证"）、`ImportPreflightTests`（19，改为断言绑定许可）。
 
 ### 7.4 Import 前置授权不变量
 
@@ -163,6 +163,18 @@
 | Metadata 写入的部分成功语义 | 未核实；离线用"创建为空记录"模拟 |
 | 断连后的真实可观测状态 | 未核实；离线用异常注入模拟 |
 | 写工具是否接受来源标记 | 未核实；ADR 明确不预设官方支持自定义属性 |
+
+### 7.7.1 独立评审发现与处置
+
+ADS-style 独立评审（`ADSHardeningReview2`）审阅 `e340617..b7a62a3` 的 998 行生产 diff、反例测试与 ADR §6–7，给出 5 项发现，全部处置后重新绿灯：
+
+| 编号 | 级别 | 发现 | 处置 |
+| --- | --- | --- | --- |
+| F1 | HIGH | `hash_unverified` 不保证零写入：第一次读的 `shaVerified` 未检查，补写发生在第二次读之前 | `finish` 在第一次独立读取后、任何补写前检查 `shaVerified`；反例改为"记录缺字段 + 摘要不可验证"并断言 `metadataCalls == 0` |
+| F2 | MEDIUM | "两个候选 / 身份未确认"用例被写前查询截断，没有进入 `adoptAfterUnknownCreate` | Fake Transport 增加"仅 create 后可见的候选"，两条反例现在真正走恢复路径并断言 `createCalls == 1` |
+| F3 | LOW | `source_changed` 返回旧 phase，与落库状态不一致 | 落 `verifyRequired` 并返回同一 phase |
+| F4 | LOW | 绑定事实只有部分不匹配有用例；create 边界的取消被吞进恢复 | 补 revision/database/group 三处不匹配用例；create 的 `CancellationError` 单独传播 |
+| F5 | LOW | `ImportPreflightBinding.digest` 计算但未使用 | 删除 |
 
 ### 7.8 ADS / CNB 评审状态
 
