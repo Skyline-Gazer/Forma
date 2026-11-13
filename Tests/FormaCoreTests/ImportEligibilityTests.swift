@@ -112,11 +112,11 @@ struct ImportEligibilityTests {
     @Test("a business document inside build, dist or vendor is never excluded")
     func businessMaterialInWeakDirectoriesIsProtected() throws {
         let cases = [
-            ("Project/build/客户交付-验收报告.pdf", "generated_directory"),
-            ("Project/dist/已提交发布包-v2.zip", "generated_directory"),
-            ("Project/vendor/原厂技术白皮书.pdf", "vendor_directory"),
-            ("Project/bin/招标附件.docx", "generated_directory"),
-            ("Project/coverage/报价单.xlsx", "generated_directory"),
+            ("Project/build/客户交付-验收报告.pdf", "generated-directory-review", "generated_directory"),
+            ("Project/dist/已提交发布包-v2.zip", "generated-directory-review", "generated_directory"),
+            ("Project/vendor/原厂技术白皮书.pdf", "vendor-directory-review", "vendor_directory"),
+            ("Project/bin/招标附件.docx", "generated-directory-review", "generated_directory"),
+            ("Project/coverage/报价单.xlsx", "generated-directory-review", "generated_directory"),
         ]
         let entries = cases.map { entry($0.0) }
         let result = try view(entries, protected: Set(entries.map(\.id)))
@@ -125,6 +125,7 @@ struct ImportEligibilityTests {
             #expect(view.decision == .review,
                     "a weak directory name may only send \(cases[index].0) to REVIEW")
             #expect(view.decidedByRuleID == cases[index].1)
+            #expect(view.explanationCode == cases[index].2)
             #expect(view.followUp != nil, "a person has to confirm the deliverable")
         }
         #expect(result.metrics.falseExclusionRate.numerator == 0)
@@ -132,15 +133,29 @@ struct ImportEligibilityTests {
         #expect(result.metrics.falseExclusionRate.value == 0)
     }
 
-    @Test("confirmed business evidence overrides a strong exclusion")
+    @Test("confirmed business evidence protects a file, by rule and by structural guard")
     func businessEvidenceBeatsExclusion() throws {
         let noise = entry("Project/.DS_Store")
-        let result = try view([noise], facts: [noise.id: facts(noise, business: .confirmed)])
-        let view = try #require(result.entry(for: noise.id))
+        // The shipped policy has a higher-priority protection rule, so the
+        // exclusion never applies at all.
+        let shipped = try view([noise], facts: [noise.id: facts(noise, business: .confirmed)])
+        let protected = try #require(shipped.entry(for: noise.id))
+        #expect(protected.decision == .include)
+        #expect(protected.explanationCode == "confirmed_business_evidence")
+        #expect(protected.decidedByRuleID == "business-evidence-protect")
+
+        // Even a policy that ranks the noise rule alone cannot exclude confirmed
+        // business material: the structural guard downgrades it.
+        let noiseOnly = EligibilityRule(ruleID: "noise-only", priority: 10, decision: .exclude,
+                                        evidenceStrength: .strong, explanationCode: "technical_noise_ds_store",
+                                        all: [EligibilityPredicate(basenames: [".DS_Store"])])
+        let guarded = try view([noise], facts: [noise.id: facts(noise, business: .confirmed)],
+                               policy: policy([noiseOnly]))
+        let view = try #require(guarded.entry(for: noise.id))
         #expect(view.decision == .review)
         #expect(view.explanationCode == "business_evidence_overrides_exclusion")
         #expect(view.followUp == .confirmBusinessUse)
-        #expect(view.matchedRuleIDs.contains("technical-noise-ds-store"),
+        #expect(view.matchedRuleIDs.contains("noise-only"),
                 "the exclusion is still visible as a matched rule")
     }
 
