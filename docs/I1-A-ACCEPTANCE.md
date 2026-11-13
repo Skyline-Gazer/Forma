@@ -90,3 +90,84 @@
 - 离线可验证的部分全部通过合成夹具与 Fake Transport 验证；报告只覆盖 **Offline Verified**。
 - 没有真实写入、没有真实记录、没有生产库访问、没有真实 Provider 请求。
 - 未验证项与现场步骤见 §4/§5；在 I1-B 批准前不得宣称 Import Integration Verified。
+
+## 7. 硬化复审（2026-11-13，Owner 授权 I1-A Hardening）
+
+### 7.1 Confirmed / Rejected Defect Matrix
+
+| # | 缺陷 | 结论 | 证据 |
+| --- | --- | --- | --- |
+| 1 | `resume()` 找不到 Ledger 操作时启动一次新 Import | **Confirmed** | 红灯 `resume without a ledger row writes nothing`：旧实现 `attempts = 2`、`createCalls > 0`，并落了一条 intent 行 |
+| 2 | 已知 UUID 的恢复路径在补写前不读目标 | **Confirmed** | 红灯 `a record somebody else changed is not overwritten`：旧实现把外部写入的 `2019` 覆盖成 `2026`，`metadataCalls > 0` |
+| 3 | `create()` 结果未知后的候选恢复取 `records.first` | **Confirmed** | 红灯 `two candidates after an unknown create: neither is chosen`：旧实现认领了 `uuid-a` |
+| 4 | Preflight 结论可任意构造，未绑定事实 | **Confirmed** | 红灯 `a preflight pass that is not bound to this intent writes nothing`：旧实现照常导入并落 intent |
+| 5 | `ImportCreateRequest` 缺真实文件导入的输入契约 | **Confirmed** | 类型层：请求只带 `sourceSHA256`，没有获授权的源文件、快照与读取会话 |
+| 6 | 目标 SHA 不可验证时仍给出终态结论 | **Confirmed** | 红灯 `a target that cannot prove its bytes is not readback verified`：旧实现给 `conflict_hold`，把"无法证明"当成"不一致" |
+| 7 | 恢复期间来源已变仍会继续 | **Confirmed** | 红灯 `resume with a snapshot that no longer matches writes nothing`：旧实现直接导入 |
+| 8 | 候选身份未确认仍会被认领 | **Rejected（行为未触发，但无保证）** | 该用例在旧实现下通过：当时恢复查询没有给出可认领的候选；代码路径本身没有身份校验，因此仍按缺陷修复并由用例锁定 |
+
+### 7.2 修复前失败测试
+
+红灯证据：[CI 43445939480](https://github.com/Skyline-Gazer/Forma/actions/runs/43445939480) —— 7 个反例以行为断言失败（不是编译失败）。失败项：
+
+| 反例 | 旧实现的实际结果 |
+| --- | --- |
+| resume without a ledger row writes nothing | `outcome = importRecord`、`attempts = 2`、`createCalls > 0`、intent 行已落 |
+| resume with a snapshot that no longer matches writes nothing | `outcome = importRecord`、`createCalls > 0` |
+| a record somebody else changed is not overwritten | `outcome = importRecord`、`metadataCalls > 0`、记录被改成 `2026` |
+| two candidates after an unknown create: neither is chosen | `actualUUID = uuid-a` |
+| a preflight pass that is not bound to this intent writes nothing | `outcome = importRecord`、`attempts = 2` |
+| a target that cannot prove its bytes is not readback verified | `outcome = conflictHold`（应为 `verifyRequired`） |
+
+### 7.3 修复后测试
+
+见 §7.8 的绿灯运行。修复后新增/改写的用例：`ImportHardeningTests`（10）、`ImportExecutorTests`（13）、`ImportFaultMatrixTests`（4）、`ImportArbitrationTests`（10，新增"字节无法证明则不验证"）、`ImportPreflightTests`（19，改为断言绑定许可）。
+
+### 7.4 Import 前置授权不变量
+
+一次外部写入只有在下列全部成立时才可能发生（ADR §6.2）：
+
+1. 存在与本次 Intent 事实绑定的 `ImportPreflightClearance`，且结论为 `pass`；许可的构造器是 **file-scoped**，只有 `ImportPreflight.evaluate` 能产出，测试与其他模块都无法手写一份许可。
+2. 许可绑定的来源、快照、Manifest revision、目标与授权摘要，与本次 Intent 逐项一致（否则 `clearance_mismatch`，零写入）。
+3. 执行器持有单写者租约，并对该来源与目标做了互斥预留。
+4. Intent 行已持久化（`intent_persisted`），且本次操作键此前不存在。
+5. 目标身份、字段与内容状态经**独立只读客户端**核对过，冲突项为零。
+6. 目标能给出可验证的内容摘要；否则停在 `VERIFY_REQUIRED(hash_unverified)`。
+
+### 7.5 恢复路径的 read-before-write 证据
+
+| 场景 | 旧行为 | 现在 |
+| --- | --- | --- |
+| 已知 UUID，字段被外部改过 | 直接补写，覆盖外部值 | 先读 → `CONFLICT_HOLD(external_modification)`，只写仍缺失的槽位，外部值保留 |
+| 已知 UUID，字段仍为空 | 全量补写 | 只写缺失的槽位 |
+| 恢复时来源快照或字节已变 | 继续导入 | `source_changed`，零写入 |
+| Ledger 中没有该操作 | 启动一次新导入 | `intent_missing`，零写入 |
+| Create 结果未知、两个候选 | 认领第一条 | `VERIFY_REQUIRED`，未认领任何 UUID |
+| Create 结果未知、候选身份未确认 | 认领并补写 | `VERIFY_REQUIRED`，零补写 |
+| Create 结果未知、唯一且身份确认 | —— | 认领该 UUID 并继续到独立回读 |
+
+### 7.6 ImportCreateRequest 真实输入契约
+
+`ImportSourceBinding` 随创建请求传递：获授权的 `sourceID`、作用域、相对路径、快照指纹、**字节 SHA-256**、字节数与**读取会话**。
+
+它刻意**不**携带可直接发送的工具参数：DEVONthink 文件导入工具的参数形状（路径、文件引用还是上传）尚未核实，猜一个会让适配器"看起来完成但不能工作"。映射留在 I1-B。
+
+### 7.7 与 I1-B 真实 MCP 能力的未决对应关系
+
+| 未决项 | 现状 |
+| --- | --- |
+| 写工具名称与参数 | 未核实；`ImportSourceBinding` 不假定形状 |
+| 创建返回的 UUID 语义 | 未核实；离线用合成 UUID |
+| 目标标准 SHA-256 可得性 | 未核实；不可得时走 `hash_unverified` |
+| Group 查询能否证明"不存在" | 未核实；离线用 `conclusive` 开关模拟 |
+| Metadata 写入的部分成功语义 | 未核实；离线用"创建为空记录"模拟 |
+| 断连后的真实可观测状态 | 未核实；离线用异常注入模拟 |
+| 写工具是否接受来源标记 | 未核实；ADR 明确不预设官方支持自定义属性 |
+
+### 7.8 I1-B Readiness Decision
+
+**结论：Integration Boundary Ready，但仍未取得 Import Integration Verified。**
+
+理由：五类执行边界缺陷已复现、修复并由红灯→绿灯的用例锁定；写入前置授权、读回证据与恢复语义现在都有可执行的契约与反例。缺口全部是**接口能力**而不是内部逻辑：I1-B 必须在真实隔离库上确认写工具、UUID、字段、Group 与标准 SHA 的真实行为，并验证断连、重复运行与崩溃恢复。
+
+因此 I1-A 的状态仍写作 **Offline Verified**；只有 I1-B 在真实接口上跑完 §7.7 的每一行，才允许改写为 Import Integration Verified。
