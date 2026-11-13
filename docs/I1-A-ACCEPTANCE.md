@@ -218,7 +218,7 @@ ADS-style 独立评审（`ADSHardeningReview2`）审阅 `e340617..b7a62a3` 的 9
 
 红灯（仅反例测试，不改实现）：[CI 43472679882](https://github.com/Skyline-Gazer/Forma/actions/runs/43472679882) —— 11 个反例以行为断言失败：A1（目标 SHA 值不同仍补写并报 import）、A3（database 变化仍补写并报 import）、A4（父组变化仍补写并报 conflict_hold）、B1–B5（SHA 为 nil / missing / unauthorized / unreadable / hydration pending 均仍补写并报 import）、B7（SHA 变化被归入 `source_changed` 而非 `source_sha_mismatch`）。A2、A5、A6、B6、B8、B9 在红灯下已通过，作为回归护栏保留，未删除或弱化。首个红灯运行 [43470329974](https://github.com/Skyline-Gazer/Forma/actions/runs/43470329974) 暴露了夹具里"缺失字段"其实并不缺失的问题，已修正夹具后重跑取得干净红灯。
 
-绿灯（最终 head）：见 §8.8。
+绿灯（最终 head）：[CI 43478182718](https://github.com/Skyline-Gazer/Forma/actions/runs/43478182718)（FormaCore tests 3m3s + macOS app build 1m43s 全绿）与 [Benchmark 43478182978](https://github.com/Skyline-Gazer/Forma/actions/runs/43478182978)（Benchmark smoke 通过）。
 
 ### 8.4 Read-before-write Proof
 
@@ -275,7 +275,7 @@ B0 反例对六条路径的覆盖：Initial create（B13，核对 create 请求�
 
 ### 8.8 macOS CI + App Build
 
-见最终绿灯运行（填入 §8.11 的 CI URL）。DevBox 只做 `git diff --check`、括号平衡与文档一致性；**不**把 Linux 静态检查等同于 Swift 编译通过。
+[CI 43478182718](https://github.com/Skyline-Gazer/Forma/actions/runs/43478182718) — FormaCore tests + macOS app build 全绿；[Benchmark 43478182978](https://github.com/Skyline-Gazer/Forma/actions/runs/43478182978) — Benchmark smoke 通过。中途 `43473868370` 与 `43477353543` 的 app build 因 macOS runner 容量被取消（不是编译失败），重跑后 `43478182718` 全绿。DevBox 只做 `git diff --check`、括号平衡与文档一致性；**不**把 Linux 静态检查等同于 Swift 编译通过。
 
 ### 8.9 ADS Review Results
 
@@ -297,7 +297,7 @@ CNB AI Code Review：本轮不触发（上一轮 PR #67 的 CNB 评审已因 `40
 
 ### 8.10 PR + Merge SHA
 
-（待合并后填入）
+PR：[#68](https://github.com/Skyline-Gazer/Forma/pull/68)。合并 SHA 见最终交付报告（合并后回填）。
 
 ### 8.11 I1-B1 Readiness
 
