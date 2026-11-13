@@ -45,7 +45,8 @@ struct ImportB0BoundaryTests {
     }
 
     private func intent(_ stack: Stack) throws -> ImportIntent {
-        try ImportFixtures.intent(runID: stack.runID)
+        try ImportFixtures.intent(runID: stack.runID,
+                                  metadata: ["completion_year": "2026", "title": "Tender"])
     }
 
     /// Persists an interrupted operation that already knows its record UUID.
@@ -93,7 +94,7 @@ struct ImportB0BoundaryTests {
         let intent = try intent(stack)
         // Record is ours, has a missing field, but its content digest differs.
         await seed(stack, sha: String(repeating: "d", count: 64),
-                   metadata: ["completion_year": "2026", "title": nil])
+                   metadata: ["completion_year": "2026"])
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
 
         let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
@@ -101,14 +102,14 @@ struct ImportB0BoundaryTests {
         try await expectNoWrite(stack, intent, result, outcome: "conflict_hold",
                                 reason: "target_sha_mismatch")
         let records = await stack.transport.storedRecords()
-        #expect(records.first?.metadata["title"] == nil, "simulated record unchanged")
+        #expect((records.first?.metadata["title"] ?? nil) == nil, "simulated record unchanged")
     }
 
     @Test("A2: an unverifiable target SHA blocks the write")
     func targetSHAUnverified() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
-        await seed(stack, shaVerified: false, metadata: ["completion_year": "2026", "title": nil])
+        await seed(stack, shaVerified: false, metadata: ["completion_year": "2026"])
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
 
         let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
@@ -122,7 +123,7 @@ struct ImportB0BoundaryTests {
         let stack = try await makeStack()
         let intent = try intent(stack)
         await seed(stack, database: "Other_Archive",
-                   metadata: ["completion_year": "2026", "title": nil])
+                   metadata: ["completion_year": "2026"])
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
 
         let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
@@ -136,7 +137,7 @@ struct ImportB0BoundaryTests {
         let stack = try await makeStack()
         let intent = try intent(stack)
         await seed(stack, groupPath: ["09_其他", "2026"],
-                   metadata: ["completion_year": "2026", "title": nil])
+                   metadata: ["completion_year": "2026"])
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
 
         let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
@@ -164,7 +165,7 @@ struct ImportB0BoundaryTests {
     func matchingTargetAllowsWrite() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
-        await seed(stack, metadata: ["completion_year": "2026", "title": nil])
+        await seed(stack, metadata: ["completion_year": "2026"])
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
 
         let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
@@ -181,12 +182,12 @@ struct ImportB0BoundaryTests {
 
     private func resumeExpectsNoWrite(_ stack: Stack, _ intent: ImportIntent,
                                       source: ImportSourceFacts, reason: String) async throws {
-        await seed(stack, metadata: ["completion_year": "2026", "title": nil])
+        await seed(stack, metadata: ["completion_year": "2026"])
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
         let result = try await stack.executor.resume(intent, source: source)
         try await expectNoWrite(stack, intent, result, outcome: "verify_required", reason: reason)
         let records = await stack.transport.storedRecords()
-        #expect(records.first?.metadata["title"] == nil, "simulated record unchanged")
+        #expect((records.first?.metadata["title"] ?? nil) == nil, "simulated record unchanged")
     }
 
     @Test("B1: a nil source SHA cannot prove the bytes")
@@ -273,7 +274,7 @@ struct ImportB0BoundaryTests {
     func verifiedRecovery() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
-        await seed(stack, metadata: ["completion_year": "2026", "title": nil])
+        await seed(stack, metadata: ["completion_year": "2026"])
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
 
         let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
@@ -289,7 +290,7 @@ struct ImportB0BoundaryTests {
     func cancellationDuringRecovery() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
-        await seed(stack, metadata: ["completion_year": "2026", "title": nil])
+        await seed(stack, metadata: ["completion_year": "2026"])
         try persistKnownUUID(stack, intent, uuid: "uuid-target")
         await stack.transport.setReadCancellation(true)
 
@@ -299,6 +300,6 @@ struct ImportB0BoundaryTests {
         #expect(await stack.transport.createCalls == 0)
         #expect(await stack.transport.metadataCalls == 0)
         let records = await stack.transport.storedRecords()
-        #expect(records.first?.metadata["title"] == nil, "simulated record unchanged")
+        #expect((records.first?.metadata["title"] ?? nil) == nil, "simulated record unchanged")
     }
 }
