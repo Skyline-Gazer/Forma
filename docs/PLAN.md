@@ -245,6 +245,8 @@ invalidated 是修订有效性标志，保留原 decision state 供审计；不�
 
 > 实现状态（2026-11-13，P3-A 切片 2f，**不改变本节需求**）：资格判定所需的三项结构事实改由只读探测建立——`EligibilityFactCollector`（`EligibilityFactProbe.swift`）读取文件元数据、祖先 `CACHEDIR.TAG` 与授权根自身的 Git 索引，全部经 `SourceRootAccess` 的逐段 `O_NOFOLLOW` 打开，`GIT_CEILING_DIRECTORIES` 固定为授权根，**不读取授权根之外的任何目录**。策略版本升为 `eligibility.v2`：每条 `EXCLUDE` 声明 `protection_facts`，未知即降级为 `REVIEW`（`protection_fact_unknown`）；授权根不是仓库顶层、仓库顶层在根之外、符号链接、超大标记、读取期间元数据变化、超时与取消分别报告为独立状态，绝不折算成"没有"。探测不推断业务证据与文件内容，不写源目录、不写库、不调用 Provider；macOS 文件系统、APFS 与 OneDrive 行为仍属现场验证。契约与已知限制见 `docs/IMPORT-ELIGIBILITY-POLICY.md` §4.1 / §4.2。
 
+> 实现状态（2026-11-13，P3-A 切片 2h，**不改变本节需求**）：探测报告新增 `descriptorOpens` 与 `gitInvocations` 两个观测计数，成本不再只能从代码推断；10,000 条目 / 100 目录的规模测量做成 opt-in（`FORMA_PROBE_SCALE=1`），由 `Benchmark` 工作流的手动任务运行，与评测运行器规模基准分开。合成条目只说明本模块的调度与记忆化开销，不进入评测口径，也不替代 M9 的真实 10,000 文件扫描验收。
+
 ## 8. 样本、评测、隐私与 Correction Capture
 
 ### 8.1 样本获取与独立性
