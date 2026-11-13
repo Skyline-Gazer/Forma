@@ -54,6 +54,23 @@ struct ProviderTransport: Sendable {
         let payload: String
         let schema: Data
         let maxOutputTokens: Int
+        /// An explicit endpoint override, used only by a grant whose scope names
+        /// that exact target. Nothing is allowed to set this from a UI string:
+        /// `EgressGate` compares it with the authorized endpoint before a ticket
+        /// exists, and `response` compares it again before the wire call.
+        let endpoint: URL?
+
+        init(provider: ProbeProvider, model: String, name: String, system: String?, payload: String,
+             schema: Data, maxOutputTokens: Int, endpoint: URL? = nil) {
+            self.provider = provider
+            self.model = model
+            self.name = name
+            self.system = system
+            self.payload = payload
+            self.schema = schema
+            self.maxOutputTokens = maxOutputTokens
+            self.endpoint = endpoint
+        }
     }
 
     func makeRequest(_ request: StructuredRequest, key: String) throws -> URLRequest {
@@ -62,12 +79,11 @@ struct ProviderTransport: Sendable {
         // provider side as well: a permissive format lets a model add identity
         // fields back in.
         var format: [String: Any] = ["type": "json_schema", "schema": schema, "strict": true]
-        let endpoint: URL
+        let endpoint: URL = EgressEndpoint.provider(request.provider).canonicalURL
         let body: [String: Any]
         let text = request.system.map { "\($0)\n\n" + request.payload } ?? request.payload
         switch request.provider {
         case .openAI:
-            endpoint = URL(string: "https://api.openai.com/v1/responses")!
             format["name"] = request.name
             body = [
                 "model": request.model,
@@ -79,7 +95,6 @@ struct ProviderTransport: Sendable {
                 "store": false,
             ]
         case .anthropic:
-            endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
             var message: [String: Any] = [
                 "model": request.model,
                 "max_tokens": request.maxOutputTokens,
@@ -89,7 +104,7 @@ struct ProviderTransport: Sendable {
             if let system = request.system { message["system"] = system }
             body = message
         }
-        var urlRequest = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
+        var urlRequest = URLRequest(url: request.endpoint ?? endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -104,7 +119,12 @@ struct ProviderTransport: Sendable {
         return urlRequest
     }
 
-    func response(_ request: URLRequest, limit: Int) async throws -> (Data, HTTPURLResponse) {
+    /// The only wire call in FormaCore. A ticket from `EgressGate` is mandatory:
+    /// no `URLRequest` can reach `session.bytes` without one. The endpoint is
+    /// compared again here so a caller that rewrote the URL after the gate (or
+    /// a follow-up request produced by a redirect) cannot escape the scope.
+    func response(_ request: URLRequest, limit: Int, ticket: EgressTicket) async throws -> (Data, HTTPURLResponse) {
+        guard request.url?.absoluteString == ticket.endpoint else { throw FormaError.unauthorized }
         let (bytes, response) = try await session.bytes(for: request, delegate: Self.redirectPolicy)
         do {
             guard let http = response as? HTTPURLResponse else { throw FormaError.invalidResponse }

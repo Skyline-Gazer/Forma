@@ -98,8 +98,7 @@ struct SettingsView: View {
                 LabeledContent("Payload bytes", value: preview.value.byteCount.formatted())
                 LabeledContent("Request digest", value: preview.value.digest)
                     .font(.caption.monospaced())
-                LabeledContent("Redaction applied", value: preview.isIdentityRedaction
-                                                            ? "Identity (no terms)" : RedactionPlan.version)
+                LabeledContent("Redaction applied", value: preview.value.redactionVersion)
                 LabeledContent("Files in previewed batch", value: preview.fileCount.formatted())
                 LabeledContent("Batches for this listing", value: preview.batchCount.formatted())
                     .help("The engine groups files by the candidate that claims them: one batch is one "
@@ -289,6 +288,7 @@ struct SettingsView: View {
             LabeledContent("Extractor", value: EvidenceRegistry.extractorVersion)
             LabeledContent("Prompt", value: MappingPrompt.version)
             LabeledContent("Redaction", value: RedactionPlan.version)
+            LabeledContent("Egress scope", value: "\(EgressContract.version) / \(EgressContract.scopeVersion)")
             LabeledContent("Excerpt limit", value: "\(EvidenceRegistry.maximumExcerptCharacters.formatted()) characters")
             LabeledContent("Prompt excerpt limit", value: "\(EvidenceRegistry.maximumPromptExcerptCharacters.formatted()) characters")
             LabeledContent("Scope", value: model.selectedScope?.displayName ?? "None selected")

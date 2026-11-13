@@ -243,6 +243,25 @@ public enum ManifestExport {
                 values[field] = entry.metadata[field].map { redaction.redact(text: $0) }
             }
             copy.entries[index].metadata = values
+            // FieldOutcome.value and its conflict strings are model-supplied free
+            // text: they can quote a document body, so they cannot travel in a
+            // "redacted" copy unredacted.
+            copy.entries[index].fields = entry.fields.map { outcome in
+                FieldOutcome(field: outcome.field,
+                             value: outcome.value.map { redaction.redact(text: $0) },
+                             status: outcome.status, evidenceIDs: outcome.evidenceIDs,
+                             conflicts: outcome.conflicts.map { redaction.redact(text: $0) })
+            }
+        }
+        // The validation report embeds real relative paths in instancePath and
+        // document fragments in detail. Encoding it unchanged left the shareable
+        // copy redacted only on its surface.
+        for groupIndex in copy.report.groups.indices {
+            copy.report.groups[groupIndex].violations = copy.report.groups[groupIndex].violations.map { violation in
+                ValidationViolation(code: violation.code,
+                                    instancePath: redaction.redact(path: violation.instancePath),
+                                    detail: redaction.redact(text: violation.detail))
+            }
         }
         return try FormaJSON.encoder(pretty: true).encode(copy)
     }

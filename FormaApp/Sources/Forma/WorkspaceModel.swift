@@ -147,7 +147,6 @@ final class WorkspaceModel: ObservableObject {
         /// the current values would pair one request's bytes with another
         /// request's settings.
         let entryLimit: Int
-        let isIdentityRedaction: Bool
     }
     @Published private(set) var preview: Preview?
     @Published private(set) var leakedTerms: [String] = []
@@ -722,13 +721,26 @@ final class WorkspaceModel: ObservableObject {
         } else {
             targets = listing.entries
         }
-        guard let engine = engine(for: profile) else { return false }
-
         let provider = self.provider
         let model = modelID
         let consent = egress
         let limit = entryLimit
         let plan = redaction
+        // Consent alone is not an authorization. Build one grant from the
+        // approved data range, provider, model and redaction policy; FormaCore's
+        // gate re-checks it against every wire request. The preview digest is
+        // recorded for auditing, but the binding is `.dataRange`: a run re-reads
+        // file bodies, so the preview is explicitly not a byte-level receipt.
+        let grant: EgressAuthorization? = consent ? EgressAuthorization(
+            scope: EgressScope(provider: provider, model: model, endpoint: .provider(provider),
+                               mode: .cloud,
+                               categories: [.filePaths, .evidenceExcerpts, .projectContext,
+                                            .casePackExamples, .profileRules, .systemPrompt,
+                                            .repairInstructions],
+                               redactionVersion: MappingPrompt.redactionVersion(for: plan),
+                               identitySubstitution: plan.isIdentity),
+            previewDigest: preview?.value.digest, binding: .dataRange) : nil
+        guard let engine = engine(for: profile, authorization: grant) else { return false }
         allowCloud = false
         notice = nil
         exportSummary = nil
@@ -1197,7 +1209,7 @@ final class WorkspaceModel: ObservableObject {
                 // not evidence of anything, and a request without the settings
                 // that produced it cannot be checked by whoever reads it.
                 self.preview = Preview(value: value, fileCount: batch.entries.count, batchCount: batches.count,
-                                       entryLimit: limit, isIdentityRedaction: plan.isIdentity)
+                                       entryLimit: limit)
                 self.leakedTerms = plan.isIdentity ? [] : plan.leaks(value.system + String(decoding: value.payload, as: UTF8.self))
             } catch {
                 if !Task.isCancelled { self.show(error, operation: .providerProbe, fallback: .incompatible) }
@@ -1229,19 +1241,25 @@ final class WorkspaceModel: ObservableObject {
     // MARK: - Helpers
 
     /// The engine is cached, but a cache keyed on nothing would answer a second
-    /// profile with the first profile's rules: `MappingEngine` binds a profile
-    /// and a case pack at construction. The key is the pair it was built from,
-    /// so switching profiles rebuilds and a repeat run reuses.
-    private func engine(for profile: MappingProfile) -> MappingEngine? {
+    /// profile with the first profile's rules - or a second run with the first
+    /// run's authorization. The key names the profile, the case pack and the
+    /// grant, so a revoked or changed scope cannot reuse a client built under
+    /// the old one.
+    private func engine(for profile: MappingProfile,
+                        authorization: EgressAuthorization?) -> MappingEngine? {
         let key = "\(profile.versionKey)|\(casePack?.versionKey ?? "no-case-pack")"
+            + "|\(authorization?.id ?? "no-egress")"
         if let engineCache, engineCache.key == key { return engineCache.engine }
         guard let casePack else {
             error = .unavailable
             notice = "The shipped CasePack could not be loaded, so no engine can be built."
             return nil
         }
+        let client: ProviderMappingClient
+        if let authorization { client = ProviderMappingClient(authorization: authorization) }
+        else { client = ProviderMappingClient() }
         let built = MappingEngine(profile: profile, casePack: casePack,
-                                  answerer: ProviderMappingClient(), workspace: workspace)
+                                  answerer: client, workspace: workspace)
         engineCache = (key, built)
         return built
     }
