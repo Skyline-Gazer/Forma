@@ -257,6 +257,7 @@ struct ProviderTests {
         let client = ProviderMappingClient(session: URLSession(configuration: configuration),
                                            keyStore: MemoryKeyStore(keys: [.openAI: key]),
                                            authorization: grant)
+        let profile = try MappingProfile.projectArchive()
         let sourceID = UUID()
         let batch = MappingBatch(id: "b1", candidateID: "c1",
                                  entries: [MappingEntryRef(ref: "e1", sourceID: sourceID,

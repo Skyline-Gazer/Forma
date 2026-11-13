@@ -140,8 +140,8 @@ struct EgressContractTests {
     @Test("a local URL is not safe just because the user named it")
     func localModeContract() {
         let local = EgressEndpoint.local(URL(string: "http://127.0.0.1:8080/v1/messages")!)
-        let localRequest = request(mode: .local, endpoint: local, endpointURL: local.canonicalURL,
-                                   categories: [.syntheticProbe])
+        let localRequest = request(categories: [.syntheticProbe], mode: .local, endpoint: local,
+                                   endpointURL: local.canonicalURL)
         // No grant at all: a URL is never an authorization.
         #expect(EgressGate.decide(request: localRequest, authorization: nil, allowCloud: false,
                                   previewDigest: nil).denial?.reason == .authorizationMissing)
