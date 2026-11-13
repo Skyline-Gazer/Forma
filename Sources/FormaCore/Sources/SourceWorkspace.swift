@@ -99,7 +99,9 @@ public actor SourceWorkspace {
         async throws -> EligibilityProbeReport {
         guard !scanInProgress, !readInProgress else { throw FormaError.unavailable }
         let (current, root) = try scanConfiguration(scope)
-        let listing = try store.database.read { db in try SourceStore.listing(db, scope: current) }
+        // `listing(_:)` is synchronous on purpose: called from an `async` body,
+        // GRDB's `read` would resolve to the async overload instead.
+        let listing = try listing(current)
         readInProgress = true
         defer { readInProgress = false }
         let work = Task.detached(priority: .utility) {
