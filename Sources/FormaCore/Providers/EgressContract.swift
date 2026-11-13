@@ -241,25 +241,25 @@ public struct EgressRequest: Sendable, Equatable {
 /// A stable, log-safe reason. No reason carries a payload, path, key or model
 /// response body, so a denial can be recorded in diagnostics as a code.
 public enum EgressDenialReason: String, Codable, Sendable, CaseIterable {
-    case cloudDisabled
-    case authorizationMissing
-    case scopeVersionMismatch
-    case scopeRevoked
-    case scopeExpired
-    case providerMismatch
-    case modelMismatch
-    case endpointMismatch
-    case modeMismatch
-    case categoryNotAllowed
-    case redactionVersionMismatch
-    case identityRedactionUndisclosed
-    case previewMismatch
-    case credentialMissing
-    case payloadIdentityMissing
-    case wireDigestCollision
-    case unknownSensitiveContent
-    case sensitiveContentBlocked
-    case cancellation
+    case cloudDisabled = "cloud_disabled"
+    case authorizationMissing = "authorization_missing"
+    case scopeVersionMismatch = "scope_version_mismatch"
+    case scopeRevoked = "scope_revoked"
+    case scopeExpired = "scope_expired"
+    case providerMismatch = "provider_mismatch"
+    case modelMismatch = "model_mismatch"
+    case endpointMismatch = "endpoint_mismatch"
+    case modeMismatch = "mode_mismatch"
+    case categoryNotAllowed = "category_not_allowed"
+    case redactionVersionMismatch = "redaction_version_mismatch"
+    case identityRedactionUndisclosed = "identity_redaction_undisclosed"
+    case previewMismatch = "preview_mismatch"
+    case credentialMissing = "credential_missing"
+    case payloadIdentityMissing = "payload_identity_missing"
+    case wireDigestCollision = "wire_digest_collision"
+    case unknownSensitiveContent = "unknown_sensitive_content"
+    case sensitiveContentBlocked = "sensitive_content_blocked"
+    case cancellation = "cancellation"
 }
 
 public struct EgressDenial: Codable, Sendable, Equatable {
