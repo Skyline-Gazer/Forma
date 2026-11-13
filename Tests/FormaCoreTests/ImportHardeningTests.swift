@@ -203,7 +203,6 @@ struct ImportHardeningTests {
     @Test("a preflight pass that is not bound to this intent writes nothing")
     func unboundPreflightWritesNothing() async throws {
         let stack = try await makeStack()
-        let intent = try intent(stack)
         // A conclusion about a different source, snapshot and target.
         let other = try intent(stack, snapshot: String(repeating: "b", count: 64),
                                associationBasis: "another association")
