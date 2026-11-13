@@ -259,8 +259,10 @@ public struct ImportPreflightBinding: Sendable, Equatable {
 public struct ImportPreflightClearance: Sendable, Equatable {
     public let binding: ImportPreflightBinding
 
-    /// Only `ImportPreflight.evaluate` may create a clearance.
-    private init(binding: ImportPreflightBinding) {
+    /// Only `ImportPreflight.evaluate` may create a clearance: the initializer
+    /// is file-scoped, so neither another module nor a test can hand-write a
+    /// permission.
+    fileprivate init(binding: ImportPreflightBinding) {
         self.binding = binding
     }
 
