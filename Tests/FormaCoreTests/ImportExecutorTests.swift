@@ -18,7 +18,7 @@ struct ImportExecutorTests {
     private let groupPath = ["01_招标文件", "2026"]
     private let metadata: [String: String?] = ["completion_year": "2026"]
 
-    private struct Stack {
+    private struct Stack: Sendable {
         let ledger: ImportLedger
         let transport: FakeImportTransport
         let executor: ImportExecutor
