@@ -42,7 +42,8 @@
 | 回读失败 | `read` 抛错 | VERIFY_REQUIRED | `readbackFailure` |
 | 回读不一致 | 回读篡改 | CONFLICT_HOLD | `readbackMismatch` |
 | 已存在且一致 | 预置记录 | SKIP_VERIFIED，0 写入 | `existingMatch` |
-| 已存在但不一致 | 预置差异记录 | CONFLICT_HOLD，0 写入 | `existingDifference` |
+| 已存在、仅锚点匹配但字段不同 | 预置差异记录 | VERIFY_REQUIRED（锚点 + 字段不足以确认） | `existingDifference` |
+| 已确认（锚点 + 字段）但字节不同 | 预置同元数据异哈希记录 | CONFLICT_HOLD，0 写入 | `confirmedButBytesDiffer` |
 | 同 SHA 无锚点 | 预置他项目记录 | VERIFY_REQUIRED，0 写入 | `sameBytesNoAnchor` |
 | 重复执行 | 同 key 第二次 | 不再次创建 | `idempotentReexecution` |
 | 重启后在途 | 进程中断 | 先标 verify_required，再只读解析 | `resumeAfterRestart` |
