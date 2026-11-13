@@ -119,7 +119,7 @@ flowchart LR
 拒绝与降级规则：
 
 - **绝不读授权根之外**：所有路径经 `SourceRootAccess.openDirectory` 打开（逐段 `O_NOFOLLOW`、校验根身份、校验设备）。`GIT_CEILING_DIRECTORIES` 固定为授权根，Git 不会向上越过它查找仓库。
-- **根不是仓库顶层 → `unknown`**（`repository_not_at_scope`）。子目录形式的仓库不会因为"父目录里可能有 `.git`"而被读；`gitTracked` 也不会被写成 `no`。
+- **根不是仓库顶层 → `unknown`**（`git_toplevel_unavailable`）。子目录形式的仓库不会因为"父目录里可能有 `.git`"而被读；`gitTracked` 也不会被写成 `no`。
 - **仓库顶层在授权根之外 → `unknown`**（`repository_outside_authorization`，`outside_authorization`）。
 - **符号链接**：`.git`、`CACHEDIR.TAG`、entry 本身遇到 symlink 一律不跟随，报告 `symlink` / `git_symlink`。
 - **超限**：`CACHEDIR.TAG` 超过 1 KiB、`.git` 文件超过 4 KiB、Git 输出超过 `gitOutputLimitBytes` 都报告 `oversized` / `git_output_limit`，不读入内存。

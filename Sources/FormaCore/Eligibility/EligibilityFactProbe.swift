@@ -558,8 +558,12 @@ enum GitSnapshot {
                                   arguments: ["rev-parse", "--show-toplevel"],
                                   timeout: request.gitTimeout, outputLimit: 4_096)
         switch top {
-        case .failure(.notARepository):
-            return .unavailable(reason: "repository_not_at_scope", status: .unavailable)
+        case .failure(.failed):
+            // `rev-parse` failed. That is "the scope root is not a repository
+            // top-level I can read", not "this host has no repository": Git also
+            // exits non-zero for a refused or unreadable repository, and the two
+            // would be indistinguishable without reading its stderr.
+            return .unavailable(reason: "git_toplevel_unavailable", status: .unavailable)
         case .failure(let failure):
             return .unavailable(reason: failure.rawValue, status: .failed)
         case .success(let output):
@@ -610,7 +614,6 @@ enum GitSnapshot {
 
 enum GitReadOnly {
     enum Failure: String, Error, Equatable {
-        case notARepository = "repository_not_at_scope"
         case timedOut = "git_timeout"
         case cancelled = "cancelled"
         case outputLimit = "git_output_limit"
@@ -681,9 +684,7 @@ enum GitReadOnly {
         }
         process.waitUntilExit()
         if killed.isSet { return .failure(.timedOut) }
-        guard process.terminationStatus == 0 else {
-            return .failure(arguments.first == "rev-parse" ? .notARepository : .failed)
-        }
+        guard process.terminationStatus == 0 else { return .failure(.failed) }
         return .success(collected)
     }
 
