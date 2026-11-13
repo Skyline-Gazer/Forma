@@ -70,7 +70,13 @@ I1 不需要重做这些；它需要的是**在这些事实之上**决定何时�
 | 崩溃窗口 | "创建成功但未记账"是唯一不可逆点 | 以 lookup-by-key 作为恢复唯一依据，禁止盲目重试 |
 | 模拟通过被当成验收 | Fake transport 全绿不等于真实写入正确 | 状态只报 PASS/FAIL/BLOCKED/NOT_VERIFIED，模拟标 `simulated` |
 
-## 7. 下一步
+## 7. 授权进展（2026-11-13）
+
+Owner 已批准 **I1-A**（离线设计确认与基础实现），分四个可独立审核的 PR：A1 契约 ADR + Preflight + 等键模型、A2 Ledger + 单写者、A3 四态仲裁 + Fake MCP + 崩溃恢复、A4 故障矩阵 + 离线阶段验收。实现基线见 `docs/ADR-I1-A-IMPORT-CONTRACT.md`。
+
+I1-A 仍然禁止：真实 DEVONthink 写工具调用、真实记录创建、生产库写入、真实文件 Import、真实 OneDrive hydration、真实 Provider 请求、默认启用应用层 WriteClient。I1-B（真实隔离库写入）仍需 Owner 单独批准。
+
+## 8. 下一步
 
 本评估完成即"记录完成条件"这一步。继续 DevBox 开发的选择有两条，均需 Owner 决策：
 
