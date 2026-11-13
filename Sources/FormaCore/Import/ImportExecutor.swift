@@ -248,6 +248,13 @@ public actor ImportExecutor {
             return ImportExecutionResult(phase: .verifyRequired, outcome: .verifyRequired,
                                          actualUUID: nil, reason: .identityUnconfirmed, attempts: 1)
         }
+        // Adoption also needs proof of the bytes: a candidate whose digest
+        // cannot be verified is not evidence of anything yet.
+        guard candidate.shaVerified else {
+            try recordObservation(operation: stored, snapshot: candidate, matches: false)
+            return ImportExecutionResult(phase: .verifyRequired, outcome: .verifyRequired,
+                                         actualUUID: nil, reason: .hashUnverified, attempts: 1)
+        }
 
         try ledger.observeActualUUID(candidate.uuid, keyDigest: stored.keyDigest, at: clock())
         try ledger.transition(keyDigest: stored.keyDigest, to: .recordObserved, at: clock())
