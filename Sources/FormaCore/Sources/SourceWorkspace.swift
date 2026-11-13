@@ -88,6 +88,33 @@ public actor SourceWorkspace {
         try await read(entry, extracting: false)
     }
 
+    /// Probes the read-only eligibility facts for an existing listing.
+    ///
+    /// Reads file metadata, `CACHEDIR.TAG` and a Git index; never writes to the
+    /// source and never touches the library. Entries past the request's bound,
+    /// past the deadline, or after cancellation are reported as such instead of
+    /// being silently dropped.
+    public func probeEligibilityFacts(_ scope: SourceScope,
+                                      request: EligibilityProbeRequest = .init())
+        async throws -> EligibilityProbeReport {
+        guard !scanInProgress, !readInProgress else { throw FormaError.unavailable }
+        let (current, root) = try scanConfiguration(scope)
+        // `listing(_:)` is synchronous on purpose: called from an `async` body,
+        // GRDB's `read` would resolve to the async overload instead.
+        let listing = try listing(current)
+        readInProgress = true
+        defer { readInProgress = false }
+        let work = Task.detached(priority: .utility) {
+            try root.withAccess { access in
+                EligibilityFactCollector.collect(access: access, entries: listing.entries, request: request)
+            }
+        }
+        let report = try await withTaskCancellationHandler(operation: { try await work.value },
+                                                           onCancel: { work.cancel() })
+        try Task.checkCancellation()
+        return report
+    }
+
     private func read(_ entry: SourceEntry, extracting: Bool) async throws -> SourceEvidence {
         guard !readInProgress, !scanInProgress else { throw FormaError.unavailable }
         let (stored, root) = try evidenceConfiguration(entry)

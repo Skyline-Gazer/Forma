@@ -243,6 +243,8 @@ invalidated 是修订有效性标志，保留原 decision state 供审计；不�
 
 > 实现状态（2026-11-13，P3-A 切片 2e，**不改变本节需求**）：`ImportEligibilityPolicy` 作为独立、版本化的规则层落地，输出 `INCLUDE` / `EXCLUDE` / `REVIEW` / `DEFER` 四态，严格区分 `Discovered != Mappable != ImportEligible`。它只消费显式事实（Git tracked、缓存标记、嵌套仓库、业务证据、源码/部署配置、可重建产物、扫描完整性），不改变 `SourceListing`、`source_id`、missing 判定、Context revision 或 Manifest；`ManifestValidator.computeEligibility` 的自动执行资格语义未改。生产 `buildContext` / `MappingEngine.run` 的默认输入**未接线**，`mappingCandidates()` 仅为纯函数投影；接入需按 `docs/IMPORT-ELIGIBILITY-POLICY.md` §10 的 Contract Delta 另行批准。真实 Git/缓存探测、真实业务误排除率对照与 I1 Executor 仍属后续阶段。
 
+> 实现状态（2026-11-13，P3-A 切片 2f，**不改变本节需求**）：资格判定所需的三项结构事实改由只读探测建立——`EligibilityFactCollector`（`EligibilityFactProbe.swift`）读取文件元数据、祖先 `CACHEDIR.TAG` 与授权根自身的 Git 索引，全部经 `SourceRootAccess` 的逐段 `O_NOFOLLOW` 打开，`GIT_CEILING_DIRECTORIES` 固定为授权根，**不读取授权根之外的任何目录**。策略版本升为 `eligibility.v2`：每条 `EXCLUDE` 声明 `protection_facts`，未知即降级为 `REVIEW`（`protection_fact_unknown`）；授权根不是仓库顶层、仓库顶层在根之外、符号链接、超大标记、读取期间元数据变化、超时与取消分别报告为独立状态，绝不折算成"没有"。探测不推断业务证据与文件内容，不写源目录、不写库、不调用 Provider；macOS 文件系统、APFS 与 OneDrive 行为仍属现场验证。契约与已知限制见 `docs/IMPORT-ELIGIBILITY-POLICY.md` §4.1 / §4.2。
+
 ## 8. 样本、评测、隐私与 Correction Capture
 
 ### 8.1 样本获取与独立性

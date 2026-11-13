@@ -79,6 +79,10 @@ public enum EligibilityClassifier {
         public static let gitTrackedProtected = "git_tracked_protected"
         public static let nestedRepositoryProtected = "nested_repository_protected"
         public static let sourceCodeProtected = "source_code_protected"
+        /// A rule that could exclude needed a protection fact that was never
+        /// established. The exclusion is not applied; the file goes to REVIEW so
+        /// the gap is visible instead of being read as a clean cache file.
+        public static let protectionFactUnknown = "protection_fact_unknown"
     }
 
     /// Why an otherwise strong exclusion must not be applied. Ordered by how
@@ -103,8 +107,12 @@ public enum EligibilityClassifier {
     }
 
     public static func classify(_ facts: EligibilityFacts, policy: EligibilityPolicy) -> EligibilityClassification {
-        let matched = policy.orderedRules.filter { $0.matches(facts) }.map(EligibilityRuleMatch.init)
-        let winner = matched.first
+        let winners = policy.orderedRules.filter { $0.matches(facts) }
+        let matched = winners.map(EligibilityRuleMatch.init)
+        // The winning *rule* is kept beside its published projection: the
+        // exclusion guard needs the rule's protection facts, which the match
+        // record does not carry.
+        let winner = winners.first
         let entry = facts.entry
 
         // 1. The entry itself cannot be decided from this listing.
@@ -153,6 +161,12 @@ public enum EligibilityClassifier {
                                                  explanationCode: protection.0,
                                                  followUp: protection.1)
             }
+            if winner.firstUnknownProtectionFact(facts) != nil {
+                return EligibilityClassification(decision: .review, matchedRules: matched,
+                                                 decidedByRuleID: winner.ruleID,
+                                                 explanationCode: Reason.protectionFactUnknown,
+                                                 followUp: .probeFacts)
+            }
             return EligibilityClassification(decision: .exclude, matchedRules: matched,
                                              decidedByRuleID: winner.ruleID,
                                              explanationCode: winner.explanationCode)
@@ -179,7 +193,7 @@ public enum EligibilityClassifier {
             }
             var notes: [String] = []
             if entry.hydrationPending { notes.append(Reason.contentNotHydrated) }
-            if winner.decision != .defer, ruleNeedsContent(winner, policy: policy), entry.hydrationPending {
+            if winner.decision != .defer, ruleNeedsContent(winner), entry.hydrationPending {
                 return EligibilityClassification(decision: .defer, matchedRules: matched,
                                                  decidedByRuleID: winner.ruleID,
                                                  explanationCode: Reason.contentNotRead,
@@ -188,7 +202,7 @@ public enum EligibilityClassifier {
             return EligibilityClassification(decision: winner.decision, matchedRules: matched,
                                              decidedByRuleID: winner.ruleID,
                                              explanationCode: winner.explanationCode,
-                                             followUp: followUp(for: winner, policy: policy),
+                                             followUp: followUp(for: winner),
                                              notes: notes)
         }
 
@@ -200,12 +214,14 @@ public enum EligibilityClassifier {
 
     /// The policy is a value; the classifier needs the rule body to know whether
     /// it declared a content requirement, and the match only keeps the summary.
-    private static func ruleNeedsContent(_ match: EligibilityRuleMatch, policy: EligibilityPolicy) -> Bool {
-        policy.rules.first { $0.ruleID == match.ruleID }?.requiresContentEvidence ?? false
+    /// The winning rule itself is available here, so both guards read it
+    /// directly instead of looking it up by id a second time.
+    private static func ruleNeedsContent(_ rule: EligibilityRule) -> Bool {
+        rule.requiresContentEvidence
     }
 
-    private static func followUp(for match: EligibilityRuleMatch, policy: EligibilityPolicy) -> EligibilityFollowUp? {
-        policy.rules.first { $0.ruleID == match.ruleID }?.followUp
+    private static func followUp(for rule: EligibilityRule) -> EligibilityFollowUp? {
+        rule.followUp
     }
 
     /// Every entry of a listing that cannot be classified because the policy was

@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "policy_id": "forma-import-eligibility",
-  "policy_version": "eligibility.v1",
+  "policy_version": "eligibility.v2",
   "profiles": [],
   "rules": [
     {
@@ -18,7 +18,8 @@
       "decision": "EXCLUDE",
       "evidence_strength": "strong",
       "explanation_code": "verified_cache_marker",
-      "all": [{ "facts": { "cacheMarker": "verified" } }]
+      "all": [{ "facts": { "cacheMarker": "verified" } }],
+      "protection_facts": ["gitTracked", "nestedRepository"]
     },
     {
       "rule_id": "technical-noise-ds-store",
@@ -26,7 +27,8 @@
       "decision": "EXCLUDE",
       "evidence_strength": "strong",
       "explanation_code": "technical_noise_ds_store",
-      "all": [{ "basenames": [".DS_Store"] }]
+      "all": [{ "basenames": [".DS_Store"] }],
+      "protection_facts": []
     },
     {
       "rule_id": "technical-noise-appledouble",
@@ -34,7 +36,8 @@
       "decision": "EXCLUDE",
       "evidence_strength": "strong",
       "explanation_code": "technical_noise_appledouble",
-      "all": [{ "basename_prefixes": ["._"] }]
+      "all": [{ "basename_prefixes": ["._"] }],
+      "protection_facts": []
     },
     {
       "rule_id": "technical-noise-office-lock",
@@ -42,7 +45,8 @@
       "decision": "EXCLUDE",
       "evidence_strength": "strong",
       "explanation_code": "technical_noise_office_lock",
-      "all": [{ "basename_prefixes": ["~$"] }]
+      "all": [{ "basename_prefixes": ["~$"] }],
+      "protection_facts": []
     },
     {
       "rule_id": "nested-repository-review",

@@ -53,6 +53,7 @@ public enum EligibilityFollowUp: String, Codable, Sendable, CaseIterable {
     case resolvePathCollision = "resolve_path_collision"
     case reconcileSnapshot = "reconcile_snapshot"
     case hydrateBeforeMapping = "hydrate_before_mapping"
+    case probeFacts = "probe_facts"
     case reconcileOverride = "reconcile_override"
     case resolveOverrideConflict = "resolve_override_conflict"
 }
@@ -188,6 +189,12 @@ public struct EligibilityRule: Codable, Sendable, Equatable {
     /// A rule that needs document content cannot decide a dataless file; the
     /// classifier turns that into DEFER instead of guessing.
     public let requiresContentEvidence: Bool
+    /// Facts that must have been *checked* before this rule may EXCLUDE.
+    ///
+    /// Absent from the JSON, an EXCLUDE rule defaults to the facts that could
+    /// protect a file inside a cache directory; a noise rule that is
+    /// self-evidencing opts out explicitly with an empty list.
+    public let protectionFacts: [String]
 
     enum CodingKeys: String, CodingKey {
         case ruleID = "rule_id", priority, decision
@@ -196,12 +203,14 @@ public struct EligibilityRule: Codable, Sendable, Equatable {
         case followUp = "follow_up"
         case all, any
         case requiresContentEvidence = "requires_content_evidence"
+        case protectionFacts = "protection_facts"
     }
 
     public init(ruleID: String, priority: Int, decision: EligibilityDecision,
                 evidenceStrength: EligibilityEvidenceStrength, explanationCode: String,
                 followUp: EligibilityFollowUp? = nil, all: [EligibilityPredicate]? = nil,
-                any: [EligibilityPredicate]? = nil, requiresContentEvidence: Bool = false) {
+                any: [EligibilityPredicate]? = nil, requiresContentEvidence: Bool = false,
+                protectionFacts: [String]? = nil) {
         self.ruleID = ruleID
         self.priority = priority
         self.decision = decision
@@ -211,6 +220,14 @@ public struct EligibilityRule: Codable, Sendable, Equatable {
         self.all = all
         self.any = any
         self.requiresContentEvidence = requiresContentEvidence
+        self.protectionFacts = protectionFacts ?? Self.defaultProtectionFacts(for: decision)
+    }
+
+    /// The guard an EXCLUDE gets when the file does not state one. Fail-safe: a
+    /// new exclusion rule is assumed to need the protecting facts, and only an
+    /// explicitly empty list opts out.
+    static func defaultProtectionFacts(for decision: EligibilityDecision) -> [String] {
+        decision == .exclude ? ["gitTracked", "nestedRepository"] : []
     }
 
     /// A policy file may omit `requires_content_evidence`; the default is false,
@@ -227,9 +244,17 @@ public struct EligibilityRule: Codable, Sendable, Equatable {
         all = try container.decodeIfPresent([EligibilityPredicate].self, forKey: .all)
         any = try container.decodeIfPresent([EligibilityPredicate].self, forKey: .any)
         requiresContentEvidence = try container.decodeIfPresent(Bool.self, forKey: .requiresContentEvidence) ?? false
+        protectionFacts = try container.decodeIfPresent([String].self, forKey: .protectionFacts)
+            ?? Self.defaultProtectionFacts(for: decision)
     }
 
     public var isEmpty: Bool { (all ?? []).isEmpty && (any ?? []).isEmpty }
+
+    /// The first protection fact this rule needs but the facts do not establish.
+    /// Nil when every required fact was checked.
+    public func firstUnknownProtectionFact(_ facts: EligibilityFacts) -> String? {
+        protectionFacts.first { !facts.isKnown($0) }
+    }
 
     public func matches(_ facts: EligibilityFacts) -> Bool {
         let allMatch = (all ?? []).allSatisfy { $0.matches(facts) }
@@ -241,7 +266,7 @@ public struct EligibilityRule: Codable, Sendable, Equatable {
 /// The versioned policy document.
 public struct EligibilityPolicy: Codable, Sendable, Equatable {
     public static let supportedSchemaVersion = "1.0"
-    public static let currentVersion = "eligibility.v1"
+    public static let currentVersion = "eligibility.v2"
 
     public let schemaVersion: String
     public let policyID: String
@@ -307,6 +332,11 @@ public struct EligibilityPolicy: Codable, Sendable, Equatable {
                 throw FormaError.incompatible
             }
             for predicate in (rule.all ?? []) + (rule.any ?? []) where predicate.isEmpty {
+                throw FormaError.incompatible
+            }
+            // A guard naming a fact the engine cannot supply would silently
+            // never protect anything.
+            for fact in rule.protectionFacts where !EligibilityFacts.knownFactNames.contains(fact) {
                 throw FormaError.incompatible
             }
         }

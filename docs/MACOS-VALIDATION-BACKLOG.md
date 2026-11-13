@@ -158,11 +158,11 @@
 ### M11 Import Eligibility 生产接入与真实目录误排除复核
 
 - **关联**：Issue #51（P3-A / I1）、PLAN §7.3、`docs/IMPORT-ELIGIBILITY-POLICY.md`。
-- **已在 DevBox 完成**：版本化 JSON Policy、原创 `EligibilityClassifier`、四态决策、解释性 `RuleMatch`、无副作用 `EligibilityView`、Owner 覆写与失效、dry-run 统计、五项资格指标、20 组合成误排除 fixture、10k 合成规模确定性测试。生产 `buildContext` / `MappingEngine` 默认输入未接线。
-- **为什么无法在 Linux 验证**：真实 Git tracked / 嵌套仓库 / `CACHEDIR.TAG` 读取、OneDrive dataless 与权限失败、真实业务目录上的误排除复核都需要 macOS 与授权目录；`CryptoKit` 等依赖也使整包 Linux 不可编译。
+- **已在 DevBox 完成**：版本化 JSON Policy、原创 `EligibilityClassifier`、四态决策、解释性 `RuleMatch`、无副作用 `EligibilityView`、Owner 覆写与失效、dry-run 统计、五项资格指标、20 组合成误排除 fixture、10k 合成规模确定性测试；切片 2f 追加只读事实探测（`EligibilityFactCollector`：`CACHEDIR.TAG` 签名、嵌套 `.git`、`git ls-files` 索引）、`protection_facts` 排除门禁与 `eligibility.v2` 策略。**实现**已在 DevBox 完成并经 macOS CI 编译与合成夹具测试；生产 `buildContext` / `MappingEngine` 默认输入未接线。
+- **为什么无法在 Linux 验证**：Linux 无 Swift 工具链且 FormaCore 依赖 Darwin/CryptoKit/PDFKit/Security，整包不可编译，因此 Swift 编译与测试以 macOS CI 为准。**仍需 macOS 现场确认的是行为，不是实现**：APFS 上的真实 `.git` 目录与 `gitdir:` 文件、`CACHEDIR.TAG` 的真实缓存目录、OneDrive dataless 与权限失败下的探测结果、以及真实业务目录上的误排除复核。
 - **需要**：Owner 对 `docs/IMPORT-ELIGIBILITY-POLICY.md` §10 Contract Delta 的批准；一个授权的真实目录（不得使用生产 991 条记录）；人工复核工作流。
-- **所需权限/资源**：只读目录授权；合成或经批准脱敏的业务样本；真实 Git/缓存探测实现。
-- **测试步骤**：真实目录扫描 → eligibility dry-run → 与人工标注比对 → 复核每一个 `EXCLUDE` 与 `REVIEW` → 记录规则命中与策略 digest。
+- **所需权限/资源**：只读目录授权；合成或经批准脱敏的业务样本；macOS 14+ 与已安装 Git。
+- **测试步骤**：真实目录扫描 → `probeEligibilityFacts` → eligibility dry-run → 与人工标注比对 → 复核每一个 `EXCLUDE` 与 `REVIEW` → 记录规则命中、逐事实 provenance 与策略 digest；对授权根属于更大仓库子目录、嵌套仓库、符号链接 `.git`、超大/无签名 `CACHEDIR.TAG` 各留一条现场记录。
 - **预期证据**：真实目录的资格统计（脱敏）、误排除清单与处理结论、策略 digest 与版本。
 - **通过条件**：应保护业务样本零误排除（或有明确人工确认记录）；扫描身份、missing 判定与 Context 默认行为未变；接入改动经 Owner 批准。
 - **当前阻塞**：生产接入未授权（Contract Delta 未批准）、真实目录未提供；本项为 **Deferred**，不把合成 fixture 结果写成真实误排除率达标。
