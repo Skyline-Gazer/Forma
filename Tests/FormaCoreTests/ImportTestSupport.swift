@@ -86,7 +86,7 @@ enum ImportFixtures {
             expectations: ImportExpectations(profileID: profile.profileID,
                                              profileVersion: profile.profileVersion,
                                              schemaVersion: manifest.schemaVersion),
-            authorization: authorization
+            authorization: authorization,
             source: ImportSourceFacts(state: .present, authorized: true, readable: true,
                                       hydrationPending: false,
                                       snapshotFingerprint: intent.key.snapshotFingerprint,
