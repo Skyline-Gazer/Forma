@@ -267,17 +267,22 @@ struct ImportExecutorTests {
     func clearanceMustMatch() async throws {
         let stack = try await makeStack()
         let mine = try intent(stack)
-        let other = try ImportFixtures.intent(runID: stack.runID,
-                                              snapshot: String(repeating: "b", count: 64))
-        // A clearance that was decided for a different snapshot.
-        let foreign = try ImportFixtures.clearance(for: other)
-
-        let result = try await stack.executor.execute(mine, clearance: foreign)
-
-        #expect(result.reason == .clearanceMismatch)
-        #expect(result.attempts == 0)
-        #expect(await stack.transport.createCalls == 0)
-        #expect(try stored(stack, mine) == nil)
+        // Six bound facts; each mismatch must refuse the write.
+        let variants: [(String, ImportIntent)] = [
+            ("snapshot", try ImportFixtures.intent(runID: stack.runID,
+                                                   snapshot: String(repeating: "b", count: 64))),
+            ("revision", try ImportFixtures.intent(runID: stack.runID, revision: 2)),
+            ("database", try ImportFixtures.intent(runID: stack.runID, database: "Other_Archive")),
+            ("group", try ImportFixtures.intent(runID: stack.runID, groupPath: ["09_其他"])),
+        ]
+        for (label, other) in variants {
+            let foreign = try ImportFixtures.clearance(for: other)
+            let result = try await stack.executor.execute(mine, clearance: foreign)
+            #expect(result.reason == .clearanceMismatch, "\(label)")
+            #expect(result.attempts == 0, "\(label)")
+            #expect(await stack.transport.createCalls == 0, "\(label)")
+            #expect(try stored(stack, mine) == nil, "\(label)")
+        }
     }
 
     @Test("a blocked clearance creates no intent and writes nothing")

@@ -224,9 +224,6 @@ public struct ImportPreflightBinding: Sendable, Equatable {
     public let authorizationDigest: String
     public let verdict: ImportPreflightVerdict
     public let failures: [ImportPreflightFailure]
-    /// Stable digest over the binding, recorded with the operation.
-    public let digest: String
-
     init(sourceID: UUID, snapshotFingerprint: String, manifestRevision: Int,
          targetDatabase: String, targetGroupPath: [String], authorizationDigest: String,
          verdict: ImportPreflightVerdict, failures: [ImportPreflightFailure]) {
@@ -238,14 +235,6 @@ public struct ImportPreflightBinding: Sendable, Equatable {
         self.authorizationDigest = authorizationDigest
         self.verdict = verdict
         self.failures = failures
-        let canonical = [
-            "v1", sourceID.uuidString.lowercased(), snapshotFingerprint,
-            String(manifestRevision), targetDatabase,
-            targetGroupPath.joined(separator: "/"), authorizationDigest,
-            verdict.rawValue,
-            failures.map(\.code.rawValue).joined(separator: ","),
-        ].joined(separator: "|")
-        self.digest = SHA256.hash(data: Data(canonical.utf8)).hexadecimalDigest
     }
 }
 

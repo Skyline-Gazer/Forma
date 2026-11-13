@@ -131,22 +131,22 @@ struct ImportHardeningTests {
     func twoCandidatesAreNotPicked() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
-        await stack.transport.seed(.init(uuid: "uuid-a", database: ImportFixtures.database,
-                                         parentPath: ImportFixtures.groupPath,
-                                         metadata: ["completion_year": "2026"],
-                                         sha256: ImportFixtures.sha,
-                                         associationBasis: ImportFixtures.association))
-        await stack.transport.seed(.init(uuid: "uuid-b", database: ImportFixtures.database,
-                                         parentPath: ImportFixtures.groupPath,
-                                         metadata: ["completion_year": "2026"],
-                                         sha256: ImportFixtures.sha,
-                                         associationBasis: ImportFixtures.association))
+        // The pre-create lookup is empty; the create itself is lost, and the
+        // post-create lookup sees two records. This exercises the recovery path
+        // rather than the arbitration before the create.
+        await stack.transport.setExtraRecordsAfterCreate([
+            .init(uuid: "uuid-extra", database: ImportFixtures.database,
+                  parentPath: ImportFixtures.groupPath, metadata: ["completion_year": "2026"],
+                  sha256: ImportFixtures.sha, associationBasis: ImportFixtures.association),
+        ])
         await stack.transport.setFault(.createAfterApply)
 
         let result = try await stack.executor.execute(intent,
                                                      clearance: try ImportFixtures.clearance(for: intent))
 
+        #expect(await stack.transport.createCalls == 1)
         #expect(result.outcome == .verifyRequired)
+        #expect(result.reason == .candidatesAmbiguous)
         #expect(result.actualUUID == nil)
         #expect(await stack.transport.metadataCalls == 0)
         #expect(try stack.ledger.operation(keyDigest: intent.key.digest)?.actualUUID == nil)
@@ -156,18 +156,20 @@ struct ImportHardeningTests {
     func unconfirmedCandidateIsNotAdopted() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
-        // Same group and our association, but the fields do not agree: the
-        // record is not provably the one this operation would have written.
-        await stack.transport.seed(.init(uuid: "uuid-other", database: ImportFixtures.database,
-                                         parentPath: ImportFixtures.groupPath,
-                                         metadata: ["completion_year": "1999"],
-                                         sha256: ImportFixtures.sha,
-                                         associationBasis: ImportFixtures.association))
+        // The create vanishes after injecting one record that is in scope but
+        // whose fields contradict the decision. The post-create lookup finds
+        // exactly one candidate, and it must not be adopted.
+        await stack.transport.setExtraRecordsAfterCreate([
+            .init(uuid: "uuid-other", database: ImportFixtures.database,
+                  parentPath: ImportFixtures.groupPath, metadata: ["completion_year": "1999"],
+                  sha256: ImportFixtures.sha, associationBasis: ImportFixtures.association),
+        ])
         await stack.transport.setFault(.createBeforeApply)
 
         let result = try await stack.executor.execute(intent,
                                                      clearance: try ImportFixtures.clearance(for: intent))
 
+        #expect(await stack.transport.createCalls == 1)
         #expect(result.outcome == .verifyRequired)
         #expect(result.reason == .identityUnconfirmed)
         #expect(await stack.transport.metadataCalls == 0)
@@ -230,6 +232,9 @@ struct ImportHardeningTests {
     func unverifiableBytesAreNotVerified() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
+        // The record is created without the fields, so a metadata write would be
+        // pending: the unverifiable target must stop BEFORE that write.
+        await stack.transport.setCreateWithoutMetadata(true)
         await stack.transport.setReadbackSHAVerified(false)
 
         let result = try await stack.executor.execute(intent,
@@ -238,6 +243,7 @@ struct ImportHardeningTests {
         #expect(result.phase != .readbackVerified)
         #expect(result.outcome == .verifyRequired)
         #expect(result.reason == .hashUnverified)
+        #expect(await stack.transport.metadataCalls == 0)
     }
 
     // MARK: - No blind retry

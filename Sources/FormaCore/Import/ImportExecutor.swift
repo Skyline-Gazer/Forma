@@ -96,8 +96,8 @@ public actor ImportExecutor {
         // The bytes must still be the ones the decision was made from.
         guard source.snapshotFingerprint == intent.source.snapshotFingerprint,
               source.sha256 == nil || source.sha256 == intent.source.contentSHA256 else {
-            try? markUnresolved(stored, reason: .sourceChanged)
-            return ImportExecutionResult(phase: stored.phase, outcome: .verifyRequired,
+            try markUnresolved(stored, reason: .sourceChanged)
+            return ImportExecutionResult(phase: .verifyRequired, outcome: .verifyRequired,
                                          actualUUID: stored.actualUUID, reason: .sourceChanged, attempts: 0)
         }
 
@@ -193,6 +193,13 @@ public actor ImportExecutor {
                 source: intent.source))
             try recordAttempt(operation: stored, attempt: 1, before: .intentPersisted,
                               after: .recordObserved, request: intent, error: nil)
+        } catch is CancellationError {
+            // A create that was cancelled may still have landed. The result is
+            // unknown, but the cancellation itself must propagate rather than
+            // being read as a completed recovery.
+            try ledger.transition(keyDigest: stored.keyDigest, to: .verifyRequired, at: clock(),
+                                  errorCode: "cancelled")
+            throw CancellationError()
         } catch {
             try recordAttempt(operation: stored, attempt: 1, before: .intentPersisted,
                               after: nil, request: intent, error: Self.code(for: error))
@@ -327,6 +334,17 @@ public actor ImportExecutor {
                                   errorCode: Self.code(for: error))
             return ImportExecutionResult(phase: .verifyRequired, outcome: .verifyRequired,
                                          actualUUID: uuid, reason: .outcomeUnknown, attempts: attempts)
+        }
+
+        // A target that cannot prove the bytes proves nothing: stop here, before
+        // any write. Checking this only after the write would let an unverifiable
+        // target receive metadata and then be reported as "needs verification".
+        guard snapshot.shaVerified else {
+            try recordObservation(operation: stored, snapshot: snapshot, matches: false)
+            try ledger.transition(keyDigest: stored.keyDigest, to: .verifyRequired, at: clock(),
+                                  errorCode: ImportReason.hashUnverified.rawValue)
+            return ImportExecutionResult(phase: .verifyRequired, outcome: .verifyRequired,
+                                         actualUUID: uuid, reason: .hashUnverified, attempts: attempts)
         }
 
         // The record must be ours before anything is written to it. A record

@@ -48,6 +48,9 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
     /// Creates the record without the fields, so the metadata step still has to
     /// happen. Separate from `fault` because the two are independent failures.
     var createWithoutMetadata = false
+    /// Records that become visible only when `create` runs, so the *post-create*
+    /// recovery lookup can see candidates the pre-create lookup did not.
+    var extraRecordsAfterCreate: [Stored] = []
     /// Corrupts the readback of the first record, for mismatch tests.
     var readbackMetadataOverride: [String: String?]?
 
@@ -56,6 +59,7 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
     func setLookupDelay(_ nanoseconds: UInt64) { lookupDelayNanoseconds = nanoseconds }
     func setReadbackSHAVerified(_ value: Bool) { readbackSHAVerified = value }
     func setCreateWithoutMetadata(_ value: Bool) { createWithoutMetadata = value }
+    func setExtraRecordsAfterCreate(_ records: [Stored]) { extraRecordsAfterCreate = records }
     func setReadbackOverride(_ metadata: [String: String?]?) { readbackMetadataOverride = metadata }
     func storedRecords() -> [Stored] { records.values.sorted { $0.uuid < $1.uuid } }
     func seed(_ record: Stored) { records[record.uuid] = record }
@@ -82,7 +86,10 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
 
     func create(_ request: ImportCreateRequest) async throws -> String {
         createCalls += 1
-        if fault == .createBeforeApply { throw FormaError.disconnected }
+        if fault == .createBeforeApply {
+            for extra in extraRecordsAfterCreate { records[extra.uuid] = extra }
+            throw FormaError.disconnected
+        }
         next += 1
         let uuid = "uuid-\(next)"
         // A create may or may not carry the fields; the transport that leaves them
@@ -91,6 +98,7 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
         records[uuid] = Stored(uuid: uuid, database: request.database, parentPath: request.groupPath,
                                metadata: metadata, sha256: request.source.contentSHA256,
                                associationBasis: request.associationBasis)
+        for extra in extraRecordsAfterCreate { records[extra.uuid] = extra }
         if fault == .createAfterApply { throw FormaError.timeout }
         return uuid
     }
