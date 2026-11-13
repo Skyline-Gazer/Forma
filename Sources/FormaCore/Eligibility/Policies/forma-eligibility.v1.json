@@ -1,0 +1,118 @@
+{
+  "schema_version": "1.0",
+  "policy_id": "forma-import-eligibility",
+  "policy_version": "eligibility.v1",
+  "profiles": [],
+  "rules": [
+    {
+      "rule_id": "business-evidence-protect",
+      "priority": 100,
+      "decision": "INCLUDE",
+      "evidence_strength": "strong",
+      "explanation_code": "confirmed_business_evidence",
+      "all": [{ "facts": { "businessEvidence": "confirmed" } }]
+    },
+    {
+      "rule_id": "verified-cache-directory",
+      "priority": 90,
+      "decision": "EXCLUDE",
+      "evidence_strength": "strong",
+      "explanation_code": "verified_cache_marker",
+      "all": [{ "facts": { "cacheMarker": "verified" } }]
+    },
+    {
+      "rule_id": "technical-noise-ds-store",
+      "priority": 85,
+      "decision": "EXCLUDE",
+      "evidence_strength": "strong",
+      "explanation_code": "technical_noise_ds_store",
+      "all": [{ "basenames": [".DS_Store"] }]
+    },
+    {
+      "rule_id": "technical-noise-appledouble",
+      "priority": 84,
+      "decision": "EXCLUDE",
+      "evidence_strength": "strong",
+      "explanation_code": "technical_noise_appledouble",
+      "all": [{ "basename_prefixes": ["._"] }]
+    },
+    {
+      "rule_id": "technical-noise-office-lock",
+      "priority": 83,
+      "decision": "EXCLUDE",
+      "evidence_strength": "strong",
+      "explanation_code": "technical_noise_office_lock",
+      "all": [{ "basename_prefixes": ["~$"] }]
+    },
+    {
+      "rule_id": "nested-repository-review",
+      "priority": 82,
+      "decision": "REVIEW",
+      "evidence_strength": "contextual",
+      "explanation_code": "nested_repository",
+      "follow_up": "confirm_nested_repository",
+      "all": [{ "facts": { "nestedRepository": "true" } }]
+    },
+    {
+      "rule_id": "git-tracked-review",
+      "priority": 80,
+      "decision": "REVIEW",
+      "evidence_strength": "contextual",
+      "explanation_code": "git_tracked_content",
+      "follow_up": "confirm_business_use",
+      "all": [{ "facts": { "gitTracked": "true" } }]
+    },
+    {
+      "rule_id": "source-code-review",
+      "priority": 78,
+      "decision": "REVIEW",
+      "evidence_strength": "contextual",
+      "explanation_code": "source_code_or_deployment",
+      "follow_up": "confirm_source_code",
+      "all": [{ "facts": { "sourceCodeOrDeployment": "true" } }]
+    },
+    {
+      "rule_id": "rebuildable-artifact-review",
+      "priority": 60,
+      "decision": "REVIEW",
+      "evidence_strength": "contextual",
+      "explanation_code": "rebuildable_artifact",
+      "follow_up": "confirm_rebuildable_artifact",
+      "all": [{ "facts": { "rebuildableArtifact": "true" } }]
+    },
+    {
+      "rule_id": "vendor-directory-review",
+      "priority": 40,
+      "decision": "REVIEW",
+      "evidence_strength": "weak",
+      "explanation_code": "vendor_directory",
+      "follow_up": "confirm_vendor_deliverable",
+      "all": [{ "path_components": ["vendor"] }]
+    },
+    {
+      "rule_id": "generated-directory-review",
+      "priority": 39,
+      "decision": "REVIEW",
+      "evidence_strength": "weak",
+      "explanation_code": "generated_directory",
+      "follow_up": "confirm_business_use",
+      "all": [{ "path_components": ["build", "dist", "bin", "target", ".build", "coverage"] }]
+    },
+    {
+      "rule_id": "dataless-metadata-only",
+      "priority": 30,
+      "decision": "INCLUDE",
+      "evidence_strength": "contextual",
+      "explanation_code": "dataless_metadata_only",
+      "all": [{ "hydration_pending": true }]
+    },
+    {
+      "rule_id": "default-mapping-candidate",
+      "priority": 0,
+      "decision": "INCLUDE",
+      "evidence_strength": "contextual",
+      "explanation_code": "default_mapping_candidate",
+      "all": [{ "entry_states": ["present"] }]
+    }
+  ]
+}
