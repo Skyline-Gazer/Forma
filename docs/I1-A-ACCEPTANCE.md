@@ -121,7 +121,7 @@
 
 ### 7.3 修复后测试
 
-见 §7.8 的绿灯运行。修复后新增/改写的用例：`ImportHardeningTests`（10）、`ImportExecutorTests`（13）、`ImportFaultMatrixTests`（4）、`ImportArbitrationTests`（10，新增"字节无法证明则不验证"）、`ImportPreflightTests`（19，改为断言绑定许可）。
+绿灯证据：[CI 43453832289](https://github.com/Skyline-Gazer/Forma/actions/runs/43453832289)（FormaCore tests + macOS app build 全绿）。修复后新增/改写的用例：`ImportHardeningTests`（10）、`ImportExecutorTests`（13）、`ImportFaultMatrixTests`（4）、`ImportArbitrationTests`（10，新增"字节无法证明则不验证"）、`ImportPreflightTests`（19，改为断言绑定许可）。
 
 ### 7.4 Import 前置授权不变量
 
@@ -164,7 +164,11 @@
 | 断连后的真实可观测状态 | 未核实；离线用异常注入模拟 |
 | 写工具是否接受来源标记 | 未核实；ADR 明确不预设官方支持自定义属性 |
 
-### 7.8 I1-B Readiness Decision
+### 7.8 ADS / CNB 评审状态
+
+按 ADS `deliver` 纪律执行：先复现缺陷（红灯证据）、修复、绿灯回归、按当前 head 复核再合并。CNB AI Code Review 尝试绑定本次 GitHub PR 的精确 head/base（CNB PR [#17](https://cnb.cool/KoolingMachine/Forma/-/pulls/17)，head `b7a62a3`、base `e340617`，日志确认 `PR 评审: b7a62a3b -> e3406171`），但流水线 `ai-code-review` 因平台额度用尽返回 `402 EXCEEDING_LIMIT`，**没有产生评审结论**。该结果按 `NOT_VERIFIED` 报告，不冒充通过的评审；CNB 评审不是本仓库配置的必需合并门禁（AGENTS.md：评审发现是反馈，不是自动合并授权）。本轮合并依据是 GitHub macOS CI 绿灯与 ADS 默认 development-first 流程。
+
+### 7.9 I1-B Readiness Decision
 
 **结论：Integration Boundary Ready，但仍未取得 Import Integration Verified。**
 
