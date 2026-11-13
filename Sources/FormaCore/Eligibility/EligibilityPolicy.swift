@@ -213,6 +213,22 @@ public struct EligibilityRule: Codable, Sendable, Equatable {
         self.requiresContentEvidence = requiresContentEvidence
     }
 
+    /// A policy file may omit `requires_content_evidence`; the default is false,
+    /// so an older or hand-written rule does not fail to load over an absent
+    /// optional flag.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ruleID = try container.decode(String.self, forKey: .ruleID)
+        priority = try container.decode(Int.self, forKey: .priority)
+        decision = try container.decode(EligibilityDecision.self, forKey: .decision)
+        evidenceStrength = try container.decode(EligibilityEvidenceStrength.self, forKey: .evidenceStrength)
+        explanationCode = try container.decode(String.self, forKey: .explanationCode)
+        followUp = try container.decodeIfPresent(EligibilityFollowUp.self, forKey: .followUp)
+        all = try container.decodeIfPresent([EligibilityPredicate].self, forKey: .all)
+        any = try container.decodeIfPresent([EligibilityPredicate].self, forKey: .any)
+        requiresContentEvidence = try container.decodeIfPresent(Bool.self, forKey: .requiresContentEvidence) ?? false
+    }
+
     public var isEmpty: Bool { (all ?? []).isEmpty && (any ?? []).isEmpty }
 
     public func matches(_ facts: EligibilityFacts) -> Bool {
