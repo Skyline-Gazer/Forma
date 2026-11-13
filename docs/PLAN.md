@@ -354,6 +354,8 @@ SQLite 丢失时先导入本地导出账本并与真实 DT 对账；没有账本
 
 > 实现状态（2026-11-13，I1-A1，**不改变本节需求**）：Owner 已授权 I1-A（离线 Import 基础）。本切片落地 `docs/ADR-I1-A-IMPORT-CONTRACT.md`（操作键、三问分离、Ledger schema v1、阶段迁移表、恢复规则、Preflight 失败码），以及 `ImportOperationKey` / `SourceBytesIdentity` / `BusinessRecordIdentity` 与 `ImportPreflight`。授权是独立对象 `ImportAuthorization`：`ManifestEnvelope.grantsExecution` 恒为 false，为真即视为契约违规而不是授权来源。**没有任何真实写入路径**：无 DEVONthink 写调用、无记录创建、无生产库访问；I1-A 只能报 Offline Verified。
 
+> 实现状态（2026-11-13，I1-A4，**不改变本节需求**）：I1-A 离线实现完成——契约 ADR（`docs/ADR-I1-A-IMPORT-CONTRACT.md`）、`ImportOperationKey` 与三问分离、`ImportPreflight`（20 码）、`ImportLedger`（`import-ledger-v1`、迁移守卫、追加式审计、重启清扫）、`ImportSingleWriter`（租约 + 预留）、`ImportArbitration`（四态，未知优先）、写读分离的传输契约、`ImportExecutor`（创建未知时只读恢复，绝不二次创建）与测试用 Fake Transport。故障矩阵与结论见 `docs/I1-A-ACCEPTANCE.md`。**没有任何真实写入路径**：无 DEVONthink 写调用、无记录创建、无生产库访问；I1-A 只报 Offline Verified，I1-B 需 Owner 单独批准。
+
 ## 11. 阶段、依赖、验收与回退
 
 阶段是实施授权后的工作顺序。本轮不执行这些开发任务。所有阶段的证据只存脱敏摘要于公开仓库，真实目录/记录的运行工件留本地。一次集中 PLAN 复核后按授权范围推进，不把每阶段变成新的人为审批关卡；云端外发和进入产品开发仍遵守已有明确授权边界。

@@ -72,7 +72,7 @@ I1 不需要重做这些；它需要的是**在这些事实之上**决定何时�
 
 ## 7. 授权进展（2026-11-13）
 
-Owner 已批准 **I1-A**（离线设计确认与基础实现），分四个可独立审核的 PR：A1 契约 ADR + Preflight + 等键模型、A2 Ledger + 单写者、A3 四态仲裁 + Fake MCP + 崩溃恢复、A4 故障矩阵 + 离线阶段验收。实现基线见 `docs/ADR-I1-A-IMPORT-CONTRACT.md`。
+Owner 已批准 **I1-A**（离线设计确认与基础实现），分四个可独立审核的 PR：A1 契约 ADR + Preflight + 等键模型、A2 Ledger + 单写者、A3 四态仲裁 + Fake MCP + 崩溃恢复、A4 故障矩阵 + 离线阶段验收。实现基线见 `docs/ADR-I1-A-IMPORT-CONTRACT.md`；离线实现与故障矩阵结果见 `docs/I1-A-ACCEPTANCE.md`（只报 Offline Verified）。
 
 I1-A 仍然禁止：真实 DEVONthink 写工具调用、真实记录创建、生产库写入、真实文件 Import、真实 OneDrive hydration、真实 Provider 请求、默认启用应用层 WriteClient。I1-B（真实隔离库写入）仍需 Owner 单独批准。
 

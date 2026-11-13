@@ -40,11 +40,14 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
     var fault: Fault = .none
     /// A lookup that cannot prove absence, however few records it returns.
     var lookupInconclusive = false
+    /// Makes a lookup take long enough for a cancellation test to land.
+    var lookupDelayNanoseconds: UInt64 = 0
     /// Corrupts the readback of the first record, for mismatch tests.
     var readbackMetadataOverride: [String: String?]?
 
     func setFault(_ fault: Fault) { self.fault = fault }
     func setLookupInconclusive(_ value: Bool) { lookupInconclusive = value }
+    func setLookupDelay(_ nanoseconds: UInt64) { lookupDelayNanoseconds = nanoseconds }
     func setReadbackOverride(_ metadata: [String: String?]?) { readbackMetadataOverride = metadata }
     func storedRecords() -> [Stored] { records.values.sorted { $0.uuid < $1.uuid } }
     func seed(_ record: Stored) { records[record.uuid] = record }
@@ -53,6 +56,9 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
 
     func lookup(_ query: ImportLookupQuery) async throws -> ImportLookupResult {
         lookupCalls += 1
+        if lookupDelayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: lookupDelayNanoseconds)
+        }
         if fault == .lookup { throw FormaError.timeout }
         let matches = records.values
             .filter { $0.database == query.database && $0.parentPath == query.groupPath }
