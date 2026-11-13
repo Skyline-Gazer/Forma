@@ -2,7 +2,7 @@
 
 > 状态：**设计评估，不含实现**。I1 未授权；本文件不新增 Import Executor、不定义已批准的持久化 schema、不连接 DEVONthink 写入。它记录"哪些组件可以在 DevBox 离线准备、各自需要什么才能开始、以及为什么本轮没有写代码"。
 >
-> 关联：Issue [#7](https://github.com/Skyline-Gazer/Forma/issues/7)、[#21](https://github.com/Skyline-Gazer/Forma/issues/21)、[#22](https://github.com/Skyline-Gazer/Forma/issues/22)、`docs/PLAN.md` §9、`docs/ROADMAP.md`（I1 未授权）、`docs/MACOS-VALIDATION-BACKLOG.md` M10。
+> 关联：Issue [#7](https://github.com/Skyline-Gazer/Forma/issues/7)、[#21](https://github.com/Skyline-Gazer/Forma/issues/21)、[#22](https://github.com/Skyline-Gazer/Forma/issues/22)、`docs/PLAN.md` §10、`docs/ROADMAP.md`（I1 未授权）、`docs/MACOS-VALIDATION-BACKLOG.md` M6。
 
 ## 1. 为什么单独写这份评估
 
