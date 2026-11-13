@@ -8,8 +8,8 @@
 | --- | --- | --- | --- |
 | A1 | 契约 ADR、`ImportOperationKey`、源字节/业务记录身份分离、`ImportPreflight` 20 码 | #62 | `f00002a` |
 | A2 | `ImportLedger` + `import-ledger-v1` + `ImportSingleWriter` 租约 + 重启清扫 | #63 | `0906345` |
-| A3 | `ImportArbitration` 四态、写读分离传输契约、`ImportExecutor`、Fake Transport | (pending) | — |
-| A4 | 故障矩阵、恢复回归、本报告 | (pending) | — |
+| A3 | `ImportArbitration` 四态、写读分离传输契约、`ImportExecutor`、Fake Transport | #64 | `953cd70` |
+| A4 | 故障矩阵、恢复回归、本报告 | #65 | 本 PR |
 
 ## 2. 状态迁移表
 
