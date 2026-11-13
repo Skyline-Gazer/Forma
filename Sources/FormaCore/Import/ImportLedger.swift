@@ -73,6 +73,12 @@ public enum ImportPhase: String, Codable, Sendable, CaseIterable {
             return true
         case (.intentPersisted, .skippedVerified), (.intentPersisted, .recordObserved):
             return true
+        // A confirmed record that differs can be found at any point after the
+        // intent: the lookup may see it before a create, and the readback may see
+        // it after one. Both are holds, neither is an overwrite.
+        case (.intentPersisted, .conflictHold), (.recordObserved, .conflictHold),
+             (.metadataObserved, .conflictHold):
+            return true
         case (.recordObserved, .metadataObserved):
             return true
         case (.metadataObserved, .readbackVerified):
