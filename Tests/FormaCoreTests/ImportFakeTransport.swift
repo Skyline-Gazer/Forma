@@ -36,6 +36,7 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
     private(set) var createCalls = 0
     private(set) var lookupCalls = 0
     private(set) var metadataCalls = 0
+    private(set) var readCalls = 0
 
     var fault: Fault = .none
     /// A lookup that cannot prove absence, however few records it returns.
@@ -53,6 +54,8 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
     var extraRecordsAfterCreate: [Stored] = []
     /// Corrupts the readback of the first record, for mismatch tests.
     var readbackMetadataOverride: [String: String?]?
+    /// Makes the independent read throw CancellationError.
+    var readCancellation = false
 
     func setFault(_ fault: Fault) { self.fault = fault }
     func setLookupInconclusive(_ value: Bool) { lookupInconclusive = value }
@@ -61,6 +64,7 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
     func setCreateWithoutMetadata(_ value: Bool) { createWithoutMetadata = value }
     func setExtraRecordsAfterCreate(_ records: [Stored]) { extraRecordsAfterCreate = records }
     func setReadbackOverride(_ metadata: [String: String?]?) { readbackMetadataOverride = metadata }
+    func setReadCancellation(_ value: Bool) { readCancellation = value }
     func storedRecords() -> [Stored] { records.values.sorted { $0.uuid < $1.uuid } }
     func seed(_ record: Stored) { records[record.uuid] = record }
 
@@ -116,6 +120,8 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
     // MARK: - Read side
 
     func read(uuid: String) async throws -> ImportRecordSnapshot {
+        readCalls += 1
+        if readCancellation { throw CancellationError() }
         if fault == .readback { throw FormaError.disconnected }
         guard let record = records[uuid] else { throw FormaError.invalidResponse }
         return ImportRecordSnapshot(
