@@ -238,6 +238,7 @@ public enum EligibilityViewBuilder {
         // directories would otherwise turn the view into an O(entries × issues)
         // walk for no reason.
         let issuesByPath = Dictionary(grouping: listing.issues, by: \.relativePath)
+        let overrideIndex = EligibilityOverrides.Index(request.overrides)
 
         var views: [EligibilityEntryView] = []
         views.reserveCapacity(ordered.count)
@@ -248,8 +249,7 @@ public enum EligibilityViewBuilder {
             let base = applicable
                 ? EligibilityClassifier.classify(facts, policy: policy)
                 : EligibilityClassifier.notApplicable()
-            let resolved = EligibilityOverrides.resolve(entry: entry, overrides: request.overrides,
-                                                        policyVersion: policy.policyVersion)
+            let resolved = overrideIndex.resolve(entry: entry, policyVersion: policy.policyVersion)
             let outcome = applyOverride(base, facts: facts, resolution: resolved)
             views.append(EligibilityEntryView(
                 entry: entry, originalState: entry.state, decision: outcome.decision,

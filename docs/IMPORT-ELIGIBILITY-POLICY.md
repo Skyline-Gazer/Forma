@@ -1,7 +1,8 @@
 # Forma 导入资格策略（IMPORT-ELIGIBILITY-POLICY）
 
-> 状态：P3-A 切片 2e，Issue #51 的**离线**部分。冻结 SPEC v0.1.1 未改；生产扫描、Context 与 Mapping 的默认输入行为未改；I1 写入未开发。
-> 本轮只交付纯规则引擎、资格视图、dry-run、统计与测试。没有真实文件系统探测、没有 OneDrive hydration、没有 Provider 调用、没有 DEVONthink 写入。
+> 状态：P3-A 切片 2e + 2f，Issue #51 的**离线**部分。冻结 SPEC v0.1.1 未改；生产扫描、Context 与 Mapping 的默认输入行为未改；I1 写入未开发。
+> 2e 交付纯规则引擎、资格视图、dry-run、统计与测试。2f 追加只读事实探测（§4.1）：文件元数据、`CACHEDIR.TAG` 与 Git 索引，全部只读。
+> 仍然没有 Provider 调用、没有 DEVONthink 写入、没有 OneDrive hydration，也没有把任何路径写进导出。
 
 ## 1. Decision semantics
 
@@ -50,6 +51,8 @@ flowchart LR
 | Git tracked / 嵌套仓库 / 源码或部署配置 | 强缓存排除也降级为 `REVIEW`（`git_tracked_protected` / `nested_repository_protected` / `source_code_protected`） |
 | 弱证据排除 | 加载期拒绝（`EXCLUDE` 必须 `evidence_strength = strong`），运行期再降级一次 |
 
+第四条结构性保护：**排除前必须已核验的事实**。每个 `EXCLUDE` 规则声明 `protection_facts`，分类器在发出 `EXCLUDE` 前逐项检查这些事实是否已被探测或人工确认；任何一项仍是 `unknown`，结果降级为 `REVIEW`（`protection_fact_unknown`，`follow_up = probe_facts`）。"没查过"不是"没有"：未运行、失败、超时或被取消的探测都不会被读成排除依据。
+
 `build`、`dist`、`bin`、`target`、`vendor`、`.build`、`coverage` **只产生 `REVIEW`**，从不单独触发 `EXCLUDE`。正式技术资料、客户交付物、已提交发布包、业务附件与历史版本因此不会因为目录名被误排除。
 
 高置信技术噪声（当前策略）：`.DS_Store`、AppleDouble `._*`、Office 锁文件 `~$*`、以及**签名已验证**的 `CACHEDIR.TAG` 所标识的缓存上下文。
@@ -62,7 +65,7 @@ flowchart LR
 {
   "schema_version": "1.0",
   "policy_id": "forma-import-eligibility",
-  "policy_version": "eligibility.v1",
+  "policy_version": "eligibility.v2",
   "profiles": [],
   "rules": [
     {
@@ -71,7 +74,17 @@ flowchart LR
       "decision": "EXCLUDE",
       "evidence_strength": "strong",
       "explanation_code": "technical_noise_ds_store",
-      "all": [{ "basenames": [".DS_Store"] }]
+      "all": [{ "basenames": [".DS_Store"] }],
+      "protection_facts": []
+    },
+    {
+      "rule_id": "verified-cache-directory",
+      "priority": 90,
+      "decision": "EXCLUDE",
+      "evidence_strength": "strong",
+      "explanation_code": "verified_cache_marker",
+      "all": [{ "facts": { "cacheMarker": "verified" } }],
+      "protection_facts": ["gitTracked", "nestedRepository"]
     }
   ]
 }
@@ -79,7 +92,9 @@ flowchart LR
 
 条件语言是**声明式比较**，不是表达式引擎：`extensions`、`basenames`、`basename_prefixes`、`path_components`、`entry_states`、`providers`、`hydration_pending`、`facts`、`scan_issue_reasons`、`minimum_size_bytes`、`maximum_size_bytes`。一个 predicate 内所有已填字段必须同时满足；`all` 是 AND，`any` 是 OR。规则不能执行命令、访问网络、读文件或调用模型。
 
-`facts` 只接受已知事实名（`gitTracked`、`cacheMarker`、`nestedRepository`、`businessEvidence`、`sourceCodeOrDeployment`、`rebuildableArtifact`），测试会拒绝未知事实名。
+`facts` 只接受已知事实名（`gitTracked`、`cacheMarker`、`nestedRepository`、`businessEvidence`、`sourceCodeOrDeployment`、`rebuildableArtifact`），测试会拒绝未知事实名。`protection_facts` 使用同一名字集合，未知名字同样在加载期拒绝。
+
+`protection_facts` 省略时，`EXCLUDE` 规则默认取 `["gitTracked", "nestedRepository"]`（fail-safe：新增排除规则自动继承护栏）；只有显式写 `[]` 才声明"这条规则自证，无需探测事实"（例如按文件名识别的 `.DS_Store`）。`INCLUDE` / `REVIEW` / `DEFER` 规则默认 `[]`。
 
 契约：
 
@@ -89,6 +104,39 @@ flowchart LR
 - **policy digest**：`SHA-256(canonical bytes)`；同内容不同文件顺序 → 同 digest。
 - **同输入 + 同版本 = 同结果**：分类器是纯函数。
 - **变更失效**：override 绑定 `policyVersion`，版本变化后旧覆写为 `stale_policy`。
+- **版本 v2**：新增 `protection_facts`；同一个快照在 v1 下可能被排除，在 v2 下因事实未核验而变为 `REVIEW`。这是收紧，不是放宽。
+
+## 4.1 Read-only fact probe
+
+`EligibilityFactCollector`（`Sources/FormaCore/Eligibility/EligibilityFactProbe.swift`）只做三件事，全部只读：
+
+| 事实 | 观测方式 | `confirmed` 条件 |
+| --- | --- | --- |
+| `cacheMarker` | 从文件的父目录逐级向上到授权根，`openat(..., O_NOFOLLOW)` 读取 `CACHEDIR.TAG` | 首个字节以 `Signature: 8a477f597d28d172789f06886806bc55` 开头 |
+| `nestedRepository` | 从授权根向下到父目录，`fstatat(.git, AT_SYMLINK_NOFOLLOW)` | 找到 `.git` 目录，或 `.git` 文件的 `gitdir:` 解析后仍在授权根内 |
+| `gitTracked` | 固定可执行文件、无 shell、清洗环境的 `git ls-files -z` | `rev-parse --show-toplevel` 的顶层**就是**授权根本身 |
+
+拒绝与降级规则：
+
+- **绝不读授权根之外**：所有路径经 `SourceRootAccess.openDirectory` 打开（逐段 `O_NOFOLLOW`、校验根身份、校验设备）。`GIT_CEILING_DIRECTORIES` 固定为授权根，Git 不会向上越过它查找仓库。
+- **根不是仓库顶层 → `unknown`**（`repository_not_at_scope`）。子目录形式的仓库不会因为"父目录里可能有 `.git`"而被读；`gitTracked` 也不会被写成 `no`。
+- **仓库顶层在授权根之外 → `unknown`**（`repository_outside_authorization`，`outside_authorization`）。
+- **符号链接**：`.git`、`CACHEDIR.TAG`、entry 本身遇到 symlink 一律不跟随，报告 `symlink` / `git_symlink`。
+- **超限**：`CACHEDIR.TAG` 超过 1 KiB、`.git` 文件超过 4 KiB、Git 输出超过 `gitOutputLimitBytes` 都报告 `oversized` / `git_output_limit`，不读入内存。
+- **读取期间变化**：读前后 `fstat` 的对象键、大小、mtime 必须一致，否则 `changed_during_read`。
+- **entry 与 listing 不一致**：大小或 mtime 不匹配 → `snapshotChanged = true`，分类器给出 `DEFER`。
+- **有界**：`maxEntries`（默认 5000）、`deadline`（默认 10 s）、`gitTimeout`（默认 5 s）。超出上限的条目计入 `skipped`，超时与取消分别记为 `timedOut` / `cancelled`，都不静默丢弃。
+- **只读**：不创建、不删除、不移动、不改写源文件；Git 只用只读子命令，`GIT_OPTIONAL_LOCKS=0`，`core.fsmonitor` 与 hooks 关闭。
+
+`EligibilityProbeResult` 为每条记录保留逐事实 `provenance`（`status` + 稳定 `reason` 码 + 不含路径的短摘要/计数），并给出条目级聚合状态。导出的 `scopeID` 由根的文件身份派生，不含路径。
+
+`businessEvidence`、`sourceCodeOrDeployment`、`rebuildableArtifact` **不由探测推断**：它们来自人工确认或未来授权的探测，调用方传入的值原样保留。
+
+### 4.2 Known limits
+
+- 不读取授权根之上的 Git 元数据，因此"授权根是某个更大仓库的子目录"时 `gitTracked` 保持 `unknown`，缓存排除需要人工确认。这是有意的：读它就等于越过授权范围。
+- 探测不判断 `businessEvidence`，也不判断文件内容；`REVIEW` 仍然需要人。
+- Linux 合成夹具只能证明规则与探测逻辑，不能替代 macOS 上的真实文件系统、APFS 与 OneDrive 行为。
 
 ## 5. Override semantics
 

@@ -88,18 +88,24 @@ struct ImportEligibilityTests {
         #expect(result.summary.mappingCandidates == 0)
     }
 
-    @Test("a verified cache marker excludes; an invalid or unreadable one does not")
+    @Test("a verified cache marker excludes only once the protecting facts are known")
     func cacheMarkerSemantics() throws {
         let verified = entry("Project/cache/blob.bin")
+        let settled = entry("Project/cache/settled.bin")
         let unverified = entry("Project/cache/other.bin")
         let unreadable = entry("Project/cache/third.bin")
-        let result = try view([verified, unverified, unreadable], facts: [
+        let result = try view([verified, settled, unverified, unreadable], facts: [
             verified.id: facts(verified, cache: .verifiedSignature),
+            settled.id: facts(settled, gitTracked: .no, cache: .verifiedSignature, nested: .no),
             unverified.id: facts(unverified, cache: .presentUnverified),
             unreadable.id: facts(unreadable, cache: .unreadable),
         ])
-        #expect(result.entry(for: verified.id)?.decision == .exclude)
-        #expect(result.entry(for: verified.id)?.decidedByRuleID == "verified-cache-directory")
+        // A verified marker alone is not enough: the facts that could protect a
+        // tracked or nested file were never established.
+        #expect(result.entry(for: verified.id)?.decision == .review)
+        #expect(result.entry(for: verified.id)?.explanationCode == "protection_fact_unknown")
+        #expect(result.entry(for: settled.id)?.decision == .exclude)
+        #expect(result.entry(for: settled.id)?.decidedByRuleID == "verified-cache-directory")
         // "not verified" and "could not be read" are not "absent", and neither is
         // evidence for a cache: both fall through to the default candidate.
         #expect(result.entry(for: unverified.id)?.decision == .include)

@@ -79,6 +79,10 @@ public enum EligibilityClassifier {
         public static let gitTrackedProtected = "git_tracked_protected"
         public static let nestedRepositoryProtected = "nested_repository_protected"
         public static let sourceCodeProtected = "source_code_protected"
+        /// A rule that could exclude needed a protection fact that was never
+        /// established. The exclusion is not applied; the file goes to REVIEW so
+        /// the gap is visible instead of being read as a clean cache file.
+        public static let protectionFactUnknown = "protection_fact_unknown"
     }
 
     /// Why an otherwise strong exclusion must not be applied. Ordered by how
@@ -152,6 +156,12 @@ public enum EligibilityClassifier {
                                                  decidedByRuleID: winner.ruleID,
                                                  explanationCode: protection.0,
                                                  followUp: protection.1)
+            }
+            if winner.firstUnknownProtectionFact(facts) != nil {
+                return EligibilityClassification(decision: .review, matchedRules: matched,
+                                                 decidedByRuleID: winner.ruleID,
+                                                 explanationCode: Reason.protectionFactUnknown,
+                                                 followUp: .probeFacts)
             }
             return EligibilityClassification(decision: .exclude, matchedRules: matched,
                                              decidedByRuleID: winner.ruleID,

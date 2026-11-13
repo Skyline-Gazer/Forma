@@ -29,6 +29,9 @@ public enum EligibilityTriState: String, Codable, Sendable, CaseIterable {
 /// signature does not match the standard, or one that could not be read, is not
 /// evidence that the directory is a cache.
 public enum EligibilityCacheMarker: String, Codable, Sendable, CaseIterable {
+    /// Nobody looked. Distinct from `absent`, which says a check ran and found
+    /// no marker; a probe that never ran must not be read as evidence of absence.
+    case notChecked = "not_checked"
     case verifiedSignature = "verified"
     case presentUnverified = "present_unverified"
     case absent
@@ -66,7 +69,7 @@ public struct EligibilityFacts: Sendable, Equatable {
 
     public init(entry: SourceEntry, scanState: SourceScanState = .complete,
                 scanIssues: [SourceScanIssue] = [], gitTracked: EligibilityTriState = .unknown,
-                cacheMarker: EligibilityCacheMarker = .absent,
+                cacheMarker: EligibilityCacheMarker = .notChecked,
                 nestedRepository: EligibilityTriState = .unknown,
                 businessEvidence: EligibilityBusinessEvidence = .unknown,
                 sourceCodeOrDeployment: EligibilityTriState = .unknown,
@@ -90,7 +93,7 @@ public struct EligibilityFacts: Sendable, Equatable {
     public static func unknown(for entry: SourceEntry, scanState: SourceScanState = .complete,
                                scanIssues: [SourceScanIssue] = []) -> EligibilityFacts {
         EligibilityFacts(entry: entry, scanState: scanState, scanIssues: scanIssues,
-                         gitTracked: .unknown, cacheMarker: .absent, nestedRepository: .unknown,
+                         gitTracked: .unknown, cacheMarker: .notChecked, nestedRepository: .unknown,
                          businessEvidence: .unknown, sourceCodeOrDeployment: .unknown,
                          rebuildableArtifact: .unknown)
     }
@@ -106,6 +109,24 @@ public struct EligibilityFacts: Sendable, Equatable {
         case "sourceCodeOrDeployment": return sourceCodeOrDeployment.literal.map(EligibilityFactLiteral.init)
         case "rebuildableArtifact": return rebuildableArtifact.literal.map(EligibilityFactLiteral.init)
         default: return nil
+        }
+    }
+
+    /// Whether a protection fact was actually established.
+    /// `unknown` is not "no": a cache-directory exclusion may only stand when the
+    /// facts that could protect the file - tracked content, a nested repository,
+    /// source or deployment material - have been checked. The classifier asks
+    /// this before it emits an EXCLUDE, so a probe that never ran (or failed)
+    /// cannot silently authorise one.
+    public func isKnown(_ name: String) -> Bool {
+        switch name {
+        case "gitTracked": return gitTracked != .unknown
+        case "nestedRepository": return nestedRepository != .unknown
+        case "sourceCodeOrDeployment": return sourceCodeOrDeployment != .unknown
+        case "rebuildableArtifact": return rebuildableArtifact != .unknown
+        case "businessEvidence": return businessEvidence != .unknown
+        case "cacheMarker": return cacheMarker != .notChecked
+        default: return false
         }
     }
 
@@ -171,28 +192,38 @@ public struct EligibilityOverrideResolution: Sendable, Equatable {
 }
 
 public enum EligibilityOverrides {
-    /// Resolves the overrides that name this entry. More than one override for
-    /// the same source is a conflict, not a "last one wins": the two instructions
-    /// disagree about the same bytes, and guessing which one the person meant is
-    /// exactly the silent behaviour the contract forbids.
-    public static func resolve(entry: SourceEntry, overrides: [EligibilityOverride],
-                               policyVersion: String) -> EligibilityOverrideResolution {
-        let matching = overrides.filter { $0.sourceID == entry.id }
-        guard !matching.isEmpty else { return .none }
-        guard matching.count == 1 else {
-            return EligibilityOverrideResolution(state: .conflicting, decision: nil,
-                                                 note: "\(matching.count) overrides name this source")
+    /// Overrides grouped by source once, so a 10k-entry view does not rescan a
+    /// 10k-entry override list for every record. The semantics are unchanged:
+    /// more than one override for the same source is still a conflict, not a
+    /// "last one wins", because the two instructions disagree about the same
+    /// bytes and guessing which one the person meant is exactly the silent
+    /// behaviour the contract forbids.
+    public struct Index: Sendable, Equatable {
+        private let bySource: [UUID: [EligibilityOverride]]
+
+        public init(_ overrides: [EligibilityOverride]) {
+            bySource = Dictionary(grouping: overrides, by: \.sourceID)
         }
-        let override = matching[0]
-        guard override.policyVersion == policyVersion else {
-            return EligibilityOverrideResolution(state: .stalePolicy, decision: nil,
-                                                 note: "override was made under \(override.policyVersion)")
+
+        public var count: Int { bySource.values.reduce(0) { $0 + $1.count } }
+
+        public func resolve(entry: SourceEntry, policyVersion: String) -> EligibilityOverrideResolution {
+            guard let matching = bySource[entry.id], !matching.isEmpty else { return .none }
+            guard matching.count == 1 else {
+                return EligibilityOverrideResolution(state: .conflicting, decision: nil,
+                                                     note: "\(matching.count) overrides name this source")
+            }
+            let override = matching[0]
+            guard override.policyVersion == policyVersion else {
+                return EligibilityOverrideResolution(state: .stalePolicy, decision: nil,
+                                                     note: "override was made under \(override.policyVersion)")
+            }
+            guard override.snapshotFingerprint == entry.snapshotFingerprint else {
+                return EligibilityOverrideResolution(state: .staleSnapshot, decision: nil,
+                                                     note: "override was made against another snapshot")
+            }
+            return EligibilityOverrideResolution(state: .applied, decision: override.decision,
+                                                 note: override.note)
         }
-        guard override.snapshotFingerprint == entry.snapshotFingerprint else {
-            return EligibilityOverrideResolution(state: .staleSnapshot, decision: nil,
-                                                 note: "override was made against another snapshot")
-        }
-        return EligibilityOverrideResolution(state: .applied, decision: override.decision,
-                                             note: override.note)
     }
 }
