@@ -66,6 +66,7 @@
 | `preflighted` | `intent_persisted` | Intent 行已提交（同一事务内） |
 | `intent_persisted` | `skipped_verified` | 只读查询证明记录已存在且位置/字段/标准 SHA 与 Manifest 一致 |
 | `intent_persisted` | `record_observed` | 创建返回 UUID，或只读查询唯一命中 |
+| `intent_persisted` / `record_observed` / `metadata_observed` | `conflict_hold` | 确认是同一条业务记录但位置/字段/内容不一致 |
 | `record_observed` | `metadata_observed` | Metadata 写入被应答 |
 | `metadata_observed` | `readback_verified` | 独立回读：UUID、父组、字段、标准 SHA 与意图一致 |
 | 任意未终结 | `verify_required` | 超时、断连、进程终止、候选不唯一、写入结果未知 |

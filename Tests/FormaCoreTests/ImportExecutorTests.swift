@@ -214,7 +214,7 @@ struct ImportExecutorTests {
         #expect(await stack.transport.createCalls == 0)
     }
 
-    @Test("a confirmed record that differs is held")
+    @Test("an association-only match with different fields needs a person")
     func existingDifference() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
@@ -225,20 +225,45 @@ struct ImportExecutorTests {
 
         let result = try await stack.executor.execute(intent, preflight: pass)
 
-        #expect(result.outcome == .conflictHold)
+        // One anchor plus differing fields is a candidate, not a confirmation:
+        // the contract needs a second corroborating fact before calling it the
+        // same business record.
+        #expect(result.outcome == .verifyRequired)
         #expect(await stack.transport.createCalls == 0)
     }
 
-    @Test("a record with the same bytes but no anchor is not confirmed")
-    func sameBytesNoAnchor() async throws {
+    @Test("a confirmed record whose bytes differ is held")
+    func confirmedButBytesDiffer() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
-        await stack.transport.seed(.init(uuid: "uuid-other", database: "Project_Archive",
-                                         parentPath: groupPath, metadata: metadata, sha256: sha,
-                                         associationBasis: "a different project"))
+        await stack.transport.seed(.init(uuid: "uuid-same-meta", database: "Project_Archive",
+                                         parentPath: groupPath, metadata: metadata,
+                                         sha256: String(repeating: "d", count: 64),
+                                         associationBasis: association))
 
         let result = try await stack.executor.execute(intent, preflight: pass)
 
+        #expect(result.outcome == .conflictHold)
+        #expect(result.reason == .confirmedButDiffers)
+        #expect(await stack.transport.createCalls == 0)
+    }
+
+    @Test("identical bytes without an association anchor do not confirm a record")
+    func sameBytesNoAnchor() async throws {
+        let stack = try await makeStack()
+        var intent = try intent(stack)
+        intent = ImportIntent(runID: intent.runID, entry: intent.entry, key: intent.key,
+                              targetDatabase: intent.targetDatabase, groupPath: intent.groupPath,
+                              associationBasis: nil, metadata: intent.metadata,
+                              sourceSHA256: intent.sourceSHA256)
+        await stack.transport.seed(.init(uuid: "uuid-other", database: "Project_Archive",
+                                         parentPath: groupPath, metadata: metadata, sha256: sha,
+                                         associationBasis: nil))
+
+        let result = try await stack.executor.execute(intent, preflight: pass)
+
+        // The bytes and the fields agree, but nothing ties the record to this
+        // source: a hash is not an identity.
         #expect(result.outcome == .verifyRequired)
         #expect(await stack.transport.createCalls == 0)
     }
