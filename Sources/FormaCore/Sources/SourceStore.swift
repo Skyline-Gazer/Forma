@@ -171,6 +171,10 @@ struct SourceStore {
         // Mapping state arrives after the source tables it references, so the
         // foreign keys in `mapping-v1` can resolve against a migrated schema.
         MappingMigrations.register(into: &migrator)
+        // The import ledger records intents before any external effect; it shares
+        // the workspace database so a single SQLite transaction can serialize the
+        // writer, as PLAN §10.2 requires.
+        ImportLedgerMigrations.register(into: &migrator)
         // Corrections and case candidates reference manifests and sources, so
         // they migrate last: a correction that could name a table that does not
         // exist yet would leave a database whose schema cannot be created on a
