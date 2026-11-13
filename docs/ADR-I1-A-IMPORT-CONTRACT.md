@@ -160,6 +160,10 @@ CREATE TABLE import_leases (
 5. 任何 `intent_persisted` 之后的行，重启时必须先只读核查才能继续。
 6. 不存路径、不存正文、不存凭据：只存 digest、字段值与脱敏后的目标路径。
 
+### 5.1 实现（A2）
+
+`Sources/FormaCore/Import/ImportLedger.swift` 提供 `ImportLedger`（意图唯一、迁移守卫、追加式 attempt/observation、UUID 单次写入、重启清扫）与 `ImportLedgerMigrations`（`import-ledger-v1`，随 workspace 数据库迁移注册）。`ImportSingleWriter` 把 PLAN §10.2 的"单个 Executor actor"落成 actor + `import_leases` 租约行：租约说"本进程可以写"，回读才决定写没写。
+
 ## 6. Preflight（A1 实现）
 
 逐文件判定，只阻断受影响记录。失败码：
