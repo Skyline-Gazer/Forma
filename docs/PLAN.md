@@ -241,6 +241,8 @@ invalidated 是修订有效性标志，保留原 decision state 供审计；不�
 
 导出包含 JSON Manifest、验证报告、缺失/冲突及版本摘要；用户可另选脱敏可分享版。离线查看和校验已保存工件不需要云端 Provider。
 
+> 实现状态（2026-11-13，P3-A 切片 2e，**不改变本节需求**）：`ImportEligibilityPolicy` 作为独立、版本化的规则层落地，输出 `INCLUDE` / `EXCLUDE` / `REVIEW` / `DEFER` 四态，严格区分 `Discovered != Mappable != ImportEligible`。它只消费显式事实（Git tracked、缓存标记、嵌套仓库、业务证据、源码/部署配置、可重建产物、扫描完整性），不改变 `SourceListing`、`source_id`、missing 判定、Context revision 或 Manifest；`ManifestValidator.computeEligibility` 的自动执行资格语义未改。生产 `buildContext` / `MappingEngine.run` 的默认输入**未接线**，`mappingCandidates()` 仅为纯函数投影；接入需按 `docs/IMPORT-ELIGIBILITY-POLICY.md` §10 的 Contract Delta 另行批准。真实 Git/缓存探测、真实业务误排除率对照与 I1 Executor 仍属后续阶段。
+
 ## 8. 样本、评测、隐私与 Correction Capture
 
 ### 8.1 样本获取与独立性

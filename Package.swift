@@ -37,6 +37,9 @@ let package = Package(
             .process("Mapping/Profiles"),
             .process("Mapping/Schemas"),
             .process("Mapping/CasePack"),
+            // The eligibility policy is data with its own version and digest;
+            // a rule change is a reviewable JSON diff, never a code change.
+            .process("Eligibility/Policies"),
         ]),
         .executableTarget(name: "FormaBenchmark", dependencies: ["FormaCore"]),
         .testTarget(name: "FormaCoreTests", dependencies: [

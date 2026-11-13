@@ -31,6 +31,7 @@
 | M8 | Mac App Store 沙盒兼容性 | #52 / R1 | Deferred（渠道未定） | 重新选择该渠道 |
 | M9 | 10,000 文件真实扫描性能验收 | #20 / P3-A | Deferred | 真实目录 + 硬件记录 |
 | M10 | 真实 Provider 外发授权、Keychain 与日志脱敏现场核验 | #20 / P3-A + P3-B | Deferred（部分未授权） | Provider 凭据、外发授权、真实 macOS 会话 |
+| M11 | Import Eligibility 生产接入与真实目录误排除复核 | #51 / P3-A | Deferred（接入未授权） | Owner 批准 Contract Delta + 授权目录 |
 
 ## 2. 各项明细
 
@@ -153,6 +154,18 @@
 - **预期证据**：真实请求摘要（脱敏）、Console 摘录（脱敏）、判别力对照汇总、通过/失败结论。
 - **通过条件**：所有拒绝路径零请求、日志无敏感原文、判别力不因脱敏系统性下降；且 P3-B 前置条件全部满足。
 - **当前阻塞**：P3-B 未授权（凭据、批准模型、外发范围、预算、隔离库、≥150 条独立核实样本）；本项为 **Deferred**，不把 Stub 通过写成现场验证通过。
+
+### M11 Import Eligibility 生产接入与真实目录误排除复核
+
+- **关联**：Issue #51（P3-A / I1）、PLAN §7.3、`docs/IMPORT-ELIGIBILITY-POLICY.md`。
+- **已在 DevBox 完成**：版本化 JSON Policy、原创 `EligibilityClassifier`、四态决策、解释性 `RuleMatch`、无副作用 `EligibilityView`、Owner 覆写与失效、dry-run 统计、五项资格指标、20 组合成误排除 fixture、10k 合成规模确定性测试。生产 `buildContext` / `MappingEngine` 默认输入未接线。
+- **为什么无法在 Linux 验证**：真实 Git tracked / 嵌套仓库 / `CACHEDIR.TAG` 读取、OneDrive dataless 与权限失败、真实业务目录上的误排除复核都需要 macOS 与授权目录；`CryptoKit` 等依赖也使整包 Linux 不可编译。
+- **需要**：Owner 对 `docs/IMPORT-ELIGIBILITY-POLICY.md` §10 Contract Delta 的批准；一个授权的真实目录（不得使用生产 991 条记录）；人工复核工作流。
+- **所需权限/资源**：只读目录授权；合成或经批准脱敏的业务样本；真实 Git/缓存探测实现。
+- **测试步骤**：真实目录扫描 → eligibility dry-run → 与人工标注比对 → 复核每一个 `EXCLUDE` 与 `REVIEW` → 记录规则命中与策略 digest。
+- **预期证据**：真实目录的资格统计（脱敏）、误排除清单与处理结论、策略 digest 与版本。
+- **通过条件**：应保护业务样本零误排除（或有明确人工确认记录）；扫描身份、missing 判定与 Context 默认行为未变；接入改动经 Owner 批准。
+- **当前阻塞**：生产接入未授权（Contract Delta 未批准）、真实目录未提供；本项为 **Deferred**，不把合成 fixture 结果写成真实误排除率达标。
 
 ## 3. 维护规则
 

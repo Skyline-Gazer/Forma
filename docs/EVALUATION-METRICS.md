@@ -284,3 +284,24 @@ PLAN §8.2 在给出建议阈值的同时要求"**必须展示实际值与差距
 本节不新增分子分母：§3 / §5 / §6 仍是唯一的指标口径。切片 2d 只约束"哪些字节可以离开机器"，契约、覆盖矩阵与威胁矩阵在 `docs/PRIVACY-EGRESS-CONTRACT.md`。
 
 对评测层的直接影响只有三处：`EvaluationRunner` 默认 `allowCloud == false` 且替身运行不构造 Provider 客户端；`EvaluationArtifact` 与 Benchmark Result 不含 Manifest、路径、证据正文或凭据，schema 1.1 的 `stage_timings` 缺失时解码为 nil；`MappingAttempt.requestIdentities` 按 wire 请求记录语义摘要与线摘要，二者不得混用。2a 的分母、2b 的 Sample/Request/Attempt 语义、2c 的基准守恒与 `runID` 派生材料均未改动（`artifactVersionCompatibility`）。真实 Provider 外发与脱敏前后同模型判别力对照仍为 P3-B / BLOCKED。
+
+## 13. 导入资格策略指标（切片 2e）
+
+本节新增的是**资格策略**的指标，不改 §3 / §5 / §6 / §10–§12 的任何定义。策略与数据流见 `docs/IMPORT-ELIGIBILITY-POLICY.md`。
+
+| 指标 | 分子 | 分母 | 单位 | 样本来源 | `MeasurementKind` | 适用 Profile | 不可用条件 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `false_exclusion_rate` | 被独立标注为应保护的业务样本中判为 `EXCLUDE` 的数量 | 同一 fixture 中应保护样本总数 | records | 独立标注的业务样本 | 调用方声明（合成 fixture 必须为 `simulated`） | 该次运行 Profile | 无应保护样本 |
+| `review_rate` | `REVIEW` 数 | `discovered` | records | 本次 `SourceListing` | 同上 | 该次运行 Profile | `discovered == 0` |
+| `mapping_candidates_reduction` | `discovered − include` | `discovered` | records | 本次 `SourceListing` | 同上 | 该次运行 Profile | `discovered == 0` |
+| `token_reduction` | `exclude × tokensPerFile` | `discovered × tokensPerFile` | tokens | 调用方假设 | `extrapolated` | 该次运行 Profile | 无真实 usage 且无假设 |
+| `estimated_import_bytes_reduction` | 被排除记录的逻辑字节 | 全部已知逻辑字节 | logical_bytes | `size_bytes` | `extrapolated` | 该次运行 Profile | 无任何记录报告大小 |
+
+规则：
+
+- **false exclusion 的分母**必须是"已独立标注为应保留的业务样本"，不能是"所有被排除记录"——后者会把漏排稀释掉（`businessMaterialInWeakDirectoriesIsProtected`）。合成数据只能报告 synthetic fixture false exclusion，不能宣布真实业务误排除率达标。
+- **零分母**统一输出 N/A（`value == nil` + `unavailableReason`），不是 0%（`zeroDenominator`）。
+- **逻辑体积 ≠ 物理磁盘**：`estimated_import_bytes_reduction` 的 `assumption` 明写硬链接、APFS clone、OneDrive 占位与压缩使物理节省未知（`dryRunConservation`）。
+- **Token** 只有在调用方给出每文件假设时才输出，且标为 `extrapolated`；不得写成真实 Token 节省或费用减少（`tokenReductionAssumption`）。
+- 策略指标与 2a–2d 的质量/运行器/基准指标并列报告，不合并、不互相替代。
+- 导出统计只含计数、规则 ID、决策与 digest，不含路径、文件名或证据正文（`exportIsPathFree`）。

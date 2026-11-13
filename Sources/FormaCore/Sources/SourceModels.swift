@@ -8,7 +8,7 @@ public struct SourceScope: Identifiable, Sendable, Equatable {
     public let displayName: String
 }
 
-public enum SourceScanState: String, Sendable {
+public enum SourceScanState: String, Codable, Sendable {
     case notScanned, scanning, complete, incomplete, cancelled, interrupted
 }
 
