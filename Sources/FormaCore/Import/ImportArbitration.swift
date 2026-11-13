@@ -26,6 +26,13 @@ public enum ImportArbitration {
 
         // 2. A confirmed business record is either already correct or in conflict.
         if facts.businessIdentity.isConfirmed {
+            // Without a verifiable digest the target cannot be shown to hold the
+            // bytes the decision was made from, so neither "matches" nor
+            // "differs" can be claimed: the record stays unverified.
+            guard facts.targetHashVerified else {
+                return ImportDecision(.verifyRequired, .hashUnverified,
+                                      "the target cannot prove the content digest")
+            }
             if facts.contentMatchesManifest && facts.metadataMatchesManifest {
                 return ImportDecision(.skipVerified, .alreadyVerified,
                                       "the record matches the manifest")
@@ -83,10 +90,14 @@ public struct ImportFacts: Sendable, Equatable {
     /// Observed location and fields against the manifest.
     public let contentMatchesManifest: Bool
     public let metadataMatchesManifest: Bool
+    /// Whether the target exposed a digest that can be compared with the source
+    /// bytes. False means "cannot be proven", never "matches".
+    public let targetHashVerified: Bool
 
     public init(observedUUID: String?, candidateCount: Int, lookupConclusive: Bool,
                 requestOutcome: RequestOutcome, businessIdentity: BusinessRecordIdentity,
-                contentMatchesManifest: Bool, metadataMatchesManifest: Bool) {
+                contentMatchesManifest: Bool, metadataMatchesManifest: Bool,
+                targetHashVerified: Bool) {
         self.observedUUID = observedUUID
         self.candidateCount = candidateCount
         self.lookupConclusive = lookupConclusive
@@ -94,6 +105,7 @@ public struct ImportFacts: Sendable, Equatable {
         self.businessIdentity = businessIdentity
         self.contentMatchesManifest = contentMatchesManifest
         self.metadataMatchesManifest = metadataMatchesManifest
+        self.targetHashVerified = targetHashVerified
     }
 }
 
@@ -119,4 +131,14 @@ public enum ImportReason: String, Codable, Sendable, CaseIterable {
     case confirmedButDiffers = "confirmed_but_differs"
     case absentAndConclusive = "absent_and_conclusive"
     case identityUnconfirmed = "identity_unconfirmed"
+    /// The target cannot prove the content digest, so nothing is verified.
+    case hashUnverified = "hash_unverified"
+    /// The ledger holds no operation to continue.
+    case intentMissing = "intent_missing"
+    /// The clearance was decided for other facts than this operation's.
+    case clearanceMismatch = "clearance_mismatch"
+    /// Somebody changed the record while the operation was interrupted.
+    case externalModification = "external_modification"
+    /// The source bytes or their snapshot changed under the operation.
+    case sourceChanged = "source_changed"
 }

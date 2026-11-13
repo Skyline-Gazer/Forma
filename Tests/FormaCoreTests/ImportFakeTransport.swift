@@ -45,6 +45,9 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
     /// When false the independent read cannot prove the bytes, which is what a
     /// target without a verifiable digest looks like.
     var readbackSHAVerified = true
+    /// Creates the record without the fields, so the metadata step still has to
+    /// happen. Separate from `fault` because the two are independent failures.
+    var createWithoutMetadata = false
     /// Corrupts the readback of the first record, for mismatch tests.
     var readbackMetadataOverride: [String: String?]?
 
@@ -52,6 +55,7 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
     func setLookupInconclusive(_ value: Bool) { lookupInconclusive = value }
     func setLookupDelay(_ nanoseconds: UInt64) { lookupDelayNanoseconds = nanoseconds }
     func setReadbackSHAVerified(_ value: Bool) { readbackSHAVerified = value }
+    func setCreateWithoutMetadata(_ value: Bool) { createWithoutMetadata = value }
     func setReadbackOverride(_ metadata: [String: String?]?) { readbackMetadataOverride = metadata }
     func storedRecords() -> [Stored] { records.values.sorted { $0.uuid < $1.uuid } }
     func seed(_ record: Stored) { records[record.uuid] = record }
@@ -81,8 +85,11 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
         if fault == .createBeforeApply { throw FormaError.disconnected }
         next += 1
         let uuid = "uuid-\(next)"
+        // A create may or may not carry the fields; the transport that leaves them
+        // out is what the metadata step exists for.
+        let metadata = createWithoutMetadata ? [:] : request.metadata
         records[uuid] = Stored(uuid: uuid, database: request.database, parentPath: request.groupPath,
-                               metadata: request.metadata, sha256: request.sourceSHA256,
+                               metadata: metadata, sha256: request.source.contentSHA256,
                                associationBasis: request.associationBasis)
         if fault == .createAfterApply { throw FormaError.timeout }
         return uuid
@@ -94,7 +101,7 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
         guard var record = records[request.uuid] else { throw FormaError.invalidResponse }
         // A metadata write fills the named slots; it does not clear the others.
         for (key, value) in request.metadata { record.metadata[key] = value }
-        record.sha256 = request.sourceSHA256
+        record.sha256 = request.source.contentSHA256
         records[request.uuid] = record
     }
 

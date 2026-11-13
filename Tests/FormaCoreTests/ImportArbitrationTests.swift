@@ -17,13 +17,15 @@ struct ImportArbitrationTests {
         request: ImportFacts.RequestOutcome = .succeeded,
         corroboration: Set<BusinessRecordIdentity.Corroboration> = [],
         contentMatches: Bool = false,
-        metadataMatches: Bool = false
+        metadataMatches: Bool = false,
+        targetHashVerified: Bool = true
     ) -> ImportFacts {
         ImportFacts(observedUUID: observedUUID, candidateCount: candidates,
                     lookupConclusive: conclusive, requestOutcome: request,
                     businessIdentity: BusinessRecordIdentity(observedUUID: observedUUID,
                                                              corroboration: corroboration),
-                    contentMatchesManifest: contentMatches, metadataMatchesManifest: metadataMatches)
+                    contentMatchesManifest: contentMatches, metadataMatchesManifest: metadataMatches,
+                    targetHashVerified: targetHashVerified)
     }
 
     @Test("a conclusive empty search imports")
@@ -101,6 +103,16 @@ struct ImportArbitrationTests {
             contentMatches: true, metadataMatches: true))
         #expect(decision.outcome == .verifyRequired)
         #expect(decision.reason == .searchInconclusive)
+    }
+
+    @Test("a confirmed record whose bytes cannot be proven stays unverified")
+    func unverifiableHash() {
+        let decision = ImportArbitration.decide(facts(
+            observedUUID: "uuid-1", candidates: 1,
+            corroboration: [.targetAssociationMatch, .attributesMatch],
+            contentMatches: true, metadataMatches: true, targetHashVerified: false))
+        #expect(decision.outcome == .verifyRequired)
+        #expect(decision.reason == .hashUnverified)
     }
 
     @Test("skipping requires positive match in both directions")

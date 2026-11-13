@@ -15,13 +15,6 @@ import Testing
 /// survives the API changes the fixes introduce.
 @Suite("Import execution boundary")
 struct ImportHardeningTests {
-    private let now = Date(timeIntervalSince1970: 1_800_000_000)
-    private let sha = String(repeating: "c", count: 64)
-    private let fingerprint = String(repeating: "a", count: 64)
-    private let association = "context revision 3 candidate cr-0001"
-    private let groupPath = ["01_招标文件", "2026"]
-    private let metadata: [String: String?] = ["completion_year": "2026"]
-
     private struct Stack: Sendable {
         let ledger: ImportLedger
         let transport: FakeImportTransport
@@ -40,50 +33,36 @@ struct ImportHardeningTests {
                                             manifestRevision: 1, profileID: "project-archive",
                                             profileVersion: "1.0.0", schemaVersion: "1.0",
                                             authorizationDigest: String(repeating: "f", count: 64),
-                                            startedAt: now))
+                                            startedAt: ImportFixtures.now))
         let transport = FakeImportTransport()
-        let fixed = now
+        let fixed = ImportFixtures.now
         let writer = ImportSingleWriter(ledger: ledger, owner: "test", clock: { fixed })
         let executor = ImportExecutor(ledger: ledger, writer: writer, write: transport,
                                       read: transport, clock: { fixed })
         return Stack(ledger: ledger, transport: transport, executor: executor, runID: runID)
     }
 
-    private func intent(_ stack: Stack, snapshot: String? = nil,
-                        associationBasis: String? = nil) throws -> ImportIntent {
-        let entry = ManifestEntry(
-            sourceID: UUID(), snapshotFingerprint: snapshot ?? fingerprint, snapshotRevision: 1,
-            sourceVersion: 1, relativePath: "synthetic/tender.pdf", state: .validated,
-            target: ManifestTarget(databaseName: "Project_Archive", groupPath: groupPath, resolved: true),
-            eligibleForAutoExecution: true)
-        let key = try ImportOperationKey(sourceID: entry.sourceID,
-                                         snapshotFingerprint: entry.snapshotFingerprint,
-                                         manifestRevision: 1,
-                                         targetAssociationID: UUID(uuidString: "55555555-5555-4555-8555-555555555555")!)
-        return ImportIntent(runID: stack.runID, entry: entry, key: key, targetDatabase: "Project_Archive",
-                            groupPath: groupPath, associationBasis: associationBasis ?? association,
-                            metadata: metadata, sourceSHA256: sha)
+    private func intent(_ stack: Stack, associationBasis: String? = ImportFixtures.association)
+        throws -> ImportIntent {
+        try ImportFixtures.intent(runID: stack.runID, associationBasis: associationBasis)
     }
 
     /// Persists an intent row the way an interrupted run would have left it.
-    private func persistIntent(_ stack: Stack, _ intent: ImportIntent, phase: ImportPhase,
+    private func persistIntent(_ stack: Stack, _ intent: ImportIntent,
                                uuid: String? = nil) throws {
         let record = ImportOperationRecord(
             runID: stack.runID, key: intent.key, targetDatabase: intent.targetDatabase,
             targetGroupPath: intent.groupPath, intendedMetadataDigest: "d",
-            intendedMetadataJSON: "{}", sourceSHA256: intent.sourceSHA256, createdAt: now)
+            intendedMetadataJSON: "{}", sourceSHA256: intent.source.contentSHA256,
+            authorizationDigest: intent.authorizationDigest, createdAt: ImportFixtures.now)
         try stack.ledger.recordIntent(record)
-        try stack.ledger.transition(keyDigest: intent.key.digest, to: .preflighted, at: now)
-        try stack.ledger.transition(keyDigest: intent.key.digest, to: .intentPersisted, at: now)
+        try stack.ledger.transition(keyDigest: intent.key.digest, to: .preflighted, at: ImportFixtures.now)
+        try stack.ledger.transition(keyDigest: intent.key.digest, to: .intentPersisted, at: ImportFixtures.now)
         if let uuid {
-            try stack.ledger.observeActualUUID(uuid, keyDigest: intent.key.digest, at: now)
-            try stack.ledger.transition(keyDigest: intent.key.digest, to: .recordObserved, at: now)
-        } else {
-            try stack.ledger.transition(keyDigest: intent.key.digest, to: phase, at: now)
+            try stack.ledger.observeActualUUID(uuid, keyDigest: intent.key.digest, at: ImportFixtures.now)
+            try stack.ledger.transition(keyDigest: intent.key.digest, to: .recordObserved, at: ImportFixtures.now)
         }
     }
-
-    private let pass = ImportPreflightResult(failures: [])
 
     // MARK: - Resume must not start an import
 
@@ -92,11 +71,12 @@ struct ImportHardeningTests {
         let stack = try await makeStack()
         let intent = try intent(stack)
 
-        let result = try await stack.executor.resume(intent)
+        let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
 
         // There is no intent to continue, so there is nothing to continue: the
         // result says so instead of starting a fresh import.
         #expect(result.outcome == .verifyRequired)
+        #expect(result.reason == .intentMissing)
         #expect(result.attempts == 0)
         #expect(await stack.transport.createCalls == 0)
         #expect(await stack.transport.metadataCalls == 0)
@@ -107,14 +87,16 @@ struct ImportHardeningTests {
     func resumeWithChangedSnapshot() async throws {
         let stack = try await makeStack()
         let original = try intent(stack)
-        try persistIntent(stack, original, phase: .verifyRequired)
-        // The caller comes back with a different snapshot: the decision it would
-        // resume belongs to bytes that are no longer there.
-        let changed = try intent(stack, snapshot: String(repeating: "b", count: 64))
+        try persistIntent(stack, original)
+        try stack.ledger.transition(keyDigest: original.key.digest, to: .verifyRequired,
+                                    at: ImportFixtures.now)
 
-        let result = try await stack.executor.resume(changed)
+        // The bytes under the operation changed while it was interrupted.
+        let result = try await stack.executor.resume(
+            original, source: ImportFixtures.sourceFacts(snapshot: String(repeating: "b", count: 64)))
 
         #expect(result.outcome == .verifyRequired)
+        #expect(result.reason == .sourceChanged)
         #expect(await stack.transport.createCalls == 0)
         #expect(await stack.transport.metadataCalls == 0)
     }
@@ -125,17 +107,19 @@ struct ImportHardeningTests {
     func externalChangeIsNotOverwritten() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
-        await stack.transport.seed(.init(uuid: "uuid-external", database: "Project_Archive",
-                                         parentPath: groupPath,
-                                         metadata: ["completion_year": "2019"], sha256: sha,
-                                         associationBasis: association))
-        try persistIntent(stack, intent, phase: .intentPersisted, uuid: "uuid-external")
+        await stack.transport.seed(.init(uuid: "uuid-external", database: ImportFixtures.database,
+                                         parentPath: ImportFixtures.groupPath,
+                                         metadata: ["completion_year": "2019"],
+                                         sha256: ImportFixtures.sha,
+                                         associationBasis: ImportFixtures.association))
+        try persistIntent(stack, intent, uuid: "uuid-external")
 
-        let result = try await stack.executor.resume(intent)
+        let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
 
         // The record carries our association but a different value: that is a
         // person's edit, not our pending write.
         #expect(result.outcome == .conflictHold)
+        #expect(result.reason == .externalModification)
         #expect(await stack.transport.metadataCalls == 0)
         let records = await stack.transport.storedRecords()
         #expect(records.first?.metadata["completion_year"] == "2019")
@@ -147,15 +131,20 @@ struct ImportHardeningTests {
     func twoCandidatesAreNotPicked() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
-        await stack.transport.seed(.init(uuid: "uuid-a", database: "Project_Archive",
-                                         parentPath: groupPath, metadata: metadata, sha256: sha,
-                                         associationBasis: association))
-        await stack.transport.seed(.init(uuid: "uuid-b", database: "Project_Archive",
-                                         parentPath: groupPath, metadata: metadata, sha256: sha,
-                                         associationBasis: association))
+        await stack.transport.seed(.init(uuid: "uuid-a", database: ImportFixtures.database,
+                                         parentPath: ImportFixtures.groupPath,
+                                         metadata: ["completion_year": "2026"],
+                                         sha256: ImportFixtures.sha,
+                                         associationBasis: ImportFixtures.association))
+        await stack.transport.seed(.init(uuid: "uuid-b", database: ImportFixtures.database,
+                                         parentPath: ImportFixtures.groupPath,
+                                         metadata: ["completion_year": "2026"],
+                                         sha256: ImportFixtures.sha,
+                                         associationBasis: ImportFixtures.association))
         await stack.transport.setFault(.createAfterApply)
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent,
+                                                     clearance: try ImportFixtures.clearance(for: intent))
 
         #expect(result.outcome == .verifyRequired)
         #expect(result.actualUUID == nil)
@@ -169,13 +158,15 @@ struct ImportHardeningTests {
         let intent = try intent(stack)
         // Same group and our association, but the fields do not agree: the
         // record is not provably the one this operation would have written.
-        await stack.transport.seed(.init(uuid: "uuid-other", database: "Project_Archive",
-                                         parentPath: groupPath,
-                                         metadata: ["completion_year": "1999"], sha256: sha,
-                                         associationBasis: association))
+        await stack.transport.seed(.init(uuid: "uuid-other", database: ImportFixtures.database,
+                                         parentPath: ImportFixtures.groupPath,
+                                         metadata: ["completion_year": "1999"],
+                                         sha256: ImportFixtures.sha,
+                                         associationBasis: ImportFixtures.association))
         await stack.transport.setFault(.createAfterApply)
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent,
+                                                     clearance: try ImportFixtures.clearance(for: intent))
 
         #expect(result.outcome == .verifyRequired)
         #expect(await stack.transport.metadataCalls == 0)
@@ -188,7 +179,8 @@ struct ImportHardeningTests {
         let intent = try intent(stack)
         await stack.transport.setFault(.createAfterApply)
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent,
+                                                     clearance: try ImportFixtures.clearance(for: intent))
 
         // The record was created and the answer was lost. The read-only lookup
         // finds exactly one record that carries our association and our fields.
@@ -198,22 +190,37 @@ struct ImportHardeningTests {
         #expect(await stack.transport.storedRecords().count == 1)
     }
 
-    // MARK: - Preflight is not a free-form permission
+    // MARK: - The clearance is a permission for one operation
 
     @Test("a preflight pass that is not bound to this intent writes nothing")
     func unboundPreflightWritesNothing() async throws {
         let stack = try await makeStack()
-        // A conclusion about a different source, snapshot and target.
-        let other = try intent(stack, snapshot: String(repeating: "b", count: 64),
-                               associationBasis: "another association")
+        let mine = try intent(stack)
+        // A conclusion about a different source and snapshot.
+        let other = try ImportFixtures.intent(runID: stack.runID,
+                                              snapshot: String(repeating: "b", count: 64))
+        let foreign = try ImportFixtures.clearance(for: other)
 
-        let result = try await stack.executor.execute(other, preflight: pass)
+        let result = try await stack.executor.execute(mine, clearance: foreign)
 
-        #expect(result.outcome == nil)
+        #expect(result.reason == .clearanceMismatch)
         #expect(result.attempts == 0)
         #expect(await stack.transport.createCalls == 0)
         #expect(await stack.transport.metadataCalls == 0)
-        #expect(try stack.ledger.operation(keyDigest: other.key.digest) == nil)
+        #expect(try stack.ledger.operation(keyDigest: mine.key.digest) == nil)
+    }
+
+    @Test("a clearance decided under another authorization does not apply")
+    func clearanceFromAnotherAuthorization() async throws {
+        let stack = try await makeStack()
+        let intent = try intent(stack)
+        let otherAuthorization = ImportFixtures.authorization(groupPrefix: ["09_其他"])
+        let foreign = try ImportFixtures.clearance(for: intent, authorization: otherAuthorization)
+
+        let result = try await stack.executor.execute(intent, clearance: foreign)
+
+        #expect(result.reason == .clearanceMismatch)
+        #expect(await stack.transport.createCalls == 0)
     }
 
     // MARK: - Verification honesty
@@ -224,10 +231,12 @@ struct ImportHardeningTests {
         let intent = try intent(stack)
         await stack.transport.setReadbackSHAVerified(false)
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent,
+                                                     clearance: try ImportFixtures.clearance(for: intent))
 
         #expect(result.phase != .readbackVerified)
         #expect(result.outcome == .verifyRequired)
+        #expect(result.reason == .hashUnverified)
     }
 
     // MARK: - No blind retry
@@ -236,9 +245,11 @@ struct ImportHardeningTests {
     func disconnectDoesNotRetry() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
+        await stack.transport.setCreateWithoutMetadata(true)
         await stack.transport.setFault(.metadata)
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent,
+                                                     clearance: try ImportFixtures.clearance(for: intent))
 
         #expect(result.outcome == .verifyRequired)
         #expect(await stack.transport.createCalls == 1)
