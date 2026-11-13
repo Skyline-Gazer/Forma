@@ -234,11 +234,15 @@ public enum EligibilityViewBuilder {
                 : $0.id.uuidString < $1.id.uuidString
         }
         let discoveredPaths = Set(ordered.map(\.relativePath))
+        // One index, not one scan per entry: a listing with many unreadable
+        // directories would otherwise turn the view into an O(entries × issues)
+        // walk for no reason.
+        let issuesByPath = Dictionary(grouping: listing.issues, by: \.relativePath)
 
         var views: [EligibilityEntryView] = []
         views.reserveCapacity(ordered.count)
         for entry in ordered {
-            let entryIssues = listing.issues.filter { $0.relativePath == entry.relativePath }
+            let entryIssues = issuesByPath[entry.relativePath] ?? []
             let facts = request.facts[entry.id]
                 ?? .unknown(for: entry, scanState: listing.state, scanIssues: entryIssues)
             let base = applicable
