@@ -51,6 +51,19 @@
 | 重启后证明不存在 | 结论性空搜索 | failed(`absent_after_unknown`)，不写 | `resumeDoesNotImport` |
 | Preflight 阻断 | 失败码 | 不落意图、不写 | `blockedPreflight` |
 
+## 3.1 测试清单
+
+| 套件 | 用例数 | 覆盖 |
+| --- | --- | --- |
+| `ImportIdentityTests` | 9 | 操作键稳定性/逐分量区分/规范化无歧义/解码校验；哈希不确认业务身份 |
+| `ImportPreflightTests` | 19 | 20 个失败码、瞬时 vs 阻断、授权独立、Profile/Schema、SHA 不一致 |
+| `ImportLedgerTests` | 15 | 唯一意图、迁移守卫、终态不可变、UUID 单写、追加式审计、重启清扫、租约 |
+| `ImportSingleWriterTests` | 5 | 排他、预留、成功/抛错释放、第二个 writer 被拒 |
+| `ImportArbitrationTests` | 9 | 四态判定顺序与未知优先 |
+| `ImportExecutorTests` | 16 | 正常、幂等、创建后断连恢复、创建前拒绝、metadata/回读失败、取消、resume 三条路径 |
+| `ImportFaultMatrixTests` | 4 | 故障矩阵扫描、崩溃后恢复、并同键、写前取消 |
+| **合计** | **77** | 全部为合成来源 + 临时 SQLite + Fake Transport |
+
 ## 4. 未验证接口清单（I1-B 必须现场确认）
 
 1. 真实 MCP 写工具名称、参数与错误码；写工具白名单。
