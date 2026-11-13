@@ -22,6 +22,7 @@
 | preflighted | intent_persisted | 意图已提交 |
 | intent_persisted | skipped_verified | 只读查询证明已存在且一致 |
 | intent_persisted | record_observed | 创建返回 UUID 或只读唯一命中 |
+| intent_persisted / record_observed / metadata_observed | conflict_hold | 确认是同一条业务记录但位置/字段/内容不一致 |
 | record_observed | metadata_observed | Metadata 写入被应答 |
 | metadata_observed | readback_verified | 独立回读一致 |
 | in-flight | verify_required | 超时/断连/进程终止/候选不唯一 |
