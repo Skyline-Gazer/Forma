@@ -163,12 +163,13 @@ struct ImportHardeningTests {
                                          metadata: ["completion_year": "1999"],
                                          sha256: ImportFixtures.sha,
                                          associationBasis: ImportFixtures.association))
-        await stack.transport.setFault(.createAfterApply)
+        await stack.transport.setFault(.createBeforeApply)
 
         let result = try await stack.executor.execute(intent,
                                                      clearance: try ImportFixtures.clearance(for: intent))
 
         #expect(result.outcome == .verifyRequired)
+        #expect(result.reason == .identityUnconfirmed)
         #expect(await stack.transport.metadataCalls == 0)
         #expect(try stack.ledger.operation(keyDigest: intent.key.digest)?.actualUUID == nil)
     }

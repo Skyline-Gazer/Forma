@@ -315,8 +315,11 @@ public actor ImportExecutor {
                                          actualUUID: uuid, reason: .outcomeUnknown, attempts: attempts)
         }
 
-        // The record must be provably ours before anything is written to it.
-        guard Self.identity(snapshot, intent: intent).isConfirmed else {
+        // The record must be ours before anything is written to it. A record
+        // that carries this operation's association is ours even when a field
+        // disagrees: the disagreement is a conflict to report, not a reason to
+        // claim the record belongs to somebody else.
+        guard Self.isOurs(snapshot, intent: intent) else {
             try recordObservation(operation: stored, snapshot: snapshot, matches: false)
             try? markUnresolved(stored, reason: .identityUnconfirmed)
             return ImportExecutionResult(phase: .verifyRequired, outcome: .verifyRequired,
@@ -431,6 +434,17 @@ public actor ImportExecutor {
             && binding.targetDatabase == intent.targetDatabase
             && binding.targetGroupPath == intent.groupPath
             && binding.authorizationDigest == intent.authorizationDigest
+    }
+
+    /// Whether the observed record belongs to this operation.
+    ///
+    /// The association is operation-specific, so a record carrying it is ours;
+    /// otherwise the full confirmation (anchor plus a second corroboration) is
+    /// required. Used where the UUID is already known from the ledger; adopting
+    /// a *discovered* UUID always requires the full confirmation.
+    static func isOurs(_ snapshot: ImportRecordSnapshot, intent: ImportIntent) -> Bool {
+        if let basis = intent.associationBasis, snapshot.associationBasis == basis { return true }
+        return identity(snapshot, intent: intent).isConfirmed
     }
 
     /// Whether the observed record can be called the record this operation is
