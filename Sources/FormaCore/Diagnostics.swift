@@ -52,6 +52,9 @@ public enum FormaError: Error, LocalizedError, Sendable, Equatable {
 public enum FormaDiagnostics {
     public enum Operation: String, Sendable {
         case openWorkspace, registerSource, scanSource, readEvidence, discoverMCP, providerProbe, saveCredential
+        /// A provider-egress decision. Only the ticket's digest/version summary
+        /// or a denial code is ever logged - never a payload, path or credential.
+        case providerEgress
         /// A correction whose call threw - the store refused the write or the
         /// manifest had been superseded. A refusal on the evidence is a
         /// successful call, recorded as a `rejected` row in the table.
@@ -62,5 +65,16 @@ public enum FormaDiagnostics {
 
     public static func failure(_ operation: Operation, _ error: FormaError) {
         logger.error("operation=\(operation.rawValue, privacy: .public) code=\(error.code, privacy: .public)")
+    }
+
+    /// The only egress log line. `EgressTicket.logSummary` and `EgressDenial.code`
+    /// are constructed from digests, versions and fixed reason names, so a
+    /// canary placed in a document can never reach this string.
+    public static func egress(_ decision: EgressDecision) {
+        if let ticket = decision.ticket {
+            logger.info("operation=providerEgress \(ticket.logSummary, privacy: .public)")
+        } else if let denial = decision.denial {
+            logger.error("operation=providerEgress code=\(denial.code, privacy: .public)")
+        }
     }
 }

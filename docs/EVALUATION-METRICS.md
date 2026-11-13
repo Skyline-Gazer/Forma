@@ -278,3 +278,9 @@ PLAN §8.2 在给出建议阈值的同时要求"**必须展示实际值与差距
 `execution_telemetry` 直接复用 2b 的 `EvaluationTelemetry`（含 measured / simulated / extrapolated / unavailable）。本机墙钟与 `ru_maxrss` 可以是 `.measured`，但替身的 usage、费用、模型延迟仍是 `.simulated` / `.unavailable`，且随每个结果导出 `limitations` 与 `substituteAnswers` 否决。峰值内存不可得时输出 `unavailable` 而非 0。共享 Runner 的绝对耗时不设合并 Gate；`--baseline` 只做可解释的倍率比较。合成 10,000 记录的内存与吞吐曲线只描述算法层，不预测 M9 的真实 10,000 文件扫描（含 IO、hydration 与 PDF 抽取）。
 
 正确性由 `EvaluationBenchmarkTests` 覆盖：夹具可复现（`fixtureReproducibility`）、10k 身份唯一（`tenThousandIdentities`）、边界分母（`boundaryListsAreNotCountable`）、样本/请求/attempt 守恒（`sampleRequestAttemptInvariant`）、拆批守恒（`batchSplittingConservation`）、并发上限（`concurrencyBound`）、重试记账（`retryAccounting`）、取消记账（`cancellationAccounting`）、缺失观测（`missingObservationSemantics`）、阶段覆盖（`performanceStageCoverage`）、脱敏与 schema（`redactedExportAndSchema`）、身份区分（`benchmarkIdentityVersusMeasurement`）、无 Provider 访问（`noProviderAccess`）。10k 合成基准实测到 `Manifest.entry(for:)` 线性扫描造成的 O(n²) 判定开销后，runner 改为一次建索引（保留首个匹配），判定规则与 §3、§5、§6 的口径均未改动，见 `docs/EVALUATION-BENCHMARK.md` §9。
+
+## 12. 外发与脱敏边界（切片 2d）
+
+本节不新增分子分母：§3 / §5 / §6 仍是唯一的指标口径。切片 2d 只约束"哪些字节可以离开机器"，契约、覆盖矩阵与威胁矩阵在 `docs/PRIVACY-EGRESS-CONTRACT.md`。
+
+对评测层的直接影响只有三处：`EvaluationRunner` 默认 `allowCloud == false` 且替身运行不构造 Provider 客户端；`EvaluationArtifact` 与 Benchmark Result 不含 Manifest、路径、证据正文或凭据，schema 1.1 的 `stage_timings` 缺失时解码为 nil；`MappingAttempt.requestIdentities` 按 wire 请求记录语义摘要与线摘要，二者不得混用。2a 的分母、2b 的 Sample/Request/Attempt 语义、2c 的基准守恒与 `runID` 派生材料均未改动（`artifactVersionCompatibility`）。真实 Provider 外发与脱敏前后同模型判别力对照仍为 P3-B / BLOCKED。

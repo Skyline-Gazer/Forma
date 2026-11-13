@@ -30,6 +30,7 @@
 | M7 | Developer ID 签名、公证与独立发行 | #24 / R1 | Deferred（未授权） | 证书与分发决策 |
 | M8 | Mac App Store 沙盒兼容性 | #52 / R1 | Deferred（渠道未定） | 重新选择该渠道 |
 | M9 | 10,000 文件真实扫描性能验收 | #20 / P3-A | Deferred | 真实目录 + 硬件记录 |
+| M10 | 真实 Provider 外发授权、Keychain 与日志脱敏现场核验 | #20 / P3-A + P3-B | Deferred（部分未授权） | Provider 凭据、外发授权、真实 macOS 会话 |
 
 ## 2. 各项明细
 
@@ -140,6 +141,18 @@
 - **预期证据**：分阶段耗时表 + 硬件/系统条件 + 峰值内存；合成数据单列。
 - **通过条件**：报告可复现（同机同目录重跑偏差在声明范围内），且合成结果未被当作真实实测。
 - **当前阻塞**：真实目录与硬件记录未提供；本项仍为 **Deferred**，不因 10k 合成基准在 macOS CI 跑通而改变状态。
+
+### M10 真实 Provider 外发授权、Keychain 与日志脱敏现场核验
+
+- **关联**：Issue #20（E4 / P3-A / P3-B）、PLAN §8.3、`docs/PRIVACY-EGRESS-CONTRACT.md`、P2-ACCEPTANCE 中已列 BLOCKED 的"脱敏判别力前后对照"。
+- **已在 DevBox 完成**：版本化 `EgressScope` / `EgressAuthorization` / `EgressGate` 与唯一 wire 出口；预览/发送共用构建路径、按数据范围授权；repair/429 重试逐请求重判；`RedactionPlan` 覆盖 locator / CasePack / System Prompt 动态字段；identity 计划披露；可分享 manifest 与日志的 canary 测试；十组 Prompt Injection 结构性质测试。全部用 HTTP Stub 与合成夹具，无真实凭据或网络。
+- **为什么无法在 Linux 验证**：Keychain ACL / 锁定态（`Security`）、`os_log` 隐私标记在真实系统日志里的效果、真实 Provider 的 3xx/429/错误正文、以及本地 API 服务模式端到端，都需要真实 macOS 会话与真实服务；`CryptoKit` 等依赖也使整包 Linux 不可编译。
+- **需要**：macOS 14+；Keychain 可撤销测试凭据；经 Owner 批准的外发范围与 Provider 数据处理政策展示；一个隔离的本地 API 服务。
+- **所需权限/资源**：只读/可撤销凭据；不得使用生产 `Project_Archive` 991 条记录；不得把真实业务正文推到公开仓库。
+- **测试步骤**：无凭据/撤销/过期/范围不符 → 逐项确认零请求；真实 302 确认无第二跳；真实 429 确认单次重试；os_log / Console 检查无正文、客户、报价、路径、凭据；脱敏前后关键反例判别力对照。
+- **预期证据**：真实请求摘要（脱敏）、Console 摘录（脱敏）、判别力对照汇总、通过/失败结论。
+- **通过条件**：所有拒绝路径零请求、日志无敏感原文、判别力不因脱敏系统性下降；且 P3-B 前置条件全部满足。
+- **当前阻塞**：P3-B 未授权（凭据、批准模型、外发范围、预算、隔离库、≥150 条独立核实样本）；本项为 **Deferred**，不把 Stub 通过写成现场验证通过。
 
 ## 3. 维护规则
 

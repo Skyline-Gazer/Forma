@@ -54,6 +54,12 @@ public struct MappingBatch: Sendable {
 public enum MappingPrompt {
     public static let version = "mapping.v1"
     public static let redactionVersion = RedactionPlan.version
+    /// An identity plan substitutes no known terms. Publishing `redaction.v1`
+    /// beside it would claim a policy that was never applied, so the request and
+    /// the egress scope name the identity state explicitly.
+    public static func redactionVersion(for plan: RedactionPlan) -> String {
+        plan.isIdentity ? "identity" : RedactionPlan.version
+    }
     /// PLAN §6.1 starts at 100 entries per batch. It is a measurement starting
     /// point, not a product conclusion, so it stays a named constant the caller
     /// can override rather than a rule buried in a loop.
@@ -67,7 +73,8 @@ public enum MappingPrompt {
     /// the per-row excerpt bound keeps the worst case near a megabyte.
     public static let maximumEvidenceRows = 2_000
 
-    public static func system(profile: MappingProfile, casePack: CasePack) -> String {
+    public static func system(profile: MappingProfile, casePack: CasePack,
+                              redaction: RedactionPlan = .none) -> String {
         let blocks = [
             """
             You are Forma's document mapping assistant. You propose metadata for files in a macOS \
@@ -101,8 +108,9 @@ public enum MappingPrompt {
             Confidence is your qualitative signal for a human reviewer. It grants nothing. An answer \
             with high confidence and no evidence is treated as an error, not a judgement.
             """,
-            "Profile: \(profile.displayName) (\(profile.versionKey)). Case pack: \(casePack.versionKey).",
-            profile.counterExamples.map { "- \($0)" }.joined(separator: "\n"),
+            "Profile: \(trusted(profile.displayName, redaction)) (\(trusted(profile.versionKey, redaction))). "
+                + "Case pack: \(trusted(casePack.versionKey, redaction)).",
+            profile.counterExamples.map { "- \(trusted($0, redaction))" }.joined(separator: "\n"),
         ]
         return blocks.joined(separator: "\n\n")
     }
@@ -134,8 +142,10 @@ public enum MappingPrompt {
         }
         var evidenceRows: [[String: Any]] = []
         for record in ranked.prefix(Self.maximumEvidenceRows) {
-            // Only the excerpt and the path are redacted; the locator stays
-            // exact so a reviewer can find the page or cell again.
+            // The locators' numeric parts stay exact so a reviewer can find the
+            // page or cell again, but their *textual* parts (sheet names, part
+            // names) come from the document and can carry a customer or project
+            // name, so they go through the same plan as the excerpt.
             guard let ref = refsBySource[record.sourceID] else {
                 // Evidence that belongs to another batch is a builder bug, not a
                 // model problem: refuse before anything leaves the machine.
@@ -145,7 +155,7 @@ public enum MappingPrompt {
                 "evidence_id": record.id,
                 "entry_ref": ref,
                 "source": record.source.rawValue,
-                "locator": record.locator.map { locatorSummary($0) } ?? "",
+                "locator": record.locator.map { locatorSummary($0, redaction: redaction) } ?? "",
                 "path": record.relativePath.map { redaction.redact(path: $0) } ?? "",
                 "excerpt": redaction.redact(text: record.excerpt ?? ""),
                 "status": record.extractionStatus.rawValue,
@@ -177,7 +187,7 @@ public enum MappingPrompt {
                 "profile_version": profile.profileVersion,
                 "case_pack_version": casePack.version,
                 "prompt_version": version,
-                "redaction_version": redactionVersion,
+                "redaction_version": redactionVersion(for: redaction),
                 "batch_id": batch.id,
                 "evidence_rows_omitted": omittedRows,
             ],
@@ -191,14 +201,15 @@ public enum MappingPrompt {
                     "allowed_evidence_sources": policy.allowedEvidenceSources.map(\.rawValue),
                     "insufficient_evidence_sources": policy.insufficientEvidenceSources.map(\.rawValue),
                     "high_impact": policy.identifier.isHighImpact,
-                    "rule": policy.rule,
+                    "rule": trusted(policy.rule, redaction),
                     "allowed_values": allowedValues(for: policy.identifier, profile: profile),
                 ] as [String: Any]
             },
             // The vocabularies travel once: inside each field rule as
             // allowed_values, and here as the glossary of what a category means.
             // A second identifier list would be a third place to keep in step.
-            "categories": profile.categories.map { ["identifier": $0.identifier, "meaning": $0.meaning] },
+            "categories": profile.categories.map { ["identifier": $0.identifier,
+                                                   "meaning": trusted($0.meaning, redaction)] },
             "context": [
                 "revision": context.revision,
                 "candidates": candidateRows,
@@ -219,20 +230,22 @@ public enum MappingPrompt {
                 [
                     "case_id": sample.caseID,
                     "kind": sample.kind.rawValue,
-                    "scenario": sample.scenario,
+                    "scenario": trusted(sample.scenario, redaction),
                     "input": [
-                        "path": sample.input.redactedRelativePath,
-                        "filename": sample.input.redactedFilename,
-                        "summary": sample.input.contextSummary as Any,
-                        "citations": sample.input.citations.map { ["label": $0.label, "excerpt": $0.excerpt] },
+                        "path": redaction.redact(path: sample.input.redactedRelativePath),
+                        "filename": redaction.redact(path: sample.input.redactedFilename),
+                        "summary": trusted(sample.input.contextSummary ?? "", redaction),
+                        "citations": sample.input.citations.map {
+                            ["label": trusted($0.label, redaction), "excerpt": trusted($0.excerpt, redaction)]
+                        },
                     ],
                     "expected": [
                         "state": sample.expected.state.rawValue,
-                        "document_category": sample.expected.documentCategory as Any,
-                        "document_type": sample.expected.documentType as Any,
-                        "metadata": metadataJSON(sample.expected.metadata),
+                        "document_category": sample.expected.documentCategory.map { trusted($0, redaction) } as Any,
+                        "document_type": sample.expected.documentType.map { trusted($0, redaction) } as Any,
+                        "metadata": metadataJSON(sample.expected.metadata, redaction: redaction),
                     ],
-                    "why_not": sample.whyNot,
+                    "why_not": sample.whyNot.map { trusted($0, redaction) },
                 ] as [String: Any]
             },
         ]
@@ -262,13 +275,21 @@ public enum MappingPrompt {
         return hasher.finalize().hexadecimalDigest
     }
 
-    static func locatorSummary(_ locator: EvidenceLocator) -> String {
+    static func locatorSummary(_ locator: EvidenceLocator, redaction: RedactionPlan = .none) -> String {
         switch locator {
         case .pdf(let page, let range): "pdf:page=\(page):utf16=\(range.lowerBound)-\(range.upperBound)"
         case .docx(let part, let paragraph, let range):
-            "docx:\(part):paragraph=\(paragraph):utf16=\(range.lowerBound)-\(range.upperBound)"
-        case .xlsx(let sheet, let cell): "xlsx:\(sheet):\(cell)"
+            "docx:\(redaction.redact(text: part)):paragraph=\(paragraph):utf16=\(range.lowerBound)-\(range.upperBound)"
+        case .xlsx(let sheet, let cell): "xlsx:\(redaction.redact(text: sheet)):\(cell)"
         }
+    }
+
+    /// Shipped Profile and CasePack text is trusted, reviewed configuration, not
+    /// document content. With an identity plan it travels verbatim so the
+    /// existing rules and counter-examples keep their exact wording; when a
+    /// substituting plan is configured, its known terms are replaced here too.
+    private static func trusted(_ value: String, _ redaction: RedactionPlan) -> String {
+        redaction.isIdentity ? value : redaction.redact(text: value)
     }
 
     private static func displayName(of candidate: ContextCandidate, redaction: RedactionPlan) -> Any {
@@ -278,9 +299,9 @@ public enum MappingPrompt {
 
     /// Explicit NSNull rather than a bridged Swift nil, so an absent value is
     /// unambiguous in the bytes that leave the machine.
-    private static func metadataJSON(_ values: MetadataValues) -> [String: Any] {
+    private static func metadataJSON(_ values: MetadataValues, redaction: RedactionPlan) -> [String: Any] {
         Dictionary(uniqueKeysWithValues: MetadataFieldID.allCases.map { field in
-            if let value = values[field] { (field.rawValue, value as Any) }
+            if let value = values[field] { (field.rawValue, trusted(value, redaction) as Any) }
             else { (field.rawValue, NSNull()) }
         })
     }

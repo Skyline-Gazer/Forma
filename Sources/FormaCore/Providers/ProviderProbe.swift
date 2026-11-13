@@ -1,7 +1,7 @@
 import CoreFoundation
 import Foundation
 
-public enum ProbeProvider: String, CaseIterable, Sendable {
+public enum ProbeProvider: String, Codable, CaseIterable, Sendable {
     case openAI = "openai"
     case anthropic
 
@@ -106,8 +106,26 @@ public struct ProviderProbe: Sendable {
                 provider: provider, model: model, name: "forma_probe", system: nil,
                 payload: Self.syntheticPrompt, schema: schema, maxOutputTokens: 256
             ), key: key)
+            // A probe sends a synthetic sentence, not document data. Its grant
+            // is restricted to `.syntheticProbe` and still goes through the one
+            // gate: consent alone is not an authorization.
+            let semanticDigest = MappingPrompt.digest(payload: Data(Self.syntheticPrompt.utf8), system: "")
+            let endpoint = EgressEndpoint.provider(provider)
+            let facts = EgressRequest(
+                provider: provider, model: model, endpoint: endpoint, mode: .cloud,
+                categories: [.syntheticProbe], redactionVersion: RedactionPlan.version,
+                identitySubstitution: true, semanticDigest: semanticDigest,
+                wireDigest: EgressWireIdentity.digest(of: request), kind: .firstAsk,
+                assessment: SensitiveContentScanner.assess(payload: Self.syntheticPrompt, system: "",
+                                                            plan: .none),
+                credentialPresent: true, endpointURL: request.url ?? endpoint.canonicalURL)
+            let decision = EgressGate.decide(request: facts,
+                                             authorization: .probe(provider: provider, model: model),
+                                             allowCloud: allowCloud, previewDigest: semanticDigest)
+            guard let ticket = decision.ticket else { throw FormaError.unauthorized }
             startedRequest = true
-            let (body, _) = try await transport.response(request, limit: ProviderTransport.maximumResponseBytes)
+            let (body, _) = try await transport.response(request, limit: ProviderTransport.maximumResponseBytes,
+                                                         ticket: ticket)
             try Task.checkCancellation()
             guard let envelope = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else {
                 throw FormaError.invalidResponse

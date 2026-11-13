@@ -281,6 +281,8 @@ invalidated 是修订有效性标志，保留原 decision state 供审计；不�
 
 在受限本地环境对同一组关键反例做脱敏前后对照，客户/主体/人员角色分别占位，报价保留“空白/已填/投标价格分册”语义；授权允许时做前后同模型调用对比，否则用本地 Provider 完成对照并注明云端局限。公开仅提交汇总差异，不提交原文。API Key 仅 Keychain；日志默认隐藏正文、客户、报价和内部绝对路径，导出可分享报告前再次脱敏。书签/缓存/真实证据不进入 Git。
 
+> 实现状态（2026-11-13，P3-A 切片 2d，**不改变本节需求**）：外发授权从 `allowCloud` 布尔升级为版本化 `EgressScope` / `EgressAuthorization` / `EgressGate`，`ProviderTransport.response` 成为唯一需要 `EgressTicket` 的 wire 出口；预览与发送共用 `MappingPrompt` 构建路径，按数据范围而非 UI 状态授权；repair 与 429 重试每次重新判定并记录独立请求身份；`RedactionPlan` 覆盖 locator 文本、CasePack 与 System Prompt 动态字段，identity 计划明确披露；可分享 manifest 的 validation report、字段值与冲突文本一并脱敏；日志只记 operation、错误码与摘要。完整契约、覆盖矩阵、威胁矩阵与已知限制见 `docs/PRIVACY-EGRESS-CONTRACT.md`。真实 Provider 调用、真实凭据、脱敏前后同模型判别力对照与本地服务模式端到端仍属 P3-B / macOS 现场验证，本切片未启用、未宣称通过。
+
 ### 8.4 Correction Capture
 
 Prototype 定义并实现最小纠正记录：原决定、新决定、字段差异、source_id/快照、context revision、证据、纠正人/方式、审核状态、候选案例归属；原 Manifest 不改写。修正触发新决策修订和再验证。

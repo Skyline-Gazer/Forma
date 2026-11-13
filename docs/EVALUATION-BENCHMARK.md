@@ -207,4 +207,4 @@ M9 仍需真实 macOS 现场：真实 10,000 文件目录、硬件/系统/磁盘
 
 ## 10. 授权边界
 
-本设施属于已授权的 P3-A 离线评测准备（合成数据与确定性替身）。未触碰：真实 Provider 调用与费用（P3-B）、真实业务文件、DEVONthink 写入（I1）、Import 状态机与 `SKIP_VERIFIED`、发行签名/公证（R1）、Issue #51 的完整扫描语义、冻结 SPEC。
+本设施属于已授权的 P3-A 离线评测准备（合成数据与确定性替身）。未触碰：真实 Provider 调用与费用（P3-B）、真实业务文件、DEVONthink 写入（I1）、Import 状态机与 `SKIP_VERIFIED`、发行签名/公证（R1）、Issue #51 的完整扫描语义、冻结 SPEC。基准结果不含 Manifest、路径、证据正文或凭据，`allow_cloud` 恒为 false；外发授权与脱敏的现场核验见 `docs/PRIVACY-EGRESS-CONTRACT.md` 与 M10。
