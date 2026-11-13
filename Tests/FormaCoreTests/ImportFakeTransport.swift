@@ -42,12 +42,16 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
     var lookupInconclusive = false
     /// Makes a lookup take long enough for a cancellation test to land.
     var lookupDelayNanoseconds: UInt64 = 0
+    /// When false the independent read cannot prove the bytes, which is what a
+    /// target without a verifiable digest looks like.
+    var readbackSHAVerified = true
     /// Corrupts the readback of the first record, for mismatch tests.
     var readbackMetadataOverride: [String: String?]?
 
     func setFault(_ fault: Fault) { self.fault = fault }
     func setLookupInconclusive(_ value: Bool) { lookupInconclusive = value }
     func setLookupDelay(_ nanoseconds: UInt64) { lookupDelayNanoseconds = nanoseconds }
+    func setReadbackSHAVerified(_ value: Bool) { readbackSHAVerified = value }
     func setReadbackOverride(_ metadata: [String: String?]?) { readbackMetadataOverride = metadata }
     func storedRecords() -> [Stored] { records.values.sorted { $0.uuid < $1.uuid } }
     func seed(_ record: Stored) { records[record.uuid] = record }
@@ -88,7 +92,8 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
         metadataCalls += 1
         if fault == .metadata { throw FormaError.disconnected }
         guard var record = records[request.uuid] else { throw FormaError.invalidResponse }
-        record.metadata = request.metadata
+        // A metadata write fills the named slots; it does not clear the others.
+        for (key, value) in request.metadata { record.metadata[key] = value }
         record.sha256 = request.sourceSHA256
         records[request.uuid] = record
     }
@@ -101,7 +106,8 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
         return ImportRecordSnapshot(
             uuid: record.uuid, database: record.database, parentPath: record.parentPath,
             metadata: readbackMetadataOverride ?? record.metadata,
-            standardSHA256: record.sha256, shaVerified: record.shaVerified,
+            standardSHA256: record.sha256,
+            shaVerified: record.shaVerified && readbackSHAVerified,
             associationBasis: record.associationBasis)
     }
 }
