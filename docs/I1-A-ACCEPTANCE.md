@@ -257,6 +257,8 @@ ADS-style 独立评审（`ADSHardeningReview2`）审阅 `e340617..b7a62a3` 的 9
 
 见 `docs/ADR-I1-A-IMPORT-CONTRACT.md` §6.3：Initial create / Metadata write / Resume with known UUID / Resume without known UUID / Recovery after unknown create / Recovery after partial metadata write。唯一的 `create` 在 `run()`，唯一的 `writeMetadata` 在 `finish()`；`resolveUnknown` 与 `adoptAfterUnknownCreate` 自身不写，因此没有绕过写前核验的入口。
 
+B0 反例对六条路径的覆盖：Initial create（B13，核对 create 请求携带 `ImportSourceBinding`）、Metadata write（A6/B8 正向 + 全部零写入反例）、Resume with known UUID（A1–A7、B1–B8、B10–B12、B16–B20）、Resume without known UUID（B14，只读解析 + 来源核验）、Recovery after unknown create（B15，认领后仍核验目标 SHA 值）、Recovery after partial metadata write（A6/B8，只补缺失槽位；B20 证明写后回读失败不重试）。
+
 ### 8.7 Ledger / Preflight Regression
 
 | 不变量 | 状态 |
@@ -277,7 +279,21 @@ ADS-style 独立评审（`ADSHardeningReview2`）审阅 `e340617..b7a62a3` 的 9
 
 ### 8.9 ADS Review Results
 
-独立 ADS-style 审查（填入结果）；CNB AI Code Review 额度不足时按 `NOT_VERIFIED` 报告，不伪造评审结果，不强推或覆盖 CNB 分支。
+独立 ADS-style 审查（`ADSB0Review`，审阅 231 行生产 diff、27 个反例、Fake Transport、ADR §6–7 与验收报告 §8）：
+
+**结论：** 缺陷 A/B 的结构性修复成立，没有任何写路径绕过写前核验；`shaVerified` 不再等价于摘要值相等，`nil` SHA 被拒绝，恢复使用等效事实绑定而不伪造 pass。**未发现 Critical/High 的"未核验即写入"缺陷。**
+
+| 编号 | 级别 | 发现 | 处置 |
+| --- | --- | --- | --- |
+| F1 | Medium | Ledger 行的 `sourceSHA256` 从未与 Intent 比对；操作键不含内容 SHA，调用方可换 SHA 重新锚定全部校验 | `storedBindingFailure` 要求已落盘源 SHA 非 nil 且等于 Intent 源字节 SHA；新增 B18 |
+| F2 | Medium | 反例未完整满足六项断言契约；"读先于写"只有计数不能证明 | `expectNoWrite` 增加无写事件与记录逐字段不变断言；A6/B8 用有序事件日志证明顺序；B9 补 outcome/reason/phase |
+| F3 | Medium | `authorizationUnverifiable`、存储行目标漂移、写前 `identityUnconfirmed`、写后回读失败、路径 1/4/5 未覆盖 | 新增 B13–B20 八个用例 |
+| F4 | Low | 新增可选字段在恢复路径被强制要求，"旧调用兼容"表述不准确 | ADR §9.4 改为"编译兼容；恢复要求生产侧提供非 nil 当前事实" |
+| F5 | Low | `stopBeforeWrite` 也用于写后回读，命名与 attempts 不一致 | 更名 `recordVerificationFailure`，回读失败计入已发生的写入 |
+
+审查对六路径覆盖的判定：**代码层 6/6 均有写前核验**；B0 反例在补齐 B13/B14/B15 之后覆盖 6/6。
+
+CNB AI Code Review：本轮不触发（上一轮 PR #67 的 CNB 评审已因 `402 EXCEEDING_LIMIT` 额度耗尽失败，同一平台配额问题未消除），按 `NOT_VERIFIED` 报告，不伪造评审结果，不强推或覆盖 CNB 分支。
 
 ### 8.10 PR + Merge SHA
 

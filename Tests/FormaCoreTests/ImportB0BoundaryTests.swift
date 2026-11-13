@@ -425,7 +425,8 @@ struct ImportB0BoundaryTests {
         // operation: the row above is terminal, so a second resume would return
         // its recorded state before the source check.
         let second = try await makeStack()
-        let secondIntent = try intent(second)
+        let secondIntent = try ImportFixtures.intent(
+            runID: second.runID, metadata: ["completion_year": "2026", "title": "Tender"])
         await seed(second, metadata: ["completion_year": "2026", "title": "Tender"])
         let secondRecord = ImportOperationRecord(
             runID: second.runID, key: secondIntent.key, targetDatabase: secondIntent.targetDatabase,
