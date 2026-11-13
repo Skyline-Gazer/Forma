@@ -208,8 +208,8 @@ struct EgressContractTests {
         #expect(SensitiveContentScanner.assess(payload: "普通正文", system: "", plan: .none) == .allowed)
         #expect(SensitiveContentScanner.assess(payload: "普通正文", system: "", plan: plan) == .redacted)
         #expect(SensitiveContentScanner.assess(payload: "客户甲有限公司", system: "", plan: plan) == .blocked)
-        for highRisk in ["联系 ops@corp.example", "sk-abcdefghijklmnop", "13800138000",
-                         "https://user:secret@host.invalid/path", "110101199003072316"] {
+        for highRisk in ["联系 ops@corp.example", "sk-abcdefghijklmnop", "13900000000",
+                         "https://user:dummy-pass@host.invalid/path", "11010119900307771X"] {
             #expect(SensitiveContentScanner.assess(payload: highRisk, system: "", plan: .none) == .reviewRequired,
                     "unclassified shape must not be called safe: \(highRisk)")
         }

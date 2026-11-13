@@ -191,7 +191,7 @@ public struct ProviderMappingClient: Sendable {
                                       payload: payload, schema: schema, semanticDigest: semanticDigest,
                                       categories: categories, assessment: assessment, redaction: redaction,
                                       kind: round == 0 ? .firstAsk : .repair,
-                                      previewDigest: preview.digest, allowCloud: allowCloud)
+                                      allowCloud: allowCloud)
                 // Accounting first, always. A request that failed still reached
                 // the provider and still cost something; dropping the count on
                 // the error path reported a rate-limited run as making no
@@ -284,7 +284,7 @@ public struct ProviderMappingClient: Sendable {
                       payload: Data, schema: Data, semanticDigest: String,
                       categories: Set<EgressDataCategory>, assessment: SensitiveContentAssessment,
                       redaction: RedactionPlan, kind: EgressRequestKind,
-                      previewDigest: String, allowCloud: Bool) async -> Sent {
+                      allowCloud: Bool) async -> Sent {
         var usage = MappingUsage()
         var requests = 0
         var rateLimitRetries = 0
@@ -329,8 +329,11 @@ public struct ProviderMappingClient: Sendable {
                 wireDigest: EgressWireIdentity.digest(of: request), kind: wireKind,
                 assessment: assessment, credentialPresent: true,
                 endpointURL: request.url ?? endpoint.canonicalURL)
+            // The approved digest lives in the grant. Passing the freshly
+            // computed digest here would make exact binding vacuous: it would
+            // always compare the bytes with themselves.
             let decision = EgressGate.decide(request: facts, authorization: authorization,
-                                             allowCloud: allowCloud, previewDigest: previewDigest)
+                                             allowCloud: allowCloud, previewDigest: nil)
             FormaDiagnostics.egress(decision)
             guard let ticket = decision.ticket else {
                 denial = decision.denial

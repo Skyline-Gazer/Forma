@@ -205,7 +205,7 @@ struct PrivacyEgressTests {
     func unknownSensitiveContentSendsNothing() async throws {
         let (client, stub, key) = try client(grant: grant())
         defer { ProbeURLProtocol.unregister(key) }
-        let (batch, member, _) = try batch(excerpt: "联系人 {{EMAIL_xdmbstap}} 的报价单")
+        let (batch, member, _) = try batch(excerpt: "联系人 canary.ops@synthetic.example 的报价单")
         let result = await attempt(client, profile: try MappingProfile.projectArchive(),
                                    batch: batch, member: member)
         #expect(stub.requests.isEmpty)
