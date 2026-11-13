@@ -151,8 +151,8 @@ struct ImportEligibilityTests {
         let source = entry("Project/cache/c.bin")
         let result = try view([tracked, nested, source], facts: [
             tracked.id: facts(tracked, gitTracked: .yes, cache: .verifiedSignature),
-            nested.id: facts(nested, nested: .yes, cache: .verifiedSignature),
-            source.id: facts(source, sourceCode: .yes, cache: .verifiedSignature),
+            nested.id: facts(nested, cache: .verifiedSignature, nested: .yes),
+            source.id: facts(source, cache: .verifiedSignature, sourceCode: .yes),
         ])
         #expect(result.entry(for: tracked.id)?.decision == .review)
         #expect(result.entry(for: tracked.id)?.explanationCode == "git_tracked_protected")
