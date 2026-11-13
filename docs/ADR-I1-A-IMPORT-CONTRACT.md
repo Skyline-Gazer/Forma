@@ -163,7 +163,7 @@ CREATE TABLE import_leases (
 
 ### 5.1 实现（A2）
 
-`Sources/FormaCore/Import/ImportLedger.swift` 提供 `ImportLedger`（意图唯一、迁移守卫、追加式 attempt/observation、UUID 单次写入、重启清扫）与 `ImportLedgerMigrations`（`import-ledger-v1`，随 workspace 数据库迁移注册）。`ImportSingleWriter` 把 PLAN §10.2 的"单个 Executor actor"落成 actor + `import_leases` 租约行：租约说"本进程可以写"，回读才决定写没写。
+`Sources/FormaCore/Import/ImportLedger.swift` 提供 `ImportLedger`（意图唯一、迁移守卫、追加式 attempt/observation、UUID 单次写入、重启清扫）与 `ImportLedgerMigrations`（`import-ledger-v1` 建表、`import-ledger-v2` 增加 `authorization_digest`，均随 workspace 数据库迁移注册；v2 的列可空，旧行照常可读）。`ImportSingleWriter` 把 PLAN §10.2 的"单个 Executor actor"落成 actor + `import_leases` 租约行：租约说"本进程可以写"，回读才决定写没写。
 
 ## 6. Preflight（A1 实现）
 
@@ -192,13 +192,43 @@ CREATE TABLE import_leases (
 
 判定：任一阻断码 → `blocked`；只有瞬时码 → `deferred`；无失败 → `pass`。`deferred` 不是"跳过"，它保留在账本里等待恢复。
 
+### 6.1 Preflight 结论是绑定事实的许可（实现层，2026-11-13 硬化）
+
+`ImportPreflight.evaluate` 返回 `ImportPreflightClearance`，其构造器**私有**：许可只能由 Preflight 规则产生，不能由调用方手写一个空失败列表。许可绑定：
+
+| 分量 | 含义 |
+| --- | --- |
+| `source_id` / `snapshot_fingerprint` | 这条结论说的是哪个来源的哪一份字节 |
+| `manifest_revision` | 哪一版不可变 Manifest |
+| `target_database` / `target_group_path` | 哪个目标 |
+| `authorization_digest` | 在哪份授权下做出 |
+| `verdict` / `failures` | 结论本身 |
+
+执行器在写任何东西之前逐项核对许可与本次 Intent 的事实；任一项不同即拒绝（`clearance_mismatch`），零写入。`ImportIntent` 携带 `authorization_digest`，Ledger v2 把它落到 `import_operations.authorization_digest`，因此"这条操作是在哪份授权下开始的"在审计里可查。
+
+### 6.2 执行前置授权不变量
+
+一次外部写入只有在下列全部成立时才可能发生：
+
+1. 存在与本次 Intent 事实绑定的 `ImportPreflightClearance`，且结论为 `pass`；
+2. 执行器持有单写者租约，并对该来源与目标做了互斥预留；
+3. Intent 行已持久化（`intent_persisted`），且本次操作键此前不存在；
+4. 目标身份、字段与内容状态经**独立只读客户端**核对过，冲突项为零；
+5. 目标能够给出可验证的内容摘要；否则停在 `VERIFY_REQUIRED(hash_unverified)`。
+
+任何一条不成立，结果都是零写入与一个明确的原因码。
+
 ## 7. 恢复规则
 
+0. **补写前先读**：任何 Metadata 补写之前，先用独立只读客户端读取目标记录。记录中已被外部改动的槽位**保留原值**，操作进入 `CONFLICT_HOLD(external_modification)`；只有仍然缺失的槽位会被写入。外部新增的槽位不覆盖，也不阻断。
 1. 重启时：`intent_persisted` 之后的每个操作，先只读核查，再决定下一步。
-2. "已创建、UUID 未落库"的崩溃窗口：在已验证的目标 Group 内按来源关联与时间窗口检索；唯一命中 → `record_observed`；多候选或无法证明不存在 → `conflict_hold` / `verify_required`；**禁止**盲重试。
+1a. Ledger 中没有对应操作时，恢复请求只返回"缺少意图"（`intent_missing`），**不得**据此启动一次新的导入。
+1b. 恢复时若来源快照或字节摘要已变（`source_changed`），零写入。
+2. "已创建、UUID 未落库"的崩溃窗口：在已验证的目标 Group 内按来源关联与时间窗口检索；**只有**查询结论完整、候选唯一、且候选的业务身份已确认（锚点 + 第二项佐证）时，才把该 UUID 认作本操作的记录；多候选、身份未确认或查询不完整 → `VERIFY_REQUIRED`，零补写；**禁止**盲重试，也**禁止**取"第一条候选"。
 3. 记录已建、Metadata 未写完：证明为本操作的部分成功后，只继续未完成且与意图兼容的步骤。
 4. 恢复不得：重新分类、删除既存记录、覆盖用户后续修改、清理未知重复。
 5. 回读由独立只读客户端发起；写请求回显、DT 自有哈希都不能作为 `readback_verified` 的唯一证据。
+5a. 目标无法给出可验证的内容摘要时，操作停在 `VERIFY_REQUIRED(hash_unverified)`：**不**标记完整 `SKIP_VERIFIED` 或 `readback_verified`。
 6. SQLite 丢失：以本地导出账本与真实目标对账；无法还原的来源关系标 `unknown`，不因源路径仍在就批量重导。
 
 ## 8. 明确不声明
@@ -211,10 +241,11 @@ CREATE TABLE import_leases (
 
 ## 9. Contract Delta
 
-本 ADR 未修改 SPEC 产品契约。两处**实现层**决定需要在 I1-B 前由 Owner 确认：
+本 ADR 未修改 SPEC 产品契约。三处**实现层**决定：
 
 1. 授权以独立 `ImportAuthorization` 对象表达，而不是复用 `ManifestEnvelope.grantsExecution`（后者恒为 `false`，且解码器拒绝 `true`）。
 2. `ImportOperationKind` 目前只有 `create_record`；Metadata 写入是同一操作内的阶段，不是第二个键。若 I1-B 需要"补写 Metadata"作为独立可重试操作，需扩展本 ADR。
+3. （2026-11-13 硬化授权）Preflight 许可改为绑定事实的 `ImportPreflightClearance`，执行器逐项核对后才允许写入；`ImportCreateRequest` 携带 `ImportSourceBinding`（获授权的源文件、字节 SHA、快照、读取会话），**不**假定 DEVONthink 文件导入工具的参数形状——该形状在 I1-B 核实前仍是未决对应关系。
 
 ## 10. 验收（I1-A）
 

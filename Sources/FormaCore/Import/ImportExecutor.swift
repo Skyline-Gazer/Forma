@@ -458,19 +458,22 @@ public actor ImportExecutor {
     }
 
     static func conflictingFields(_ observed: [String: String?], _ intended: [String: String?]) -> [String] {
-        intended.compactMap { key, value in
-            guard let value else { return nil }
-            guard let current = observed[key] ?? nil else { return nil }
-            return current == value ? nil : key
-        }.sorted()
+        var conflicts: [String] = []
+        for (key, intendedValue) in intended {
+            guard let intendedValue else { continue }
+            guard let current = observed[key] ?? nil else { continue }
+            if current != intendedValue { conflicts.append(key) }
+        }
+        return conflicts.sorted()
     }
 
     static func missingFields(_ observed: [String: String?], _ intended: [String: String?]) -> [String: String?] {
-        intended.compactMap { key, value in
-            guard let value else { return nil }
-            guard (observed[key] ?? nil) == nil else { return nil }
-            return (key, value)
+        var missing: [String: String?] = [:]
+        for (key, intendedValue) in intended {
+            guard let intendedValue else { continue }
+            if (observed[key] ?? nil) == nil { missing[key] = intendedValue }
         }
+        return missing
     }
 
     private func markUnresolved(_ stored: ImportOperationRecord, reason: ImportReason) throws {
