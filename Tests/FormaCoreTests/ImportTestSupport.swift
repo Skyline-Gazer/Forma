@@ -97,10 +97,14 @@ enum ImportFixtures {
             expectedSHA256: intent.source.contentSHA256, now: now))
     }
 
-    /// The source facts a recovery sees now.
+    /// The source facts a recovery sees now, including the read session and
+    /// byte count that bind the observation to the intent's source.
     static func sourceFacts(snapshot: String = ImportFixtures.snapshot,
-                            sha: String? = ImportFixtures.sha) -> ImportSourceFacts {
+                            sha: String? = ImportFixtures.sha,
+                            readSessionID: String? = "session-synthetic",
+                            byteCount: Int64? = 1_024) -> ImportSourceFacts {
         ImportSourceFacts(state: .present, authorized: true, readable: true, hydrationPending: false,
-                          snapshotFingerprint: snapshot, sha256: sha)
+                          snapshotFingerprint: snapshot, sha256: sha,
+                          readSessionID: readSessionID, byteCount: byteCount)
     }
 }

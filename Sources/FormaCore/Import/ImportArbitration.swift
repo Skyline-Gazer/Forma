@@ -139,6 +139,21 @@ public enum ImportReason: String, Codable, Sendable, CaseIterable {
     case clearanceMismatch = "clearance_mismatch"
     /// Somebody changed the record while the operation was interrupted.
     case externalModification = "external_modification"
-    /// The source bytes or their snapshot changed under the operation.
+    /// The source's snapshot changed under the operation.
     case sourceChanged = "source_changed"
+    /// Recovery source facts: distinct, testable reasons, never one bucket.
+    case sourceMissing = "source_missing"
+    case sourceUnauthorized = "source_unauthorized"
+    case sourceUnreadable = "source_unreadable"
+    case sourceHydrationPending = "hydration_pending"
+    case sourceSHAUnavailable = "source_sha_unavailable"
+    case sourceSHAMismatch = "source_sha_mismatch"
+    case sourceSizeChanged = "source_size_changed"
+    case readSessionInvalid = "read_session_invalid"
+    case authorizationUnverifiable = "authorization_unverifiable"
+    case authorizationChanged = "authorization_changed"
+    /// Target checks before any metadata write.
+    case targetIdentityMismatch = "target_identity_mismatch"
+    case targetLocationChanged = "target_location_changed"
+    case targetSHAMismatch = "target_sha_mismatch"
 }

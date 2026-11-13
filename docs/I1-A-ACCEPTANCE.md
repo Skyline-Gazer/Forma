@@ -187,3 +187,118 @@ ADS-style 独立评审（`ADSHardeningReview2`）审阅 `e340617..b7a62a3` 的 9
 理由：五类执行边界缺陷已复现、修复并由红灯→绿灯的用例锁定；写入前置授权、读回证据与恢复语义现在都有可执行的契约与反例。缺口全部是**接口能力**而不是内部逻辑：I1-B 必须在真实隔离库上确认写工具、UUID、字段、Group 与标准 SHA 的真实行为，并验证断连、重复运行与崩溃恢复。
 
 因此 I1-A 的状态仍写作 **Offline Verified**；只有 I1-B 在真实接口上跑完 §7.7 的每一行，才允许改写为 Import Integration Verified。
+
+
+## 8. I1-B0 — Import Execution Boundary Final Hardening
+
+> 授权：I1-A 已授权的缺陷修复，只在 DevBox 离线进行。**没有**真实 DEVONthink 写调用、真实 Provider 请求、生产库写入，也没有修改 `main` 或强推 CNB。
+
+### 8.1 Repository Reality
+
+| 项 | 值 |
+| --- | --- |
+| GitHub `dev` HEAD（开始前核实） | `671894c` |
+| `origin/dev` 与本地 `dev` | 一致 |
+| I1-A Hardening | PR #67 已合并 |
+| SPEC | v0.1.1 FROZEN，未改 |
+| ADS pin | `.ads` = `16b99f4b49769555acc66a0c57b8cfcb8c8bac60`，未改 |
+| `main` | 未改 |
+| DevBox | 无 Swift 工具链；Swift 编译与测试只以 macOS CI 为准 |
+
+### 8.2 Confirmed Defect Matrix
+
+| # | 缺陷 | 结论 | 修复前证据 |
+| --- | --- | --- | --- |
+| B0-1 | `finish()` 补写前只检查 `shaVerified`，未比较 SHA 的**值**、目标 database、父组、UUID | **Confirmed** | 红灯用例 A1/A3/A4：目标字节或位置已不符，仍发生 `writeMetadata` |
+| B0-2 | `resume()` 把 `source.sha256 == nil` 当作"没有不匹配"，且未验证来源存在/授权/可读/hydration/会话 | **Confirmed** | 红灯用例 B1–B5：SHA 未验证或来源不可用时仍进入补写路径 |
+| B0-3 | 失败原因一律归入 `source_changed` | **Confirmed** | 代码路径只有单一 `sourceChanged` 返回 |
+| B0-4 | 恢复期间没有等效的事实绑定校验 | **Confirmed** | 代码路径只核对快照与（可空的）SHA |
+
+### 8.3 Red → Green Evidence
+
+红灯（仅反例测试，不改实现）：[CI 43472679882](https://github.com/Skyline-Gazer/Forma/actions/runs/43472679882) —— 11 个反例以行为断言失败：A1（目标 SHA 值不同仍补写并报 import）、A3（database 变化仍补写并报 import）、A4（父组变化仍补写并报 conflict_hold）、B1–B5（SHA 为 nil / missing / unauthorized / unreadable / hydration pending 均仍补写并报 import）、B7（SHA 变化被归入 `source_changed` 而非 `source_sha_mismatch`）。A2、A5、A6、B6、B8、B9 在红灯下已通过，作为回归护栏保留，未删除或弱化。首个红灯运行 [43470329974](https://github.com/Skyline-Gazer/Forma/actions/runs/43470329974) 暴露了夹具里"缺失字段"其实并不缺失的问题，已修正夹具后重跑取得干净红灯。
+
+绿灯（最终 head）：[CI 43478182718](https://github.com/Skyline-Gazer/Forma/actions/runs/43478182718)（FormaCore tests 3m3s + macOS app build 1m43s 全绿）与 [Benchmark 43478182978](https://github.com/Skyline-Gazer/Forma/actions/runs/43478182978)（Benchmark smoke 通过）。
+
+### 8.4 Read-before-write Proof
+
+`finish()` 在第一次独立只读读取之后、任何 `writeMetadata` 之前，依次核验（每种失败一个稳定原因码）：
+
+| 检查 | 失败码 | 结果 |
+| --- | --- | --- |
+| `snapshot.uuid == knownUUID` | `target_identity_mismatch` | VERIFY_REQUIRED，零写入 |
+| `database` 与 `parentPath` 与 Intent 一致 | `target_location_changed` | VERIFY_REQUIRED，零写入 |
+| Ledger 行的键/目标/授权摘要与 Intent 一致 | `authorization_unverifiable` / `authorization_changed` / `clearance_mismatch` | VERIFY_REQUIRED，零写入 |
+| `shaVerified == true` | `hash_unverified` | VERIFY_REQUIRED，零写入 |
+| `standardSHA256 == intent.source.contentSHA256` | `target_sha_mismatch` | CONFLICT_HOLD，零写入 |
+| 业务身份（关联锚点或完整确认） | `identity_unconfirmed` | VERIFY_REQUIRED，零写入 |
+| 已有字段与 Intent 冲突 | `external_modification` | CONFLICT_HOLD，保留外部值 |
+
+只有全部通过且存在缺失槽位时才发出 `writeMetadata`，且只写缺失槽位。最终独立回读重复同一组核验，并额外比较字段。`shaVerified` 不再等价于"摘要值相等"。
+
+### 8.5 Resume Source Verification Matrix
+
+| 检查 | 失败码 | 结果 |
+| --- | --- | --- |
+| `state == present` | `source_missing` | VERIFY_REQUIRED，零写入 |
+| `authorized` | `source_unauthorized` | 同上 |
+| `readable` | `source_unreadable` | 同上 |
+| `!hydrationPending` | `hydration_pending` | 同上 |
+| 快照与 Intent 一致 | `source_changed` | 同上 |
+| 当前 SHA 已取得 | `source_sha_unavailable` | 同上（`nil` 不再是"无不匹配"） |
+| 当前 SHA 与 Intent 一致 | `source_sha_mismatch` | 同上 |
+| 读取会话与 `ImportSourceBinding.readSessionID` 一致 | `read_session_invalid` | 同上 |
+| 字节数与绑定一致 | `source_size_changed` | 同上 |
+| Ledger 行的键分量/目标/授权摘要一致 | `authorization_unverifiable` / `authorization_changed` / `target_location_changed` / `clearance_mismatch` | 同上 |
+
+恢复**不**重新运行 Preflight，也不构造新的 pass：用上述事实绑定校验替代。取消（`CancellationError`）在任何边界都传播，不启动新的 create 或补写。
+
+### 8.6 写路径前置条件
+
+见 `docs/ADR-I1-A-IMPORT-CONTRACT.md` §6.3：Initial create / Metadata write / Resume with known UUID / Resume without known UUID / Recovery after unknown create / Recovery after partial metadata write。唯一的 `create` 在 `run()`，唯一的 `writeMetadata` 在 `finish()`；`resolveUnknown` 与 `adoptAfterUnknownCreate` 自身不写，因此没有绕过写前核验的入口。
+
+B0 反例对六条路径的覆盖：Initial create（B13，核对 create 请求携带 `ImportSourceBinding`）、Metadata write（A6/B8 正向 + 全部零写入反例）、Resume with known UUID（A1–A7、B1–B8、B10–B12、B16–B20）、Resume without known UUID（B14，只读解析 + 来源核验）、Recovery after unknown create（B15，认领后仍核验目标 SHA 值）、Recovery after partial metadata write（A6/B8，只补缺失槽位；B20 证明写后回读失败不重试）。
+
+### 8.7 Ledger / Preflight Regression
+
+| 不变量 | 状态 |
+| --- | --- |
+| `ImportOperationKey` 身份语义 | 未改，操作键仍与业务身份分离 |
+| `ImportPreflightClearance` 绑定（构造器 file-scoped） | 未改，新增字段有默认值，旧调用兼容 |
+| `ImportSingleWriter` 租约与预留 | 未改 |
+| 写前持久化 Intent | 未改 |
+| Ledger v2（`authorization_digest`） | 未改；恢复用它做等效绑定校验 |
+| 独立只读回读 | 强化为写前 + 写后两次 |
+| Unknown outcome 不盲重试 | 未改 |
+| `SourceListing` / `ManifestValidator` 契约 | 未触碰 |
+| I1-A / P3-A 全量回归 | 见 §8.8 的绿灯运行 |
+
+### 8.8 macOS CI + App Build
+
+[CI 43478182718](https://github.com/Skyline-Gazer/Forma/actions/runs/43478182718) — FormaCore tests + macOS app build 全绿；[Benchmark 43478182978](https://github.com/Skyline-Gazer/Forma/actions/runs/43478182978) — Benchmark smoke 通过。中途 `43473868370` 与 `43477353543` 的 app build 因 macOS runner 容量被取消（不是编译失败），重跑后 `43478182718` 全绿。DevBox 只做 `git diff --check`、括号平衡与文档一致性；**不**把 Linux 静态检查等同于 Swift 编译通过。
+
+### 8.9 ADS Review Results
+
+独立 ADS-style 审查（`ADSB0Review`，审阅 231 行生产 diff、27 个反例、Fake Transport、ADR §6–7 与验收报告 §8）：
+
+**结论：** 缺陷 A/B 的结构性修复成立，没有任何写路径绕过写前核验；`shaVerified` 不再等价于摘要值相等，`nil` SHA 被拒绝，恢复使用等效事实绑定而不伪造 pass。**未发现 Critical/High 的"未核验即写入"缺陷。**
+
+| 编号 | 级别 | 发现 | 处置 |
+| --- | --- | --- | --- |
+| F1 | Medium | Ledger 行的 `sourceSHA256` 从未与 Intent 比对；操作键不含内容 SHA，调用方可换 SHA 重新锚定全部校验 | `storedBindingFailure` 要求已落盘源 SHA 非 nil 且等于 Intent 源字节 SHA；新增 B18 |
+| F2 | Medium | 反例未完整满足六项断言契约；"读先于写"只有计数不能证明 | `expectNoWrite` 增加无写事件与记录逐字段不变断言；A6/B8 用有序事件日志证明顺序；B9 补 outcome/reason/phase |
+| F3 | Medium | `authorizationUnverifiable`、存储行目标漂移、写前 `identityUnconfirmed`、写后回读失败、路径 1/4/5 未覆盖 | 新增 B13–B20 八个用例 |
+| F4 | Low | 新增可选字段在恢复路径被强制要求，"旧调用兼容"表述不准确 | ADR §9.4 改为"编译兼容；恢复要求生产侧提供非 nil 当前事实" |
+| F5 | Low | `stopBeforeWrite` 也用于写后回读，命名与 attempts 不一致 | 更名 `recordVerificationFailure`，回读失败计入已发生的写入 |
+
+审查对六路径覆盖的判定：**代码层 6/6 均有写前核验**；B0 反例在补齐 B13/B14/B15 之后覆盖 6/6。
+
+CNB AI Code Review：本轮不触发（上一轮 PR #67 的 CNB 评审已因 `402 EXCEEDING_LIMIT` 额度耗尽失败，同一平台配额问题未消除），按 `NOT_VERIFIED` 报告，不伪造评审结果，不强推或覆盖 CNB 分支。
+
+### 8.10 PR + Merge SHA
+
+PR：[#68](https://github.com/Skyline-Gazer/Forma/pull/68)。合并 SHA 见最终交付报告（合并后回填）。
+
+### 8.11 I1-B1 Readiness
+
+**Offline Verified + B1 Ready**。B0 只完成离线执行边界修复；B1 真实 MCP 能力、B2 真实写入均未启动，也未宣称 `Import Integration Verified`。
