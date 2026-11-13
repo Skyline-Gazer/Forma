@@ -279,6 +279,8 @@ invalidated 是修订有效性标志，保留原 decision state 供审计；不�
 
 > 实现状态（2026-11-12，P3-A 切片 2c，**不改变本节需求**）：合成压力数据单列与「每批/每文件 token、请求次数、平均/P95 延迟、错误率、并发」的采集由 `EvaluationRunner` / `EvaluationTelemetry`（切片 2b）与 opt-in 的合成规模基准（切片 2c：`FormaBenchmark`、`docs/EVALUATION-BENCHMARK.md`）落地。10k 合成运行只作为运行器/算法层证据；真实本地 10,000 文件扫描、OneDrive hydration 分列与真实 Provider 对比评测仍分别属于 M9 现场验证与 P3-B 授权范围，未由本切片完成或宣称通过。
 
+> 实现状态（2026-11-13，P3-A 切片 2g，**不改变本节需求**）：分层报告之上补一份**覆盖普查** `EvaluationCoverage`（`Sources/FormaCore/Evaluation/EvaluationCoverage.swift`）：每个 `GoldRecord.Category` 同时给出数据集报告的可计数数与本轮真正判定的用例数，并把「split 没有该场景」「有样本但一条未判」「部分未判」与「schema 未声明的场景键」分别列为 `untested` / `unreached` / `partial` / `undeclared`，不再让缺失场景与不需要场景长得一样。它只做计数，不新增分子分母，不改 §8.2 的七项比率与门禁。导出工件 `schema_version` 升至 `1.2`，新增可选 `coverage` 与 `parent_run_id`（再版工件声明前序运行；这是声明，不是链路校验）；`1.0` / `1.1` 导出仍可解码，缺省不补造。真实样本覆盖是否足够、真实运行的血缘链仍属 P3-B 与现场复核范围。
+
 ### 8.3 外发与本地安全
 
 云端 Provider 首次启用须产品内明确说明并由用户启用；发送前可预览实际 payload 范围和 Provider 数据处理政策。文件名/目录可能包含敏感信息，不能仅按“路径字段”默认视为低敏。客户、人员、报价使用稳定但不同的占位符；密钥、凭据、受保护资料拒绝外发。必要敏感上下文由用户明确选择，记录授权范围版本。离线扫描/Manifest 查看始终可用，本地 API 模式不要求云外发。
