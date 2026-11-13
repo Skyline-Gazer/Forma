@@ -56,6 +56,8 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
     var readbackMetadataOverride: [String: String?]?
     /// Makes the independent read throw CancellationError.
     var readCancellation = false
+    /// Makes the independent read report a different UUID than the record key.
+    var readUUIDOverride: String?
 
     func setFault(_ fault: Fault) { self.fault = fault }
     func setLookupInconclusive(_ value: Bool) { lookupInconclusive = value }
@@ -65,6 +67,7 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
     func setExtraRecordsAfterCreate(_ records: [Stored]) { extraRecordsAfterCreate = records }
     func setReadbackOverride(_ metadata: [String: String?]?) { readbackMetadataOverride = metadata }
     func setReadCancellation(_ value: Bool) { readCancellation = value }
+    func setReadUUIDOverride(_ value: String?) { readUUIDOverride = value }
     func storedRecords() -> [Stored] { records.values.sorted { $0.uuid < $1.uuid } }
     func seed(_ record: Stored) { records[record.uuid] = record }
 
@@ -125,7 +128,8 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
         if fault == .readback { throw FormaError.disconnected }
         guard let record = records[uuid] else { throw FormaError.invalidResponse }
         return ImportRecordSnapshot(
-            uuid: record.uuid, database: record.database, parentPath: record.parentPath,
+            uuid: readUUIDOverride ?? record.uuid, database: record.database,
+            parentPath: record.parentPath,
             metadata: readbackMetadataOverride ?? record.metadata,
             standardSHA256: record.sha256,
             shaVerified: record.shaVerified && readbackSHAVerified,

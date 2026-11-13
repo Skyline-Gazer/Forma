@@ -73,15 +73,23 @@ public struct ImportSourceFacts: Sendable, Equatable {
     public let snapshotFingerprint: String
     /// Verified digest of the bytes this run read; nil means unverified.
     public let sha256: String?
+    /// The read session that produced this observation. A recovery cannot
+    /// proceed without it: the session is part of the source binding.
+    public let readSessionID: String?
+    /// Byte count observed in this session; must match the binding.
+    public let byteCount: Int64?
 
     public init(state: State, authorized: Bool, readable: Bool, hydrationPending: Bool,
-                snapshotFingerprint: String, sha256: String?) {
+                snapshotFingerprint: String, sha256: String?,
+                readSessionID: String? = nil, byteCount: Int64? = nil) {
         self.state = state
         self.authorized = authorized
         self.readable = readable
         self.hydrationPending = hydrationPending
         self.snapshotFingerprint = snapshotFingerprint
         self.sha256 = sha256
+        self.readSessionID = readSessionID
+        self.byteCount = byteCount
     }
 }
 

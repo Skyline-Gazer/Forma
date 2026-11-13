@@ -178,6 +178,20 @@ struct ImportB0BoundaryTests {
         #expect(try stack.ledger.operation(keyDigest: intent.key.digest)?.phase == .readbackVerified)
     }
 
+    @Test("A7: a target read that returns another UUID blocks the write")
+    func targetUUIDMismatch() async throws {
+        let stack = try await makeStack()
+        let intent = try intent(stack)
+        await seed(stack, metadata: ["completion_year": "2026"])
+        try persistKnownUUID(stack, intent, uuid: "uuid-target")
+        await stack.transport.setReadUUIDOverride("uuid-somebody-else")
+
+        let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
+
+        try await expectNoWrite(stack, intent, result, outcome: "verify_required",
+                                reason: "target_identity_mismatch")
+    }
+
     // MARK: - Task B: source verification before recovery
 
     private func resumeExpectsNoWrite(_ stack: Stack, _ intent: ImportIntent,
@@ -284,6 +298,46 @@ struct ImportB0BoundaryTests {
         #expect(await stack.transport.createCalls == 0)
         #expect(await stack.transport.metadataCalls == 1)
         #expect(try stack.ledger.operation(keyDigest: intent.key.digest)?.phase == .readbackVerified)
+    }
+
+    @Test("B10: a stale read session is refused")
+    func staleReadSession() async throws {
+        let stack = try await makeStack()
+        let intent = try intent(stack)
+        try await resumeExpectsNoWrite(
+            stack, intent,
+            source: ImportFixtures.sourceFacts(readSessionID: "stale-session"),
+            reason: "read_session_invalid")
+    }
+
+    @Test("B11: a changed byte count is refused")
+    func sourceSizeChanged() async throws {
+        let stack = try await makeStack()
+        let intent = try intent(stack)
+        try await resumeExpectsNoWrite(
+            stack, intent,
+            source: ImportFixtures.sourceFacts(byteCount: 9_999),
+            reason: "source_size_changed")
+    }
+
+    @Test("B12: an operation stored under another authorization is refused")
+    func authorizationChanged() async throws {
+        let stack = try await makeStack()
+        let intent = try intent(stack)
+        await seed(stack, metadata: ["completion_year": "2026"])
+        let record = ImportOperationRecord(
+            runID: stack.runID, key: intent.key, targetDatabase: intent.targetDatabase,
+            targetGroupPath: intent.groupPath, intendedMetadataDigest: "d",
+            intendedMetadataJSON: "{}", sourceSHA256: intent.source.contentSHA256,
+            authorizationDigest: String(repeating: "0", count: 64), createdAt: ImportFixtures.now)
+        try stack.ledger.recordIntent(record)
+        try stack.ledger.transition(keyDigest: intent.key.digest, to: .preflighted, at: ImportFixtures.now)
+        try stack.ledger.transition(keyDigest: intent.key.digest, to: .intentPersisted, at: ImportFixtures.now)
+
+        let result = try await stack.executor.resume(intent, source: ImportFixtures.sourceFacts())
+
+        try await expectNoWrite(stack, intent, result, outcome: "verify_required",
+                                reason: "authorization_changed")
     }
 
     @Test("B9: a cancellation during recovery starts no write")

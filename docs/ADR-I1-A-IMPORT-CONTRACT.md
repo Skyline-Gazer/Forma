@@ -214,9 +214,24 @@ CREATE TABLE import_leases (
 2. 执行器持有单写者租约，并对该来源与目标做了互斥预留；
 3. Intent 行已持久化（`intent_persisted`），且本次操作键此前不存在；
 4. 目标身份、字段与内容状态经**独立只读客户端**核对过，冲突项为零；
-5. 目标能够给出可验证的内容摘要；否则停在 `VERIFY_REQUIRED(hash_unverified)`。
+5. 目标能够给出可验证的内容摘要，**且该摘要的值等于本次 Intent 的源字节 SHA**；否则分别停在 `VERIFY_REQUIRED(hash_unverified)` 或 `CONFLICT_HOLD(target_sha_mismatch)`；
+6. 目标的 UUID、数据库与父组与 Intent 一致；否则 `VERIFY_REQUIRED(target_identity_mismatch / target_location_changed)`；
+7. 持久化 Intent 行仍与本次 Intent 的键分量、目标与授权摘要一致（恢复路径的等效事实绑定校验，不重新构造 pass）。
 
 任何一条不成立，结果都是零写入与一个明确的原因码。
+
+### 6.3 写路径前置条件（I1-B0 审计）
+
+| 写路径 | 可能发出的写请求 | 前置条件 |
+| --- | --- | --- |
+| Initial create | `create` | 与 Intent 绑定的 `ImportPreflightClearance` 为 pass 且六项事实一致；单写者租约与预留；Intent 已落盘且键此前不存在；写前 lookup 结论完整且证明无记录 |
+| Metadata write | `writeMetadata` | UUID 已知；独立只读读取成功；§6.2 的第 4–7 项全部成立；没有不可覆盖的字段冲突；只写仍缺失的槽位 |
+| Resume with known UUID | `writeMetadata` | Ledger 行在途；`storedBindingFailure` 与 `sourceFailure` 均为 nil（见 §7）；租约与预留；随后进入 Metadata write 的全部前置条件 |
+| Resume without known UUID | **无写** | 同上；`resolveUnknown` 只做只读 lookup 与仲裁，结果只能是 skip / conflict / failed / verify-required |
+| Recovery after unknown create | `create`（仅原始一次），随后可 `writeMetadata` | 原始 create 已尝试且结果未知；恢复 lookup 结论完整、候选唯一、业务身份已确认、摘要可验证；认领 UUID 后进入 Metadata write 的全部前置条件；**禁止第二次 create** |
+| Recovery after partial metadata write | `writeMetadata` | Resume with known UUID 的全部条件；独立读取显示部分字段已写入且无冲突；只补写缺失槽位 |
+
+**没有**任何写路径绕过 `finish()` 的写前核验：唯一的 `create` 在 `run()` 中，唯一的 `writeMetadata` 在 `finish()` 中；`resolveUnknown` 与 `adoptAfterUnknownCreate` 本身不写。
 
 ## 7. 恢复规则
 
@@ -241,11 +256,12 @@ CREATE TABLE import_leases (
 
 ## 9. Contract Delta
 
-本 ADR 未修改 SPEC 产品契约。三处**实现层**决定：
+本 ADR 未修改 SPEC 产品契约。四处**实现层**决定：
 
 1. 授权以独立 `ImportAuthorization` 对象表达，而不是复用 `ManifestEnvelope.grantsExecution`（后者恒为 `false`，且解码器拒绝 `true`）。
 2. `ImportOperationKind` 目前只有 `create_record`；Metadata 写入是同一操作内的阶段，不是第二个键。若 I1-B 需要"补写 Metadata"作为独立可重试操作，需扩展本 ADR。
 3. （2026-11-13 硬化授权）Preflight 许可改为绑定事实的 `ImportPreflightClearance`，执行器逐项核对后才允许写入；`ImportCreateRequest` 携带 `ImportSourceBinding`（获授权的源文件、字节 SHA、快照、读取会话），**不**假定 DEVONthink 文件导入工具的参数形状——该形状在 I1-B 核实前仍是未决对应关系。
+4. （2026-11-14，I1-B0 已授权缺陷修复）`finish()` 在任何补写前完整核验目标 UUID / database / 父组 / 已验证且值相等的 SHA；`resume()` 改为完整来源核验与等效事实绑定校验。`ImportSourceFacts` 增加 `readSessionID` / `byteCount`，均为可选、旧调用保持兼容。以上为**实现层**，不改 SPEC 产品语义。
 
 ## 10. 验收（I1-A）
 

@@ -93,12 +93,16 @@ public actor ImportExecutor {
             return ImportExecutionResult(phase: stored.phase, outcome: stored.phase.outcome,
                                          actualUUID: stored.actualUUID, reason: nil, attempts: 0)
         }
-        // The bytes must still be the ones the decision was made from.
-        guard source.snapshotFingerprint == intent.source.snapshotFingerprint,
-              source.sha256 == nil || source.sha256 == intent.source.contentSHA256 else {
-            try markUnresolved(stored, reason: .sourceChanged)
-            return ImportExecutionResult(phase: .verifyRequired, outcome: .verifyRequired,
-                                         actualUUID: stored.actualUUID, reason: .sourceChanged, attempts: 0)
+        // Equivalent fact-binding check: no new clearance is constructed here.
+        // The persisted operation must still be the operation this intent names
+        // (same key parts, same target, same authorization), and the source
+        // observation must prove the bytes, the session and the access rights
+        // that the original decision rested on.
+        if let failure = Self.storedBindingFailure(stored, intent: intent) {
+            return try stopBeforeRecovery(stored, reason: failure)
+        }
+        if let failure = Self.sourceFailure(source, intent: intent) {
+            return try stopBeforeRecovery(stored, reason: failure)
         }
 
         let keys = ["source:\(intent.key.sourceID.uuidString.lowercased())",
@@ -122,6 +126,58 @@ public actor ImportExecutor {
             try? await writer.release()
             throw error
         }
+    }
+
+    /// Records a refused recovery and returns a verify-required result with no
+    /// external effect.
+    private func stopBeforeRecovery(_ stored: ImportOperationRecord,
+                                    reason: ImportReason) throws -> ImportExecutionResult {
+        try markUnresolved(stored, reason: reason)
+        return ImportExecutionResult(phase: .verifyRequired, outcome: .verifyRequired,
+                                     actualUUID: stored.actualUUID, reason: reason, attempts: 0)
+    }
+
+    /// Whether the persisted operation still describes this intent. A row
+    /// written under another authorization or for another target is not a
+    /// permission to continue, and a row from ledger v1 has no authorization
+    /// proof at all.
+    static func storedBindingFailure(_ stored: ImportOperationRecord,
+                                     intent: ImportIntent) -> ImportReason? {
+        guard let digest = stored.authorizationDigest else { return .authorizationUnverifiable }
+        guard digest == intent.authorizationDigest else { return .authorizationChanged }
+        guard stored.targetDatabase == intent.targetDatabase,
+              stored.targetGroupPath == intent.groupPath else { return .targetLocationChanged }
+        guard stored.sourceID == intent.key.sourceID,
+              stored.snapshotFingerprint == intent.key.snapshotFingerprint,
+              stored.manifestRevision == intent.key.manifestRevision,
+              stored.targetAssociationID == intent.key.targetAssociationID else {
+            return .clearanceMismatch
+        }
+        return nil
+    }
+
+    /// The complete source verification for a recovery, with a distinct code
+    /// for each way the source can fail. A nil SHA is not "no mismatch": it is
+    /// an unverified source, and an unverified source cannot authorize a write.
+    static func sourceFailure(_ source: ImportSourceFacts,
+                              intent: ImportIntent) -> ImportReason? {
+        guard source.state == .present else { return .sourceMissing }
+        guard source.authorized else { return .sourceUnauthorized }
+        guard source.readable else { return .sourceUnreadable }
+        guard !source.hydrationPending else { return .sourceHydrationPending }
+        guard source.snapshotFingerprint == intent.source.snapshotFingerprint,
+              source.snapshotFingerprint == intent.key.snapshotFingerprint else {
+            return .sourceChanged
+        }
+        guard let sha = source.sha256 else { return .sourceSHAUnavailable }
+        guard sha == intent.source.contentSHA256 else { return .sourceSHAMismatch }
+        guard let session = source.readSessionID, session == intent.source.readSessionID else {
+            return .readSessionInvalid
+        }
+        guard let byteCount = source.byteCount, byteCount == intent.source.byteCount else {
+            return .sourceSizeChanged
+        }
+        return nil
     }
 
     // MARK: - Fresh execution
@@ -336,15 +392,17 @@ public actor ImportExecutor {
                                          actualUUID: uuid, reason: .outcomeUnknown, attempts: attempts)
         }
 
-        // A target that cannot prove the bytes proves nothing: stop here, before
-        // any write. Checking this only after the write would let an unverifiable
-        // target receive metadata and then be reported as "needs verification".
-        guard snapshot.shaVerified else {
-            try recordObservation(operation: stored, snapshot: snapshot, matches: false)
-            try ledger.transition(keyDigest: stored.keyDigest, to: .verifyRequired, at: clock(),
-                                  errorCode: ImportReason.hashUnverified.rawValue)
-            return ImportExecutionResult(phase: .verifyRequired, outcome: .verifyRequired,
-                                         actualUUID: uuid, reason: .hashUnverified, attempts: attempts)
+        // Full target verification BEFORE any metadata write. Each check has a
+        // distinct outcome; none of them is deferred to the final readback,
+        // because a write that already happened cannot be undone by a later
+        // discovery.
+        if let failure = Self.targetFailure(snapshot, intent: intent, uuid: uuid) {
+            return try stopBeforeWrite(stored, uuid: uuid, snapshot: snapshot,
+                                       attempts: attempts, reason: failure)
+        }
+        if let failure = Self.storedBindingFailure(current, intent: intent) {
+            return try stopBeforeWrite(stored, uuid: uuid, snapshot: snapshot,
+                                       attempts: attempts, reason: failure)
         }
 
         // The record must be ours before anything is written to it. A record
@@ -404,14 +462,10 @@ public actor ImportExecutor {
                                          actualUUID: uuid, reason: .outcomeUnknown, attempts: attempts + 1)
         }
 
-        // A target that cannot prove the content digest proves nothing: the
-        // operation stays unverified instead of being called complete.
-        guard after.shaVerified else {
-            try recordObservation(operation: stored, snapshot: after, matches: false)
-            try ledger.transition(keyDigest: stored.keyDigest, to: .verifyRequired, at: clock(),
-                                  errorCode: ImportReason.hashUnverified.rawValue)
-            return ImportExecutionResult(phase: .verifyRequired, outcome: .verifyRequired,
-                                         actualUUID: uuid, reason: .hashUnverified, attempts: attempts)
+        // The readback proves the same facts again, from the independent client.
+        if let failure = Self.targetFailure(after, intent: intent, uuid: uuid) {
+            return try stopBeforeWrite(stored, uuid: uuid, snapshot: after,
+                                       attempts: attempts, reason: failure)
         }
 
         let matches = after.matches(groupPath: intent.groupPath, metadata: intent.metadata,
@@ -466,6 +520,42 @@ public actor ImportExecutor {
             && binding.targetDatabase == intent.targetDatabase
             && binding.targetGroupPath == intent.groupPath
             && binding.authorizationDigest == intent.authorizationDigest
+    }
+
+    /// Every fact the target must prove before a metadata write: the record is
+    /// the UUID this operation knows, it is in the authorized database and
+    /// parent group, and its *verified* digest is the digest of the source bytes.
+    /// `shaVerified` alone is not enough — a verified but different digest is a
+    /// conflict, not a match.
+    static func targetFailure(_ snapshot: ImportRecordSnapshot, intent: ImportIntent,
+                              uuid: String) -> ImportReason? {
+        guard snapshot.uuid == uuid else { return .targetIdentityMismatch }
+        guard snapshot.database == intent.targetDatabase,
+              snapshot.parentPath == intent.groupPath else { return .targetLocationChanged }
+        guard snapshot.shaVerified else { return .hashUnverified }
+        guard let sha = snapshot.standardSHA256, sha == intent.source.contentSHA256 else {
+            return .targetSHAMismatch
+        }
+        return nil
+    }
+
+    /// Refuses a metadata write with a reason a reviewer can act on. A verified
+    /// but different digest is a conflict hold; everything else is an
+    /// unverified or changed boundary that needs a read-only check first.
+    private func stopBeforeWrite(_ stored: ImportOperationRecord, uuid: String,
+                                 snapshot: ImportRecordSnapshot, attempts: Int,
+                                 reason: ImportReason) throws -> ImportExecutionResult {
+        try recordObservation(operation: stored, snapshot: snapshot, matches: false)
+        let isConflict = reason == .targetSHAMismatch
+        let phase: ImportPhase = isConflict ? .conflictHold : .verifyRequired
+        let outcome: ImportOutcome = isConflict ? .conflictHold : .verifyRequired
+        let current = try ledger.operation(keyDigest: stored.keyDigest) ?? stored
+        if current.phase.canTransition(to: phase) {
+            try ledger.transition(keyDigest: stored.keyDigest, to: phase, at: clock(),
+                                  errorCode: reason.rawValue)
+        }
+        return ImportExecutionResult(phase: phase, outcome: outcome,
+                                     actualUUID: uuid, reason: reason, attempts: attempts)
     }
 
     /// Whether the observed record belongs to this operation.

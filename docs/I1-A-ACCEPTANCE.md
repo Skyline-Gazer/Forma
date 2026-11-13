@@ -187,3 +187,100 @@ ADS-style 独立评审（`ADSHardeningReview2`）审阅 `e340617..b7a62a3` 的 9
 理由：五类执行边界缺陷已复现、修复并由红灯→绿灯的用例锁定；写入前置授权、读回证据与恢复语义现在都有可执行的契约与反例。缺口全部是**接口能力**而不是内部逻辑：I1-B 必须在真实隔离库上确认写工具、UUID、字段、Group 与标准 SHA 的真实行为，并验证断连、重复运行与崩溃恢复。
 
 因此 I1-A 的状态仍写作 **Offline Verified**；只有 I1-B 在真实接口上跑完 §7.7 的每一行，才允许改写为 Import Integration Verified。
+
+
+## 8. I1-B0 — Import Execution Boundary Final Hardening
+
+> 授权：I1-A 已授权的缺陷修复，只在 DevBox 离线进行。**没有**真实 DEVONthink 写调用、真实 Provider 请求、生产库写入，也没有修改 `main` 或强推 CNB。
+
+### 8.1 Repository Reality
+
+| 项 | 值 |
+| --- | --- |
+| GitHub `dev` HEAD（开始前核实） | `671894c` |
+| `origin/dev` 与本地 `dev` | 一致 |
+| I1-A Hardening | PR #67 已合并 |
+| SPEC | v0.1.1 FROZEN，未改 |
+| ADS pin | `.ads` = `16b99f4b49769555acc66a0c57b8cfcb8c8bac60`，未改 |
+| `main` | 未改 |
+| DevBox | 无 Swift 工具链；Swift 编译与测试只以 macOS CI 为准 |
+
+### 8.2 Confirmed Defect Matrix
+
+| # | 缺陷 | 结论 | 修复前证据 |
+| --- | --- | --- | --- |
+| B0-1 | `finish()` 补写前只检查 `shaVerified`，未比较 SHA 的**值**、目标 database、父组、UUID | **Confirmed** | 红灯用例 A1/A3/A4：目标字节或位置已不符，仍发生 `writeMetadata` |
+| B0-2 | `resume()` 把 `source.sha256 == nil` 当作"没有不匹配"，且未验证来源存在/授权/可读/hydration/会话 | **Confirmed** | 红灯用例 B1–B5：SHA 未验证或来源不可用时仍进入补写路径 |
+| B0-3 | 失败原因一律归入 `source_changed` | **Confirmed** | 代码路径只有单一 `sourceChanged` 返回 |
+| B0-4 | 恢复期间没有等效的事实绑定校验 | **Confirmed** | 代码路径只核对快照与（可空的）SHA |
+
+### 8.3 Red → Green Evidence
+
+红灯（仅反例测试，不改实现）：[CI 43470329974](https://github.com/Skyline-Gazer/Forma/actions/runs/43470329974)。绿灯（最终 head）：见 §8.7。
+
+### 8.4 Read-before-write Proof
+
+`finish()` 在第一次独立只读读取之后、任何 `writeMetadata` 之前，依次核验（每种失败一个稳定原因码）：
+
+| 检查 | 失败码 | 结果 |
+| --- | --- | --- |
+| `snapshot.uuid == knownUUID` | `target_identity_mismatch` | VERIFY_REQUIRED，零写入 |
+| `database` 与 `parentPath` 与 Intent 一致 | `target_location_changed` | VERIFY_REQUIRED，零写入 |
+| Ledger 行的键/目标/授权摘要与 Intent 一致 | `authorization_unverifiable` / `authorization_changed` / `clearance_mismatch` | VERIFY_REQUIRED，零写入 |
+| `shaVerified == true` | `hash_unverified` | VERIFY_REQUIRED，零写入 |
+| `standardSHA256 == intent.source.contentSHA256` | `target_sha_mismatch` | CONFLICT_HOLD，零写入 |
+| 业务身份（关联锚点或完整确认） | `identity_unconfirmed` | VERIFY_REQUIRED，零写入 |
+| 已有字段与 Intent 冲突 | `external_modification` | CONFLICT_HOLD，保留外部值 |
+
+只有全部通过且存在缺失槽位时才发出 `writeMetadata`，且只写缺失槽位。最终独立回读重复同一组核验，并额外比较字段。`shaVerified` 不再等价于"摘要值相等"。
+
+### 8.5 Resume Source Verification Matrix
+
+| 检查 | 失败码 | 结果 |
+| --- | --- | --- |
+| `state == present` | `source_missing` | VERIFY_REQUIRED，零写入 |
+| `authorized` | `source_unauthorized` | 同上 |
+| `readable` | `source_unreadable` | 同上 |
+| `!hydrationPending` | `hydration_pending` | 同上 |
+| 快照与 Intent 一致 | `source_changed` | 同上 |
+| 当前 SHA 已取得 | `source_sha_unavailable` | 同上（`nil` 不再是"无不匹配"） |
+| 当前 SHA 与 Intent 一致 | `source_sha_mismatch` | 同上 |
+| 读取会话与 `ImportSourceBinding.readSessionID` 一致 | `read_session_invalid` | 同上 |
+| 字节数与绑定一致 | `source_size_changed` | 同上 |
+| Ledger 行的键分量/目标/授权摘要一致 | `authorization_unverifiable` / `authorization_changed` / `target_location_changed` / `clearance_mismatch` | 同上 |
+
+恢复**不**重新运行 Preflight，也不构造新的 pass：用上述事实绑定校验替代。取消（`CancellationError`）在任何边界都传播，不启动新的 create 或补写。
+
+### 8.6 写路径前置条件
+
+见 `docs/ADR-I1-A-IMPORT-CONTRACT.md` §6.3：Initial create / Metadata write / Resume with known UUID / Resume without known UUID / Recovery after unknown create / Recovery after partial metadata write。唯一的 `create` 在 `run()`，唯一的 `writeMetadata` 在 `finish()`；`resolveUnknown` 与 `adoptAfterUnknownCreate` 自身不写，因此没有绕过写前核验的入口。
+
+### 8.7 Ledger / Preflight Regression
+
+| 不变量 | 状态 |
+| --- | --- |
+| `ImportOperationKey` 身份语义 | 未改，操作键仍与业务身份分离 |
+| `ImportPreflightClearance` 绑定（构造器 file-scoped） | 未改，新增字段有默认值，旧调用兼容 |
+| `ImportSingleWriter` 租约与预留 | 未改 |
+| 写前持久化 Intent | 未改 |
+| Ledger v2（`authorization_digest`） | 未改；恢复用它做等效绑定校验 |
+| 独立只读回读 | 强化为写前 + 写后两次 |
+| Unknown outcome 不盲重试 | 未改 |
+| `SourceListing` / `ManifestValidator` 契约 | 未触碰 |
+| I1-A / P3-A 全量回归 | 见 §8.8 的绿灯运行 |
+
+### 8.8 macOS CI + App Build
+
+见最终绿灯运行（填入 §8.11 的 CI URL）。DevBox 只做 `git diff --check`、括号平衡与文档一致性；**不**把 Linux 静态检查等同于 Swift 编译通过。
+
+### 8.9 ADS Review Results
+
+独立 ADS-style 审查（填入结果）；CNB AI Code Review 额度不足时按 `NOT_VERIFIED` 报告，不伪造评审结果，不强推或覆盖 CNB 分支。
+
+### 8.10 PR + Merge SHA
+
+（待合并后填入）
+
+### 8.11 I1-B1 Readiness
+
+**Offline Verified + B1 Ready**。B0 只完成离线执行边界修复；B1 真实 MCP 能力、B2 真实写入均未启动，也未宣称 `Import Integration Verified`。
