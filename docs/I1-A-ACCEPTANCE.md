@@ -61,9 +61,9 @@
 | `ImportLedgerTests` | 15 | 唯一意图、迁移守卫、终态不可变、UUID 单写、追加式审计、重启清扫、租约 |
 | `ImportSingleWriterTests` | 5 | 排他、预留、成功/抛错释放、第二个 writer 被拒 |
 | `ImportArbitrationTests` | 9 | 四态判定顺序与未知优先 |
-| `ImportExecutorTests` | 16 | 正常、幂等、创建后断连恢复、创建前拒绝、metadata/回读失败、取消、resume 三条路径 |
+| `ImportExecutorTests` | 17 | 正常、幂等、创建后断连恢复、创建前拒绝、metadata/回读失败、取消、resume 三条路径、确认但字节不同 |
 | `ImportFaultMatrixTests` | 4 | 故障矩阵扫描、崩溃后恢复、并同键、写前取消 |
-| **合计** | **77** | 全部为合成来源 + 临时 SQLite + Fake Transport |
+| **合计** | **78** | 全部为合成来源 + 临时 SQLite + Fake Transport |
 
 ## 4. 未验证接口清单（I1-B 必须现场确认）
 
