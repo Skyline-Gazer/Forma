@@ -43,11 +43,10 @@ struct ImportArbitrationTests {
     @Test("an unknown request outcome outranks every conclusion")
     func unknownOutcome() {
         for request in [ImportFacts.RequestOutcome.timedOut, .disconnected, .failed] {
-            let decision = ImportArbitration.decide(facts(request: request,
-                                                          corroboration: [.targetAssociationMatch,
-                                                                          .attributesMatch],
-                                                          contentMatches: true, metadataMatches: true,
-                                                          observedUUID: "uuid-1", candidates: 1))
+            let decision = ImportArbitration.decide(facts(
+                observedUUID: "uuid-1", candidates: 1, request: request,
+                corroboration: [.targetAssociationMatch, .attributesMatch],
+                contentMatches: true, metadataMatches: true))
             #expect(decision.outcome == .verifyRequired)
             #expect(decision.reason == .outcomeUnknown)
         }
