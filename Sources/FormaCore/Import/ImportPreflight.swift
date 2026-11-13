@@ -207,17 +207,56 @@ public enum ImportPreflightVerdict: String, Codable, Sendable {
     case blocked
 }
 
-public struct ImportPreflightResult: Sendable, Equatable {
+/// The facts a clearance is bound to.
+///
+/// A clearance is a permission *for one operation*, not a general "it is fine to
+/// import" flag: it names the source, the snapshot, the manifest revision, the
+/// target and the authorization it was decided under. A clearance for another
+/// source, another snapshot or another authorization is not a permission for this
+/// one, and the executor checks every component before it writes.
+public struct ImportPreflightBinding: Sendable, Equatable {
+    public let sourceID: UUID
+    public let snapshotFingerprint: String
+    public let manifestRevision: Int
+    public let targetDatabase: String
+    public let targetGroupPath: [String]
+    /// Digest of the authorization object the decision was made under.
+    public let authorizationDigest: String
+    public let verdict: ImportPreflightVerdict
     public let failures: [ImportPreflightFailure]
-
-    public init(failures: [ImportPreflightFailure]) {
+    init(sourceID: UUID, snapshotFingerprint: String, manifestRevision: Int,
+         targetDatabase: String, targetGroupPath: [String], authorizationDigest: String,
+         verdict: ImportPreflightVerdict, failures: [ImportPreflightFailure]) {
+        self.sourceID = sourceID
+        self.snapshotFingerprint = snapshotFingerprint
+        self.manifestRevision = manifestRevision
+        self.targetDatabase = targetDatabase
+        self.targetGroupPath = targetGroupPath
+        self.authorizationDigest = authorizationDigest
+        self.verdict = verdict
         self.failures = failures
     }
+}
 
-    public var verdict: ImportPreflightVerdict {
-        if failures.isEmpty { return .pass }
-        return failures.contains { !$0.code.isTransient } ? .blocked : .deferred
+/// The result of a preflight, usable as a write permission only for the
+/// operation it names.
+///
+/// The initializer is private on purpose: a clearance can only come from
+/// `ImportPreflight.evaluate`. That is what makes "a pass" mean "the preflight
+/// rules were run against these facts" instead of "someone wrote an empty
+/// failure list".
+public struct ImportPreflightClearance: Sendable, Equatable {
+    public let binding: ImportPreflightBinding
+
+    /// Only `ImportPreflight.evaluate` may create a clearance: the initializer
+    /// is file-scoped, so neither another module nor a test can hand-write a
+    /// permission.
+    fileprivate init(binding: ImportPreflightBinding) {
+        self.binding = binding
     }
+
+    public var verdict: ImportPreflightVerdict { binding.verdict }
+    public var failures: [ImportPreflightFailure] { binding.failures }
 
     public var blockingCodes: [ImportPreflightCode] {
         failures.map(\.code).filter { !$0.isTransient }
@@ -226,7 +265,10 @@ public struct ImportPreflightResult: Sendable, Equatable {
 
 public enum ImportPreflight {
     /// Evaluates one manifest entry. Pure: same input, same result.
-    public static func evaluate(_ input: ImportPreflightInput) -> ImportPreflightResult {
+    ///
+    /// The returned clearance is bound to the facts this call saw; it is not a
+    /// reusable permission and it says nothing about any other record.
+    public static func evaluate(_ input: ImportPreflightInput) -> ImportPreflightClearance {
         var failures: [ImportPreflightFailure] = []
         let entry = input.entry
 
@@ -247,7 +289,8 @@ public enum ImportPreflight {
         // 2. Authorization is its own object.
         guard let authorization = input.authorization else {
             failures.append(.init(.authorizationMissing, detail: "no import authorization"))
-            return ImportPreflightResult(failures: failures)
+            return ImportPreflightClearance(binding: Self.binding(input, failures: failures,
+                                                                 authorizationDigest: ""))
         }
         if authorization.isExpired(at: input.now) {
             failures.append(.init(.authorizationExpired, detail: "authorization expired"))
@@ -310,6 +353,27 @@ public enum ImportPreflight {
             failures.append(.init(.capabilityMissing, detail: "write or readback capability is unavailable"))
         }
 
-        return ImportPreflightResult(failures: failures)
+        return ImportPreflightClearance(binding: Self.binding(input, failures: failures,
+                                                              authorizationDigest: input.authorization?.digest ?? ""))
+    }
+
+    /// The binding every clearance carries: the facts the decision was made
+    /// against, so a later consumer can tell whether it still applies.
+    private static func binding(_ input: ImportPreflightInput, failures: [ImportPreflightFailure],
+                                 authorizationDigest: String) -> ImportPreflightBinding {
+        let verdict: ImportPreflightVerdict
+        if failures.isEmpty {
+            verdict = .pass
+        } else {
+            verdict = failures.contains { !$0.code.isTransient } ? .blocked : .deferred
+        }
+        return ImportPreflightBinding(
+            sourceID: input.entry.sourceID,
+            snapshotFingerprint: input.entry.snapshotFingerprint,
+            manifestRevision: input.manifest.revision,
+            targetDatabase: input.entry.target.databaseName ?? "",
+            targetGroupPath: input.entry.target.groupPath,
+            authorizationDigest: authorizationDigest,
+            verdict: verdict, failures: failures)
     }
 }

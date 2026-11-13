@@ -356,6 +356,8 @@ SQLite 丢失时先导入本地导出账本并与真实 DT 对账；没有账本
 
 > 实现状态（2026-11-13，I1-A4，**不改变本节需求**）：I1-A 离线实现完成——契约 ADR（`docs/ADR-I1-A-IMPORT-CONTRACT.md`）、`ImportOperationKey` 与三问分离、`ImportPreflight`（20 码）、`ImportLedger`（`import-ledger-v1`、迁移守卫、追加式审计、重启清扫）、`ImportSingleWriter`（租约 + 预留）、`ImportArbitration`（四态，未知优先）、写读分离的传输契约、`ImportExecutor`（创建未知时只读恢复，绝不二次创建）与测试用 Fake Transport。故障矩阵与结论见 `docs/I1-A-ACCEPTANCE.md`。**没有任何真实写入路径**：无 DEVONthink 写调用、无记录创建、无生产库访问；I1-A 只报 Offline Verified，I1-B 需 Owner 单独批准。
 
+> 实现状态（2026-11-13，I1-A 硬化，**不改变本节需求**）：执行边界复审确认并修复五类缺陷——`resume()` 不再在 Ledger 缺少操作时启动新导入（改为 `intent_missing`，零写入）；已知 UUID 的补写路径改为**先独立读取目标**，外部改过的字段保留并进入 `CONFLICT_HOLD(external_modification)`，只补写仍缺失的槽位；`create()` 结果未知后的候选恢复不再取"第一条"，要求查询结论完整、候选唯一且业务身份已确认，否则 `VERIFY_REQUIRED` 零补写；Preflight 结论改为绑定来源/快照/Manifest revision/目标/授权摘要的 `ImportPreflightClearance`（构造器 file-scoped，只有 `evaluate` 能产出），执行器逐项核对后才允许写入；`ImportCreateRequest` 引入 `ImportSourceBinding`（获授权源文件、字节 SHA、快照、读取会话），**不**假定 DEVONthink 工具参数形状。目标内容摘要不可验证时不再标记完整 `readback_verified`，而是 `VERIFY_REQUIRED(hash_unverified)`；Ledger 升到 v2 记录操作所用授权摘要。反例先红后绿：红灯运行 43445939480 记录 7 项行为失败。详见 `docs/I1-A-ACCEPTANCE.md` §7 与 `docs/ADR-I1-A-IMPORT-CONTRACT.md` §6.1/§6.2/§7。
+
 ## 11. 阶段、依赖、验收与回退
 
 阶段是实施授权后的工作顺序。本轮不执行这些开发任务。所有阶段的证据只存脱敏摘要于公开仓库，真实目录/记录的运行工件留本地。一次集中 PLAN 复核后按授权范围推进，不把每阶段变成新的人为审批关卡；云端外发和进入产品开发仍遵守已有明确授权边界。

@@ -20,18 +20,59 @@ public protocol ImportReadTransport: Sendable {
     func read(uuid: String) async throws -> ImportRecordSnapshot
 }
 
+/// The authorized source file an import is bound to.
+///
+/// This is Forma's own contract, not DEVONthink's: it says **which bytes**, from
+/// **which snapshot**, read **under which session**. It exists so that a create
+/// request carries the evidence for the file it is about to import instead of a
+/// loose digest.
+///
+/// It deliberately does **not** carry a ready-to-send tool argument. The shape of
+/// DEVONthink's file-import tool is unverified: a path parameter, a file
+/// reference and an upload are three different contracts, and guessing would
+/// produce an adapter that looks finished and cannot work. Until I1-B verifies
+/// the tool schema, the mapping from this binding to tool arguments stays open
+/// (see `docs/I1-A-ACCEPTANCE.md` §4) and no real adapter is written.
+public struct ImportSourceBinding: Sendable, Equatable {
+    public let sourceID: UUID
+    public let scopeID: UUID
+    /// Path relative to the authorized scope. Never absolute, never sent to a
+    /// target that has not been verified to accept it.
+    public let relativePath: String
+    /// The snapshot the bytes were read from.
+    public let snapshotFingerprint: String
+    /// SHA-256 of the bytes that were read, lowercase hex.
+    public let contentSHA256: String
+    public let byteCount: Int64
+    /// The read session that produced the bytes (scope grant / bookmark identity).
+    public let readSessionID: String
+
+    public init(sourceID: UUID, scopeID: UUID, relativePath: String, snapshotFingerprint: String,
+                contentSHA256: String, byteCount: Int64, readSessionID: String) {
+        self.sourceID = sourceID
+        self.scopeID = scopeID
+        self.relativePath = relativePath
+        self.snapshotFingerprint = snapshotFingerprint
+        self.contentSHA256 = contentSHA256
+        self.byteCount = byteCount
+        self.readSessionID = readSessionID
+    }
+}
+
 public struct ImportLookupQuery: Sendable, Equatable {
     public let database: String
     public let groupPath: [String]
     /// The manifest's candidate association, used as an identity anchor.
     public let associationBasis: String?
-    public let sourceSHA256: String?
+    /// The source the lookup is about, so a candidate can be tied to it.
+    public let source: ImportSourceBinding
 
-    public init(database: String, groupPath: [String], associationBasis: String?, sourceSHA256: String?) {
+    public init(database: String, groupPath: [String], associationBasis: String?,
+                source: ImportSourceBinding) {
         self.database = database
         self.groupPath = groupPath
         self.associationBasis = associationBasis
-        self.sourceSHA256 = sourceSHA256
+        self.source = source
     }
 }
 
@@ -51,28 +92,39 @@ public struct ImportCreateRequest: Sendable, Equatable {
     public let database: String
     public let groupPath: [String]
     public let associationBasis: String?
+    /// The field values mapping already decided. The executor never re-decides them.
     public let metadata: [String: String?]
-    public let sourceSHA256: String
+    /// The authorized source file, with its bytes, snapshot and read session.
+    ///
+    /// A digest alone is not enough to import a file: the transport needs to know
+    /// *which* file, *which* snapshot it was read from and under which session the
+    /// read happened, and it must be able to prove that the bytes it sends are the
+    /// bytes that were hashed. The target-side tool arguments are decided by the
+    /// I1-B adapter, not here.
+    public let source: ImportSourceBinding
 
     public init(database: String, groupPath: [String], associationBasis: String?,
-                metadata: [String: String?], sourceSHA256: String) {
+                metadata: [String: String?], source: ImportSourceBinding) {
         self.database = database
         self.groupPath = groupPath
         self.associationBasis = associationBasis
         self.metadata = metadata
-        self.sourceSHA256 = sourceSHA256
+        self.source = source
     }
 }
 
 public struct ImportMetadataRequest: Sendable, Equatable {
     public let uuid: String
+    /// Only the slots that still need to be written. A slot the record already
+    /// holds at the intended value is not part of the request, so a resumed
+    /// operation cannot overwrite a value somebody else changed.
     public let metadata: [String: String?]
-    public let sourceSHA256: String
+    public let source: ImportSourceBinding
 
-    public init(uuid: String, metadata: [String: String?], sourceSHA256: String) {
+    public init(uuid: String, metadata: [String: String?], source: ImportSourceBinding) {
         self.uuid = uuid
         self.metadata = metadata
-        self.sourceSHA256 = sourceSHA256
+        self.source = source
     }
 }
 

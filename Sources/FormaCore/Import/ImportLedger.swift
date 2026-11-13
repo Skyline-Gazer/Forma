@@ -155,6 +155,9 @@ public struct ImportOperationRecord: Sendable, Equatable {
     public var actualUUID: String?
     public var sourceSHA256: String?
     public var targetSHA256: String?
+    /// Digest of the authorization the operation ran under. Added by ledger v2;
+    /// rows written before it carry nothing.
+    public var authorizationDigest: String?
     public var errorCode: String?
     public let createdAt: Date
     public var updatedAt: Date
@@ -162,8 +165,8 @@ public struct ImportOperationRecord: Sendable, Equatable {
     public init(id: UUID = UUID(), runID: UUID, key: ImportOperationKey, phase: ImportPhase = .planned,
                 targetDatabase: String, targetGroupPath: [String], intendedMetadataDigest: String,
                 intendedMetadataJSON: String, actualUUID: String? = nil, sourceSHA256: String? = nil,
-                targetSHA256: String? = nil, errorCode: String? = nil, createdAt: Date,
-                updatedAt: Date? = nil) {
+                targetSHA256: String? = nil, authorizationDigest: String? = nil,
+                errorCode: String? = nil, createdAt: Date, updatedAt: Date? = nil) {
         self.id = id
         self.runID = runID
         self.keyDigest = key.digest
@@ -180,6 +183,7 @@ public struct ImportOperationRecord: Sendable, Equatable {
         self.actualUUID = actualUUID
         self.sourceSHA256 = sourceSHA256
         self.targetSHA256 = targetSHA256
+        self.authorizationDigest = authorizationDigest
         self.errorCode = errorCode
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
@@ -304,9 +308,9 @@ public struct ImportLedger: Sendable {
                                                manifest_revision, target_association_id, operation_kind,
                                                phase, outcome, target_database, target_group_path,
                                                intended_metadata_digest, intended_metadata, actual_uuid,
-                                               source_sha256, target_sha256, error_code,
-                                               created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                               source_sha256, target_sha256, authorization_digest,
+                                               error_code, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, arguments: [
                     operation.id.uuidString.lowercased(), operation.runID.uuidString.lowercased(),
                     operation.keyDigest, operation.sourceID.uuidString.lowercased(),
@@ -316,7 +320,8 @@ public struct ImportLedger: Sendable {
                     operation.targetDatabase, Self.encode(operation.targetGroupPath),
                     operation.intendedMetadataDigest, operation.intendedMetadataJSON,
                     operation.actualUUID, operation.sourceSHA256, operation.targetSHA256,
-                    operation.errorCode, operation.createdAt.timeIntervalSince1970,
+                    operation.authorizationDigest, operation.errorCode,
+                    operation.createdAt.timeIntervalSince1970,
                     operation.updatedAt.timeIntervalSince1970,
                 ])
             return (operation, true)
@@ -511,7 +516,8 @@ public struct ImportLedger: Sendable {
             intendedMetadataDigest: row["intended_metadata_digest"],
             intendedMetadataJSON: row["intended_metadata"],
             actualUUID: row["actual_uuid"], sourceSHA256: row["source_sha256"],
-            targetSHA256: row["target_sha256"], errorCode: row["error_code"],
+            targetSHA256: row["target_sha256"], authorizationDigest: row["authorization_digest"],
+            errorCode: row["error_code"],
             createdAt: Date(timeIntervalSince1970: row["created_at"]),
             updatedAt: Date(timeIntervalSince1970: row["updated_at"]))
     }
@@ -644,6 +650,12 @@ public enum ImportLedgerMigrations {
                     expires_at REAL NOT NULL
                 );
                 """)
+        }
+        // v2 records which authorization an operation ran under. The column is
+        // nullable on purpose: a row written before it stays readable, and a
+        // missing digest is an absent fact rather than a fabricated one.
+        migrator.registerMigration("import-ledger-v2") { db in
+            try db.execute(sql: "ALTER TABLE import_operations ADD COLUMN authorization_digest TEXT")
         }
     }
 }

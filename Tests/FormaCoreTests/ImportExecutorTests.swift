@@ -11,12 +11,7 @@ import Testing
 /// what was persisted, not about what a stub remembered.
 @Suite("Import executor")
 struct ImportExecutorTests {
-    private let now = Date(timeIntervalSince1970: 1_800_000_000)
-    private let sha = String(repeating: "c", count: 64)
-    private let fingerprint = String(repeating: "a", count: 64)
-    private let association = "context revision 3 candidate cr-0001"
-    private let groupPath = ["01_招标文件", "2026"]
-    private let metadata: [String: String?] = ["completion_year": "2026"]
+    private let now = ImportFixtures.now
 
     private struct Stack: Sendable {
         let ledger: ImportLedger
@@ -45,25 +40,18 @@ struct ImportExecutorTests {
         return Stack(ledger: ledger, transport: transport, executor: executor, runID: runID)
     }
 
-    private func intent(_ stack: Stack, revision: Int = 1) throws -> ImportIntent {
-        let entry = ManifestEntry(
-            sourceID: UUID(), snapshotFingerprint: fingerprint, snapshotRevision: 1, sourceVersion: 1,
-            relativePath: "synthetic/tender.pdf", state: .validated,
-            target: ManifestTarget(databaseName: "Project_Archive", groupPath: groupPath, resolved: true),
-            eligibleForAutoExecution: true)
-        let key = try ImportOperationKey(sourceID: entry.sourceID, snapshotFingerprint: fingerprint,
-                                         manifestRevision: revision,
-                                         targetAssociationID: UUID(uuidString: "33333333-3333-4333-8333-333333333333")!)
-        return ImportIntent(runID: stack.runID, entry: entry, key: key, targetDatabase: "Project_Archive",
-                            groupPath: groupPath, associationBasis: association,
-                            metadata: metadata, sourceSHA256: sha)
+    private func intent(_ stack: Stack, associationBasis: String? = ImportFixtures.association)
+        throws -> ImportIntent {
+        try ImportFixtures.intent(runID: stack.runID, associationBasis: associationBasis)
+    }
+
+    private func clearance(_ intent: ImportIntent) throws -> ImportPreflightClearance {
+        try ImportFixtures.clearance(for: intent)
     }
 
     private func stored(_ stack: Stack, _ intent: ImportIntent) throws -> ImportOperationRecord? {
         try stack.ledger.operation(keyDigest: intent.key.digest)
     }
-
-    private let pass = ImportPreflightResult(failures: [])
 
     // MARK: - Happy path
 
@@ -72,7 +60,7 @@ struct ImportExecutorTests {
         let stack = try await makeStack()
         let intent = try intent(stack)
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent, clearance: try clearance(intent))
 
         #expect(result.outcome == .importRecord)
         #expect(result.phase == .readbackVerified)
@@ -81,9 +69,9 @@ struct ImportExecutorTests {
         #expect(await stack.transport.createCalls == 1)
         #expect(await stack.transport.storedRecords().count == 1)
         #expect(try stored(stack, intent)?.phase == .readbackVerified)
-        #expect(try stored(stack, intent)?.targetSHA256 == sha)
+        #expect(try stored(stack, intent)?.targetSHA256 == ImportFixtures.sha)
         let record = try #require(try stored(stack, intent))
-        #expect(try stack.ledger.attempts(operationID: record.id).count == 2)
+        #expect(try stack.ledger.attempts(operationID: record.id).count == 1)
     }
 
     @Test("a second execution of the same key does not create a second record")
@@ -91,8 +79,8 @@ struct ImportExecutorTests {
         let stack = try await makeStack()
         let intent = try intent(stack)
 
-        _ = try await stack.executor.execute(intent, preflight: pass)
-        let second = try await stack.executor.execute(intent, preflight: pass)
+        _ = try await stack.executor.execute(intent, clearance: try clearance(intent))
+        let second = try await stack.executor.execute(intent, clearance: try clearance(intent))
 
         #expect(second.phase == .readbackVerified)
         #expect(second.attempts == 0)
@@ -108,7 +96,7 @@ struct ImportExecutorTests {
         let intent = try intent(stack)
         await stack.transport.setFault(.createAfterApply)
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent, clearance: try clearance(intent))
 
         #expect(result.outcome == .importRecord)
         #expect(result.phase == .readbackVerified)
@@ -117,27 +105,31 @@ struct ImportExecutorTests {
         #expect(try stored(stack, intent)?.actualUUID == "uuid-1")
     }
 
-    @Test("refused before creating: the conclusive empty lookup does not retry")
+    @Test("refused before creating: the conclusive empty lookup ends the operation")
     func createRefusedBeforeApply() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
         await stack.transport.setFault(.createBeforeApply)
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent, clearance: try clearance(intent))
 
-        #expect(result.outcome == .verifyRequired)
+        // The create's outcome was unknown; a conclusive lookup then proved the
+        // record is absent. That is reported, not retried.
+        #expect(result.phase == .failed)
+        #expect(result.outcome == nil)
         #expect(await stack.transport.createCalls == 1)
         #expect(await stack.transport.storedRecords().isEmpty)
-        #expect(try stored(stack, intent)?.phase == .verifyRequired)
+        #expect(try stored(stack, intent)?.errorCode == "absent_after_unknown")
     }
 
-    @Test("metadata failure leaves the record in place and the operation unknown")
+    @Test("a metadata failure leaves the record in place and the operation unknown")
     func metadataFailure() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
+        await stack.transport.setCreateWithoutMetadata(true)
         await stack.transport.setFault(.metadata)
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent, clearance: try clearance(intent))
 
         #expect(result.outcome == .verifyRequired)
         #expect(result.actualUUID == "uuid-1")
@@ -151,7 +143,7 @@ struct ImportExecutorTests {
         let intent = try intent(stack)
         await stack.transport.setReadbackOverride(["completion_year": "2019"])
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent, clearance: try clearance(intent))
 
         #expect(result.outcome == .conflictHold)
         #expect(result.phase == .conflictHold)
@@ -164,7 +156,7 @@ struct ImportExecutorTests {
         let intent = try intent(stack)
         await stack.transport.setFault(.readback)
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent, clearance: try clearance(intent))
 
         #expect(result.outcome == .verifyRequired)
         #expect(try stored(stack, intent)?.phase == .verifyRequired)
@@ -178,7 +170,7 @@ struct ImportExecutorTests {
         let intent = try intent(stack)
         await stack.transport.setFault(.lookup)
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent, clearance: try clearance(intent))
 
         #expect(result.outcome == .verifyRequired)
         #expect(await stack.transport.createCalls == 0)
@@ -191,7 +183,7 @@ struct ImportExecutorTests {
         let intent = try intent(stack)
         await stack.transport.setLookupInconclusive(true)
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent, clearance: try clearance(intent))
 
         #expect(result.outcome == .verifyRequired)
         #expect(await stack.transport.createCalls == 0)
@@ -203,11 +195,13 @@ struct ImportExecutorTests {
     func existingMatch() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
-        await stack.transport.seed(.init(uuid: "uuid-existing", database: "Project_Archive",
-                                         parentPath: groupPath, metadata: metadata, sha256: sha,
-                                         associationBasis: association))
+        await stack.transport.seed(.init(uuid: "uuid-existing", database: ImportFixtures.database,
+                                         parentPath: ImportFixtures.groupPath,
+                                         metadata: ["completion_year": "2026"],
+                                         sha256: ImportFixtures.sha,
+                                         associationBasis: ImportFixtures.association))
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent, clearance: try clearance(intent))
 
         #expect(result.outcome == .skipVerified)
         #expect(result.actualUUID == "uuid-existing")
@@ -218,12 +212,13 @@ struct ImportExecutorTests {
     func existingDifference() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
-        await stack.transport.seed(.init(uuid: "uuid-existing", database: "Project_Archive",
-                                         parentPath: groupPath,
-                                         metadata: ["completion_year": "2019"], sha256: sha,
-                                         associationBasis: association))
+        await stack.transport.seed(.init(uuid: "uuid-existing", database: ImportFixtures.database,
+                                         parentPath: ImportFixtures.groupPath,
+                                         metadata: ["completion_year": "2019"],
+                                         sha256: ImportFixtures.sha,
+                                         associationBasis: ImportFixtures.association))
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent, clearance: try clearance(intent))
 
         // One anchor plus differing fields is a candidate, not a confirmation:
         // the contract needs a second corroborating fact before calling it the
@@ -236,12 +231,13 @@ struct ImportExecutorTests {
     func confirmedButBytesDiffer() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
-        await stack.transport.seed(.init(uuid: "uuid-same-meta", database: "Project_Archive",
-                                         parentPath: groupPath, metadata: metadata,
+        await stack.transport.seed(.init(uuid: "uuid-same-meta", database: ImportFixtures.database,
+                                         parentPath: ImportFixtures.groupPath,
+                                         metadata: ["completion_year": "2026"],
                                          sha256: String(repeating: "d", count: 64),
-                                         associationBasis: association))
+                                         associationBasis: ImportFixtures.association))
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent, clearance: try clearance(intent))
 
         #expect(result.outcome == .conflictHold)
         #expect(result.reason == .confirmedButDiffers)
@@ -251,16 +247,13 @@ struct ImportExecutorTests {
     @Test("identical bytes without an association anchor do not confirm a record")
     func sameBytesNoAnchor() async throws {
         let stack = try await makeStack()
-        var intent = try intent(stack)
-        intent = ImportIntent(runID: intent.runID, entry: intent.entry, key: intent.key,
-                              targetDatabase: intent.targetDatabase, groupPath: intent.groupPath,
-                              associationBasis: nil, metadata: intent.metadata,
-                              sourceSHA256: intent.sourceSHA256)
-        await stack.transport.seed(.init(uuid: "uuid-other", database: "Project_Archive",
-                                         parentPath: groupPath, metadata: metadata, sha256: sha,
-                                         associationBasis: nil))
+        let intent = try intent(stack, associationBasis: nil)
+        await stack.transport.seed(.init(uuid: "uuid-other", database: ImportFixtures.database,
+                                         parentPath: ImportFixtures.groupPath,
+                                         metadata: ["completion_year": "2026"],
+                                         sha256: ImportFixtures.sha, associationBasis: nil))
 
-        let result = try await stack.executor.execute(intent, preflight: pass)
+        let result = try await stack.executor.execute(intent, clearance: try clearance(intent))
 
         // The bytes and the fields agree, but nothing ties the record to this
         // source: a hash is not an identity.
@@ -268,90 +261,41 @@ struct ImportExecutorTests {
         #expect(await stack.transport.createCalls == 0)
     }
 
-    // MARK: - Resume after a restart
+    // MARK: - Clearance gate
 
-    @Test("a restart resolves an existing record by lookup, without creating")
-    func resumeAfterRestart() async throws {
+    @Test("a clearance for other facts does not authorize this operation")
+    func clearanceMustMatch() async throws {
         let stack = try await makeStack()
-        let intent = try intent(stack)
-        await stack.transport.seed(.init(uuid: "uuid-crashed", database: "Project_Archive",
-                                         parentPath: groupPath, metadata: metadata, sha256: sha,
-                                         associationBasis: association))
-        // The process died right after persisting the intent.
-        let record = ImportOperationRecord(runID: stack.runID, key: intent.key,
-                                           targetDatabase: "Project_Archive", targetGroupPath: groupPath,
-                                           intendedMetadataDigest: "d", intendedMetadataJSON: "{}",
-                                           sourceSHA256: sha, createdAt: now)
-        try stack.ledger.recordIntent(record)
-        try stack.ledger.transition(keyDigest: intent.key.digest, to: .preflighted, at: now)
-        try stack.ledger.transition(keyDigest: intent.key.digest, to: .intentPersisted, at: now)
-
-        let outcome = try ImportRecovery.open(stack.ledger, at: now)
-        #expect(outcome.interrupted == 1)
-
-        let result = try await stack.executor.resume(intent)
-        #expect(result.outcome == .skipVerified)
-        #expect(result.actualUUID == "uuid-crashed")
-        #expect(await stack.transport.createCalls == 0)
+        let mine = try intent(stack)
+        // Six bound facts; each mismatch must refuse the write.
+        let variants: [(String, ImportIntent)] = [
+            ("snapshot", try ImportFixtures.intent(runID: stack.runID,
+                                                   snapshot: String(repeating: "b", count: 64))),
+            ("revision", try ImportFixtures.intent(runID: stack.runID, revision: 2)),
+            ("database", try ImportFixtures.intent(runID: stack.runID, database: "Other_Archive")),
+            ("group", try ImportFixtures.intent(runID: stack.runID, groupPath: ["09_其他"])),
+        ]
+        for (label, other) in variants {
+            let foreign = try ImportFixtures.clearance(for: other)
+            let result = try await stack.executor.execute(mine, clearance: foreign)
+            #expect(result.reason == .clearanceMismatch, "\(label)")
+            #expect(result.attempts == 0, "\(label)")
+            #expect(await stack.transport.createCalls == 0, "\(label)")
+            #expect(try stored(stack, mine) == nil, "\(label)")
+        }
     }
 
-    @Test("a known UUID is finished rather than re-created")
-    func resumeFinishesKnownRecord() async throws {
-        let stack = try await makeStack()
-        let intent = try intent(stack)
-        await stack.transport.seed(.init(uuid: "uuid-half", database: "Project_Archive",
-                                         parentPath: groupPath, metadata: [:], sha256: sha,
-                                         associationBasis: association))
-        let record = ImportOperationRecord(runID: stack.runID, key: intent.key,
-                                           targetDatabase: "Project_Archive", targetGroupPath: groupPath,
-                                           intendedMetadataDigest: "d", intendedMetadataJSON: "{}",
-                                           sourceSHA256: sha, createdAt: now)
-        try stack.ledger.recordIntent(record)
-        try stack.ledger.transition(keyDigest: intent.key.digest, to: .preflighted, at: now)
-        try stack.ledger.transition(keyDigest: intent.key.digest, to: .intentPersisted, at: now)
-        try stack.ledger.observeActualUUID("uuid-half", keyDigest: intent.key.digest, at: now)
-        try stack.ledger.transition(keyDigest: intent.key.digest, to: .recordObserved, at: now)
-
-        let result = try await stack.executor.resume(intent)
-
-        #expect(result.outcome == .importRecord)
-        #expect(result.phase == .readbackVerified)
-        #expect(await stack.transport.createCalls == 0)
-        #expect(await stack.transport.metadataCalls == 1)
-    }
-
-    @Test("resume never turns a proven absence into a write")
-    func resumeDoesNotImport() async throws {
-        let stack = try await makeStack()
-        let intent = try intent(stack)
-        let record = ImportOperationRecord(runID: stack.runID, key: intent.key,
-                                           targetDatabase: "Project_Archive", targetGroupPath: groupPath,
-                                           intendedMetadataDigest: "d", intendedMetadataJSON: "{}",
-                                           sourceSHA256: sha, createdAt: now)
-        try stack.ledger.recordIntent(record)
-        try stack.ledger.transition(keyDigest: intent.key.digest, to: .preflighted, at: now)
-        try stack.ledger.transition(keyDigest: intent.key.digest, to: .intentPersisted, at: now)
-        try stack.ledger.transition(keyDigest: intent.key.digest, to: .verifyRequired, at: now)
-
-        let result = try await stack.executor.resume(intent)
-
-        #expect(result.phase == .failed)
-        #expect(await stack.transport.createCalls == 0)
-        #expect(try stored(stack, intent)?.errorCode == "absent_after_unknown")
-    }
-
-    // MARK: - Preflight gate
-
-    @Test("a blocked preflight creates no intent and writes nothing")
+    @Test("a blocked clearance creates no intent and writes nothing")
     func blockedPreflight() async throws {
         let stack = try await makeStack()
         let intent = try intent(stack)
-        let blocked = ImportPreflightResult(failures: [.init(.sourceMissing, detail: "gone")])
+        let blocked = try ImportFixtures.clearance(for: intent, sha: String(repeating: "e", count: 64))
 
-        let result = try await stack.executor.execute(intent, preflight: blocked)
+        let result = try await stack.executor.execute(intent, clearance: blocked)
 
         #expect(result.phase == .planned)
         #expect(result.outcome == nil)
+        #expect(result.blockingCodes == [.sourceSHAMismatch])
         #expect(try stored(stack, intent) == nil)
         #expect(await stack.transport.createCalls == 0)
     }

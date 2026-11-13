@@ -42,12 +42,24 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
     var lookupInconclusive = false
     /// Makes a lookup take long enough for a cancellation test to land.
     var lookupDelayNanoseconds: UInt64 = 0
+    /// When false the independent read cannot prove the bytes, which is what a
+    /// target without a verifiable digest looks like.
+    var readbackSHAVerified = true
+    /// Creates the record without the fields, so the metadata step still has to
+    /// happen. Separate from `fault` because the two are independent failures.
+    var createWithoutMetadata = false
+    /// Records that become visible only when `create` runs, so the *post-create*
+    /// recovery lookup can see candidates the pre-create lookup did not.
+    var extraRecordsAfterCreate: [Stored] = []
     /// Corrupts the readback of the first record, for mismatch tests.
     var readbackMetadataOverride: [String: String?]?
 
     func setFault(_ fault: Fault) { self.fault = fault }
     func setLookupInconclusive(_ value: Bool) { lookupInconclusive = value }
     func setLookupDelay(_ nanoseconds: UInt64) { lookupDelayNanoseconds = nanoseconds }
+    func setReadbackSHAVerified(_ value: Bool) { readbackSHAVerified = value }
+    func setCreateWithoutMetadata(_ value: Bool) { createWithoutMetadata = value }
+    func setExtraRecordsAfterCreate(_ records: [Stored]) { extraRecordsAfterCreate = records }
     func setReadbackOverride(_ metadata: [String: String?]?) { readbackMetadataOverride = metadata }
     func storedRecords() -> [Stored] { records.values.sorted { $0.uuid < $1.uuid } }
     func seed(_ record: Stored) { records[record.uuid] = record }
@@ -74,12 +86,19 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
 
     func create(_ request: ImportCreateRequest) async throws -> String {
         createCalls += 1
-        if fault == .createBeforeApply { throw FormaError.disconnected }
+        if fault == .createBeforeApply {
+            for extra in extraRecordsAfterCreate { records[extra.uuid] = extra }
+            throw FormaError.disconnected
+        }
         next += 1
         let uuid = "uuid-\(next)"
+        // A create may or may not carry the fields; the transport that leaves them
+        // out is what the metadata step exists for.
+        let metadata = createWithoutMetadata ? [:] : request.metadata
         records[uuid] = Stored(uuid: uuid, database: request.database, parentPath: request.groupPath,
-                               metadata: request.metadata, sha256: request.sourceSHA256,
+                               metadata: metadata, sha256: request.source.contentSHA256,
                                associationBasis: request.associationBasis)
+        for extra in extraRecordsAfterCreate { records[extra.uuid] = extra }
         if fault == .createAfterApply { throw FormaError.timeout }
         return uuid
     }
@@ -88,8 +107,9 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
         metadataCalls += 1
         if fault == .metadata { throw FormaError.disconnected }
         guard var record = records[request.uuid] else { throw FormaError.invalidResponse }
-        record.metadata = request.metadata
-        record.sha256 = request.sourceSHA256
+        // A metadata write fills the named slots; it does not clear the others.
+        for (key, value) in request.metadata { record.metadata[key] = value }
+        record.sha256 = request.source.contentSHA256
         records[request.uuid] = record
     }
 
@@ -101,7 +121,8 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
         return ImportRecordSnapshot(
             uuid: record.uuid, database: record.database, parentPath: record.parentPath,
             metadata: readbackMetadataOverride ?? record.metadata,
-            standardSHA256: record.sha256, shaVerified: record.shaVerified,
+            standardSHA256: record.sha256,
+            shaVerified: record.shaVerified && readbackSHAVerified,
             associationBasis: record.associationBasis)
     }
 }

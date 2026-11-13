@@ -59,7 +59,7 @@ struct ImportPreflightTests {
             expectedSHA256: nil, now: now)
     }
 
-    private func evaluate(_ configure: (inout Base) throws -> Void = { _ in }) throws -> ImportPreflightResult {
+    private func evaluate(_ configure: (inout Base) throws -> Void = { _ in }) throws -> ImportPreflightClearance {
         var base = try makeBase()
         try configure(&base)
         return ImportPreflight.evaluate(ImportPreflightInput(
@@ -68,7 +68,7 @@ struct ImportPreflightTests {
             capability: base.capability, expectedSHA256: base.expectedSHA256, now: base.now))
     }
 
-    private func codes(_ result: ImportPreflightResult) -> Set<ImportPreflightCode> {
+    private func codes(_ result: ImportPreflightClearance) -> Set<ImportPreflightCode> {
         Set(result.failures.map(\.code))
     }
 
