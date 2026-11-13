@@ -152,7 +152,7 @@ public struct EligibilityPredicate: Codable, Sendable, Equatable {
         if let hydrationPending {
             guard entry.hydrationPending == hydrationPending else { return false }
         }
-        if let factsRequired = facts.facts {
+        if let factsRequired = self.facts {
             for (name, required) in factsRequired {
                 guard facts.fact(named: name)?.literal == required.lowercased() else { return false }
             }

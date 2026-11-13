@@ -246,7 +246,7 @@ public enum EligibilityViewBuilder {
                 : EligibilityClassifier.notApplicable()
             let resolved = EligibilityOverrides.resolve(entry: entry, overrides: request.overrides,
                                                         policyVersion: policy.policyVersion)
-            let outcome = applyOverride(base, entry: entry, facts: facts, resolution: resolved)
+            let outcome = applyOverride(base, facts: facts, resolution: resolved)
             views.append(EligibilityEntryView(
                 entry: entry, originalState: entry.state, decision: outcome.decision,
                 decidedByRuleID: outcome.decidedByRuleID, matchedRuleIDs: outcome.matchedRuleIDs,
@@ -270,8 +270,7 @@ public enum EligibilityViewBuilder {
     /// Safety outranks the override: an EXCLUDE cannot bury confirmed business
     /// evidence, and an INCLUDE cannot turn a DEFER (a fact is missing) into a
     /// mapping candidate. Both become REVIEW/keep DEFER with a stated reason.
-    private static func applyOverride(_ base: EligibilityClassification, entry: SourceEntry,
-                                      facts: EligibilityFacts,
+    private static func applyOverride(_ base: EligibilityClassification, facts: EligibilityFacts,
                                       resolution: EligibilityOverrideResolution) -> EligibilityClassification {
         switch resolution.state {
         case .none:
