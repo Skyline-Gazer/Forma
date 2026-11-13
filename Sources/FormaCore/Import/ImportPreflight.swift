@@ -164,7 +164,6 @@ public enum ImportPreflightCode: String, Codable, Sendable, CaseIterable {
     case entryNotEligible = "entry_not_eligible"
     case entryInvalidated = "entry_invalidated"
     case manifestNotValidated = "manifest_not_validated"
-    case manifestExecutionClaim = "manifest_execution_claim"
     case targetUnresolved = "target_unresolved"
     case targetMissing = "target_missing"
     case targetOutsideAuthorization = "target_outside_authorization"
@@ -235,11 +234,9 @@ public enum ImportPreflight {
         if input.manifest.state != .validated {
             failures.append(.init(.manifestNotValidated, detail: "manifest state is \(input.manifest.state.rawValue)"))
         }
-        if input.manifest.grantsExecution {
-            // Defensive: no manifest may carry write authority. Treating this as
-            // a grant would let a corrupted file authorize itself.
-            failures.append(.init(.manifestExecutionClaim, detail: "manifest claims execution authority"))
-        }
+        // No check for `grants_execution` here: the manifest decoder refuses a
+        // manifest that claims it (`FormaError.invalidOutput`), so a value this
+        // type could see is already false. Re-checking it would be dead code.
         if entry.state != .validated {
             failures.append(.init(.entryInvalidated, detail: "entry state is \(entry.state.rawValue)"))
         }

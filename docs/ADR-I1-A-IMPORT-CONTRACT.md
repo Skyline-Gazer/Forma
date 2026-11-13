@@ -11,7 +11,7 @@
 3. 写入前先持久化 Intent；Intent 与外部副作用之间没有跨系统事务，因此不声明 exactly-once。
 4. 任何"结果未知"都必须先只读核查，再落到四态之一；未知不得被读成"不存在"。
 5. Import 只消费 Manifest 的既有决定，不重新执行 AI Mapping，不把 Eligibility `INCLUDE` 当作 Import 授权。
-6. 授权是一个**独立对象**，不是 Manifest 上的标志位：`ManifestEnvelope.grantsExecution` 在生产中恒为 `false`，Preflight 把它为真当作契约违规（`manifest_execution_claim`），而不是授权来源。
+6. 授权是一个**独立对象**，不是 Manifest 上的标志位：`ManifestEnvelope.grantsExecution` 恒为 `false`，且**解码器直接拒绝** `grants_execution: true` 的文件（`FormaError.invalidOutput`）。Preflight 因此不重复检查这个不可能出现的值——契约在唯一能产生它的地方执行。
 7. Ledger schema 版本化、追加式审计；不覆盖既有 attempt/observation 行。
 
 ## 2. 操作键（`ImportOperationKey`）
@@ -175,7 +175,6 @@ CREATE TABLE import_leases (
 | `entry_not_eligible` | 阻断 | `eligible_for_auto_execution == false` |
 | `entry_invalidated` | 阻断 | 条目已失效 |
 | `manifest_not_validated` | 阻断 | Manifest 不是 `validated` |
-| `manifest_execution_claim` | 阻断 | Manifest 声称执行授权（契约违规） |
 | `target_unresolved` | 阻断 | 目标 Group 模板未解析 |
 | `target_missing` | 阻断 | 目标 Group/库不存在 |
 | `target_outside_authorization` | 阻断 | 目标不在授权范围 |
@@ -209,7 +208,7 @@ CREATE TABLE import_leases (
 
 本 ADR 未修改 SPEC 产品契约。两处**实现层**决定需要在 I1-B 前由 Owner 确认：
 
-1. 授权以独立 `ImportAuthorization` 对象表达，而不是复用 `ManifestEnvelope.grantsExecution`（后者在生产中恒为 `false`，ADR 把它为真视为契约违规）。
+1. 授权以独立 `ImportAuthorization` 对象表达，而不是复用 `ManifestEnvelope.grantsExecution`（后者恒为 `false`，且解码器拒绝 `true`）。
 2. `ImportOperationKind` 目前只有 `create_record`；Metadata 写入是同一操作内的阶段，不是第二个键。若 I1-B 需要"补写 Metadata"作为独立可重试操作，需扩展本 ADR。
 
 ## 10. 验收（I1-A）

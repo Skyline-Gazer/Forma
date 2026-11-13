@@ -125,19 +125,21 @@ struct ImportPreflightTests {
 
     // MARK: - Manifest and entry
 
-    @Test("a manifest that claims execution authority is refused")
+    @Test("a manifest that claims execution authority cannot even be decoded")
     func manifestExecutionClaim() throws {
-        // No initializer can produce this: the flag is constant false. A file
-        // that says otherwise is a contract violation, which is what this checks.
+        // The flag is constant false, and the decoder refuses a file that says
+        // otherwise. Preflight therefore never needs to re-check it: there is no
+        // value it could see that carries a grant.
         let encoded = try JSONEncoder().encode(try makeBase().manifest)
         var object = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         object["grants_execution"] = true
-        let corrupted = try JSONDecoder().decode(
-            ManifestEnvelope.self, from: try JSONSerialization.data(withJSONObject: object))
+        let corrupted = try JSONSerialization.data(withJSONObject: object)
 
-        let result = try evaluate { $0.manifest = corrupted }
-        #expect(result.verdict == .blocked)
-        #expect(codes(result).contains(.manifestExecutionClaim))
+        #expect(throws: FormaError.self) {
+            _ = try JSONDecoder().decode(ManifestEnvelope.self, from: corrupted)
+        }
+        // A legitimate manifest still passes.
+        #expect(try evaluate().verdict == .pass)
     }
 
     @Test("an unvalidated manifest or entry blocks")
