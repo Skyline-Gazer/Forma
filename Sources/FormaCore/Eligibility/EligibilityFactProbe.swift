@@ -112,8 +112,10 @@ public struct EligibilityProbeReport: Sendable, Equatable {
     public let skipped: Int
     public let cancelled: Bool
     public let timedOut: Bool
-    /// Directory descriptors opened while probing. Every entry opens its parent
-    /// once, and each directory whose metadata is read is opened once per batch;
+    /// `SourceRootAccess.openDirectory` calls made while probing, including the
+    /// ones that failed. Each call resolves a whole relative path, so this is a
+    /// lower bound on descriptors opened. Every entry makes one call for its own
+    /// stat, and each directory whose metadata is read is called once per batch;
     /// publishing the number keeps the cost visible instead of implied.
     public let descriptorOpens: Int
     /// Git processes started. Zero when the probe was disabled, one for a scope
