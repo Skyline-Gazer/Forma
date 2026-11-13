@@ -108,3 +108,32 @@ jobs:
           name: benchmark-scale
           path: benchmark-results/
           if-no-files-found: error
+
+  # The eligibility fact probe is a different subsystem from the evaluation
+  # runner: it walks a real directory tree instead of replaying synthetic
+  # records. Kept as its own manual job so a PR never pays for 10k filesystem
+  # objects, and so its numbers are never mixed into the runner scale table.
+  probe-scale:
+    if: github.event_name == 'workflow_dispatch'
+    name: Probe scale (10k entries, manual)
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain and hardware
+        run: |
+          xcodebuild -version
+          swift --version
+          sw_vers
+          sysctl -n hw.model machdep.cpu.core_count hw.memsize
+      - name: Run the opt-in probe scale suite
+        run: |
+          mkdir -p benchmark-results
+          FORMA_PROBE_SCALE=1 swift test --filter EligibilityProbeScaleTests 2>&1 \
+            | tee benchmark-results/probe-scale.log
+      - name: Upload the measurement
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-scale
+          path: benchmark-results/
+          if-no-files-found: error

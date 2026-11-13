@@ -127,6 +127,9 @@ flowchart LR
 - **entry 与 listing 不一致**：大小或 mtime 不匹配 → `snapshotChanged = true`，分类器给出 `DEFER`。
 - **有界**：`maxEntries`（默认 5000）、`deadline`（默认 10 s）、`gitTimeout`（默认 5 s）。超出上限的条目计入 `skipped`，超时与取消分别记为 `timedOut` / `cancelled`，都不静默丢弃。
 - **只读**：不创建、不删除、不移动、不改写源文件；Git 只用只读子命令，`GIT_OPTIONAL_LOCKS=0`，`core.fsmonitor` 与 hooks 关闭。
+- **工作量自述**：报告带 `descriptorOpens`（调用 `SourceRootAccess.openDirectory` 的次数，含失败；每次调用会逐段打开到目标目录，所以它是**下界**）与 `gitInvocations`（0 / 1 / 2）。每个条目为自己的 `stat` 调用一次，目录级元数据按目录记忆化一次——两者都会出现在导出里，成本不靠推断。
+
+规模测量是 **opt-in**：`Tests/FormaCoreTests/EligibilityProbeScaleTests.swift` 只在 `FORMA_PROBE_SCALE=1` 时运行（10,000 条目 / 100 目录），由 `Benchmark` 工作流的 `Probe scale` 手动任务触发并保留日志与 JSON 行。它与评测运行器的规模基准分开，二者都只测本模块，不冒充真实文件扫描。
 
 `EligibilityProbeResult` 为每条记录保留逐事实 `provenance`（`status` + 稳定 `reason` 码 + 不含路径的短摘要/计数），并给出条目级聚合状态。导出的 `scopeID` 由根的文件身份派生，不含路径。
 
@@ -137,6 +140,7 @@ flowchart LR
 - 不读取授权根之上的 Git 元数据，因此"授权根是某个更大仓库的子目录"时 `gitTracked` 保持 `unknown`，缓存排除需要人工确认。这是有意的：读它就等于越过授权范围。
 - 探测不判断 `businessEvidence`，也不判断文件内容；`REVIEW` 仍然需要人。
 - Linux 合成夹具只能证明规则与探测逻辑，不能替代 macOS 上的真实文件系统、APFS 与 OneDrive 行为。
+- 10,000 条合成条目的测量说明的是本模块的调度与记忆化开销，不是真实目录扫描性能，也不是 M9 的验收数据。
 
 ## 5. Override semantics
 

@@ -277,13 +277,16 @@ struct EligibilityProbeTests {
 
         let request = EligibilityProbeRequest(includeGit: false, includeNestedRepository: false,
                                               includeCacheMarker: false)
-        let result = try #require(try fixture.probe([entry], request: request).results.first)
+        let report = try fixture.probe([entry], request: request)
+        let result = try #require(report.results.first)
 
         #expect(result.facts.cacheMarker == .notChecked)
         #expect(result.facts.gitTracked == .unknown)
         #expect(result.facts.nestedRepository == .unknown)
         #expect(result.provenance(for: "cacheMarker")?.status == .notChecked)
         #expect(result.provenance(for: "cacheMarker")?.reason == "probe_disabled")
+        #expect(report.gitInvocations == 0)
+        #expect(report.descriptorOpens >= 1)
     }
 
     @Test("caller facts survive the probe untouched")
