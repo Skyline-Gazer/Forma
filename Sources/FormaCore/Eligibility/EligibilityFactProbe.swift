@@ -112,6 +112,13 @@ public struct EligibilityProbeReport: Sendable, Equatable {
     public let skipped: Int
     public let cancelled: Bool
     public let timedOut: Bool
+    /// Directory descriptors opened while probing. Every entry opens its parent
+    /// once, and each directory whose metadata is read is opened once per batch;
+    /// publishing the number keeps the cost visible instead of implied.
+    public let descriptorOpens: Int
+    /// Git processes started. Zero when the probe was disabled, one for a scope
+    /// that is not a repository top-level, two for one that is.
+    public let gitInvocations: Int
 
     public var factsBySource: [UUID: EligibilityFacts] {
         Dictionary(results.map { ($0.sourceID, $0.facts) }, uniquingKeysWith: { _, last in last })
@@ -133,7 +140,10 @@ enum EligibilityFactCollector {
                         isCancelled: () -> Bool = { Task.isCancelled }) -> EligibilityProbeReport {
         let start = ContinuousClock.now
         let slice = Array(entries.prefix(request.maxEntries))
-        let git = request.includeGit ? GitSnapshot.load(access: access, request: request) : .disabled
+        var gitInvocations = 0
+        let git = request.includeGit
+            ? GitSnapshot.load(access: access, request: request, invocations: &gitInvocations)
+            : .disabled
         let probes = DirectoryProbes(access: access, request: request)
 
         var results: [EligibilityProbeResult] = []
@@ -220,7 +230,9 @@ enum EligibilityFactCollector {
 
         return EligibilityProbeReport(scopeID: Self.scopeIdentifier(access), factVersion: factVersion,
                                       results: results, skipped: max(0, entries.count - slice.count),
-                                      cancelled: cancelled, timedOut: timedOut)
+                                      cancelled: cancelled, timedOut: timedOut,
+                                      descriptorOpens: probes.descriptorOpens,
+                                      gitInvocations: gitInvocations)
     }
 
     /// The weakest status across the facts this entry needed.
@@ -302,6 +314,8 @@ final class DirectoryProbes {
     private let request: EligibilityProbeRequest
     private var gitByDirectory: [String: GitMarkerState] = [:]
     private var markerByDirectory: [String: MarkerState] = [:]
+    /// Descriptor opens actually attempted, including the ones that failed.
+    private(set) var descriptorOpens = 0
 
     init(access: SourceRootAccess, request: EligibilityProbeRequest) {
         self.access = access
@@ -310,6 +324,7 @@ final class DirectoryProbes {
 
     func statFile(parent: String, name: String) -> FileState {
         guard Self.isSafeComponent(name) else { return .traversalRefused }
+        descriptorOpens += 1
         guard let descriptor = try? access.openDirectory(parent) else { return .unreadable("open_failed") }
         defer { close(descriptor) }
         var value = stat()
@@ -389,6 +404,7 @@ final class DirectoryProbes {
 
     private func marker(directory: String) -> MarkerState {
         if let cached = markerByDirectory[directory] { return cached }
+        descriptorOpens += 1
         guard let descriptor = try? access.openDirectory(directory) else {
             let state = MarkerState.unreadable("open_failed")
             markerByDirectory[directory] = state
@@ -402,6 +418,7 @@ final class DirectoryProbes {
 
     private func gitMarker(directory: String) -> GitMarkerState {
         if let cached = gitByDirectory[directory] { return cached }
+        descriptorOpens += 1
         guard let descriptor = try? access.openDirectory(directory) else {
             let state = GitMarkerState.unreadable("open_failed")
             gitByDirectory[directory] = state
@@ -549,11 +566,13 @@ enum GitSnapshot {
     case unavailable(reason: String, status: EligibilityProbeStatus)
     case loaded(paths: Set<String>)
 
-    static func load(access: SourceRootAccess, request: EligibilityProbeRequest) -> GitSnapshot {
+    static func load(access: SourceRootAccess, request: EligibilityProbeRequest,
+                     invocations: inout Int) -> GitSnapshot {
         guard let executable = Self.executable() else {
             return .unavailable(reason: "git_not_installed", status: .unavailable)
         }
         let root = access.url
+        invocations += 1
         let top = GitReadOnly.run(executable: executable, directory: root,
                                   arguments: ["rev-parse", "--show-toplevel"],
                                   timeout: request.gitTimeout, outputLimit: 4_096)
@@ -578,6 +597,7 @@ enum GitSnapshot {
             }
         }
 
+        invocations += 1
         let listing = GitReadOnly.run(executable: executable, directory: root,
                                       arguments: ["ls-files", "-z", "--", "."],
                                       timeout: request.gitTimeout,
