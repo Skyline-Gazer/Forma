@@ -1,7 +1,7 @@
 import CoreFoundation
 import Foundation
 
-public enum ProbeProvider: String, CaseIterable, Sendable {
+public enum ProbeProvider: String, Codable, CaseIterable, Sendable {
     case openAI = "openai"
     case anthropic
 
