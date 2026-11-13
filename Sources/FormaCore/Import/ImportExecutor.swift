@@ -172,8 +172,13 @@ public actor ImportExecutor {
                 try recordObservation(operation: stored, snapshot: observed,
                                       matches: decision.outcome == .skipVerified)
             }
+            // `actualUUID` names the record this operation is bound to. A
+            // candidate that was merely observed is not a binding, so an
+            // undecided lookup reports no UUID at all.
+            let bound = decision.outcome == .skipVerified || decision.outcome == .conflictHold
             return ImportExecutionResult(phase: Self.phase(decision.outcome), outcome: decision.outcome,
-                                         actualUUID: observed?.uuid, reason: decision.reason, attempts: 0)
+                                         actualUUID: bound ? observed?.uuid : nil,
+                                         reason: decision.reason, attempts: 0)
         case .importRecord:
             break
         }
@@ -275,8 +280,10 @@ public actor ImportExecutor {
                 try recordObservation(operation: stored, snapshot: observed,
                                       matches: decision.outcome == .skipVerified)
             }
+            let bound = decision.outcome == .skipVerified || decision.outcome == .conflictHold
             return ImportExecutionResult(phase: Self.phase(decision.outcome), outcome: decision.outcome,
-                                         actualUUID: observed?.uuid, reason: decision.reason, attempts: 1)
+                                         actualUUID: bound ? observed?.uuid : nil,
+                                         reason: decision.reason, attempts: 1)
         case .importRecord:
             // Proven absent. That is not permission to write: a new decision is.
             try ledger.transition(keyDigest: stored.keyDigest, to: .failed, at: clock(),
