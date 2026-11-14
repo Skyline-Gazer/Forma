@@ -57,4 +57,14 @@
 3. R1-M01–M06 现场验证（含崩溃注入的独立写预算）。
 4. R1-R01–R03 发行环境（Developer ID、公证、渠道评估、仓库转 private）。
 
-未获授权前，不得开始 Batch 2 代码或任何真实写入。
+## 7. Batch 2A 执行结果（2026-11-14）
+
+Owner 授权了 Batch 2A（真实 macOS 现场验证，仅只读）。执行会话主机为 **Linux DevBox**，无 DEVONthink、Security、AppKit、`codesign`/`spctl`，两个已配置 SSH 主机认证失败 → **M01/M02/M03/M04/M06 全部 BLOCKED**。
+
+唯一可执行部分：§1 打包静态验收（Bundle ID、bundle 结构、`LC_CODE_SIGNATURE`、CI 的 `codesign --verify` 与 `adhoc,runtime` 标志）与 baseline 核对（`dev` @ `cab0936`，CI success，无 Batch 2A 工程 PR）。
+
+真实 DEVONthink 写调用 **0 次**（未执行，不是被拒绝）。详见 `docs/R1-BATCH2A-REPORT.md`。
+
+**下一步**：在一台可交互的 macOS 14+ 机器上按该报告 §11 的步骤复跑 2A；2B 不具备申请条件。
+
+未获 Owner 对 Batch 2B 的单独授权前，不得开始任何真实 macOS 写入、签名或发行工作。
