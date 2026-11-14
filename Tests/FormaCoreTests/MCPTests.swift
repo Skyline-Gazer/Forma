@@ -328,3 +328,33 @@ private func fake(_ script: String, timeout: Duration = .seconds(15), frameLimit
     await #expect(throws: FormaError.incompatible) { try await client.database(in: scope) }
     await client.close()
 }
+
+@Test func mcpCapturesChildStderrAsABoundedDigest() async throws {
+    let transport = MCPStdio(configuration: fake(#"""
+    next
+    printf 'first diagnostic line\n' >&2
+    printf 'second diagnostic line\n' >&2
+    respond "$id" '"ok"'
+    next
+    respond "$id" '"barrier"'
+    keep_open
+    """#))
+    _ = try await transport.request("probe")
+    // The barrier proves stderr was drained: a full pipe would have blocked the
+    // child before it could answer a second call.
+    _ = try await transport.request("barrier")
+
+    var snapshot = await transport.stderrSnapshot()
+    for _ in 0..<50 where snapshot.byteCount == 0 {
+        try await Task.sleep(for: .milliseconds(20))
+        snapshot = await transport.stderrSnapshot()
+    }
+    #expect(snapshot.byteCount > 0)
+    #expect(snapshot.sha256.count == 64)
+    #expect(snapshot.truncated == false)
+    await transport.close()
+    // The summary survives the child, so a post-mortem still has the numbers.
+    let afterClose = await transport.stderrSnapshot()
+    #expect(afterClose.byteCount == snapshot.byteCount)
+    #expect(afterClose.sha256 == snapshot.sha256)
+}
