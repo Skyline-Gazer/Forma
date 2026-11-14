@@ -59,7 +59,7 @@
 | `create_group_path` | 1 | `location=Forma_I1B2/r1`，`database_uuid=隔离库` | 返回载荷未给出可用 UUID，组身份由 children 回读确认 |
 | `import_file` | 4 | `mode=import`，`destination=Forma_I1B2/r1`，`database_uuid=隔离库`，四个合成文件路径 | 4 次都**没有**返回唯一 UUID；记录身份由创建前后 children 差集 + 独立回读确认 |
 | `set_record_custom_metadata` | 8 | `mode=merge`，仅 8 个允许 identifier | 4 次初始写入 + 冲突改写 1 + 冲突复原 1 + 超时探针 1（**实际已落库**）+ 最终 `documenttype` 复原 1 |
-| 断连探针（发送前） | 1 | 先杀 MCP 子进程，再发 metadata 写 | 请求**未发出**（§8 情况 B） |
+| 断连探针（发送前） | 尝试 1，**到达服务端 0** | 先杀 MCP 子进程，再发 metadata 写 | `FormaError.disconnected`，请求**未发出**（§8 情况 B） |
 | 断连探针（发送后、响应前） | **0** | — | **未构造**（§8 情况 C，NOT_VERIFIED） |
 
 读侧只用了 `get_databases`、`get_record_children`、`get_record_parents`、`get_record_properties`、`get_record_custom_metadata`、`list_custom_metadata_fields`、`get_imported_record_path`。**边界拒绝 0 次**（说明计划内请求都合法），生产库调用 0 次。
