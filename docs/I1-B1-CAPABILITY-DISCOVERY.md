@@ -8,7 +8,8 @@
 - 宿主：macOS（arm64），GitHub Actions 为唯一编译/测试权威
 - DEVONthink：4.4.2（`/Applications/DEVONthink.app`）
 - DEVONthink MCP：`com.devon-technologies.think.mcp-server` 4.4.2；serverInfo `devonthink-mcp` 1.0.0；协议 **2025-06-18**；`--stdio`
-- 本轮写入调用数：**0**。全部为 `initialize` / `tools/list` / 只读工具调用。
+- 写工具调用数：**0**（没有任何调用创建、修改、移动或删除 DEVONthink 对象）。全部调用为 `initialize` / `tools/list` 与只读工具。
+- 另有 **1 次 `export_record`**：该工具注解为 `readOnlyHint:false`，但它只把一条既有合成记录的字节复制到临时目录（不触碰数据库），用于验证标准 SHA-256 获取路径；临时输出在摘要后已删除。详见 §9。
 
 ## 1. 基线
 
@@ -125,6 +126,9 @@
 - 本轮 Owner **未指定**隔离测试库。按既定边界，**未使用生产 `Project_Archive` 做任何记录级查询**（它只出现在全局 `get_databases` 列表里，属允许的全局发现）。
 - 实际只读探测对象是 DEVONthink 自带的全局 Inbox 库：只含既有的合成 MCP harness 记录，不含业务数据；全程零写入。
 - 已实测：库查找、根组、父子关系、搜索、分页一致性与 total、记录 UUID 查找、属性、12 字段定义、记录元数据回读、内容读取与导出、标准 SHA-256 获取路径。
+- 明细：`get_databases`（全局列表 + 单库查询）、`get_group_tree`、`get_record_children`（分页与 total 一致性）、`get_record_parents`（单条与批量）、`search_records`（含 `group_uuid` 限定）、`lookup_records`、`get_record_properties`、`get_record_custom_metadata`（单条与批量）、`list_custom_metadata_fields`、`get_record_text`、`extract_record_content`、`get_record_duplicates`、`get_imported_record_path`、`is_running`。
+- `export_record` 调用过一次：源为 Inbox 中既有的合成 harness 记录（内容为无意义短文本），目标是新建的临时目录；导出字节与库包内同一文件字节完全一致（标准 SHA-256 相同），临时目录随后删除。**没有创建、修改、移动或删除任何 DEVONthink 对象。**
+- 未调用任何 `create_*` / `set_*` / `update_*` / `move_*` / `trash_*` / `import_file` / `replicate_record` / `merge_records` / `capture_*` / `ocr_record` 等写工具。
 - 因此**正式库级验收（Owner 指定隔离库 + 授权 Group + 授权记录集）仍为 BLOCKED**，缺项见 §11。
 
 ## 10. 标准 SHA-256
