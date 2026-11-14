@@ -57,6 +57,11 @@ final class FormaApplicationState: ObservableObject {
     @Published private(set) var recoveryFailure: FormaError?
     /// Why the read-only recheck cannot run, in a stable code.
     @Published private(set) var recoveryReviewReason: String?
+    /// The scope a person confirmed for the recheck. Session only: it is a
+    /// statement about now, not a preference to remember.
+    @Published private(set) var recoveryScope: ImportRecoveryScopeConfirmation?
+    @Published private(set) var recoveryReview: ImportRecoveryReviewReport?
+    @Published private(set) var recoveryReviewInFlight = false
 
     private var shutdownHandlers: [() -> Void] = []
 
@@ -82,18 +87,34 @@ final class FormaApplicationState: ObservableObject {
             recoveryFailure = (error as? FormaError) ?? .storage
         }
         if recovery.requiresReview {
-            // Batch 1 has no import authorization, so it has no authorized read
-            // scope either. The operations stay `verify_required`; nothing retries.
+            // A scope has to be confirmed before anything can be read back; until
+            // then the operations stay `verify_required` and nothing retries.
             recoveryReviewReason = "no_authorized_scope"
         }
         launch = .ready(workspace)
     }
 
-    /// The read-only recheck entry point.
+    /// Records the scope a person explicitly confirmed for the read-only check.
+    func confirmRecoveryScope(databaseID: String, databaseName: String, groupPath: String) {
+        let path = groupPath.split(separator: "/").map(String.init).filter { !$0.isEmpty }
+        guard let scope = ImportRecoveryScopeConfirmation(
+            databaseID: databaseID.trimmingCharacters(in: .whitespacesAndNewlines),
+            databaseName: databaseName.trimmingCharacters(in: .whitespacesAndNewlines),
+            groupPath: path, confirmedAt: Date(), confirmedBy: "operator") else {
+            recoveryReviewReason = "invalid_scope"
+            return
+        }
+        recoveryScope = scope
+        recoveryReviewReason = nil
+    }
+
+    /// The read-only recheck.
     ///
-    /// It refuses, with a reason, when no authorized target exists. It never
-    /// writes and never retries an import.
-    func requestRecoveryRecheck() {
+    /// It needs a confirmed scope; without one it refuses and says why. It reads
+    /// through an independent client, updates only what this screen shows, and
+    /// never writes to DEVONthink or to the ledger — an inconclusive result leaves
+    /// the operation in `verify_required`.
+    func requestRecoveryRecheck() async {
         guard recovery.requiresReview else {
             recoveryReviewReason = "nothing_to_review"
             return
@@ -102,9 +123,22 @@ final class FormaApplicationState: ObservableObject {
             recoveryReviewReason = "workspace_unavailable"
             return
         }
-        // The reviewer needs a scope an operator authorised. No such scope exists
-        // in this build, so the refusal is the honest answer.
-        recoveryReviewReason = "no_authorized_scope"
+        guard let scope = recoveryScope else {
+            recoveryReviewReason = "no_authorized_scope"
+            return
+        }
+        guard let databaseID = UUID(uuidString: scope.databaseID) else {
+            recoveryReviewReason = "invalid_scope"
+            return
+        }
+        recoveryReviewInFlight = true
+        defer { recoveryReviewInFlight = false }
+
+        let client = DEVONthinkReadOnlyClient()
+        let adapter = DEVONthinkImportReadAdapter(client: client, databaseID: databaseID)
+        let coordinator = ImportRecoveryCoordinator(read: adapter)
+        recoveryReview = await coordinator.review(recovery.entries, scope: scope)
+        await client.close()
     }
 
     /// Registered cancellation hooks. They are synchronous on purpose: quitting
@@ -197,6 +231,8 @@ private struct WorkspaceAreas: View {
 private struct ImportRecoveryBanner: View {
     @ObservedObject var state: FormaApplicationState
 
+    @State private var configuringScope = false
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -213,6 +249,16 @@ private struct ImportRecoveryBanner: View {
                         .font(.callout)
                         .foregroundStyle(.red)
                 }
+                if let scope = state.recoveryScope {
+                    Text("Read scope: \(scope.databaseName) · \(scope.groupPath.joined(separator: "/"))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let review = state.recoveryReview {
+                    Text(reviewSummary(review))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if let reason = state.recoveryReviewReason {
                     Text(reviewExplanation(reason))
                         .font(.caption)
@@ -220,12 +266,33 @@ private struct ImportRecoveryBanner: View {
                 }
             }
             Spacer()
-            Button("Recheck read-only") { state.requestRecoveryRecheck() }
+            Button("Read Scope…") { configuringScope = true }
                 .disabled(state.recovery.requiresReview == false)
+                .accessibilityIdentifier("configure-recovery-scope")
+            Button("Recheck read-only") {
+                Task { await state.requestRecoveryRecheck() }
+            }
+            .disabled(state.recovery.requiresReview == false
+                      || state.recoveryScope == nil
+                      || state.recoveryReviewInFlight)
+            .accessibilityIdentifier("recheck-recovery")
         }
         .padding(12)
         .background(.orange.opacity(0.08))
         .accessibilityIdentifier("import-recovery-banner")
+        .sheet(isPresented: $configuringScope) {
+            RecoveryScopeSheet(state: state)
+        }
+    }
+
+    private func reviewSummary(_ report: ImportRecoveryReviewReport) -> String {
+        let counts = report.counts
+        let parts = ImportRecoveryReviewResult.Outcome.allCases.compactMap { outcome -> String? in
+            guard let count = counts[outcome], count > 0 else { return nil }
+            return "\(count) \(outcome.rawValue)"
+        }
+        let verdict = report.isConclusive ? "conclusive" : "inconclusive"
+        return "Read-only check \(verdict): " + (parts.isEmpty ? "nothing reviewed" : parts.joined(separator: " · "))
     }
 
     private var summary: String {
@@ -251,7 +318,7 @@ private struct ImportRecoveryBanner: View {
     private func reviewExplanation(_ reason: String) -> String {
         switch reason {
         case "no_authorized_scope":
-            return "A read-only recheck needs an authorized target scope. None is configured in this build, so these operations stay VERIFY_REQUIRED and are never retried automatically."
+            return "A read-only recheck needs a confirmed read scope. Until one is confirmed these operations stay VERIFY_REQUIRED and are never retried automatically."
         case "nothing_to_review":
             return "Nothing is waiting for a readback."
         case "workspace_unavailable":
@@ -259,5 +326,59 @@ private struct ImportRecoveryBanner: View {
         default:
             return reason
         }
+    }
+}
+
+/// The one place a read scope can be confirmed.
+///
+/// It asks for the UUID rather than offering a list on purpose: listing databases
+/// would itself be a live call, and the point of this sheet is that a person
+/// states which database may be read.
+@MainActor
+private struct RecoveryScopeSheet: View {
+    @ObservedObject var state: FormaApplicationState
+    @Environment(\.dismiss) private var dismiss
+    @State private var databaseID = ""
+    @State private var databaseName = ""
+    @State private var groupPath = ""
+
+    private var isInvalid: Bool { state.recoveryReviewReason == "invalid_scope" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Read-only recovery scope")
+                .font(.headline)
+            Text("Forma will read the records of interrupted operations in this database and group. It never writes and never retries an import.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            TextField("Database UUID", text: $databaseID)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("recovery-database-id")
+            TextField("Database name (label only)", text: $databaseName)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("recovery-database-name")
+            TextField("Group path, e.g. Forma_I1B2/r1", text: $groupPath)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("recovery-group-path")
+            if isInvalid {
+                Text("Enter a database UUID, a name and at least one group component.")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button("Confirm read-only scope") {
+                    state.confirmRecoveryScope(databaseID: databaseID,
+                                               databaseName: databaseName,
+                                               groupPath: groupPath)
+                    if state.recoveryScope != nil { dismiss() }
+                }
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("confirm-recovery-scope")
+            }
+        }
+        .padding(20)
+        .frame(width: 480)
     }
 }
