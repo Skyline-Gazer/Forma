@@ -40,3 +40,21 @@ jobs:
         run: swift build --package-path FormaApp --product Forma --only-use-versions-from-resolved-file
         # The ADS pin check is wired into CI by the consumer change that adds
         # scripts/check_ads_pin.py; scheduling it here first would be a red job.
+
+  # A development bundle, not a release artifact: ad-hoc signed, not notarized,
+  # no Developer ID. It exists so "the app packages" is checked on every PR
+  # instead of being discovered at release time.
+  package:
+    name: macOS app package
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble and ad-hoc sign Forma.app
+        run: sh scripts/build_app.sh
+      - name: Upload the development bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Forma-app-adhoc
+          path: build/Forma.app
+          if-no-files-found: error
