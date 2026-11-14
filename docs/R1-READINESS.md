@@ -281,6 +281,8 @@ Owner 另行授权 Batch 2A 的**无真实写入工程**：T05、T06、T04 补�
 | R1-T06 | **DevBox Implemented · macOS CI Verified** | `KeychainCredentialStore`（device-only、删除/轮换、锁定态、legacy 只读探测、可回滚迁移接口）+ 11 例测试（PR #88） |
 | R1-T04 补齐 | **DevBox Implemented · macOS CI Verified** | `ImportRecoveryScopeConfirmation` / `ImportRecoveryCoordinator` + 读范围确认表单与实际回查（PR #89） |
 
+CI 上的一条真实限制（不是代码缺陷）：macOS 的文件型 login keychain **接受但不回读** `kSecAttrAccessible`，所以真实 Keychain 测试只能断言"未报告或正是所请求的值"；属性请求本身由内存后端测试钉住，真实回读列为 M02（需 data protection keychain 或真机）。
+
 边界：未改 Keychain service 名、未自动迁移、未触碰真实凭据、未发起任何 DEVONthink 写、未开放 Import 写入。
 
 仍未验证：M01–M06 的真实 macOS 行为（撤销授权、stale security-scoped bookmark、锁定 Keychain、真实 MCP 回查、GUI 交互）与 R01–R03。
