@@ -14,6 +14,14 @@ protocol MCPConnection: AnyObject, Sendable {
     func close() async
 }
 
+extension MCPConnection {
+    /// A request with no parameters. Protocol requirements cannot carry default
+    /// arguments, so the empty form lives here.
+    func request(_ method: String) async throws -> MCPValue {
+        try await request(method, parameters: [:])
+    }
+}
+
 extension MCPStdio: MCPConnection {
     func sendInitialized() async throws { try initialized() }
 }
