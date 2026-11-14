@@ -21,12 +21,14 @@ struct FormaApplication: App {
 ///
 /// Startup and shutdown live here rather than in a view's `.task`, because a view
 /// can be recreated at any time and quitting must not depend on which view
-/// happens to be mounted. The delegate never blocks termination: it asks for
-/// `terminateLater`, runs a bounded shutdown, and then replies.
+/// happens to be mounted. Cleanup runs in `applicationWillTerminate`, which
+/// cannot delay quitting at all — the strongest form of "must not block".
+/// Everything worth keeping is already durable: a cancelled scan loses its
+/// in-progress step, not its record, and the next launch sweeps an interrupted
+/// import.
 @MainActor
 final class FormaAppDelegate: NSObject, NSApplicationDelegate {
     let state = FormaApplicationState()
-    private var terminating = false
     private var didStart = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -35,14 +37,8 @@ final class FormaAppDelegate: NSObject, NSApplicationDelegate {
         Task { await state.start() }
     }
 
-    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminationReply {
-        guard !terminating else { return .terminateNow }
-        terminating = true
-        Task { @MainActor in
-            await state.prepareForTermination()
-            sender.reply(toApplicationShouldTerminate: true)
-        }
-        return .terminateLater
+    func applicationWillTerminate(_ notification: Notification) {
+        state.prepareForTermination()
     }
 }
 
@@ -62,7 +58,7 @@ final class FormaApplicationState: ObservableObject {
     /// Why the read-only recheck cannot run, in a stable code.
     @Published private(set) var recoveryReviewReason: String?
 
-    private var shutdownHandlers: [() async -> Void] = []
+    private var shutdownHandlers: [() -> Void] = []
 
     func start() async {
         let directory = URL.applicationSupportDirectory.appending(path: "Forma", directoryHint: .isDirectory)
@@ -117,16 +113,12 @@ final class FormaApplicationState: ObservableObject {
         shutdownHandlers.append(handler)
     }
 
-    /// Stops new work, then waits a bounded grace period for the cancelled tasks
-    /// to close their pipes and release the writer lease.
-    ///
-    /// It never waits for a task's completion: a slow scan loses its in-progress
-    /// step, not its record, and a hung task must not hold the app open.
-    func prepareForTermination() async {
+    /// Stops new work. It returns immediately: quitting must never wait for a
+    /// task, and intents plus observations are already durable.
+    func prepareForTermination() {
         let handlers = shutdownHandlers
         shutdownHandlers.removeAll()
         for handler in handlers { handler() }
-        try? await Task.sleep(for: .milliseconds(300))
     }
 }
 
