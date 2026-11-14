@@ -7,8 +7,10 @@ public actor SourceWorkspace {
     /// Internal so the mapping persistence extension can reach the one
     /// database connection this actor owns.
     let store: SourceStore
-    private var scanInProgress = false
-    private var readInProgress = false
+    /// Internal, like `store`: the availability and reauthorization extension
+    /// lives in another file and must refuse while a scan or read is running.
+    var scanInProgress = false
+    var readInProgress = false
 
     public init(databaseURL: URL) throws {
         store = try SourceStore(url: databaseURL)
@@ -258,7 +260,10 @@ extension SourceWorkspace {
         return a == "/" || b == "/" || SourcePath.contains(a, in: b) || SourcePath.contains(b, in: a)
     }
 
-    private static func updateBookmark(in db: Database, id: UUID, selected: SourceRootAccess,
+    /// Replaces the stored bookmark for one root. Internal because the only
+    /// caller that may do this without registering a new root is
+    /// `reauthorize(scope:with:)`, which checks the identity first.
+    static func updateBookmark(in db: Database, id: UUID, selected: SourceRootAccess,
                                        authorizedURL: URL, insert: Bool) throws {
         let bookmark: Data
         let securityScoped: Bool

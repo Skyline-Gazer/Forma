@@ -19,15 +19,28 @@ struct WorkspaceView: View {
     var body: some View {
         NavigationSplitView {
             List(model.scopes, selection: $model.selectedScopeID) { scope in
-                Label(scope.displayName, systemImage: "folder")
-                    .tag(scope.id)
-                    .help(scope.relativePath)
+                HStack(spacing: 6) {
+                    Label(scope.displayName, systemImage: "folder")
+                    if let status = model.sourceStatus(for: scope.id),
+                       status.needsReauthorization || status.availability == .identityChanged {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .help("This source needs attention.")
+                            .accessibilityLabel("Source needs attention")
+                    }
+                }
+                .tag(scope.id)
+                .help(scope.relativePath)
             }
             .navigationTitle("Sources")
             .navigationSplitViewColumnWidth(min: 150, ideal: 200)
         } detail: {
             if let listing = model.listing {
                 VStack(spacing: 0) {
+                    if let status = selectedStatus, status.isUnreadable {
+                        sourceUnavailableBanner(status)
+                        Divider()
+                    }
                     HSplitView {
                         fileTable(listing)
                             .frame(minWidth: 300)
@@ -54,6 +67,13 @@ struct WorkspaceView: View {
                 Button("Add Source…", systemImage: "folder.badge.plus", action: chooseSource)
                     .disabled(model.phase.isBusy)
                     .accessibilityIdentifier("add-source")
+                if let scope = model.selectedScope,
+                   model.sourceStatus(for: scope.id)?.needsReauthorization == true {
+                    Button("Reauthorize…", systemImage: "lock.open", action: { chooseReauthorization(for: scope) })
+                        .disabled(model.phase.isBusy)
+                        .help("Choose the same folder again to renew macOS access")
+                        .accessibilityIdentifier("reauthorize-source")
+                }
                 if model.phase.isBusy {
                     Button("Cancel", systemImage: "stop.circle") { model.cancelWork() }
                         .accessibilityIdentifier("cancel-work")
@@ -352,6 +372,80 @@ struct WorkspaceView: View {
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             Task { @MainActor in await model.register(url) }
+        }
+    }
+
+    private var selectedStatus: SourceScopeStatus? {
+        guard let id = model.selectedScopeID else { return nil }
+        return model.sourceStatus(for: id)
+    }
+
+    /// What the source needs, in the words a person can act on. The four cases
+    /// stay apart because only two of them are fixed by choosing the folder again.
+    private func sourceUnavailableBanner(_ status: SourceScopeStatus) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(sourceUnavailableTitle(status.availability))
+                    .font(.headline)
+                Text(sourceUnavailableDetail(status))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if status.needsReauthorization, let scope = model.selectedScope {
+                Button("Reauthorize…") { chooseReauthorization(for: scope) }
+                    .disabled(model.phase.isBusy)
+            }
+        }
+        .padding(12)
+        .background(.orange.opacity(0.08))
+        .accessibilityIdentifier("source-unavailable-banner")
+    }
+
+    private func sourceUnavailableTitle(_ availability: SourceRootAvailability) -> String {
+        switch availability {
+        case .accessible: return "Source available"
+        case .bookmarkStale: return "Access needs renewing"
+        case .permissionDenied: return "Access was revoked"
+        case .missing: return "Folder not found"
+        case .hydrationPending: return "Not downloaded yet"
+        case .identityChanged: return "This folder is different now"
+        case .unavailable: return "Source unavailable"
+        }
+    }
+
+    private func sourceUnavailableDetail(_ status: SourceScopeStatus) -> String {
+        switch status.availability {
+        case .accessible:
+            return "This source can be read."
+        case .bookmarkStale:
+            return "The stored permission for \(status.lastKnownPath) is no longer valid. Choose the same folder again to renew it."
+        case .permissionDenied:
+            return "macOS no longer allows Forma to read \(status.lastKnownPath). Files were not marked missing; renew access to continue."
+        case .missing:
+            return "\(status.lastKnownPath) is gone. Scans stay incomplete until it is back, so nothing is marked missing by accident."
+        case .hydrationPending:
+            return "The provider has not downloaded this folder's contents yet. Metadata can still be read."
+        case .identityChanged:
+            return "The folder at \(status.lastKnownPath) is not the one this source was registered from. Add it as a new source instead."
+        case .unavailable:
+            return "Forma could not determine the state of \(status.lastKnownPath)."
+        }
+    }
+
+    private func chooseReauthorization(for scope: SourceScope) {
+        let panel = NSOpenPanel()
+        panel.title = "Choose the folder for \(scope.displayName) again"
+        panel.message = "Forma renews access only when the folder is the same one."
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in await model.reauthorize(scope, url: url) }
         }
     }
 }
