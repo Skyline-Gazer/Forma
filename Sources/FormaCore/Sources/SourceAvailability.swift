@@ -136,13 +136,16 @@ extension SourceWorkspace {
         } catch {
             return classify(error)
         }
-        guard !stale else { return .bookmarkStale }
-
+        // The filesystem answer comes first. A bookmark can go stale because the
+        // folder was deleted, and "needs reauthorization" would be the wrong
+        // thing to tell someone whose folder is simply gone.
         var accessing = false
         if root.securityScoped {
             accessing = url.startAccessingSecurityScopedResource()
             defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-            guard accessing else { return .permissionDenied }
+            if !accessing {
+                return stale ? .bookmarkStale : .permissionDenied
+            }
         }
 
         do {
@@ -151,25 +154,26 @@ extension SourceWorkspace {
                   selected.caseSensitive == root.caseSensitive else {
                 return .identityChanged
             }
+            if stale { return .bookmarkStale }
             return selected.metadata.isHydrationPending ? .hydrationPending : .accessible
         } catch let error as POSIXError {
             switch error.code {
             case .ENOENT, .ENOTDIR:
                 return .missing
             case .EACCES, .EPERM:
-                return .permissionDenied
+                return stale ? .bookmarkStale : .permissionDenied
             default:
-                return .unavailable
+                return stale ? .bookmarkStale : .unavailable
             }
         } catch {
-            return .unavailable
+            return stale ? .bookmarkStale : .unavailable
         }
     }
 
     private static func classify(_ error: any Error) -> SourceRootAvailability {
         if let cocoa = error as? CocoaError {
             switch cocoa.code {
-            case .fileReadNoSuchFile:
+            case .fileNoSuchFile, .fileReadNoSuchFile:
                 return .missing
             case .fileReadNoPermission:
                 return .permissionDenied
