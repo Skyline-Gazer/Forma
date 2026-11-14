@@ -1,191 +1,201 @@
-# R1 Batch 2A — Real macOS Acceptance（现场验证：BLOCKED；工程部分：已完成）
+# R1 Batch 2A — Real macOS Acceptance（现场执行结果）
 
-状态：**现场验证 BLOCKED — 执行主机不是 macOS**；**无真实写入的工程部分（T05/T06/T04 接线）已完成并经 macOS CI 验证**（#87/#88/#89）。本报告记录实际执行到的部分与阻塞证据；没有执行的项目一律标记 BLOCKED，不写成 PASS/NOT_VERIFIED 的混合。
+状态：**现场验证已在 macOS 执行**（2026-11-15）；**M01 / M02（除锁定态）/ M03 / M04 的主体已取得现场证据，其中发现 2 个阻断性打包缺陷与 2 个实现缺陷**；**M06 BLOCKED**（本机无 macOS 14.x 运行时）。
 
 - 授权：Owner 2026-11-14 批准 R1 Batch 2A（仅无 DEVONthink 写入的现场验证）。
-- 执行会话主机：Linux DevBox（`Linux 7.0.0-42-generic x86_64`）。
-- 结论先行：**M01 / M02 / M03 / M04 / M06 全部 BLOCKED**；只有「§1 Baseline 与开发用 `.app` 的静态验收」部分可执行，且其中「启动路径 / 其他实例」仍为 BLOCKED。
-- 真实 DEVONthink 写调用：**0 次**（原因见 §5：主机上不存在 DEVONthink，调用未被执行，而不是被拒绝）。
+- 本轮未调用任何 DEVONthink 写工具；未修改生产库；未修改任何现有 Keychain 凭据；未做 Developer ID 签名与公证。
+- 上一轮（2026-11-14）执行主机为 Linux，结论为 BLOCKED，原文见 §12；本文是同一授权的真实 macOS 执行结果。
+- 证据原件仅保存在本机 `~/.forma/evidence/r1-batch2a/`；本文不含真实数据库 UUID、路径或业务数据。
 
-## 0. 主机事实（阻塞证据）
+## 0. 执行事实
+
+| 项 | 值 |
+| --- | --- |
+| macOS | 27.0.1（26A434），arm64 |
+| DEVONthink | 4.4.2（官方 MCP，stdio） |
+| `dev` | `6642f16`（PR #90），CI run `43612484825` **success** |
+| Batch 2A 工程 PR | #86（上一轮 BLOCKED 报告）· #87（T05）· #88（T06）· #89（T04）· #90（收尾文档）全部 merged |
+| 被测 `.app` | CI 产物 `Forma-app-adhoc`（`gh run download`），非本地重新构建 |
+| 启动前其他 Forma 实例 | 无 |
+| 执行后进程残留 | 无（应用、其 MCP 子进程均已退出） |
+
+`.app` 的既有静态结论（bundle id、结构、`LC_CODE_SIGNATURE`、链接依赖）本轮复核一致：`codesign --verify --strict` 通过、`Identifier=io.github.skyline-gazer.forma`、`flags=0x10002(adhoc,runtime)`、`LSMinimumSystemVersion=14.0`、entitlements 为空字典、Mach-O arm64。
+
+## 1. Baseline：打包产物**无法启动**（FAIL）
 
 | 检查 | 结果 |
 | --- | --- |
-| 内核 | `Linux … x86_64`（非 Darwin） |
-| `sw_vers` | 不存在 |
-| `/Applications/DEVONthink.app` | 不存在 |
-| `security` / `codesign` / `spctl` / `plutil` / `osascript` / `swift` | 均不存在 |
-| `~/.forma` | 执行前不存在（本机从未产生过 I1-B2 现场证据） |
-| 已配置 SSH 主机 | 2 个；`BatchMode` 认证均失败（`Permission denied (publickey,password)`） |
-| 任何挂载的 macOS 共享 | 无 |
+| Bundle ID / 签名 / 结构 | **PASS**（同上，CI 产物本机复核） |
+| 应用资源 | **FAIL**：产物内无 `Contents/Resources`（空目录被 artifact 上传丢弃），且**没有 `Forma_FormaCore.bundle`** |
+| 产物落地 | 观察：`gh run download` 解出的根是 `Contents/`（artifact 压平了 bundle 目录），本机重建为 `Forma.app/` 后再验签 |
+| 启动路径 | **FAIL** |
+| 是否存在其他实例 | **PASS**（启动前后均无） |
 
-因此本会话无法访问：Security 框架（书签/Keychain）、AppKit/SwiftUI（GUI）、DEVONthink 与官方 MCP、`codesign`/`spctl`、macOS 14 运行时。
+实际执行：
 
-## 1. Baseline 与开发用 `.app` 静态验收
+```
+FormaCore/resource_bundle_accessor.swift:12: Fatal error: could not load resource bundle:
+  from …/Forma.app/Forma_FormaCore.bundle
+  or  /Users/runner/work/Forma/Forma/FormaApp/.build/arm64-apple-macosx/release/Forma_FormaCore.bundle
+```
 
-| 项 | 结果 | 证据 |
+崩溃报告（`~/Library/Logs/DiagnosticReports/Forma-2026-11-15-001131.ips`）faulting thread：
+
+```
+_assertionFailure(_:_:file:line:flags:)
+closure #1 in variable initialization expression of static NSBundle.module
+static MappingProfile.shipped()
+WorkspaceModel.restore()
+```
+
+根因：`scripts/build_app.sh` 只拷贝 `Forma_FormaApp.bundle`（该 bundle 实际不存在），**从未拷贝 `Forma_FormaCore.bundle`**；而 SwiftPM 生成的 `Bundle.module` 访问器只查找 `Bundle.main.bundleURL/Forma_FormaCore.bundle`，即 `.app` 根目录。CI 的 `macOS app package` job 只做 `codesign --verify` 与结构断言，从不启动应用，因此该产物在 CI 上"打包成功"而本机必然崩溃。
+
+**第二个问题（同一根因，必须一起修）**：把 `Forma_FormaCore.bundle`（含 GRDB/ZIPFoundation bundle）放进 `.app` **根目录**后应用可以启动，但 `codesign --verify --strict` 立刻报 `Forma.app: unsealed contents present in the bundle root` —— `.app` 根目录不是可封存（sealed）的位置。也就是说：满足运行期访问器的布局与满足 `codesign --strict` 的布局当前**互斥**，不是"漏拷一个文件"就能同时满足的。
+
+本报告的 §3–§6 是在"拷贝资源 bundle 到 `.app` 根 + 重新 ad-hoc 签名"的补丁产物上完成的；所有 M04 结论都标注了这一点，打包基线仍是 **FAIL**。
+
+已实测："把 bundle 放进 `Contents/Resources/`"**不能**解决问题——SwiftPM 生成的访问器只查 `.app` 根目录，实测仍以同一 `Fatal error` 退出。
+
+建议修法（未在本轮实施，需单独工程 PR）：资源 bundle 放到 `Contents/Resources/` 以满足 `codesign --strict`，同时让应用侧按 `Bundle.main.resourceURL` 解析（或为 `Bundle.module` 增加 `.app` 变体回退）；`build_app.sh` 显式拷贝 `Forma_FormaCore.bundle`；CI 增加一次"启动后 3 秒仍存活"的冒烟，避免再次出现"打包成功但无法启动"。
+
+## 2. M01 — Bookmark（现场通过，1 项分类缺陷）
+
+合成来源目录（`m01/…`，3 个文件；`m01b/…`，1 个文件），新建 workspace；所有步骤均为真实 `Security` 书签 + 真实文件系统。
+
+| 场景 | 观察 | 判定 |
 | --- | --- | --- |
-| GitHub `dev` | `cab0936` | 与本地 HEAD 一致 |
-| `main` | `38d4553`（未动） | — |
-| `dev` CI | **success**（run `43594703178`：FormaCore tests / macOS app build / macOS app package） | — |
-| Batch 2A 工程 PR | **不存在**：`dev` 历史止于 Batch 1 收尾（#79–#85），本轮没有新的工程 PR | — |
-| 冻结基线 | `ads-pin.txt` / `.ads` / `.gitmodules` / `docs/SPEC.md` 自 `a3a3cf7` 起 0 变更 | — |
-| Bundle ID | **PASS**：`io.github.skyline-gazer.forma` | 下载 CI 产物 `Forma-app-adhoc`，`Info.plist` 解析 |
-| Bundle 结构 | **PASS**：`Contents/{Info.plist, MacOS/Forma, _CodeSignature/CodeResources}`；可执行文件为 Mach-O 64-bit arm64 | `file` 输出 |
-| ad-hoc 签名（结构） | **PASS**：Mach-O 含 `LC_CODE_SIGNATURE`（dataoff 16160784 / size 145728），`_CodeSignature/CodeResources` 存在 | 本地解析 |
-| ad-hoc 签名（有效性） | **macOS CI Verified**（非本机）：CI `codesign --verify --strict` 通过；`codesign -dv` 报 `flags=0x10002(adhoc,runtime)`、`Identifier=io.github.skyline-gazer.forma` | CI 日志 |
-| 应用资源 | **PASS（按设计）**：`Contents/Resources` 不存在；`CFBundleIconFile=AppIcon` 指向未提供的图标，符合「图标入口已接线、资产未提供」 | 产物结构 |
-| 启动路径 | **BLOCKED**：无法在非 macOS 上启动 `.app` | — |
-| 是否存在其他 Forma 实例 | **BLOCKED**：无 macOS 进程视图 | — |
-| `LSMinimumSystemVersion` | `14.0`（声明值，非运行验证） | `Info.plist` |
-| 链接依赖 | **PASS**：23 个动态库，全部为 `/usr/lib` 或 `/System/Library`；**未引用 DEVONthink**（不打包第三方可执行文件） | Mach-O `LC_LOAD_DYLIB` 解析 |
-| Info.plist 与仓库一致 | **PASS**：产物 `Info.plist` 与 `FormaApp/Info.plist` 逐键相同 | 两边解析比对 |
-| 内嵌 rpath | **观察（非失败）**：含 `/Applications/Xcode_26.3.app/…/swift-6.2/macosx` 构建机工具链路径 | 见下方说明 |
+| 首次授权（API 路径）+ 正常扫描 | `register` 成功（`security_scoped=1`），扫描 `complete`，3 条 entry 全 `present` | PASS |
+| 首次授权（应用内 `NSOpenPanel` 路径） | 未被验证：本轮授权通过 CLI 夹具走同一 `SourceWorkspace.register`，未在 GUI 面板中选目录 | NOT_VERIFIED |
+| 权限失效（`chmod 000`） | 扫描 `incomplete`，issue = `unreadable`，`missing` 计数 **0**，历史 entry ID 全部保留 | PASS |
+| 扫描 incomplete 时历史不被标记 missing | 同上（`listing.state=incomplete`，`missing=0`） | PASS |
+| 恢复权限 + 重新授权 | 可用性 `accessible`；`reauthorize` 同一目录 → `updated(accessible)`；重扫 `complete`、ID 稳定 | PASS |
+| 来源身份变化时拒绝静默复用 | 用**另一个目录**重新授权 → `identityMismatch`，未写入任何东西 | PASS |
+| 目录被移走 | 可用性 `bookmark_stale`，`needsReauthorization=true`；历史 `missing=0` | PASS |
+| 同路径换成另一个目录（新 inode） | 可用性 `identity_changed`；扫描返回 `incomplete` + `authorization` issue，历史 `missing=0`；`reauthorize` → `identityMismatch` | PASS |
+| 目录被删除 | 可用性 `bookmark_stale`（而非 `missing`） | **FAIL（分类缺陷）** |
+| 外部卷 / iCloud | 无隔离夹具，按授权不得用真实业务目录替代 | BLOCKED |
 
-关于 rpath：`/usr/lib/swift` 与 `@loader_path` 存在，Swift 运行库在系统路径可解析；工具链路径在用户机上通常不存在，属于"构建机残留"。它不是本轮失败项（ad-hoc 开发包不发行），但**发行前必须**在干净机上验证解析行为，必要时规范化/剥离 rpath（Batch 2B / R01 项，本轮不改代码）。
+缺陷证据：对**已删除**目录解析书签时，普通书签抛 `NSCocoaErrorDomain 4`（`NSFileNoSuchFileError`），而实际存储的 **security-scoped** 书签抛 `NSCocoaErrorDomain 259`（`NSFileReadUnknownError`）。`SourceAvailability.classify(_:)` 只把 code 4 映射为 `.missing`，259 落入 `default` → `.bookmarkStale`。因此"文件夹已经不存在"会被 UI 说成"需要重新授权"，与 `SourceRootAvailability` 的注释契约（"a bookmark can go stale because the folder was deleted, and 'needs reauthorization' would be the wrong thing"）相反。
 
-`.app` 来自 CI 产物（`gh run download`），不是本地重新构建：本机没有 Swift 工具链，按仓库脚本构建同样不可执行。
+建议修法（未实施）：解析失败后对 `last_path` 做一次 `stat`；`ENOENT` → `.missing`，存在但身份不可证 → `.unavailable`，绝不因为"读不到属性"就把未知当 missing。
 
-## 2. M01 — Bookmark
+## 3. M02 — Keychain（生命周期通过；可访问性回读 FAIL；锁定态 NOT_VERIFIED）
 
-**BLOCKED**。Security-Scoped Bookmark 依赖 `Foundation` 的 `bookmarkData(options: .withSecurityScope)` 与 `startAccessingSecurityScopedResource`，只在 macOS 上存在；本机也无法创建「合成来源目录」以外的授权状态。
+独立测试 service `io.github.skyline-gazer.forma.r1-batch2a`（及其 `.legacy` / `.alt`），未触碰 `com.skyline-gazer.forma.provider-api-key`。
 
-未执行项：首次授权、正常扫描、权限撤销、扫描进入 incomplete、历史记录不被标记 missing、重新授权、恢复后重扫、来源身份变化时拒绝静默复用。
-外部卷与 iCloud：**BLOCKED**（无夹具，且按授权不得用真实业务目录替代）。
+| 场景 | 观察 | 判定 |
+| --- | --- | --- |
+| 添加 + 读取 | `save` → `load` 返回同一密钥 | PASS |
+| 更新（`save` 重复项）/ 轮换 | 值被替换；对不存在项 `rotate` → `credentialMissing` | PASS |
+| 删除（幂等） | 连续 `delete` 两次均成功，`load` → `nil` | PASS |
+| 迁移（copy + verify，legacy 保留） | `migrated([openAI])`；新 service 有值，legacy 仍在 | PASS |
+| 回滚迁移（只删本 service） | `rolledBack([openAI])`；legacy 仍在 | PASS |
+| 迁移计划语义 | `noRenameConfigured` / `ready` 两态正确 | PASS |
+| 访问性属性回读 | 对**存在**的项，`accessibility(for:)` 返回 `nil`（`.whenUnlockedThisDeviceOnly` 与 `.afterFirstUnlockThisDeviceOnly` 都一样） | **FAIL** |
+| 锁定状态错误处理 | 未能可靠制造；见下 | NOT_VERIFIED |
+| GUI 提示 | 未出现任何 Keychain 提示（因为锁定态未触发） | NOT_VERIFIED |
 
-## 3. M02 — Keychain
+可访问性缺陷证据：直接 `SecItemCopyMatching(kSecReturnAttributes)` 返回的键只有 `acct / cdat / class / labl / mdat / svce`（加 `kSecReturnData` 亦无变化），**不含 `pdmn`**；`security find-generic-password -g` 同样不输出该属性。因此在本机 macOS 27 上无法区分"项不存在"与"项存在但属性不可读"，方法契约（`nil` 仅表示没有项）不成立。修法需评估替代读取路径（例如显式 `kSecUseDataProtectionKeychain` 组合或对创建路径做显式自检），不应默默改成"回读不到就当作默认值"。
 
-**BLOCKED**。`Security` 框架不存在；无法创建独立测试 service/account，也无法观察锁定态。
+锁定态：另建临时文件 keychain（`security create-keychain`）、写入同名 service 项、把临时 keychain 置于用户搜索列表首位、`security lock-keychain` 后调用 `load`。A/B 结果：**解锁与锁定读取都返回 `nil`（item not found）**——`SecItem*` 在本机走 data-protection keychain，根本看不到文件 keychain 里的项，所以 `errSecInteractionNotAllowed` 分支没有被走到。测试后搜索列表已恢复为仅 login keychain，临时 keychain 已删除，测试项在 `m02` 收尾时已删除；`com.skyline-gazer.forma.provider-api-key` 前后均为 absent。
 
-未执行项：添加合成密钥、读取、更新、删除、访问性属性、锁定错误处理、GUI 提示。
-既有 Provider Keychain 项：**未触碰**（本机无 Keychain）。
+## 4. M03 — MCP Process（全部 PASS）
 
-## 4. M03 — MCP Process
+全部通过随仓库发布的 `DEVONthinkReadOnlyClient`（真实 `MCPStdio` + 连接监督器）执行，只用只读工具。
 
-**BLOCKED**。DEVONthink 未安装，官方 MCP 不存在；无法建立任何真实连接。
-
-未执行项：`initialize`、`tools/list`、只读连接、主动关闭、子进程异常终止、读连接重建、双连接并存、schema digest 复核。
-写侧监督器：**未运行**（其契约复核需要真实 `tools/list`）。写工具调用：**0 次**。
-
-补充：**MCP 真实调用 0 次**（未建立连接，`initialize`/`tools/list` 无记录）。
-
-## 5. M04 — App Lifecycle
-
-**BLOCKED**。无 GUI、无 macOS 应用生命周期、无窗口服务器。
-
-未执行项：启动、Workspace 加载、恢复状态展示、未授权只读回查拒绝、授权范围回查、正常退出、重启、恢复未决状态、不自动重试。
-
-按授权要求，四个维度分别记录（本批全部为"未发生"）：
-
-| 维度 | 本批观察 |
+| 检查 | 结果 |
 | --- | --- |
-| GUI 实际显示 | **无**（应用未启动） |
-| 持久化数据变化 | **无**（未创建 `workspace.sqlite`，未生成合成 Ledger） |
-| MCP 真实调用 | **无**（未建立任何连接） |
-| 未完成的写入中恢复场景 | **未构造**（本批明确不涉及写入） |
-合成 Ledger 未生成：按授权只能在独立测试 `workspace.sqlite` 中生成，而该步骤必须配合真实 GUI 才有验收意义。
+| `initialize` | protocol `2025-06-18`，server `devonthink-mcp 1.0.0` |
+| `tools/list` | 62 个工具，1 页；只读白名单 8 个；`hasRecordParents=true` |
+| Schema digest 复核 | **62/62 与 I1-B1 `client-digests.json` 完全一致**（`inputSchemaSHA256` 逐项相等）→ schema 未变 |
+| 只读连接建立 | `get_databases` 命中沙盒库（库名 `Forma_I1B2_Sandbox`，root group 与库 UUID 一致） |
+| 主动关闭连接 | `close()` 后子进程退出（exit code 0） |
+| 重新建立读连接 | 新子进程，`tools/list` 62 |
+| 双连接并存 | 两个客户端同时 `initialize` + `tools/list` 均成功 |
+| 终止本次自己的 MCP 子进程 | 客户端观察到 `disconnected`；随后重连成功 |
+| 写工具调用 | **0** |
+
+## 5. M04 — App Lifecycle（GUI 主体通过；两处受限）
+
+GUI 证据来自 Accessibility 树文本转储（`ax-empty.txt`、`ax-pending.txt`），不是截图。
+
+| 场景 | 观察 | 判定 |
+| --- | --- | --- |
+| 正常启动 | 补丁产物可启动并稳定存活；窗口 "source" 出现 | PASS（**基于补丁产物**；原 CI 产物见 §1 FAIL） |
+| Workspace 加载 | 空库时显示 "Choose a source" / "Add a local or OneDrive folder to scan its files." | PASS |
+| 恢复状态展示 | 注入合成 ledger（`phase=verify_required`）后出现横幅："Interrupted import operations" · "1 outcome unknown" · 说明文字（"…stay VERIFY_REQUIRED and are never retried automatically."） | PASS |
+| 未确认读范围时明确拒绝 | 横幅显示 `no_authorized_scope` 的解释；"Recheck read-only" 不可用 | PASS |
+| 无效读范围被拒绝 | 空输入点确认 → 红色提示 "Enter a database UUID, a name and at least one group component."，sheet 不关闭；横幅 reason = `invalid_scope` | PASS |
+| 授权 Sandbox 只读范围后正确回查 | **GUI 文本输入无法驱动**：AX `set value` / 粘贴后字段显示正确，但 SwiftUI 绑定未接受，点确认仍报 `invalid_scope` | **NOT_VERIFIED（GUI 路径）** |
+| 同一路径的库级现场验证 | 用应用自身的 `DEVONthinkReadOnlyClient → DEVONthinkImportReadAdapter → ImportRecoveryCoordinator`：正确摘要 → `verified / readback_matches`；故意写错摘要 → `differs / target_sha_mismatch`；范围外库（不确认该库）→ `outsideScope`，`readAttempted=false`；ledger 保持 `verify_required`、attempts 0 | PASS（库级） |
+| 正常退出 | `⌘Q` 退出，进程结束，**无遗留 MCP 子进程** | PASS |
+| 重新启动 + 恢复未决状态 | 同一横幅、同一 `1 outcome unknown`；读范围不持久（session-only，符合设计） | PASS |
+| 不自动重试 Import | 两次启动后 `import_operations.phase` 仍为 `verify_required`，`import_attempts` 仍为 0，应用启动期间**未启动**任何 DEVONthink MCP 子进程 | PASS |
+| GUI 截图 | `screencapture` 被系统拒绝（无屏幕录制授权） | BLOCKED（以 AX 文本代替） |
+
+关于"未决 Intent 的制造"：只写入了**合成** ledger 行（`run` + `operation`，`phase=verify_required`、目标为沙盒库与 `Forma_I1B2/r1`、目标记录为 B2 现存合成记录之一），使用仓库自身 `ImportLedger` API 生成，未创建任何 DEVONthink 记录。应用数据库在测试前备份（`m04/app-workspace-before.sqlite`），测试后已还原（`scopes=0`、`import_operations=0`）。侧栏把夹具来源标为 "Access needs renewing"，属于"书签由另一个进程创建"的预期结果，不是产品缺陷。
 
 ## 6. M06 — macOS 14.x
 
-**BLOCKED**。无 macOS 14 环境。**不**用 macOS 15 编译成功替代运行时验收。
+**BLOCKED**。本机 macOS 27.0.1；Parallels 仅有 Windows 11 虚拟机，无 macOS 14.x 运行时或设备。未用"在 macOS 27 上编译通过"代替 14.x 运行时验收。
 
-## 7. 真实 DEVONthink 写调用计数
+## 7. DEVONthink 写调用计数
 
-**0 次**。精确表述：本会话没有发起任何 MCP 调用（读写都没有），因为主机上不存在 DEVONthink；这不是「边界拒绝了写调用」的证据，不能用于证明写路径安全。写路径的拒绝证据仍来自 I1-B2 现场与 `ImportWriteBoundary` 单测。
+**0**。本轮所有 DEVONthink 交互均为只读工具：`get_databases`、`get_record_properties`、`get_record_children`、`get_record_parents`、`get_imported_record_path`（以及 `tools/list`）。未出现 `import_file` / `create_group_path` / `set_record_custom_metadata` / `move_record` / `trash_record` 等写工具调用；未读取生产库；沙盒对象未增删改。
 
-## 8. 证据位置
+## 8. 状态汇总
 
-本机：`~/.forma/evidence/r1-batch2a/`
+| 项 | 状态 |
+| --- | --- |
+| Baseline 静态验收（bundle id / 签名 / 结构 / 依赖） | PASS |
+| Baseline 应用资源（SwiftPM resource bundle） | **FAIL**（缺 `Forma_FormaCore.bundle`） |
+| Baseline 启动路径 | **FAIL**（资源 bundle 缺失；修法见 §1） |
+| M01 书签授权 / 扫描 / 撤销 / 重授权 / 身份校验 | PASS（授权经 API 夹具；GUI 面板选目录 NOT_VERIFIED） |
+| M01 删除根目录的分类（`missing` vs `bookmark_stale`） | **FAIL** |
+| M01 外部卷 / iCloud | BLOCKED |
+| M02 添加 / 读取 / 更新 / 轮换 / 删除 / 迁移 / 回滚 | PASS |
+| M02 访问性属性回读 | **FAIL** |
+| M02 锁定态与 GUI 提示 | NOT_VERIFIED |
+| M03 initialize / tools / digest / 关闭 / 重连 / 并发 / 子进程终止 | PASS |
+| M04 启动 / 加载 / 恢复展示 / 拒绝 / 退出 / 重启 / 不自动重试 | PASS（补丁产物） |
+| M04 授权范围后的 GUI 回查 | NOT_VERIFIED（AX 文本输入不可驱动）；库级等价路径 PASS |
+| M04 截图 | BLOCKED |
+| M06 macOS 14.x | BLOCKED |
+| DEVONthink 写调用 | 0 |
+
+## 9. 只由 CI 证明、未在本机证明的部分
+
+- `codesign --verify --strict` 与结构断言：CI job 通过，本机复核亦通过（但见 §1 的启动缺陷）。
+- Developer ID 签名、公证、staple、干净机 Gatekeeper、DMG、更新机制：**NOT_VERIFIED**，未授权。
+- FormaCore 全量单元测试（550 用例）：CI 通过，本轮未重跑。
+
+## 10. 结论
+
+- **Read-only Integration（R1 Batch 2A 范围）：Verified with defects** —— M01/M02/M03/M04 的主路径已在真实 macOS 上取得证据，同时确认 4 个缺陷（2 个打包阻断、1 个可用性分类、1 个 Keychain 属性回读）。
+- **打包/启动**：当前 CI 产物在本机**无法启动**，因此 R1 的"打包基线"不能算通过；这必须先修，否则 Batch 2B 的 GUI 现场验证没有可信起点。
+- **未执行**：M05（真实写入）、R01–R03（签名/公证/干净机）。本轮**不宣布** Release Ready。
+
+## 11. 申请 R1 Batch 2B 前置条件
+
+1. 修复 §1 的资源 bundle 布局与拷贝，使产物同时满足"能启动"与"`codesign --strict` 通过"，并在 CI 增加启动冒烟。
+2. 修复 §2 的删除根目录分类（`.missing` 与 `.bookmark_stale` 可区分）。
+3. 决定 §3 的访问性回读方案（修实现或明确改为不可回读并调整契约/测试）。
+4. 补齐 M04 的 GUI 输入验证手段（可用 UI 测试或显式调试入口），因为 Accessibility 文本注入不能驱动当前 SwiftUI 绑定。
+5. 提供 macOS 14.x 设备或虚拟机以完成 M06。
+
+## 12. 上一轮（2026-11-14）执行记录
+
+同一授权在 Linux DevBox 上执行，M01/M02/M03/M04/M06 全部 BLOCKED（无 Darwin、无 Security/AppKit、无 DEVONthink、无 `codesign`），仅完成 `.app` 静态验收。该轮的阻塞证据保留在对应 PR #86 的正文中，结论已被本文取代。
+
+## 13. 证据索引（本机）
 
 | 文件 | 内容 |
 | --- | --- |
-| `host.txt` | 内核、工具缺失、DEVONthink 缺失、SSH 认证失败 |
-| `baseline.txt` | `dev`/`main` SHA、CI run、开放 PR 数、冻结文件 0 变更 |
-| `bundle.txt` | 产物来源、结构、`file` 输出、Info.plist 全量键值、`LC_CODE_SIGNATURE`、CI `codesign` 摘要 |
-
-仓库只提交本报告，不含原始日志与任何本机路径。
-
-## 9. 逐项结论
-
-| 项 | 结论 |
-| --- | --- |
-| §1 Bundle ID / 结构 / 签名结构 / 资源 | **PASS** |
-| §1 ad-hoc 签名有效性 | **macOS CI Verified**（非本机） |
-| §1 启动路径 / 其他实例 | **BLOCKED** |
-| M01 Bookmark | **BLOCKED** |
-| M02 Keychain | **BLOCKED** |
-| M03 MCP Process | **BLOCKED** |
-| M04 App Lifecycle | **BLOCKED** |
-| M06 macOS 14.x | **BLOCKED** |
-| 真实写入计数 | 0（未执行） |
-
-## 10. 关于 R1 Batch 2B
-
-**不能申请。** Batch 2B 的前置是 2A 的现场结论；2A 在本会话完全 BLOCKED，没有产生任何可用于判断 2B 范围的现场事实。
-
-需要的执行环境：一台可交互的 macOS 14+ 机器，装有 DEVONthink 4.4.2（或记录实际版本）、可登录的桌面会话、可用的 Developer ID 无关的 ad-hoc 构建（CI 产物即可）、以及一个全新的合成来源目录。
-
-## 11. 在 macOS 上的复跑程序（下一次会话直接执行）
-
-1. 取 CI 产物或本地构建：`sh scripts/build_app.sh`（或 `gh run download <run-id> -n Forma-app-adhoc`）。
-2. 记录环境：`sw_vers`、`system_profiler SPSoftwareDataType`、`mdls -name kMDItemVersion /Applications/DEVONthink.app`、`codesign -dv --verbose=4 Forma.app`、`spctl -a -vv Forma.app`。
-3. 启动前确认无其他实例：`pgrep -fl 'Forma.app/Contents/MacOS/Forma'`。
-4. 启动应用（`open Forma.app`），确认 Workspace 加载与恢复横幅（无未决操作时应不显示）。
-5. M01：新建合成目录 → 添加 → 扫描 → 在「系统设置 → 隐私与安全性 → 文件与文件夹」撤销该目录 → 再扫描（应 `.incomplete` 且无 `.missing`）→ 重新添加授权 → 重扫。
-6. M02：用独立 service/account（如 `io.github.skyline-gazer.forma.test`）执行 `security add-generic-password` / `find` / `delete`，并记录 `kSecAttrAccessible`；锁定态用「锁屏后读取」观察，若无法稳定复现则记 NOT_VERIFIED。
-7. M03：用应用内「DEVONthink MCP」发现按钮建立只读连接；记录 `initialize`/`tools/list` 结果与 schema digest；用 `pkill -f 'DEVONthink MCP --stdio'` **只终止本次启动的子进程**（先 `pgrep -P` 确认父进程是本次 Forma 实例），再触发一次发现以验证重建。
-8. M04：正常退出 → 确认 `pgrep` 无残留子进程 → 重启 → 确认恢复横幅与 `verify_required` 计数；未授权回查应显示 `no_authorized_scope`。
-9. 证据写入 `~/.forma/evidence/r1-batch2a/`，仓库只提交脱敏报告。
-
-每一步都要记录：GUI 实际显示、持久化数据变化、MCP 真实调用、以及是否涉及写入中恢复（本批不应涉及）。
-
-## 12. Mac Agent 验收入口（Batch 2A 工程完成后）
-
-工程部分已实现（T05 #87 / T06 #88 / T04 接线 #89），现场验证仍未执行。在真实 macOS 上按下面顺序执行即可，不需要再写代码。
-
-### 12.1 前置
-
-- macOS 14+、DEVONthink 4.4.2（记录实际版本）、可登录桌面会话。
-- 构建：`sh scripts/build_app.sh`（或 `gh run download <run-id> -n Forma-app-adhoc`）。
-- 记录：`sw_vers`、`system_profiler SPSoftwareDataType`、`codesign -dv --verbose=4 Forma.app`、`spctl -a -vv Forma.app`。
-
-### 12.2 书签（M01 / T05）
-
-1. 新建合成目录（例如 `~/FormaBatch2A/source`，放 2–3 个文本文件）。
-2. 应用内 **Add Source…** 选择它 → **Scan** → 状态应为 `Scan complete`，侧栏无警告图标。
-3. 在「系统设置 → 隐私与安全性 → 文件与文件夹」中撤销该目录（或删除目录后重建同名空目录）。
-4. 再 **Scan**：应显示 `Incomplete scan`；横幅标题为「Access was revoked」或「Folder not found」；历史条目**不得**变成 `Missing`。
-5. 点 **Reauthorize…** 重新选择**同一目录**：横幅消失、状态回到 `Scan complete`。
-6. 再点 **Reauthorize…** 但选择**另一个目录**：应提示「That folder is not the source this entry was registered from.」，且原来源仍可用（不静默替换）。
-
-### 12.3 Keychain（M02 / T06）
-
-- 自动化入口：`swift test --filter KeychainCredentialStoreTests`（真实 login keychain，使用一次性合成 service 并在用后删除）。
-- 手工入口：应用 Settings 中保存/读取 API key；随后 `security find-generic-password -s com.skyline-gazer.forma.provider-api-key` 应能看到条目（**不要**删除真实条目）。
-- 锁定态：锁屏后触发一次读取，记录错误是否为 `credential_locked`；无法稳定复现则记 **NOT_VERIFIED**。
-- 已知限制：文件型 login keychain 不回读 `kSecAttrAccessible`；真实属性验证需要 data protection keychain 或真机人工确认。
-
-### 12.4 MCP（M03）
-
-1. 应用内「DEVONthink MCP」发现按钮：记录 `initialize`/`tools/list` 的版本与工具数。
-2. `pgrep -fl 'DEVONthink MCP --stdio'` 记录子进程；`pgrep -P <Forma pid>` 确认归属。
-3. 只终止本次实例的子进程（`kill <pid>`），再点一次发现：应建立新连接并重新协商；**不得**终止 DEVONthink 主程序或他人会话的子进程。
-4. 记录 schema digest 与 B1/B2 基线是否一致（漂移时写侧应拒绝写入，但本批不触发写入）。
-
-### 12.5 恢复回查（M04 / T04）
-
-1. 正常启动，确认恢复横幅（无未决操作时不应出现）。
-2. 制造未决操作（仅测试机）：备份 `~/Library/Application Support/Forma/workspace.sqlite` 后，用 `sqlite3` 插入一条 `verify_required` 行（`import_runs` + `import_operations`，`key_digest` 用任意合成串；`target_database` 填隔离库 UUID；`target_group_path` 填 `["Forma_I1B2","r1"]`）。
-3. 重启应用：横幅应显示 `outcome unknown`，且 **Recheck read-only** 在未确认范围时不可用。
-4. 点 **Read Scope…** 填隔离库 UUID / 名称 / `Forma_I1B2/r1` → 确认；**Recheck read-only** 变为可用。
-5. 点击回查：无 `actual_uuid` 时结果应为 `unverifiable`（原因 `no_record_uuid`），操作**保持** `verify_required`；若把 `actual_uuid` 填成 B2 记录之一并把 `source_sha256` 填成该记录源文件 SHA，则应得到 `verified`。
-6. 确认没有新的 DEVONthink 记录产生，`import_operations` 行数不变（除手工插入的那一条）。
-
-### 12.6 退出（M04）
-
-- 正常退出（⌘Q）：`pgrep -fl 'Forma.app/Contents/MacOS/Forma'` 与 MCP 子进程都应消失；重启后横幅状态与退出前一致。
-- 强制退出（Activity Monitor）：重启后仍能看到未决操作（Ledger 清扫生效）。
-
-### 12.7 证据
-
-写入 `~/.forma/evidence/r1-batch2a/`：`versions.txt`、`bookmark-*.txt`、`keychain-*.txt`、`mcp-*.txt`、`recovery-*.txt`、`screenshots/`。仓库只提交脱敏报告。
+| `m01-bookmark.json` / `m01b-identity.json` | 书签授权、incomplete、重授权、身份变化、删除/移动 |
+| `m02-keychain.txt` / `m02-keychain.json` | Keychain 生命周期与可访问性回读 |
+| `m03-client.json` | 客户端 initialize / tools / digest / 重连 / 并发 / 子进程终止 |
+| `m03-mcp.json` / `m03-schema.json` | 原生 JSON-RPC 探索与 schema 对照 |
+| `m04-review.txt` | 库级只读回查（verified / mismatch / outsideScope） |
+| `ax-empty.txt` / `ax-pending.txt` | GUI 可访问性树（空库、未决恢复） |
+| `m04/workspace.sqlite`、`m04/app-workspace-before.sqlite` | 合成 ledger 夹具与测试前的应用库备份 |
+| `app/` | CI 产物重建的 `.app`（含补丁 bundle） |
