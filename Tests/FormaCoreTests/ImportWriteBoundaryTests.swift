@@ -50,7 +50,8 @@ struct ImportWriteBoundaryTests {
     /// A stub whose only job is to return a record from a database the scope
     /// does not own, so the boundary's independent check is the only thing that
     /// can catch it.
-    actor ForeignDatabaseTransport: ImportWriteTransport {
+    actor ForeignDatabaseTransport: ImportWriteSurface {
+        private(set) var createGroupCalls = 0
         private(set) var lookupCalls = 0
         private(set) var createCalls = 0
         private(set) var metadataCalls = 0
@@ -74,6 +75,11 @@ struct ImportWriteBoundaryTests {
 
         func writeMetadata(_ request: ImportMetadataRequest) async throws {
             metadataCalls += 1
+        }
+
+        func createGroup(database: String, path: [String]) async throws -> String {
+            createGroupCalls += 1
+            return "group-foreign"
         }
     }
 
@@ -236,6 +242,33 @@ struct ImportWriteBoundaryTests {
         #expect(await base.metadataCalls == 1)
         #expect(await authorization.grantedCount == 0) // metadata grants do not consume the record budget
     }
+    // MARK: - Group creation
+
+    @Test func groupCreationPassesThePermitAndReachesTheTransportOnce() async throws {
+        let base = FakeImportTransport()
+        let authorization = ImportWriteAuthorization(scope: Self.scope())
+        let guarded = GuardedImportWriteTransport(base: base, authorization: authorization,
+                                                  sourcePath: { _ in Self.approvedPath })
+        _ = try await guarded.createGroup(database: Self.database, path: Self.prefix)
+        #expect(await base.createGroupCalls == 1)
+        #expect(await authorization.createdGroups == 1)
+    }
+
+    @Test func groupCreationOutsideThePrefixNeverReachesTheTransport() async throws {
+        let base = FakeImportTransport()
+        let authorization = ImportWriteAuthorization(scope: Self.scope())
+        let guarded = GuardedImportWriteTransport(base: base, authorization: authorization,
+                                                  sourcePath: { _ in Self.approvedPath })
+        await #expect(throws: ImportWriteRefusal.self) {
+            _ = try await guarded.createGroup(database: Self.database, path: ["Somewhere", "else"])
+        }
+        await #expect(throws: ImportWriteRefusal.self) {
+            _ = try await guarded.createGroup(database: Self.foreignDatabase, path: Self.prefix)
+        }
+        #expect(await base.createGroupCalls == 0)
+        #expect(await authorization.createdGroups == 0)
+    }
+
 
     // MARK: - Budgets
 

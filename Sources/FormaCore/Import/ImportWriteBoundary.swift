@@ -267,19 +267,27 @@ public actor ImportWriteAuthorization {
 /// The decorator exists so "denied before the call" is a property of the type
 /// system's ordinary path rather than a convention: there is exactly one place
 /// that invokes the wrapped transport, and it is downstream of `permit`.
-public actor GuardedImportWriteTransport: ImportWriteTransport {
-    private let base: any ImportWriteTransport
+public actor GuardedImportWriteTransport: ImportWriteSurface {
+    private let base: any ImportWriteSurface
     private let authorization: ImportWriteAuthorization
     /// Maps a source binding to the absolute path the adapter is about to send.
     /// Returning nil refuses the import instead of guessing a path.
     private let sourcePath: @Sendable (ImportSourceBinding) -> String?
     private(set) var deniedCalls = 0
 
-    public init(base: any ImportWriteTransport, authorization: ImportWriteAuthorization,
+    public init(base: any ImportWriteSurface, authorization: ImportWriteAuthorization,
                 sourcePath: @escaping @Sendable (ImportSourceBinding) -> String?) {
         self.base = base
         self.authorization = authorization
         self.sourcePath = sourcePath
+    }
+
+    /// Group creation goes through the same permit as every other write: there
+    /// is no path to the transport that skips the boundary.
+    public func createGroup(database: String, path: [String]) async throws -> String {
+        _ = try await authorization.permit(.createGroup(
+            location: path.joined(separator: "/"), database: database))
+        return try await base.createGroup(database: database, path: path)
     }
 
     public func lookup(_ query: ImportLookupQuery) async throws -> ImportLookupResult {

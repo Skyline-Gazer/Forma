@@ -8,7 +8,7 @@ import Foundation
 /// "created, then the connection dropped", "the lookup timed out", and "the
 /// record exists but the metadata write never landed". A real client cannot be
 /// asked for those on demand, and a fake that only ever succeeds proves nothing.
-actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
+actor FakeImportTransport: ImportWriteSurface, ImportReadTransport {
     enum Fault: Sendable, Equatable {
         case none
         /// The record is created and then the call throws: the crash window.
@@ -34,6 +34,8 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
     private var records: [String: Stored] = [:]
     private var next = 0
     private(set) var createCalls = 0
+    private(set) var createGroupCalls = 0
+    private(set) var createdGroupPaths: [[String]] = []
     private(set) var lookupCalls = 0
     private(set) var metadataCalls = 0
     private(set) var readCalls = 0
@@ -103,6 +105,13 @@ actor FakeImportTransport: ImportWriteTransport, ImportReadTransport {
                                      shaVerified: $0.shaVerified, associationBasis: $0.associationBasis)
             }
         return ImportLookupResult(records: matches, conclusive: !lookupInconclusive)
+    }
+
+    func createGroup(database: String, path: [String]) async throws -> String {
+        createGroupCalls += 1
+        createdGroupPaths.append(path)
+        events.append("createGroup")
+        return "group-\(path.joined(separator: "/"))"
     }
 
     func create(_ request: ImportCreateRequest) async throws -> String {

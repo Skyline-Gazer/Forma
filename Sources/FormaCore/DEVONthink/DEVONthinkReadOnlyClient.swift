@@ -92,6 +92,7 @@ private enum ReadTool: String {
     case parents = "get_record_parents"
     case children = "get_record_children"
     case customMetadata = "get_record_custom_metadata"
+    case contentPath = "get_imported_record_path"
     case fieldDefinitions = "list_custom_metadata_fields"
 
     func accepts(_ schema: MCPValue) -> Bool {
@@ -107,6 +108,7 @@ private enum ReadTool: String {
         case .parents: sample = batch.merging(["kind": .string("groups")]) { first, _ in first }
         case .children: sample = page.merging(["uuid": id]) { first, _ in first }
         case .customMetadata: sample = batch
+        case .contentPath: sample = record
         case .fieldDefinitions: sample = ["include_disabled": .boolean(true)]
         }
         return InputSchema.accepts(sample, schema: schema)
@@ -283,6 +285,21 @@ public actor DEVONthinkReadOnlyClient {
         return try Dictionary(uniqueKeysWithValues: DEVONthinkMetadataField.allCases.map { field in
             (field, try Self.metadataValue(metadata[field.rawValue]))
         })
+    }
+
+    /// The on-disk path of a record's stored bytes, for a host-side SHA-256.
+    ///
+    /// The tool is read-only, but the bytes it names live inside the database
+    /// package: this method returns the path and never reads or writes there.
+    /// `nil` means the target cannot expose bytes (groups, smart groups), which
+    /// must stay `hash_unverified` rather than being guessed.
+    public func contentPath(of id: UUID, in scope: DEVONthinkReadScope) async throws -> String? {
+        let result = try await call(.contentPath, Self.recordArguments(id, scope: scope))
+        guard let row = result.object, let recordID = Self.uuid(row["uuid"]) else {
+            throw FormaError.invalidResponse
+        }
+        guard recordID == id else { throw FormaError.unauthorized }
+        return try Self.optionalString(row["path"])
     }
 
     public func metadataFieldDefinitions(in scope: DEVONthinkReadScope) async throws -> [DEVONthinkMetadataFieldDefinition] {
