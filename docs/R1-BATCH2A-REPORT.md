@@ -38,6 +38,11 @@
 | 启动路径 | **BLOCKED**：无法在非 macOS 上启动 `.app` | — |
 | 是否存在其他 Forma 实例 | **BLOCKED**：无 macOS 进程视图 | — |
 | `LSMinimumSystemVersion` | `14.0`（声明值，非运行验证） | `Info.plist` |
+| 链接依赖 | **PASS**：23 个动态库，全部为 `/usr/lib` 或 `/System/Library`；**未引用 DEVONthink**（不打包第三方可执行文件） | Mach-O `LC_LOAD_DYLIB` 解析 |
+| Info.plist 与仓库一致 | **PASS**：产物 `Info.plist` 与 `FormaApp/Info.plist` 逐键相同 | 两边解析比对 |
+| 内嵌 rpath | **观察（非失败）**：含 `/Applications/Xcode_26.3.app/…/swift-6.2/macosx` 构建机工具链路径 | 见下方说明 |
+
+关于 rpath：`/usr/lib/swift` 与 `@loader_path` 存在，Swift 运行库在系统路径可解析；工具链路径在用户机上通常不存在，属于"构建机残留"。它不是本轮失败项（ad-hoc 开发包不发行），但**发行前必须**在干净机上验证解析行为，必要时规范化/剥离 rpath（Batch 2B / R01 项，本轮不改代码）。
 
 `.app` 来自 CI 产物（`gh run download`），不是本地重新构建：本机没有 Swift 工具链，按仓库脚本构建同样不可执行。
 
