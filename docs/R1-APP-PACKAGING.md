@@ -29,7 +29,7 @@ Forma.app/
 | `LSApplicationCategoryType` | `public.app-category.productivity` | App Store 元数据兼容，当前不提交 |
 | `NSPrincipalClass` | `NSApplication` | SwiftUI `App` 生命周期进入 AppKit 事件循环 |
 | `CFBundleIconFile` | `AppIcon` | 资源入口已接线；图形资产未提供，缺省时使用系统通用图标 |
-| `NSSupportsSuddenTermination` | `false` | 突然终止会跳过 `applicationWillTerminate`（以及任何 AppKit 终止回调），而退出时必须在其中取消任务并关闭 MCP 子进程（T04） |
+| `NSSupportsSuddenTermination` | `false` | 突然终止会跳过 `applicationShouldTerminate`，而退出时必须停止 MCP 子进程并释放写租约（T04） |
 | `NSSupportsAutomaticTermination` | `false` | 同上 |
 
 ## 2. Bundle identifier 兼容性报告

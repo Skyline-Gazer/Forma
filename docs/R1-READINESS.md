@@ -80,12 +80,10 @@
 
 ### 1.7 退出时保存
 
-> 本节记录 Batch 1 之前的审计结论；T04 已实现退出接线，现状见本节末的「实现后」。
-
-- （审计时）`@main struct FormaApplication: App` 只有 `Window` 与 `Settings` 两个 scene；无 `NSApplicationDelegateAdaptor`，无 `applicationShouldTerminate`，无 `applicationWillTerminate`。
+- `@main struct FormaApplication: App` 只有 `Window` 与 `Settings` 两个 scene；无 `NSApplicationDelegateAdaptor`，无 `applicationShouldTerminate`，无 `applicationWillTerminate`。
 - `WorkspaceAreas` 用 `.onDisappear { model.cancelAll() }` 取消 `work`/`fileWork`/`auxWork`。
 - 已持久化的只有：扫描状态（`scans.state='scanning'` 下次打开被改成 `interrupted`）、`MappingStore.markInterruptedRuns`、UI 选择（`UserDefaults`）。
-- **实现后（T04）**：`NSApplicationDelegateAdaptor(FormaAppDelegate.self)` 接管启动与退出；清理在 `applicationWillTerminate` 中**同步**执行——取消任务、关闭 discovery 的 MCP 连接——不做任何等待，因此不可能阻塞退出。`applicationShouldTerminate` / `terminateLater` 未使用。启动时调用 `ImportRecovery.open` 并呈现六态；Intent/Ledger 先落库，退出不承担写状态。
+- **未实现**：任何“退出时把当前任务写成可恢复状态”的钩子；若将来 Import 在途，退出等于把不确定性留给下次启动的清扫。
 
 ### 1.8 下次启动恢复
 
@@ -126,7 +124,7 @@
 
 **正常退出**
 
-- **实现选择（T04）**：清理放在 `applicationWillTerminate`，同步执行 `cancelAll()` 与关闭 discovery 的 MCP 连接，**不做任何等待**。原先设想的 `applicationShouldTerminate` + `.terminateLater` 没有采用：它需要异步回执，既容易把退出变成等待，也让"不阻塞"依赖实现细节；`applicationWillTerminate` 在类型上就不可能延迟退出。
+- `NSApplicationDelegateAdaptor` + `applicationShouldTerminate` → 返回 `.terminateLater`：先 `cancelAll()`，关闭 MCP 子进程，释放写租约（`ImportSingleWriter.release`），再 `reply(toApplicationShouldTerminate: true)`。
 - **不**在退出时改写相位：在途写的不确定性由下次启动的统一清扫处理（一处逻辑，避免两处漂移）。
 - 不等待网络、不做“保存中”阻塞：每一步已经先落库，退出只需要停止新增动作。
 
@@ -239,9 +237,9 @@ R1 交付物（技术侧）：`.app` bundle 布局、`Info.plist`（bundle id、
 | R1-T01 | 真实只读适配器 `DEVONthinkImportReadAdapter: ImportReadTransport`（读属性/父组/`contentPath` + 宿主只读 SHA） | 无 | DevBox + macOS CI | Owner（R1 开发） | 类型上不命名任何写工具；假传输测试覆盖 `shaVerified=false` 路径；CI 绿 |
 | R1-T02 | 现场运行入口（显式 opt-in、默认拒绝、复用 `ImportWriteAuthorization`） | T01 | DevBox | Owner（R1 开发） | 无授权时运行即拒绝且零调用；计划输出可 dry-run |
 | R1-T03 | `MCPConnectionSupervisor`：ping、退避重建、写侧不重发、终态错误可恢复 | 无 | DevBox | Owner（R1 开发） | Fake 子进程注入断连/超时；读侧恢复、写侧返回 `verify_required` |
-| R1-T04 | 退出/启动接线：`applicationWillTerminate`、`ImportRecovery.open`、待核查横幅、只读回查入口 | T03 | DevBox + macOS CI | Owner（R1 开发） | 单测覆盖“启动即扫、退出不写”；重启后 `verify_required` 计数正确 |
-| R1-T05 | 书签失效恢复：可用性分类、身份校验的重授权、GUI 引导 | 无 | DevBox | Owner（R1 开发） | stale/撤权可区分；异目录拒绝且不改行；不误标 `.missing` |
-| R1-T06 | Keychain 生命周期：设备专用可访问性、删除/轮换、锁定态、只读 legacy 探测、可回滚迁移接口（**不改 service 名、不自动迁移**） | 无 | DevBox | Owner（R1 开发） | 合成 service 往返；锁定 ≠ 缺失；迁移保留 legacy |
+| R1-T04 | 退出/启动接线：`applicationShouldTerminate`、`ImportRecovery.open`、待核查横幅 | T03 | DevBox + macOS CI | Owner（R1 开发） | 单测覆盖“启动即扫、退出不写”；重启后 `verify_required` 计数正确 |
+| R1-T05 | 书签失效恢复流程 + `security_scoped=0` 的开发构建标识 | 无 | DevBox | Owner（R1 开发） | stale → 明确 `.unauthorized` + UI 引导；不误标 `.missing` |
+| R1-T06 | Keychain：bundle id 定案、service 名迁移、`kSecAttrAccessible`、删除/轮换 | T07 定案 | DevBox + Real macOS | Owner（R1 开发） | 旧密钥可读可迁移；锁定态错误可读；无明文落盘 |
 | R1-T07 | 发行打包：`Info.plist`、entitlements、图标、`.app` 组装、`codesign`/`notarytool` 脚本 | 无 | DevBox + macOS CI | Owner（R1 开发） | CI 产出可 `codesign -dv` 的 `.app`；`plutil -lint` 通过 |
 | R1-T08 | 诊断与脱敏：stderr 环形缓冲、日志字段白名单、隐私清单草案 | T03 | DevBox | Owner（R1 开发） | canary 测试证明路径/UUID/凭据不进日志 |
 | R1-M01 | 书签授权、撤销、恢复、外部卷、iCloud 现场验证 | T05 | Real macOS | Owner | 每步记录：撤销后扫描 `.incomplete` 且无 `.missing`；恢复后重扫一致 |
@@ -271,26 +269,12 @@ Batch 1 未触碰的边界：无真实 DEVONthink 写入、无写预算消耗、
 
 仍未验证：一切**真实 macOS** 项（M01–M06）与**发行环境**项（R01–R03）；`docs/R1-BATCH1-HANDOFF.md` 是接续入口。
 
-### 5.2 Batch 2A 工程记录（2026-11-14）
-
-Owner 另行授权 Batch 2A 的**无真实写入工程**：T05、T06、T04 补齐（只读 Recovery 接线）与文档一致性。现场验证仍为 BLOCKED（执行主机不是 macOS，见 `docs/R1-BATCH2A-REPORT.md`）。
-
-| Task | 状态 | 交付 |
-| --- | --- | --- |
-| R1-T05 | **DevBox Implemented · macOS CI Verified** | `SourceRootAvailability` / `SourceScopeStatus` / `reauthorize(scope:with:)` + 侧栏与横幅（PR #87） |
-| R1-T06 | **DevBox Implemented · macOS CI Verified** | `KeychainCredentialStore`（device-only、删除/轮换、锁定态、legacy 只读探测、可回滚迁移接口）+ 11 例测试（PR #88） |
-| R1-T04 补齐 | **DevBox Implemented · macOS CI Verified** | `ImportRecoveryScopeConfirmation` / `ImportRecoveryCoordinator` + 读范围确认表单与实际回查（PR #89） |
-
-边界：未改 Keychain service 名、未自动迁移、未触碰真实凭据、未发起任何 DEVONthink 写、未开放 Import 写入。
-
-仍未验证：M01–M06 的真实 macOS 行为（撤销授权、stale security-scoped bookmark、锁定 Keychain、真实 MCP 回查、GUI 交互）与 R01–R03。
-
 ## 6. 需要 Owner 决策的事项
 
-1. ~~是否正式授权 R1 开发~~ → **Batch 1 已完成（§5.1）；Batch 2A 的工程部分已完成（§5.2）**。**真实 macOS 现场验证仍待执行；Batch 2B 未授权。**
-2. ~~建议分两批~~ → Batch 1（T01–T04、T07、T08）与 Batch 2A 工程（T05、T06、T04 补齐）均已完成；剩余为真实 macOS 现场（M01–M06）与发行环境（R01–R03）。
+1. ~~是否正式授权 R1 开发~~ → **已授权 Batch 1（2026-11-14）**，工程部分已完成（§5.1）。**Batch 2 仍未授权**。
+2. 若授权：建议分两批——**批次 1** 仅 DevBox + macOS CI 可完成项（T01–T04、T07、T08，已完成）；**批次 2** 真实 macOS 与发行项（T05/T06 的现场部分、M01–M06、R01–R03），等待授权。
 3. **bundle identifier 与发行渠道**：bundle id 必须在 Keychain service 迁移（T06）之前定案；渠道沿用 2026-11-12 决策，不因 R1 调查而改变。
-4. **Keychain 可访问性策略** → 已按候选值实现为 `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`（新条目）；如需改为 `AfterFirstUnlockThisDeviceOnly`，需 Owner 决定并作为一次显式变更。
+4. **Keychain 可访问性策略**：`WhenUnlocked`（更严，锁屏后探针失败）还是 `AfterFirstUnlockThisDeviceOnly`（更宽松，无后台 Worker 也可用）。
 5. **R1-M05 的写预算**：崩溃注入会产生真实记录，必须单独批准，且与 I1 剩余探针（响应前断连、`dropped_fields`、返回结构）分开审批，不合并预算。
 
 ## 7. 本次调查的验证状态
