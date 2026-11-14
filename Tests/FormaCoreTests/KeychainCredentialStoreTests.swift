@@ -191,7 +191,12 @@ struct KeychainCredentialStoreTests {
 
         try store.save("synthetic-key", for: .openAI)
         #expect(try store.load(for: .openAI) == "synthetic-key")
-        #expect(try store.accessibility(for: .openAI) == .whenUnlockedThisDeviceOnly)
+        // The file-based login keychain accepts `kSecAttrAccessible` but does not
+        // report it back, so on CI this is either absent or exactly what was
+        // requested. The in-memory test above pins the request itself; proving the
+        // stored attribute needs the data-protection keychain (real-macOS item M02).
+        let reported = try store.accessibility(for: .openAI)
+        #expect(reported == nil || reported == .whenUnlockedThisDeviceOnly)
 
         try store.rotate("rotated-key", for: .openAI)
         #expect(try store.load(for: .openAI) == "rotated-key")
