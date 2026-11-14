@@ -2,6 +2,8 @@
 
 状态：**开发用打包工程，非发行物**。
 
+> **2026-11-15 现场更正：**当前脚本产出的 bundle **不能启动**——`scripts/build_app.sh` 只拷贝 `Forma_FormaApp.bundle`，未拷贝 SwiftPM 为 FormaCore 生成的 `Forma_FormaCore.bundle`，应用在 `MappingProfile.shipped()` 处因 `NSBundle.module` 缺失而 `fatalError`；把该 bundle 补到 `.app` 根目录虽可启动，却会使 `codesign --verify --strict` 报 `unsealed contents present in the bundle root`。因此"能启动"与"可签名"当前互斥，见 `docs/R1-BATCH2A-REPORT.md` §1。
+
 - 本轮产出：`FormaApp/Info.plist`、`FormaApp/Forma.entitlements`、`scripts/build_app.sh`、CI `macOS app package` job。
 - 签名：**ad-hoc**（`codesign --sign -`），Hardened Runtime 已开启。
 - **未做**：Developer ID 证书、`notarytool` 公证、staple、Gatekeeper 干净机验证、DMG、更新机制、App Store 打包。
