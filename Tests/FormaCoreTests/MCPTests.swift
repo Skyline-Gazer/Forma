@@ -50,7 +50,7 @@ private func fake(_ script: String, timeout: Duration = .seconds(15), frameLimit
     next
     expect '"method":"tools/list"'
     expect '"cursor":"page-2"'
-    respond "$id" '{"tools":[{"name":"get_record_parents","annotations":{"readOnlyHint":true},"outputSchema":{"type":"object"},"inputSchema":{"type":"object","properties":{"uuid":{"type":"string"},"database_uuid":{"type":"string"},"kind":{"type":"string","enum":["groups","tags","both"]}}}}]}'
+    respond "$id" '{"tools":[{"name":"get_record_parents","annotations":{"readOnlyHint":true},"outputSchema":{"type":"object"},"inputSchema":{"type":"object","properties":{"uuids":{"type":"array","items":{"type":"string"},"maxItems":500},"database_uuid":{"type":"string"},"kind":{"type":"string","enum":["groups","tags","both"]}}}}]}'
     keep_open
     """#))
     let discovery = try await client.discover()
@@ -61,7 +61,7 @@ private func fake(_ script: String, timeout: Duration = .seconds(15), frameLimit
     #expect(discovery.availableReadOnlyTools == ["get_record_parents"])
     #expect(discovery.hasRecordParents)
     let parent = try #require(discovery.tools.first)
-    let expected = Data(#"{"properties":{"database_uuid":{"type":"string"},"kind":{"enum":["groups","tags","both"],"type":"string"},"uuid":{"type":"string"}},"type":"object"}"#.utf8)
+    let expected = Data(#"{"properties":{"database_uuid":{"type":"string"},"kind":{"enum":["groups","tags","both"],"type":"string"},"uuids":{"items":{"type":"string"},"maxItems":500,"type":"array"}},"type":"object"}"#.utf8)
     #expect(parent.inputSchema == expected)
     #expect(parent.inputSchemaSHA256 == SHA256.hash(data: expected).map { String(format: "%02x", $0) }.joined())
     #expect(parent.outputSchema == Data(#"{"type":"object"}"#.utf8))
@@ -115,8 +115,8 @@ private func fake(_ script: String, timeout: Duration = .seconds(15), frameLimit
 @Test func mcpReadsOnlyScopedPropertiesParentsChildrenAndMetadata() async throws {
     let client = DEVONthinkReadOnlyClient(configuration: fake(#"""
     initialize
-    respond "$id" '{"tools":[{"name":"get_record_properties","annotations":{"readOnlyHint":true},"inputSchema":{"type":"object","properties":{"uuid":{"type":"string"},"database_uuid":{"type":"string"}}}},{"name":"get_record_parents","annotations":{"readOnlyHint":true},"inputSchema":{"type":"object","properties":{"uuid":{"type":"string"},"database_uuid":{"type":"string"},"kind":{"type":"string","enum":["groups"]}}}},{"name":"get_record_children","annotations":{"readOnlyHint":true},"inputSchema":{"type":"object","properties":{"uuid":{"type":"string"},"limit":{"type":"integer"},"offset":{"type":"integer"}}}},{"name":"get_databases","annotations":{"readOnlyHint":true},"inputSchema":{"type":"object","properties":{"uuid":{"type":"string"}}}},{"name":"list_custom_metadata_fields","annotations":{"readOnlyHint":true},"inputSchema":{"type":"object","properties":{"include_disabled":{"type":"boolean"}}}}]}'
-    record='{"uuid":"00000000-0000-4000-8000-000000000002","databaseUUID":"00000000-0000-4000-8000-000000000001","name":"Fixture document","type":"pdf","customMetadata":{"projectname":"Sample","issuer":null,"department":"","completionyear":2030,"unrelated":"discard"}}'
+    respond "$id" '{"tools":[{"name":"get_record_properties","annotations":{"readOnlyHint":true},"inputSchema":{"type":"object","properties":{"uuid":{"type":"string"},"database_uuid":{"type":"string"}}}},{"name":"get_record_custom_metadata","annotations":{"readOnlyHint":true},"inputSchema":{"type":"object","properties":{"uuids":{"type":"array","items":{"type":"string"},"maxItems":500},"database_uuid":{"type":"string"}}}},{"name":"get_record_parents","annotations":{"readOnlyHint":true},"inputSchema":{"type":"object","properties":{"uuids":{"type":"array","items":{"type":"string"},"maxItems":500},"database_uuid":{"type":"string"},"kind":{"type":"string","enum":["groups","tags","both"]}}}},{"name":"get_record_children","annotations":{"readOnlyHint":true},"inputSchema":{"type":"object","properties":{"uuid":{"type":"string"},"limit":{"type":"integer"},"offset":{"type":"integer"}}}},{"name":"get_databases","annotations":{"readOnlyHint":true},"inputSchema":{"type":"object","properties":{"uuid":{"type":"string"}}}},{"name":"list_custom_metadata_fields","annotations":{"readOnlyHint":true},"inputSchema":{"type":"object","properties":{"include_disabled":{"type":"boolean"}}}}]}'
+    record='{"uuid":"00000000-0000-4000-8000-000000000002","databaseUUID":"00000000-0000-4000-8000-000000000001","name":"Fixture document","type":"pdf"}'
     group='{"uuid":"00000000-0000-4000-8000-000000000003","databaseUUID":"00000000-0000-4000-8000-000000000001","name":"Fixture group","type":"group"}'
     next
     expect '"name":"get_record_properties"'
@@ -124,12 +124,16 @@ private func fake(_ script: String, timeout: Duration = .seconds(15), frameLimit
     expect '"database_uuid":"00000000-0000-4000-8000-000000000001"'
     respond "$id" "{\"structuredContent\":$record}"
     next
+    expect '"name":"get_record_custom_metadata"'
+    expect '"uuids":["00000000-0000-4000-8000-000000000002"]'
+    respond "$id" '{"structuredContent":{"operation":"get_record_custom_metadata","succeeded":1,"failed":0,"results":[{"uuid":"00000000-0000-4000-8000-000000000002","metadata":{"projectname":"Sample","issuer":null,"department":"","completionyear":2030,"unrelated":"discard"}}]}}'
+    next
     expect '"name":"get_record_properties"'
     respond "$id" "{\"structuredContent\":$record}"
     next
     expect '"name":"get_record_parents"'
     expect '"kind":"groups"'
-    respond "$id" "{\"structuredContent\":{\"uuid\":\"00000000-0000-4000-8000-000000000002\",\"kind\":\"groups\",\"primary_parent\":$group,\"parents\":[$group],\"count\":1}}"
+    respond "$id" "{\"structuredContent\":{\"operation\":\"get_record_parents\",\"succeeded\":1,\"failed\":0,\"results\":[{\"uuid\":\"00000000-0000-4000-8000-000000000002\",\"kind\":\"groups\",\"primary_parent\":$group,\"parents\":[$group],\"count\":1}]}}"
     next
     expect '"name":"get_record_properties"'
     expect '"uuid":"00000000-0000-4000-8000-000000000003"'
@@ -166,6 +170,34 @@ private func fake(_ script: String, timeout: Duration = .seconds(15), frameLimit
     #expect(fields.first?.title == "Project")
     #expect(fields.last?.isDisabled == true)
     #expect(fields.last?.allowedValues == ["Sample"])
+    await client.close()
+}
+
+/// The live server answers `get_record_parents` and `get_record_custom_metadata` in their
+/// batch form, where the record UUID is echoed per entry rather than at the top level.
+/// A payload that binds to another record, or that reports a partial batch, is refused.
+@Test func mcpRefusesBatchPayloadsThatDoNotBindToTheRequestedRecord() async throws {
+    let client = DEVONthinkReadOnlyClient(configuration: fake(#"""
+    initialize
+    respond "$id" '{"tools":[{"name":"get_record_properties","annotations":{"readOnlyHint":true},"inputSchema":{"type":"object","properties":{"uuid":{"type":"string"},"database_uuid":{"type":"string"}}}},{"name":"get_record_custom_metadata","annotations":{"readOnlyHint":true},"inputSchema":{"type":"object","properties":{"uuids":{"type":"array","items":{"type":"string"},"maxItems":500},"database_uuid":{"type":"string"}}}},{"name":"get_record_parents","annotations":{"readOnlyHint":true},"inputSchema":{"type":"object","properties":{"uuids":{"type":"array","items":{"type":"string"},"maxItems":500},"database_uuid":{"type":"string"},"kind":{"type":"string","enum":["groups","tags","both"]}}}}]}'
+    record='{"uuid":"00000000-0000-4000-8000-000000000002","databaseUUID":"00000000-0000-4000-8000-000000000001","name":"Fixture document","type":"pdf"}'
+    next
+    expect '"name":"get_record_properties"'
+    respond "$id" "{\"structuredContent\":$record}"
+    next
+    expect '"name":"get_record_custom_metadata"'
+    respond "$id" '{"structuredContent":{"operation":"get_record_custom_metadata","succeeded":1,"failed":0,"results":[{"uuid":"00000000-0000-4000-8000-000000000009","metadata":{"projectname":"Other"}}]}}'
+    next
+    expect '"name":"get_record_properties"'
+    respond "$id" "{\"structuredContent\":$record}"
+    next
+    expect '"name":"get_record_parents"'
+    respond "$id" '{"structuredContent":{"operation":"get_record_parents","succeeded":0,"failed":1,"failed_uuids":["00000000-0000-4000-8000-000000000002"],"results":[]}}'
+    keep_open
+    """#))
+    _ = try await client.discover()
+    await #expect(throws: FormaError.invalidResponse) { try await client.metadata(of: recordID, in: scope) }
+    await #expect(throws: FormaError.invalidResponse) { try await client.parents(of: recordID, in: scope) }
     await client.close()
 }
 

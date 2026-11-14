@@ -91,19 +91,22 @@ private enum ReadTool: String {
     case properties = "get_record_properties"
     case parents = "get_record_parents"
     case children = "get_record_children"
+    case customMetadata = "get_record_custom_metadata"
     case fieldDefinitions = "list_custom_metadata_fields"
 
     func accepts(_ schema: MCPValue) -> Bool {
         let id = MCPValue.string("00000000-0000-4000-8000-000000000001")
         let page = ["offset": MCPValue.integer(0), "limit": .integer(1)]
         let record = ["uuid": id, "database_uuid": id]
+        let batch = ["uuids": MCPValue.array([id]), "database_uuid": id]
         let sample: [String: MCPValue]
         switch self {
         case .database: sample = ["uuid": id]
         case .search: sample = page.merging(["database_uuid": id, "query": .string("test")]) { first, _ in first }
         case .properties: sample = record
-        case .parents: sample = record.merging(["kind": .string("groups")]) { first, _ in first }
+        case .parents: sample = batch.merging(["kind": .string("groups")]) { first, _ in first }
         case .children: sample = page.merging(["uuid": id]) { first, _ in first }
+        case .customMetadata: sample = batch
         case .fieldDefinitions: sample = ["include_disabled": .boolean(true)]
         }
         return InputSchema.accepts(sample, schema: schema)
@@ -228,14 +231,21 @@ public actor DEVONthinkReadOnlyClient {
     }
 
     public func parents(of id: UUID, in scope: DEVONthinkReadScope) async throws -> DEVONthinkRecordParents {
-        var arguments = try Self.recordArguments(id, scope: scope)
+        guard scope.recordIDs.contains(id) else { throw FormaError.unauthorized }
+        // The single-record payload of this tool carries no record UUID of its own, so the
+        // batch form is used: its per-entry `uuid` is what binds the answer to the record
+        // that was asked for. See docs/I1-B1-CAPABILITY-DISCOVERY.md for the live shapes.
+        var arguments: [String: MCPValue] = ["uuids": .array([.string(id.uuidString)])]
+        arguments["database_uuid"] = .string(scope.databaseID.uuidString)
         arguments["kind"] = .string("groups")
         let session = try validatedConnection(for: .parents, arguments)
         // The relation payload can omit the source database even when its UUID is echoed.
         _ = try await record(id, in: scope)
         guard connection === session else { throw FormaError.disconnected }
         let result = try await call(.parents, arguments)
-        guard let row = result.object, let recordID = Self.uuid(row["uuid"]),
+        guard let envelope = result.object, let rows = envelope["results"]?.array, rows.count == 1,
+              envelope["succeeded"]?.integer == 1, envelope["failed"]?.integer == 0,
+              let row = rows.first?.object, let recordID = Self.uuid(row["uuid"]),
               row["kind"]?.string == "groups", let entries = row["parents"]?.array,
               row["count"]?.integer == entries.count else { throw FormaError.invalidResponse }
         guard recordID == id else { throw FormaError.unauthorized }
@@ -255,10 +265,21 @@ public actor DEVONthinkReadOnlyClient {
     }
 
     public func metadata(of id: UUID, in scope: DEVONthinkReadScope) async throws -> [DEVONthinkMetadataField: DEVONthinkMetadataValue] {
-        // The standalone metadata tool's single-record payload has no record or database identity.
-        // The properties response binds those identities to the returned custom metadata.
-        let (_, row) = try await properties(id, in: scope)
-        guard let metadata = row["customMetadata"]?.object else { throw FormaError.invalidResponse }
+        // The record properties bind the UUID to the authorized database; the metadata tool
+        // reports the field values. Its single-record payload carries no database identity,
+        // so the batch form is used and the returned UUID is checked against the record read.
+        _ = try await record(id, in: scope)
+        let arguments: [String: MCPValue] = [
+            "uuids": .array([.string(id.uuidString)]),
+            "database_uuid": .string(scope.databaseID.uuidString),
+        ]
+        let session = try validatedConnection(for: .customMetadata, arguments)
+        guard connection === session else { throw FormaError.disconnected }
+        let result = try await call(.customMetadata, arguments)
+        guard let envelope = result.object, let rows = envelope["results"]?.array, rows.count == 1,
+              envelope["succeeded"]?.integer == 1, envelope["failed"]?.integer == 0,
+              let row = rows.first?.object, let recordID = Self.uuid(row["uuid"]), recordID == id,
+              let metadata = row["metadata"]?.object else { throw FormaError.invalidResponse }
         return try Dictionary(uniqueKeysWithValues: DEVONthinkMetadataField.allCases.map { field in
             (field, try Self.metadataValue(metadata[field.rawValue]))
         })
@@ -470,6 +491,19 @@ private enum InputSchema {
                 && meetsBounds(number, constraints["minimum"], constraints["maximum"])
         case .boolean:
             return constraints["type"] == .string("boolean") && Set(constraints.keys).isSubset(of: base)
+        case .array(let elements):
+            // Only a homogeneous array of strings is emitted by this client, so only that
+            // shape is accepted; anything else fails closed before the request is sent.
+            guard constraints["type"] == .string("array"),
+                  Set(constraints.keys).isSubset(of: base.union(["items", "minItems", "maxItems"])),
+                  let items = constraints["items"]?.object,
+                  Set(items.keys).isSubset(of: base.union(["minLength", "maxLength"])) else { return false }
+            if let maximum = constraints["maxItems"]?.integer, elements.count > maximum { return false }
+            if let minimum = constraints["minItems"]?.integer, elements.count < minimum { return false }
+            return elements.allSatisfy { element in
+                guard case .string(let text) = element else { return false }
+                return accepts(.string(text), constraints: items)
+            }
         default: return false
         }
     }
