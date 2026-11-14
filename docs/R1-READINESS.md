@@ -147,13 +147,17 @@ stateDiagram-v2
     verify_required --> readback_verified: 回查证明已存在且一致
     verify_required --> skipped_verified: 回查证明已存在且等价
     verify_required --> conflict_hold: 已存在但不同
-    verify_required --> intent_persisted: 回查证明不存在且获新决定
+    verify_required --> failed: 回查证明不存在（不重写；需新的执行决定）
     readback_verified --> [*]
     skipped_verified --> [*]
     conflict_hold --> [*]
 ```
 
-关键约束：`verify_required → intent_persisted`（重新写入）**只能由人作出新决定**，不能由恢复流程自动发生；恢复只做只读。
+关键约束（与 `ImportLedger` 的 `ImportPhase.canTransition(to:)` 一致，由 `ImportLedgerTests.transitionShape` 与 `verifyRequiredReachability` 钉住）：
+
+- **不存在 `verify_required → intent_persisted`**。恢复流程只做只读，不能把一次未决操作推回"即将写入"。
+- 回查证明记录不存在时，操作进入 `failed(absent_after_unknown)`，**不重写**。
+- 再次写入必须是**新的执行决定**：只有多个键分量变化（新的 Manifest revision、目标关联等）后形成**新的 operation key**，并重新过 preflight 与授权；仅更换 operation ID 不能绕过 `key_digest` 的唯一约束（`recordIntent` 用该唯一索引拒绝第二次意图）。
 
 **未决 Import 操作恢复流程**
 
