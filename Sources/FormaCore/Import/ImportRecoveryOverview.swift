@@ -129,7 +129,7 @@ public struct ImportRecoveryScope: Sendable, Equatable {
 }
 
 public struct ImportRecoveryReviewResult: Sendable, Equatable {
-    public enum Outcome: String, Sendable, Equatable {
+    public enum Outcome: String, Sendable, Equatable, CaseIterable {
         /// The record exists and matches what the ledger says was intended.
         case verified
         /// The record exists but differs: a hold, never an overwrite.
