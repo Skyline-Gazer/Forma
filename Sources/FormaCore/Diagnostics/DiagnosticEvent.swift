@@ -43,6 +43,7 @@ public enum DiagnosticCode: String, Sendable, CaseIterable, Codable {
     case network
     case remoteStatus = "remote_status"
     case credentialMissing = "credential_missing"
+    case credentialLocked = "credential_locked"
     case invalidOutput = "invalid_output"
     case exhausted
     case degraded
@@ -65,6 +66,7 @@ public enum DiagnosticCode: String, Sendable, CaseIterable, Codable {
         case .network: self = .network
         case .remoteStatus: self = .remoteStatus
         case .credentialMissing: self = .credentialMissing
+        case .credentialLocked: self = .credentialLocked
         case .invalidOutput: self = .invalidOutput
         }
     }

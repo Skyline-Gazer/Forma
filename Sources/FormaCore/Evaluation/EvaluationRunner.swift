@@ -104,8 +104,10 @@ public enum EvaluationRunner {
                 return true
             case .remoteStatus(let status):
                 return status == 429 || status >= 500
-            case .cancelled, .refused, .unauthorized, .credentialMissing, .incompatible, .storage,
-                 .invalidSource, .sourceChanged, .hydrationPending:
+            case .cancelled, .refused, .unauthorized, .credentialMissing, .credentialLocked,
+                 .incompatible, .storage, .invalidSource, .sourceChanged, .hydrationPending:
+                // A locked keychain is not fixed by asking again; the user has to
+                // unlock it, so retrying only burns the budget.
                 return false
             }
         }
