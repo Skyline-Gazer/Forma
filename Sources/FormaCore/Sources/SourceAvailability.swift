@@ -123,74 +123,171 @@ extension SourceWorkspace {
 
     // MARK: - Probe
 
-    /// Classifies the root without throwing: a probe that throws is exactly the
-    /// case a person needs to be told about, not a reason to fail the screen.
-    static func availability(of root: StoredSourceRoot) -> SourceRootAvailability {
-        var stale = false
-        let options: URL.BookmarkResolutionOptions = root.securityScoped
-            ? [.withSecurityScope, .withoutUI] : [.withoutUI]
-        let url: URL
-        do {
-            url = try URL(resolvingBookmarkData: root.bookmark, options: options,
-                          bookmarkDataIsStale: &stale)
-        } catch {
-            return classify(error)
-        }
-        // The filesystem answer comes first. A bookmark can go stale because the
-        // folder was deleted, and "needs reauthorization" would be the wrong
-        // thing to tell someone whose folder is simply gone.
-        var accessing = false
-        if root.securityScoped {
-            accessing = url.startAccessingSecurityScopedResource()
-            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-            if !accessing {
-                return stale ? .bookmarkStale : .permissionDenied
-            }
+    /// What the probe knows about a registered root, without the bookmark.
+    ///
+    /// Split out so the classification can be tested against synthetic resolution
+    /// failures. A field machine produced the one that matters: a **deleted**
+    /// security-scoped bookmark fails with `NSCocoaErrorDomain 259`
+    /// (`NSFileReadUnknownError`), which says nothing about whether the folder
+    /// exists. Only the filesystem can answer that.
+    struct RootExpectation: Sendable, Equatable {
+        let identity: String
+        let caseSensitive: Bool?
+        let lastPath: String
+        let securityScoped: Bool
+    }
+
+    struct ProbedRoot: Sendable, Equatable {
+        let identity: String
+        let caseSensitive: Bool?
+        let hydrationPending: Bool
+
+        init(identity: String, caseSensitive: Bool?, hydrationPending: Bool) {
+            self.identity = identity
+            self.caseSensitive = caseSensitive
+            self.hydrationPending = hydrationPending
         }
 
-        do {
-            let selected = try SourceRootAccess(url)
-            guard selected.rootIdentity == root.identity,
-                  selected.caseSensitive == root.caseSensitive else {
-                return .identityChanged
-            }
-            if stale { return .bookmarkStale }
-            return selected.metadata.isHydrationPending ? .hydrationPending : .accessible
-        } catch let error as POSIXError {
-            switch error.code {
-            case .ENOENT, .ENOTDIR:
-                return .missing
-            case .EACCES, .EPERM:
-                return stale ? .bookmarkStale : .permissionDenied
-            default:
-                return stale ? .bookmarkStale : .unavailable
-            }
-        } catch {
-            return stale ? .bookmarkStale : .unavailable
+        init(_ url: URL) throws {
+            let access = try SourceRootAccess(url)
+            self.init(identity: access.rootIdentity, caseSensitive: access.caseSensitive,
+                      hydrationPending: access.metadata.isHydrationPending)
         }
     }
 
-    private static func classify(_ error: any Error) -> SourceRootAvailability {
+    /// Why a stored bookmark could not produce a URL. Deliberately coarse: the
+    /// filesystem probe, not the error code, decides between "gone" and "not
+    /// allowed", because the same deletion produces different codes depending on
+    /// whether the bookmark is security-scoped.
+    enum BookmarkFailure: Sendable, Equatable {
+        case noSuchFile
+        case noPermission
+        /// Anything the error code cannot decide — includes `NSCocoaErrorDomain
+        /// 259` for a deleted security-scoped bookmark.
+        case unknown
+    }
+
+    enum BookmarkOutcome: Sendable, Equatable {
+        case resolved(URL, stale: Bool)
+        case failed(BookmarkFailure)
+    }
+
+    /// Classifies the root without throwing: a probe that throws is exactly the
+    /// case a person needs to be told about, not a reason to fail the screen.
+    static func availability(of root: StoredSourceRoot) -> SourceRootAvailability {
+        let expectation = RootExpectation(identity: root.identity,
+                                          caseSensitive: root.caseSensitive,
+                                          lastPath: root.lastPath,
+                                          securityScoped: root.securityScoped)
+        var stale = false
+        let options: URL.BookmarkResolutionOptions = root.securityScoped
+            ? [.withSecurityScope, .withoutUI] : [.withoutUI]
+        let outcome: BookmarkOutcome
+        do {
+            let url = try URL(resolvingBookmarkData: root.bookmark, options: options,
+                              bookmarkDataIsStale: &stale)
+            outcome = .resolved(url, stale: stale)
+        } catch {
+            outcome = .failed(failure(from: error))
+        }
+
+        if case .resolved(let url, _) = outcome, root.securityScoped {
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+            if !accessing {
+                // The bookmark resolved but the grant did not: let the path probe
+                // decide between a revoked grant and a folder that is simply gone.
+                return classify(expectation: expectation, resolution: .failed(.noPermission),
+                                probe: probe)
+            }
+        }
+        return classify(expectation: expectation, resolution: outcome, probe: probe)
+    }
+
+    static func probe(_ url: URL) throws -> ProbedRoot { try ProbedRoot(url) }
+
+    /// Decides the availability from the resolution result and the filesystem.
+    ///
+    /// The order is the point: when the bookmark cannot be used, the **path** is
+    /// asked first. "Missing" is only concluded from the filesystem, never from a
+    /// bookmark error, and "renew your grant" is only said when the folder is
+    /// there and is provably the same folder.
+    static func classify(expectation: RootExpectation, resolution: BookmarkOutcome,
+                         probe: (URL) throws -> ProbedRoot) -> SourceRootAvailability {
+        switch resolution {
+        case .resolved(let url, let stale):
+            do {
+                let selected = try probe(url)
+                guard selected.identity == expectation.identity,
+                      selected.caseSensitive == expectation.caseSensitive else {
+                    return .identityChanged
+                }
+                if stale { return .bookmarkStale }
+                return selected.hydrationPending ? .hydrationPending : .accessible
+            } catch let error as POSIXError {
+                switch error.code {
+                case .ENOENT, .ENOTDIR:
+                    return .missing
+                case .EACCES, .EPERM:
+                    return stale ? .bookmarkStale : .permissionDenied
+                default:
+                    return stale ? .bookmarkStale : .unavailable
+                }
+            } catch {
+                return stale ? .bookmarkStale : .unavailable
+            }
+
+        case .failed(let failure):
+            let path = URL(fileURLWithPath: expectation.lastPath)
+            do {
+                let selected = try probe(path)
+                guard selected.identity == expectation.identity,
+                      selected.caseSensitive == expectation.caseSensitive else {
+                    return .identityChanged
+                }
+                return .bookmarkStale
+            } catch let error as POSIXError {
+                switch error.code {
+                case .ENOENT, .ENOTDIR:
+                    return .missing
+                case .EACCES, .EPERM:
+                    return .permissionDenied
+                default:
+                    break
+                }
+            } catch {
+                // A probe that cannot classify the path tells us nothing about the
+                // filesystem; fall through to what the bookmark error itself said.
+            }
+            switch failure {
+            case .noSuchFile: return .missing
+            case .noPermission: return .permissionDenied
+            case .unknown: return .unavailable
+            }
+        }
+    }
+
+    static func failure(from error: any Error) -> BookmarkFailure {
         if let cocoa = error as? CocoaError {
             switch cocoa.code {
             case .fileNoSuchFile, .fileReadNoSuchFile:
-                return .missing
+                return .noSuchFile
             case .fileReadNoPermission:
-                return .permissionDenied
+                return .noPermission
             default:
-                return .bookmarkStale
+                return .unknown
             }
         }
         if let posix = error as? POSIXError {
             switch posix.code {
             case .ENOENT, .ENOTDIR:
-                return .missing
+                return .noSuchFile
             case .EACCES, .EPERM:
-                return .permissionDenied
+                return .noPermission
             default:
-                return .bookmarkStale
+                return .unknown
             }
         }
-        return .bookmarkStale
+        return .unknown
     }
 }
