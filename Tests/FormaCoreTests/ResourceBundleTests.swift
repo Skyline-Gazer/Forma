@@ -41,4 +41,28 @@ struct ResourceBundleTests {
         _ = try CasePack.shipped()
         _ = try EligibilityPolicy.shipped()
     }
+
+    @Test func anAppWithoutTheResourceBundleIsReportedIncomplete() {
+        let app = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let result = ShippedResourceProbe.probe(appURL: app)
+        #expect(result.bundlePath == nil)
+        #expect(result.isComplete == false)
+        #expect(result.missing.count == ShippedResourceProbe.requiredFiles.count)
+    }
+
+    @Test func anAppWithTheBuiltBundleCanOpenEveryResource() throws {
+        let source = try #require(FormaResourceBundle.bundle?.bundleURL)
+        let app = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let target = ShippedResourceProbe.resourceBundleURL(in: app)
+        try FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: source, to: target)
+        defer { try? FileManager.default.removeItem(at: app) }
+
+        let result = ShippedResourceProbe.probe(appURL: app)
+        #expect(result.isComplete,
+                "missing=\(result.missing) unreadable=\(result.unreadable)")
+    }
 }
