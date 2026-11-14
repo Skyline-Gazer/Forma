@@ -26,6 +26,8 @@
 | 检查 | 结果 |
 | --- | --- |
 | Bundle ID / 签名 / 结构 | **PASS**（同上，CI 产物本机复核） |
+| 应用资源 | **FAIL**：产物内无 `Contents/Resources`（空目录被 artifact 上传丢弃），且**没有 `Forma_FormaCore.bundle`** |
+| 产物落地 | 观察：`gh run download` 解出的根是 `Contents/`（artifact 压平了 bundle 目录），本机重建为 `Forma.app/` 后再验签 |
 | 启动路径 | **FAIL** |
 | 是否存在其他实例 | **PASS**（启动前后均无） |
 
@@ -128,7 +130,7 @@ GUI 证据来自 Accessibility 树文本转储（`ax-empty.txt`、`ax-pending.tx
 | 不自动重试 Import | 两次启动后 `import_operations.phase` 仍为 `verify_required`，`import_attempts` 仍为 0，应用启动期间**未启动**任何 DEVONthink MCP 子进程 | PASS |
 | GUI 截图 | `screencapture` 被系统拒绝（无屏幕录制授权） | BLOCKED（以 AX 文本代替） |
 
-关于"未决 Intent 的制造"：只写入了**合成** ledger 行（`run` + `operation`，`phase=verify_required`、目标为沙盒库与 `Forma_I1B2/r1`、目标记录为 B2 现存合成记录之一），使用仓库自身 `ImportLedger` API 生成，未创建任何 DEVONthink 记录。应用数据库在测试前备份（`m04/app-workspace-before.sqlite`），测试后已还原（`scopes=0`、`import_operations=0`）。侧栏把触控夹具来源标为 "Access needs renewing"，属于"书签由另一个进程创建"的预期结果，不是产品缺陷。
+关于"未决 Intent 的制造"：只写入了**合成** ledger 行（`run` + `operation`，`phase=verify_required`、目标为沙盒库与 `Forma_I1B2/r1`、目标记录为 B2 现存合成记录之一），使用仓库自身 `ImportLedger` API 生成，未创建任何 DEVONthink 记录。应用数据库在测试前备份（`m04/app-workspace-before.sqlite`），测试后已还原（`scopes=0`、`import_operations=0`）。侧栏把夹具来源标为 "Access needs renewing"，属于"书签由另一个进程创建"的预期结果，不是产品缺陷。
 
 ## 6. M06 — macOS 14.x
 
@@ -143,6 +145,7 @@ GUI 证据来自 Accessibility 树文本转储（`ax-empty.txt`、`ax-pending.tx
 | 项 | 状态 |
 | --- | --- |
 | Baseline 静态验收（bundle id / 签名 / 结构 / 依赖） | PASS |
+| Baseline 应用资源（SwiftPM resource bundle） | **FAIL**（缺 `Forma_FormaCore.bundle`） |
 | Baseline 启动路径 | **FAIL**（资源 bundle 缺失；修法见 §1） |
 | M01 书签授权 / 扫描 / 撤销 / 重授权 / 身份校验 | PASS |
 | M01 删除根目录的分类（`missing` vs `bookmark_stale`） | **FAIL** |
