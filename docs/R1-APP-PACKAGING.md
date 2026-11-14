@@ -96,10 +96,12 @@ codesign --verify --strict --verbose=2 Forma.app
 
 | job | 内容 |
 | --- | --- |
-| `macOS app package` | `build_app.sh`（构建→组装→资源断言→ad-hoc 签名→严格验签）→ `verify_app_bundle.sh` → 上传 `build/*.app`（archive 根为 `Forma.app/`） |
-| `macOS app launch smoke` | 下载同一 artifact → 断言根目录是 `Forma.app` → 复验结构与严格签名 → `smoke_app.sh`：启动、存活 5 s、收集崩溃日志、清理进程与子进程 |
+| `macOS app package` | `build_app.sh`（构建→组装→资源断言→ad-hoc 签名→严格验签）→ `verify_app_bundle.sh` → 打包 `Forma-app-adhoc.tar.gz`（内含 `Forma.app/`）→ 上传 |
+| `macOS app launch smoke` | 下载同一 tar → 解压 → 断言 `Forma.app` 与可执行位 → 复验结构与严格签名 → `smoke_app.sh`：启动、存活 5 s、收集崩溃日志、清理进程与子进程 |
 
 `smoke_app.sh` 的退出码：`0` 通过；`1` 失败（未启动或观察期内退出）；`3` 当前会话没有 Aqua（GUI 不可用），此时**不宣称启动通过**，由运行者记录环境限制。
+
+为什么是 tar 而不是目录/zip：`upload-artifact` 的 zip 不保留 POSIX 权限，下载后的 `Contents/MacOS/Forma` 失去可执行位，无法启动；tar 保留权限，且解压根就是 `Forma.app/`。冒烟 job 因此运行的是**与上传内容一致**的产物，而不是事后修补过的副本。
 
 ## 6. 未验证项（不得视为发行就绪）
 
