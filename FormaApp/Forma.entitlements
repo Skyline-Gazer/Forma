@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Deliberately empty for the Developer ID channel.
+
+	  Hardened Runtime is a signing option (the runtime flag on codesign), not an
+	  entitlement. It does not restrict the child processes Forma starts: the
+	  DEVONthink MCP helper is a separate, signed executable launched through
+	  Process(), so no library-validation escape hatch is needed.
+
+	  No App Sandbox (com.apple.security.app-sandbox). If an App Store channel is
+	  ever chosen, sandbox plus security-scoped bookmarks are a separate,
+	  unverified workstream (docs/MACOS-VALIDATION-BACKLOG.md M8).
+
+	  No com.apple.security.automation.apple-events: Forma must not reach
+	  DEVONthink through AppleScript.
+
+	  No full-disk access: the only directories Forma reads are the ones the user
+	  grants through a panel, stored as security-scoped bookmarks.
+	-->
+</dict>
+</plist>
