@@ -1,14 +1,14 @@
 # I1-B2 Preflight 报告（只读）
 
-状态：**Guard Ready · Database Binding BLOCKED**（Owner 尚未创建隔离库）。
+状态：**B2 Preflight Ready — Awaiting Owner Write Authorization**
 
-结论先说：默认拒绝边界已实现并有 **14 例**拦截测试；但 `Forma_I1B2_Sandbox` 在 DEVONthink 中**尚不存在**，因此 §2 的库绑定无法完成，数据库级流程按要求停止。Owner 在 GUI 创建该库后，只需重新执行一次只读发现即可把状态推进为 `B2 Preflight Ready — Awaiting Owner Write Authorization`。
+结论先说：默认拒绝边界已实现并有 **14 例**拦截测试；隔离库 `Forma_I1B2_Sandbox` 已由 Owner 在 GUI 创建，并已通过只读 `get_databases` 绑定成功（名称精确、`is_inbox=false`、与生产库 UUID 不同、初始为空）。真实 UUID 只保存在本机授权位置，不入库。
 
 本轮 MCP 写工具调用数：**0**。
 
 ## 1. 最新 dev SHA
 
-`db2e9d5`（docs: I1-B1 报告与 B2 提案，PR #70 squash）；父提交 `fa1dde6`（PR #69，只读客户端契约修复）。两者 CI（FormaCore tests / macOS app build / Benchmark smoke）均为 success。
+`37ea73f`（PR #71，默认拒绝写入边界）；前序 `0ce0d38`（PR #72，B2 文档）、`db2e9d5`（PR #70，B1 报告）。`dev` 的 CI（FormaCore tests / macOS app build / Benchmark smoke）success。
 
 ## 2. DEVONthink 与 MCP 版本
 
@@ -22,13 +22,32 @@
 
 ## 3. 隔离库 UUID
 
-**未取得。** 只读 `get_databases` 当前返回两个库：DEVONthink 全局 `Inbox`（`is_inbox=true`）与生产 `Project_Archive`。逐字 UUID 与名称映射只写在本机证据目录 `~/.forma/evidence/i1-b2/databases.json`，不入库。
+**已绑定。** 只读 `get_databases` 发现三个库：隔离库 `Forma_I1B2_Sandbox`、DEVONthink 全局 `Inbox`（`is_inbox=true`）与生产 `Project_Archive`。
 
-按 §2 要求，**未**用 Inbox 或其他现存业务库替代；对生产库零记录级查询。
+| 校验 | 结果 |
+| --- | --- |
+| 名称精确等于 `Forma_I1B2_Sandbox` | 是 |
+| `is_inbox == false` | 是 |
+| UUID 与 `Project_Archive` 不同 | 是 |
+| UUID 与全局 `Inbox` 不同 | 是 |
+| root Group UUID 等于库 UUID | 是 |
+| `get_databases{uuid}` 只返回 1 条 | 是 |
+
+真实 UUID、root/Trash/Inbox/Tags 组 UUID 与绑定时间只写在本机 `~/.forma/evidence/i1-b2/binding.json`，不入库。**未**用 Inbox 或其他现存业务库替代；对生产库零记录级查询。
 
 ## 4. 测试库初始状态
 
-不适用（库尚未创建）。因此也无法确认其初始记录数、Group 结构与是否为空。这些必须在库创建后由只读发现补齐：`get_databases{uuid}` + `get_record_children{root}`（仅针对隔离库）。
+| 项 | 值 |
+| --- | --- |
+| 文档/记录数 | **0** |
+| 根组直接文档数 | 0 |
+| Group 总数 | 6（3 个系统组 + 3 个智能组） |
+| 结构 | `Trash`、`Inbox`（库内接收组）、`Tags`，加智能组 `Duplicates`、`All PDF Documents`、`All Images` |
+| 各系统组记录数 | `Trash` 0、`Inbox` 0、`Tags` 0 |
+| 版本控制 | 关闭（`versioning=false`） |
+| 标签 | 0 |
+
+依据：`get_record_children{root, limit=1000}`（`total=6`，全部为 group/smart_group，无文档）、`get_group_tree{max_depth=10, include_documents=true}`（每个节点 `directDocumentCount=0`）、三个系统组各自的 children（`total=0`）。`search_records{query:"*"}` 返回 0 仅作旁证——按 B1 结论，搜索为空不能单独证明不存在。
 
 ## 5. 工具 schema digest（现场复核）
 
@@ -37,6 +56,8 @@
 | `create_group_path` | `6256d00d2755137648ed10e28fa1b946db9bc30b601feefc741b303758fd439a` | 是 |
 | `import_file` | `3642cf6990596a9b7814c846a018004b4fe9694b6af35b5d2cd468a4611b0d2f` | 是 |
 | `set_record_custom_metadata` | `f1aa770b370095f3c2280d8a617dbe3078eeee04da794a746ac925dd71a7fdb0` | 是 |
+
+绑定当日再次现场复核：三项 digest 与上表逐字一致（无 schema 漂移）。
 
 三项注解：`create_group_path` idempotent、`import_file` 非幂等、`set_record_custom_metadata` destructive+idempotent。`set_record_custom_metadata` 的 inputSchema **没有 `database_uuid` 参数**——库绑定只能靠独立回读，这一点已写入边界与提案 §4/§8。
 
@@ -66,7 +87,7 @@
 | `forma-b1-probe-03.csv` | 69 | `f2dc19a7443b23cc64be58cb500c533178dbf3f62650c0d73ab1623c281b1c0e` |
 | `forma-b1-probe-04.png` | 75 | `ebda4d4ace3059d20d30b04f8fb1a9390f9e8bd8cd2117fca38db09ba2efa1a0` |
 
-由 `scripts/make_i1_b2_synthetic.py` 生成；与 B1 证据目录中的清单逐字一致（diff 无差异）。提案值无需修订。
+由 `scripts/make_i1_b2_synthetic.py` 生成；与 B1 证据目录中的清单逐字一致（diff 无差异）。绑定当日重新计算，四个值与上表逐字一致。提案值无需修订。
 
 ## 8. 实际权限白名单
 
@@ -75,7 +96,7 @@
 | 维度 | 允许值 |
 | --- | --- |
 | 工具 | `create_group_path`、`import_file`、`set_record_custom_metadata`（枚举，无字符串入口） |
-| 数据库 | `<ISOLATED_DB_UUID>`（精确匹配；尚未取得，故当前为空集，任何请求都会被拒） |
+| 数据库 | 隔离库精确 UUID（已在 §3 绑定；真实值仅本地）。构造 scope 时填入；当前未实例化任何 scope，故不存在任何写路径 |
 | Group 路径 | 等于或扩展 `Forma_I1B2/<run-id>` |
 | Metadata identifier | 上述 8 个 |
 | 源文件路径 | 上述 4 个规范化绝对路径 |
@@ -114,14 +135,14 @@
 4. 首条完整验收：独立回读证明（库 + 父组 + SHA）、Metadata merge 写后逐字段回读、重复执行 `SKIP_VERIFIED`。
 5. 首条全通过后才继续余下三条；首条任一失败即停。
 
-停止条件：schema digest 变化、返回形状不符、`failed_uuids` 出现、记录越界（他库/他组）、`total` 与 Ledger 不符、无法解释的错误、SHA 不一致原因不明、**边界层报出任何拒绝**。未知 Create 结果进入 `VERIFY_REQUIRED`，按 §8 的身份恢复路径处理，不盲重试。
+停止条件：schema digest 变化、返回形状不符、`failed_uuids` 出现、记录越界（他库/他组）、`total` 与 Ledger 不符、无法解释的错误、SHA 不一致原因不明、**边界层报出任何拒绝**。未知 Create 结果进入 `VERIFY_REQUIRED`，按提案 §8 的身份恢复路径处理，**不盲重试**；查询为空不构成重新创建的依据，重新创建必须另行作出可审计的新执行决定。
 
 ## 11. Owner Approval Required
 
 需要 Owner：
 
-1. 在 DEVONthink GUI 新建可丢弃库 `Forma_I1B2_Sandbox`，并确认其 UUID；
-2. 批准修订后的 `docs/I1-B2-AUTHORIZATION-PROPOSAL.md`（含 3 个写工具、8 个字段、4 条记录上限、冲突/断连测试、访问边界证明方式）；
+1. ~~在 DEVONthink GUI 新建可丢弃库 `Forma_I1B2_Sandbox`~~ —— **已完成并绑定**（§3）；
+2. 批准修订后的 `docs/I1-B2-AUTHORIZATION-PROPOSAL.md`（含 3 个写工具、8 个字段、4 条记录上限、冲突/断连测试、访问边界证明方式，以及 §8 的未知 Create 恢复策略）；
 3. 确认本轮不授权任何自动删除。
 
-在上述确认之前，`ImportWriteBoundary` 的库白名单为空集，任何写请求都会在调用前被拒——这是有意为之的失败关闭。
+在上述 2、3 确认之前，不构造任何写入 scope、不发起任何写调用。库已绑定但未获写授权，这是有意为之的失败关闭。
