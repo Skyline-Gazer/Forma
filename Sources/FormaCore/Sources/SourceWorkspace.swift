@@ -7,8 +7,10 @@ public actor SourceWorkspace {
     /// Internal so the mapping persistence extension can reach the one
     /// database connection this actor owns.
     let store: SourceStore
-    private var scanInProgress = false
-    private var readInProgress = false
+    /// Internal, like `store`: the availability and reauthorization extension
+    /// lives in another file and must refuse while a scan or read is running.
+    var scanInProgress = false
+    var readInProgress = false
 
     public init(databaseURL: URL) throws {
         store = try SourceStore(url: databaseURL)
