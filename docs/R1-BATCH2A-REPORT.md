@@ -54,7 +54,9 @@ WorkspaceModel.restore()
 
 本报告的 §3–§6 是在"拷贝资源 bundle 到 `.app` 根 + 重新 ad-hoc 签名"的补丁产物上完成的；所有 M04 结论都标注了这一点，打包基线仍是 **FAIL**。
 
-建议修法（未在本轮实施，需单独工程 PR）：把资源 bundle 放到 `Contents/Resources/`，并在应用侧用 `Bundle.main.resourceURL` 解析（或为 `Bundle.module` 增加 `.app` 变体回退），同时在 `build_app.sh` 中显式拷贝 `Forma_FormaCore.bundle`、在 CI 中增加一次"启动后 3 秒仍存活"的冒烟。
+已实测："把 bundle 放进 `Contents/Resources/`"**不能**解决问题——SwiftPM 生成的访问器只查 `.app` 根目录，实测仍以同一 `Fatal error` 退出。
+
+建议修法（未在本轮实施，需单独工程 PR）：资源 bundle 放到 `Contents/Resources/` 以满足 `codesign --strict`，同时让应用侧按 `Bundle.main.resourceURL` 解析（或为 `Bundle.module` 增加 `.app` 变体回退）；`build_app.sh` 显式拷贝 `Forma_FormaCore.bundle`；CI 增加一次"启动后 3 秒仍存活"的冒烟，避免再次出现"打包成功但无法启动"。
 
 ## 2. M01 — Bookmark（现场通过，1 项分类缺陷）
 
