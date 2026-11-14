@@ -79,6 +79,42 @@
 - 返回 `{uuid, metadata, dropped_fields, rejection_reasons?}`；`dropped_fields` 非空表示部分成功。
 - **没有任何版本号 / If-Match / 冲突检测参数**。
 
+### 6.1 File Import 的确定答案
+
+| 问题 | 答案 | 依据 |
+| --- | --- | --- |
+| 是否提供 import_file 或等价能力 | 是，工具名 `import_file` | `tools/list` |
+| 输入形式 | 仅 **POSIX 路径字符串**（`path`，必填）。**不接受 file URL，不接受二进制 payload** | inputSchema |
+| 能否指定目标数据库 UUID | 能（`database_uuid`） | inputSchema |
+| 能否指定目标 Group UUID | 能（`destination` 接受 Group UUID **或** location path；路径形式的真实解析行为未验证） | inputSchema + 描述 |
+| 能否指定初始 Metadata | **不能**。`import_file` 没有 metadata 参数，元数据只能事后用 `set_record_custom_metadata` 写 | inputSchema |
+| 是否返回创建的 record UUID | **NOT_VERIFIED**（无 outputSchema，描述未声明返回值；需真实写入才能确定） | 无 outputSchema |
+| 是否存在异步/延迟可见性 | **NOT_VERIFIED**（同上） | — |
+
+### 6.2 Metadata Write 的确定答案
+
+| 问题 | 答案 | 依据 |
+| --- | --- | --- |
+| 修改 Custom Metadata 的工具 | `set_record_custom_metadata` | `tools/list` |
+| 是否支持部分字段更新 | 支持，`mode:"merge"`；默认 `replace` 会丢弃未列出的字段 | 描述 |
+| null / 空字符串 / 缺失字段 | `NSNull` 与空字符串都表示**清空该字段**；`merge` 下未出现的键保持原值，`replace` 下被丢弃 | 描述 |
+| 输入用 identifier 还是中文 Label | **identifier**（如 `projectname`）。Label 不参与写入；大小写归一为小写，`md` 前缀可省略 | 描述 |
+| 是否有字段类型约束 | 服务端按字段原生类型校验；对 `set` 类型给自由文本会被拒并计入 `dropped_fields`。12 个治理字段均为 `string`，无枚举约束 | 描述 + `list_custom_metadata_fields` |
+| 是否返回更新后的完整记录 | **否**。返回 `{uuid, metadata, dropped_fields, rejection_reasons?}`，不含完整属性字典；独立回读仍必须用 `get_record_properties` / `get_record_custom_metadata` | 描述 |
+| 是否有冲突检测或版本条件参数 | **没有**。无 If-Match / 版本号 / 条件写 | inputSchema |
+
+### 6.3 Identity / Group 语义的确定答案
+
+| 问题 | 答案 |
+| --- | --- |
+| UUID 是否是持久记录身份 | 是（同一记录在多次调用间稳定返回同一 UUID）。跨重启/重导入的持久性**未验证** |
+| Record UUID 与 Database UUID 如何绑定 | 每条记录载荷都携带 `databaseUUID`（`get_record_properties`、`children`、`search` 三处均已实测）；`database_uuid` 参数只是"加速查找"，**服务端不据此强制作用域**，必须由客户端自行校验 |
+| Group UUID 与 Group path 能否互相核验 | **部分**。`get_group_tree` 给出 uuid+name；`get_record_children` 的条目带 `location`（父组路径）。但 `lookup_records{location:"/"}` 与 `{location:"/Trash/"}` 实测均返回 0 条，**路径反查 UUID 不可靠** |
+| 搜索结果是否包含完整数据库身份 | 是（`databaseUUID` + `databaseName` 都在 brief 里） |
+| 能否完整枚举指定 Group 的记录 | 能，用 `get_record_children` 按 `offset/limit` 翻页并以 `total` 收敛；**不要用 search 枚举**（它排除回收站） |
+| 分页是否有一致性保证 | 静态数据下 `total` 与条目稳定；**没有快照隔离保证**，并发修改时的分页一致性未验证 |
+| 空查询是否足以证明不存在 | **不足**。搜索排除回收站、`name:=="…"` 精确谓词实测无命中、`query:"*"` 返回 0 条，都是反例 |
+
 ## 7. 12 个受治理字段的现场定义
 
 `list_custom_metadata_fields` 全量 33 个字段，其中启用 12 个，与 SPEC §5.2 的标识符集合**完全一致**：
