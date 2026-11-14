@@ -283,6 +283,8 @@ Owner 另行授权 Batch 2A 的**无真实写入工程**：T05、T06、T04 补�
 
 CI 上的一条真实限制（不是代码缺陷）：macOS 的文件型 login keychain **接受但不回读** `kSecAttrAccessible`，所以真实 Keychain 测试只能断言"未报告或正是所请求的值"；属性请求本身由内存后端测试钉住，真实回读列为 M02（需 data protection keychain 或真机）。
 
+> **2026-11-15（Batch 2A.1）**：Keychain 契约已改为三态 `missing / presentUnobservable / verified(…)`（PR #94），不再用 `nil` 混合"没有项"与"不可观察"；打包与书签分类的修复见 `docs/R1-BATCH2A1-REPORT.md`。
+
 边界：未改 Keychain service 名、未自动迁移、未触碰真实凭据、未发起任何 DEVONthink 写、未开放 Import 写入。
 
 仍未验证：M01–M06 的真实 macOS 行为（撤销授权、stale security-scoped bookmark、锁定 Keychain、真实 MCP 回查、GUI 交互）与 R01–R03。
