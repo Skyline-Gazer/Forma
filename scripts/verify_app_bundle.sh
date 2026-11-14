@@ -29,10 +29,11 @@ test -x "$APP/Contents/MacOS/Forma" || { echo "error: executable missing" >&2; e
 BUNDLE_ID=$(plutil -extract CFBundleIdentifier raw "$APP/Contents/Info.plist")
 test "$BUNDLE_ID" = "io.github.skyline-gazer.forma" || { echo "error: unexpected bundle id $BUNDLE_ID" >&2; exit 1; }
 
-RESOURCE_DIR="$APP/Contents/Resources/Forma_FormaCore.bundle/Contents/Resources"
-test -d "$RESOURCE_DIR" || { echo "error: Forma_FormaCore.bundle missing from Contents/Resources" >&2; exit 1; }
+RESOURCE_BUNDLE="$APP/Contents/Resources/Forma_FormaCore.bundle"
+test -d "$RESOURCE_BUNDLE" || { echo "error: Forma_FormaCore.bundle missing from Contents/Resources" >&2; exit 1; }
 for resource in $REQUIRED_RESOURCES; do
-    test -f "$RESOURCE_DIR/$resource" || { echo "error: required resource missing: $resource" >&2; exit 1; }
+    find "$RESOURCE_BUNDLE" -name "$resource" -print -quit | grep -q . \
+        || { echo "error: required resource missing: $resource" >&2; exit 1; }
 done
 
 if [ -d "$APP/Forma_FormaCore.bundle" ]; then

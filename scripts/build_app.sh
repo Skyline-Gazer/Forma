@@ -78,15 +78,21 @@ MINIMUM=$(plutil -extract LSMinimumSystemVersion raw "$APP/Contents/Info.plist")
 echo "bundle id: $BUNDLE_ID (minimum macOS $MINIMUM)"
 test "$BUNDLE_ID" = "io.github.skyline-gazer.forma"
 
-RESOURCE_DIR="$APP/Contents/Resources/Forma_FormaCore.bundle/Contents/Resources"
-test -d "$RESOURCE_DIR" || { echo "error: resource bundle missing from Contents/Resources" >&2; exit 1; }
+RESOURCE_BUNDLE="$APP/Contents/Resources/Forma_FormaCore.bundle"
+test -d "$RESOURCE_BUNDLE" || { echo "error: resource bundle missing from Contents/Resources" >&2; exit 1; }
+# SwiftPM's bundle layout differs between toolchains (a shallow bundle with the
+# files at its root, or a macOS bundle with Contents/Resources). Check by file
+# name rather than by assuming one layout, and print what was found so the next
+# layout change is diagnosable from the log.
+echo "resource layout:"
+find "$RESOURCE_BUNDLE" -maxdepth 3 | sed -n '1,20p' | sed 's/^/  /'
 for resource in $REQUIRED_RESOURCES; do
-    if [ ! -f "$RESOURCE_DIR/$resource" ]; then
+    if ! find "$RESOURCE_BUNDLE" -name "$resource" -print -quit | grep -q .; then
         echo "error: required resource missing: $resource" >&2
         exit 1
     fi
 done
-echo "resources: $(ls "$RESOURCE_DIR" | wc -l | tr -d ' ') files, required set present"
+echo "resources: required set present"
 
 # The app must not contain a resource bundle at the bundle root: `codesign
 # --strict` rejects it, and the root is not a sealed location.

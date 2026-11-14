@@ -37,14 +37,18 @@ enum FormaResourceBundle {
         if let executable = Bundle.main.executableURL?.deletingLastPathComponent() {
             directories.append(executable)
         }
-        // Legacy layout some development runs produce. Kept last: signing an app
-        // with this layout fails, so it is never the intended location.
+        // A test host keeps the bundle beside the `.xctest`, not inside it, so the
+        // containing directory is part of the search.
         directories.append(Bundle.main.bundleURL)
+        directories.append(Bundle.main.bundleURL.deletingLastPathComponent())
         if let frameworkResources = Bundle(for: BundleToken.self).resourceURL {
             directories.append(frameworkResources)
         }
         directories.append(Bundle(for: BundleToken.self).bundleURL)
-        return directories
+        directories.append(Bundle(for: BundleToken.self).bundleURL.deletingLastPathComponent())
+        // Deduplicate: the same directory often appears twice.
+        var seen: Set<String> = []
+        return directories.filter { seen.insert($0.standardizedFileURL.path).inserted }
     }
 
     static func resolve() -> Bundle? {
