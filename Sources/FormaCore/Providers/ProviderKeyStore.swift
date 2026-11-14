@@ -40,6 +40,75 @@ public enum KeychainAccessibility: String, Sendable, Equatable, CaseIterable {
     }
 }
 
+/// What the keychain can say about an item's accessibility attribute.
+///
+/// Three answers, because on macOS there are three situations and collapsing them
+/// would make "not observable" look like "not stored" or like the value we asked
+/// for. The last case is a claim; the middle one is explicitly not a claim.
+public enum KeychainAccessibilityObservation: Sendable, Equatable {
+    case missing
+    /// The item exists, but this keychain does not report the attribute. The
+    /// stored value is neither confirmed nor contradicted.
+    case presentUnobservable
+    case verified(KeychainAccessibility)
+}
+
+/// Whether the data-protection keychain is usable here, and whether it exposes
+/// the attribute.
+///
+/// The field run found items in the data-protection keychain still reported no
+/// `pdmn`. This probe makes that an observation instead of an assumption: it
+/// writes, reads and deletes one synthetic item under a throwaway service, so
+/// `.usable` is never claimed without a successful round trip.
+public enum DataProtectionKeychainProbe {
+    public struct Report: Sendable, Equatable {
+        public let usable: Bool
+        /// The `OSStatus` that stopped the probe, when it was not usable.
+        public let status: Int32?
+        /// True only when `kSecAttrAccessible` came back from the same keychain.
+        public let accessibilityVisible: Bool
+    }
+
+    public static func run(service: String) -> Report {
+        let account = "attribute-probe"
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: true,
+        ]
+        SecItemDelete(base as CFDictionary)
+        var add = base
+        add[kSecValueData as String] = Data("probe".utf8)
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        let addStatus = SecItemAdd(add as CFDictionary, nil)
+        defer { SecItemDelete(base as CFDictionary) }
+        guard addStatus == errSecSuccess else {
+            return Report(usable: false, status: addStatus, accessibilityVisible: false)
+        }
+
+        var read = base
+        read[kSecReturnData as String] = true
+        read[kSecMatchLimit as String] = kSecMatchLimitOne
+        var value: CFTypeRef?
+        guard SecItemCopyMatching(read as CFDictionary, &value) == errSecSuccess,
+              let data = value as? Data, data == Data("probe".utf8) else {
+            return Report(usable: false, status: errSecInternalError, accessibilityVisible: false)
+        }
+
+        var attributesQuery = base
+        attributesQuery[kSecReturnAttributes as String] = true
+        attributesQuery[kSecMatchLimit as String] = kSecMatchLimitOne
+        var attributes: CFTypeRef?
+        guard SecItemCopyMatching(attributesQuery as CFDictionary, &attributes) == errSecSuccess,
+              let dictionary = attributes as? [String: Any] else {
+            return Report(usable: true, status: nil, accessibilityVisible: false)
+        }
+        let visible = dictionary[kSecAttrAccessible as String] as? String != nil
+        return Report(usable: true, status: nil, accessibilityVisible: visible)
+    }
+}
+
 /// The keychain operations, as a protocol, so the lifecycle can be tested
 /// without touching the login keychain.
 protocol KeychainBackend: Sendable {
@@ -219,11 +288,27 @@ public struct KeychainCredentialStore: Sendable {
         try backend.update(service: service, account: provider.rawValue, secret: Data(secret.utf8))
     }
 
-    /// The accessibility attribute actually stored, or nil when no item exists.
-    public func accessibility(for provider: ProbeProvider) throws -> KeychainAccessibility? {
-        guard let attributes = try backend.attributes(service: service, account: provider.rawValue),
-              let raw = attributes[kSecAttrAccessible as String] as? String else { return nil }
-        return KeychainAccessibility(securityValue: raw)
+    /// What can be said about the stored accessibility attribute.
+    ///
+    /// On macOS the file-based login keychain returns only `acct / cdat / class /
+    /// labl / mdat / svce` from `SecItemCopyMatching` — no `pdmn` — so "the item
+    /// exists" and "the item has the attribute we asked for" are different facts.
+    /// The field run proved this on macOS 27, and `security find-generic-password -g`
+    /// does not print the attribute either. Reporting `nil` for an existing item
+    /// would have meant "not verified" and "no item" were the same answer, which
+    /// is exactly the kind of conflation this project forbids.
+    public func accessibility(for provider: ProbeProvider) throws -> KeychainAccessibilityObservation {
+        guard let attributes = try backend.attributes(service: service, account: provider.rawValue) else {
+            return .missing
+        }
+        guard let raw = attributes[kSecAttrAccessible as String] as? String,
+              let observed = KeychainAccessibility(securityValue: raw) else {
+            // Present, but this keychain does not expose the attribute (or exposes
+            // a value this build does not recognise). Never substituted with the
+            // value we requested.
+            return .presentUnobservable
+        }
+        return .verified(observed)
     }
 
     /// Reads a credential from another service without writing anything there.

@@ -15,12 +15,20 @@ private final class MemoryKeychain: KeychainBackend, @unchecked Sendable {
     private let lock = NSLock()
     private var items: [String: Item] = [:]
     private(set) var locked = false
+    /// Whether `SecItemCopyMatching` reports `kSecAttrAccessible`, as the
+    /// file-based login keychain does not.
+    private var reportsAccessibility = true
+    /// Set to simulate a value this build does not recognise.
+    private var accessibilityOverride: String?
 
     private func key(_ service: String, _ account: String) -> String { "\(service)\u{0}\(account)" }
 
     /// Simulates the keychain being locked. Named apart from the `lock` property
     /// on purpose: a method and a property cannot share a name.
     func lockDown() { lock.withLock { locked = true } }
+
+    func hideAccessibility() { lock.withLock { reportsAccessibility = false } }
+    func overrideAccessibility(_ raw: String) { lock.withLock { accessibilityOverride = raw } }
 
     func add(service: String, account: String, secret: Data,
              accessible: KeychainAccessibility) throws -> Bool {
@@ -54,6 +62,14 @@ private final class MemoryKeychain: KeychainBackend, @unchecked Sendable {
         try lock.withLock {
             if locked { throw FormaError.credentialLocked }
             guard let item = items[key(service, account)] else { return nil }
+            if let override = accessibilityOverride {
+                return [kSecAttrAccessible as String: override]
+            }
+            guard reportsAccessibility else {
+                // What the file-based login keychain actually returns: the item,
+                // without the attribute.
+                return [kSecAttrAccount as String: account]
+            }
             return [kSecAttrAccessible as String: item.accessible.securityValue as String]
         }
     }
@@ -84,7 +100,53 @@ struct KeychainCredentialStoreTests {
 
         try store.save("sk-synthetic", for: .openAI)
         #expect(try store.load(for: .openAI) == "sk-synthetic")
-        #expect(try store.accessibility(for: .openAI) == .whenUnlockedThisDeviceOnly)
+        #expect(try store.accessibility(for: .openAI) == .verified(.whenUnlockedThisDeviceOnly))
+    }
+
+    @Test func anExistingItemWithoutTheAttributeIsUnobservableNotMissing() throws {
+        let backend = MemoryKeychain()
+        let store = store(backend)
+        try store.save("secret", for: .openAI)
+        backend.hideAccessibility()
+
+        // This is what the file-based login keychain does: the item is there, the
+        // attribute is not reported. Calling that "missing" would be a lie, and
+        // substituting the requested value would be a bigger one.
+        #expect(try store.accessibility(for: .openAI) == .presentUnobservable)
+    }
+
+    @Test func anUnrecognisedAttributeIsNotSubstitutedWithTheRequestedValue() throws {
+        let backend = MemoryKeychain()
+        let store = store(backend)
+        try store.save("secret", for: .openAI)
+        backend.overrideAccessibility("some-future-constant")
+
+        #expect(try store.accessibility(for: .openAI) == .presentUnobservable)
+    }
+
+    @Test func aDeletedItemIsReportedAsMissingRatherThanUnobservable() throws {
+        let backend = MemoryKeychain()
+        let store = store(backend)
+        try store.save("secret", for: .openAI)
+        try store.delete(for: .openAI)
+
+        #expect(try store.accessibility(for: .openAI) == .missing)
+    }
+
+    /// Evaluates `kSecUseDataProtectionKeychain` on the host, with a synthetic
+    /// service. It never reads a stored credential: it adds, reads and deletes its
+    /// own item, so `.usable` cannot be claimed without a successful round trip.
+    @Test func theDataProtectionKeychainProbeIsDeterminate() {
+        let service = "io.github.skyline-gazer.forma.tests.probe.\(UUID().uuidString)"
+        let report = DataProtectionKeychainProbe.run(service: service)
+        print("data-protection probe: usable=\(report.usable) "
+              + "status=\(String(describing: report.status)) "
+              + "accessibilityVisible=\(report.accessibilityVisible)")
+        #expect(report.usable || report.status != nil)
+        // A second run on the same service must behave the same way: the probe
+        // deletes its item, so it cannot be confused by a leftover duplicate.
+        let second = DataProtectionKeychainProbe.run(service: service)
+        #expect(second.usable == report.usable)
     }
 
     @Test func savingTwiceReplacesTheSecretWithoutDuplicating() throws {
@@ -192,11 +254,15 @@ struct KeychainCredentialStoreTests {
         try store.save("synthetic-key", for: .openAI)
         #expect(try store.load(for: .openAI) == "synthetic-key")
         // The file-based login keychain accepts `kSecAttrAccessible` but does not
-        // report it back, so on CI this is either absent or exactly what was
-        // requested. The in-memory test above pins the request itself; proving the
-        // stored attribute needs the data-protection keychain (real-macOS item M02).
+        // report it back (field run, macOS 27: attributes are acct/cdat/class/labl/
+        // mdat/svce, no `pdmn`). The contract therefore distinguishes "present but
+        // unobservable" from "verified": this test may legitimately see either, and
+        // it must never see `.missing` or a different accessibility.
         let reported = try store.accessibility(for: .openAI)
-        #expect(reported == nil || reported == .whenUnlockedThisDeviceOnly)
+        #expect(reported != .missing)
+        if case .verified(let value) = reported {
+            #expect(value == .whenUnlockedThisDeviceOnly)
+        }
 
         try store.rotate("rotated-key", for: .openAI)
         #expect(try store.load(for: .openAI) == "rotated-key")
