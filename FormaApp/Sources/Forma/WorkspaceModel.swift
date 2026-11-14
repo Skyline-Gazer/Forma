@@ -112,6 +112,9 @@ final class WorkspaceModel: ObservableObject {
     // MARK: - Published state
 
     @Published private(set) var scopes: [SourceScope] = []
+    /// Readiness of every registered root, refreshed with the listing. Advisory
+    /// only: it decides what to show and which fix to offer, never what to write.
+    @Published private(set) var sourceStatuses: [UUID: SourceScopeStatus] = [:]
     @Published private(set) var listing: SourceListing?
     @Published private(set) var profiles: [MappingProfile] = []
     @Published private(set) var context: ProjectContext?
@@ -420,6 +423,7 @@ final class WorkspaceModel: ObservableObject {
     /// scope/profile pair: the current context revision, the latest manifest and
     /// the reconciliation verdict after a rescan.
     func reload() async {
+        await refreshSourceStatuses()
         guard let scope = selectedScope else {
             listing = nil
             context = nil
@@ -491,6 +495,41 @@ final class WorkspaceModel: ObservableObject {
             let scope = try await workspace.register(url)
             scopes = try await workspace.scopes()
             selectedScopeID = scope.id
+        } catch {
+            show(error, operation: .registerSource, fallback: .invalidSource)
+        }
+    }
+
+    /// Probes every registered root. A failed probe is advisory: the listing is
+    /// still shown, and the banner explains what is missing.
+    func refreshSourceStatuses() async {
+        guard let statuses = try? await workspace.scopeStatuses() else { return }
+        sourceStatuses = Dictionary(uniqueKeysWithValues: statuses.map { ($0.scope.id, $0) })
+    }
+
+    func sourceStatus(for id: UUID) -> SourceScopeStatus? {
+        sourceStatuses[id]
+    }
+
+    /// Hands an existing scope a folder again. The identity check happens in
+    /// FormaCore: a different folder is refused, never swapped in silently.
+    func reauthorize(_ scope: SourceScope, url: URL) async {
+        do {
+            switch try await workspace.reauthorize(scope: scope, with: url) {
+            case .updated:
+                notice = "Access to \(scope.displayName) was renewed."
+                await reload()
+            case .identityMismatch:
+                // Not an error: a different folder is a new source, and saying so
+                // is the only way the person can choose.
+                notice = "That folder is not the source this entry was registered from. "
+                    + "Add it as a new source instead."
+            case .unknownScope:
+                notice = "That source is no longer registered."
+                scopes = (try? await workspace.scopes()) ?? scopes
+            case .unusable(let error):
+                show(error, operation: .registerSource, fallback: .invalidSource)
+            }
         } catch {
             show(error, operation: .registerSource, fallback: .invalidSource)
         }

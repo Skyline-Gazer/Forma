@@ -258,7 +258,10 @@ extension SourceWorkspace {
         return a == "/" || b == "/" || SourcePath.contains(a, in: b) || SourcePath.contains(b, in: a)
     }
 
-    private static func updateBookmark(in db: Database, id: UUID, selected: SourceRootAccess,
+    /// Replaces the stored bookmark for one root. Internal because the only
+    /// caller that may do this without registering a new root is
+    /// `reauthorize(scope:with:)`, which checks the identity first.
+    static func updateBookmark(in db: Database, id: UUID, selected: SourceRootAccess,
                                        authorizedURL: URL, insert: Bool) throws {
         let bookmark: Data
         let securityScoped: Bool
