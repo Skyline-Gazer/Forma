@@ -3,7 +3,7 @@ import OSLog
 
 public enum FormaError: Error, LocalizedError, Sendable, Equatable {
     case unavailable, cancelled, invalidResponse, timeout, disconnected
-    case unauthorized, incompatible, credentialMissing, storage, invalidSource
+    case unauthorized, incompatible, credentialMissing, credentialLocked, storage, invalidSource
     case sourceChanged, hydrationPending, network, remoteStatus(Int), refused, invalidOutput
 
     public var code: String {
@@ -16,6 +16,7 @@ public enum FormaError: Error, LocalizedError, Sendable, Equatable {
         case .unauthorized: "unauthorized"
         case .incompatible: "incompatible"
         case .credentialMissing: "credential_missing"
+        case .credentialLocked: "credential_locked"
         case .storage: "storage"
         case .invalidSource: "invalid_source"
         case .sourceChanged: "source_changed"
@@ -37,6 +38,7 @@ public enum FormaError: Error, LocalizedError, Sendable, Equatable {
         case .unauthorized: "This operation requires explicit authorization."
         case .incompatible: "The detected service capability is incompatible."
         case .credentialMissing: "Save an API key in Keychain before running the probe."
+        case .credentialLocked: "Unlock the login keychain to read the saved API key."
         case .storage: "Forma could not access its local storage."
         case .invalidSource: "The selected source cannot be safely accessed."
         case .sourceChanged: "The source changed. Scan it again before reading."
