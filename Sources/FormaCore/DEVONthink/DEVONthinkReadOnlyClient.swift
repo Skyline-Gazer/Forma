@@ -124,29 +124,32 @@ public actor DEVONthinkReadOnlyClient {
         let schemas: [ReadTool: MCPValue]
     }
 
-    private let configuration: MCPConfiguration
-    private var connection: MCPStdio?
+    private var connection: (any MCPConnection)?
     private var discovery: Discovery?
     private var observedInputDigests: [ReadTool: String] = [:]
+    private let supervisor: MCPConnectionSupervisor
 
-    public init() { configuration = .devonThink }
-    init(configuration: MCPConfiguration) { self.configuration = configuration }
+    public init() { self.init(configuration: .devonThink) }
+    init(configuration: MCPConfiguration) {
+        // Each replacement is a new child process; the supervisor decides when
+        // that may happen and how often it may be attempted.
+        supervisor = MCPConnectionSupervisor(factory: { MCPStdio(configuration: configuration) })
+    }
 
     public func discover() async throws -> DEVONthinkCapabilities {
-        if let connection {
-            guard let discovery else { throw FormaError.unavailable }
+        if let connection, let discovery {
             do {
                 try await connection.checkOpen()
                 guard self.connection === connection else { throw FormaError.disconnected }
                 return discovery.capabilities
             } catch {
-                guard self.connection === connection else { throw error }
-                self.connection = nil
-                self.discovery = nil
+                // A dead connection is replaced by the supervisor, with a bounded
+                // number of attempts. Nothing is re-sent.
+                await discard(connection, because: (error as? FormaError) ?? .disconnected)
             }
         }
         guard !Task.isCancelled else { throw FormaError.cancelled }
-        let connection = MCPStdio(configuration: configuration)
+        let connection = try await supervisor.connection(for: .read)
         self.connection = connection
         do {
             let initialized = try await connection.request("initialize", parameters: [
@@ -164,7 +167,7 @@ public actor DEVONthinkReadOnlyClient {
             guard Self.supportedVersions.contains(version), capabilities["tools"]?.object != nil else {
                 throw FormaError.incompatible
             }
-            try await connection.initialized()
+            try await connection.sendInitialized()
             let discovery = try await Self.listTools(
                 connection, version: version, name: name, serverVersion: serverVersion,
                 observedInputDigests: observedInputDigests
@@ -180,20 +183,25 @@ public actor DEVONthinkReadOnlyClient {
             }
             return discovery.capabilities
         } catch {
-            if self.connection === connection {
-                self.connection = nil
-                discovery = nil
-            }
-            await connection.close()
+            await discard(connection, because: (error as? FormaError) ?? .disconnected)
             throw error
         }
     }
 
+    /// Drops one connection and tells the supervisor it failed. The handshake
+    /// result goes with it: a new child must negotiate again.
+    private func discard(_ connection: any MCPConnection, because error: FormaError) async {
+        if self.connection === connection {
+            self.connection = nil
+            discovery = nil
+        }
+        await supervisor.invalidate(.read, because: error)
+    }
+
     public func close() async {
-        let connection = connection
-        self.connection = nil
+        connection = nil
         discovery = nil
-        await connection?.close()
+        await supervisor.close()
     }
 
     public func database(in scope: DEVONthinkReadScope) async throws -> DEVONthinkDatabase {
@@ -333,7 +341,7 @@ public actor DEVONthinkReadOnlyClient {
     }
 
     private static func listTools(
-        _ connection: MCPStdio, version: String, name: String, serverVersion: String,
+        _ connection: any MCPConnection, version: String, name: String, serverVersion: String,
         observedInputDigests: [ReadTool: String]
     ) async throws -> Discovery {
         var seenCursors: Set<String> = []
@@ -381,7 +389,7 @@ public actor DEVONthinkReadOnlyClient {
         throw FormaError.invalidResponse
     }
 
-    private func validatedConnection(for tool: ReadTool, _ arguments: [String: MCPValue]) throws -> MCPStdio {
+    private func validatedConnection(for tool: ReadTool, _ arguments: [String: MCPValue]) throws -> any MCPConnection {
         guard let connection, let discovery else { throw FormaError.unavailable }
         guard let schema = discovery.schemas[tool], InputSchema.accepts(arguments, schema: schema) else {
             throw FormaError.incompatible
@@ -391,9 +399,23 @@ public actor DEVONthinkReadOnlyClient {
 
     private func call(_ tool: ReadTool, _ arguments: [String: MCPValue]) async throws -> MCPValue {
         let connection = try validatedConnection(for: tool, arguments)
-        let response = try await connection.request("tools/call", parameters: [
-            "name": .string(tool.rawValue), "arguments": .object(arguments)
-        ])
+        let response: MCPValue
+        do {
+            response = try await connection.request("tools/call", parameters: [
+                "name": .string(tool.rawValue), "arguments": .object(arguments)
+            ])
+        } catch let error as FormaError {
+            // A read that timed out or lost its peer says nothing about the
+            // target, but it does say the pipe is unusable: the next call must
+            // negotiate a new child instead of reusing this one.
+            switch error {
+            case .disconnected, .timeout, .unavailable:
+                await discard(connection, because: error)
+            default:
+                break
+            }
+            throw error
+        }
         guard self.connection === connection else { throw FormaError.disconnected }
         guard !Task.isCancelled else { throw FormaError.cancelled }
         guard let result = response.object else { throw FormaError.invalidResponse }
