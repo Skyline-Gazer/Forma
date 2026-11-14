@@ -18,7 +18,9 @@ private final class MemoryKeychain: KeychainBackend, @unchecked Sendable {
 
     private func key(_ service: String, _ account: String) -> String { "\(service)\u{0}\(account)" }
 
-    func lock() { lock.withLock { locked = true } }
+    /// Simulates the keychain being locked. Named apart from the `lock` property
+    /// on purpose: a method and a property cannot share a name.
+    func lockDown() { lock.withLock { locked = true } }
 
     func add(service: String, account: String, secret: Data,
              accessible: KeychainAccessibility) throws -> Bool {
@@ -118,7 +120,7 @@ struct KeychainCredentialStoreTests {
         let backend = MemoryKeychain()
         let store = store(backend)
         try store.save("secret", for: .openAI)
-        backend.lock()
+        backend.lockDown()
 
         // "Locked" and "not saved" are different: one needs the user to unlock,
         // the other needs the user to save a key.
