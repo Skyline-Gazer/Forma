@@ -1,6 +1,6 @@
 # Forma — Implementation Roadmap (Approved Planning Baseline)
 
-**状态：P0/P1/P2 已授权并完成工程实现；P3-A（离线评测基础设施）已授权进行中；I1 已收尾——I1-A 离线实现、I1-B0 执行边界硬化、I1-B1 真实 MCP 能力发现与只读验证、I1-B2 隔离库真实 Import 集成验收均已完成，整体结论为 **Import Integration Verified（Limited Scope / 限定范围）**，见下方「I1 最终状态」；`import_file` 精确返回结构、`dropped_fields` 部分成功路径、响应前断连与写入中崩溃仍为 NOT_VERIFIED，Replicant 与生产迁移未验证/未授权；**P3-B 真实模型评测、I2、R1 均未授权**（R1 仅有 `docs/R1-READINESS.md` 的技术调查与实施方案，不等于开发授权）。**  
+**状态：P0/P1/P2 已授权并完成工程实现；P3-A（离线评测基础设施）已授权进行中；I1 已收尾——I1-A 离线实现、I1-B0 执行边界硬化、I1-B1 真实 MCP 能力发现与只读验证、I1-B2 隔离库真实 Import 集成验收均已完成，整体结论为「Import Integration Verified（Limited Scope / 限定范围）」，见下方「I1 最终状态」；`import_file` 精确返回结构、`dropped_fields` 部分成功路径、响应前断连与写入中崩溃仍为 NOT_VERIFIED，Replicant 与生产迁移未验证/未授权；P3-B 真实模型评测、I2、R1 均未授权（R1 仅有 `docs/R1-READINESS.md` 的技术调查与实施方案，不等于开发授权）。**  
 **基线：** [SPEC v0.1.1 FROZEN](SPEC.md) · [PLAN v0.1](PLAN.md) · [PLAN PR #1 merged](https://github.com/Skyline-Gazer/Forma/pull/1) · [P2 验收报告](P2-ACCEPTANCE.md) · [I1-A 离线验收](I1-A-ACCEPTANCE.md) · [I1-B1 能力发现](I1-B1-CAPABILITY-DISCOVERY.md) · [I1-B2 预检](I1-B2-PREFLIGHT.md) · [I1-B2 现场验收](I1-B2-ACCEPTANCE.md) · [R1 Readiness](R1-READINESS.md)  
 **Owner 决策记录：** 2026-11-11（P0/P1 授权）· 2026-11-12（P2 收尾接受 + P3 拆分授权）· 2026-11-13（I1-A）· 2026-11-14（I1-B1、I1-B2 预检、库绑定与写入授权；I1 收尾文档修订），详见下方「授权历史」
 
