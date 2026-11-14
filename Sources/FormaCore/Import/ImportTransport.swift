@@ -15,6 +15,19 @@ public protocol ImportWriteTransport: Sendable {
     func writeMetadata(_ request: ImportMetadataRequest) async throws
 }
 
+/// Group creation is part of a run's approved scope, so it belongs on the same
+/// surface the boundary guards rather than on a side channel the boundary
+/// cannot see.
+public protocol ImportGroupCreating: Sendable {
+    /// Creates the path if needed and returns the group UUID, or an empty string
+    /// when the response does not name exactly one object. An empty answer is an
+    /// unknown outcome: the caller verifies the group by reading its parent.
+    func createGroup(database: String, path: [String]) async throws -> String
+}
+
+/// Everything a bounded import run may invoke on the target.
+public protocol ImportWriteSurface: ImportWriteTransport, ImportGroupCreating {}
+
 public protocol ImportReadTransport: Sendable {
     /// Independent read of one record. Never the write call's own response.
     func read(uuid: String) async throws -> ImportRecordSnapshot
