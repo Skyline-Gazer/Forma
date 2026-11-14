@@ -1,8 +1,8 @@
 # Forma — Implementation Roadmap (Approved Planning Baseline)
 
-**状态：P0/P1/P2 已授权并完成工程实现；P3-A（离线评测基础设施）已授权进行中；I1-A（离线 Import 基础）已授权并完成离线实现；I1-B1（真实 MCP 能力发现与只读验证）已授权并完成现场探测；I1-B2 预检完成默认拒绝边界、隔离库绑定与只读复核（`B2 Preflight Ready — Awaiting Owner Write Authorization`），写入仍未授权；P3-B 真实模型评测、I2、R1 未授权。**  
-**基线：** [SPEC v0.1.1 FROZEN](SPEC.md) · [PLAN v0.1](PLAN.md) · [PLAN PR #1 merged](https://github.com/Skyline-Gazer/Forma/pull/1) · [P2 验收报告](P2-ACCEPTANCE.md) · [I1-B1 能力发现](I1-B1-CAPABILITY-DISCOVERY.md) · [I1-B2 预检](I1-B2-PREFLIGHT.md)  
-**Owner 决策记录：** 2026-11-11（P0/P1 授权）· 2026-11-12（P2 收尾接受 + P3 拆分授权）· 2026-11-13（I1-A）· 2026-11-14（I1-B1、I1-B2 预检与库绑定），详见下方「授权历史」
+**状态：P0/P1/P2 已授权并完成工程实现；P3-A（离线评测基础设施）已授权进行中；I1-A（离线 Import 基础）已授权并完成离线实现；I1-B1（真实 MCP 能力发现与只读验证）已授权并完成现场探测；I1-B2 已在隔离库完成真实 Import 集成验收（**Import Integration Verified（限定范围）**：4 条合成记录、源/目标 SHA 一致、merge 回读、幂等、冲突与断连恢复）；Replicant、部分成功路径与生产迁移仍未验证/未授权；P3-B 真实模型评测、I2、R1 未授权。**  
+**基线：** [SPEC v0.1.1 FROZEN](SPEC.md) · [PLAN v0.1](PLAN.md) · [PLAN PR #1 merged](https://github.com/Skyline-Gazer/Forma/pull/1) · [P2 验收报告](P2-ACCEPTANCE.md) · [I1-B1 能力发现](I1-B1-CAPABILITY-DISCOVERY.md) · [I1-B2 预检](I1-B2-PREFLIGHT.md) · [I1-B2 现场验收](I1-B2-ACCEPTANCE.md)  
+**Owner 决策记录：** 2026-11-11（P0/P1 授权）· 2026-11-12（P2 收尾接受 + P3 拆分授权）· 2026-11-13（I1-A）· 2026-11-14（I1-B1、I1-B2 预检、库绑定与写入授权），详见下方「授权历史」
 
 ## 已批准的三项 Owner 决策
 
@@ -52,6 +52,7 @@ P2 的 E2/E3 可部分并行，但用户可操作的 Prototype 应形成完整 M
   - **2026-11-13（Owner 授权 I1-A：可靠 Import 的离线设计确认与基础实现）：** 允许在 DevBox + macOS CI 内开发 Preflight、SHA/快照校验、幂等操作键、版本化 SQLite Intent/Ledger、四态仲裁、单写者与重启恢复、Fake MCP Transport、故障注入与独立回读验证。幂等键为 `(source_id, snapshot_fingerprint, manifest_revision, target_association_id, operation_kind)`；写入前先持久化 Intent；不确定副作用进入 VERIFY_REQUIRED；不声明未经真实接口证明的 exactly-once。**明确禁止**：真实 DEVONthink 写工具调用、真实记录/Group 创建、生产库写入、真实文件 Import、真实 OneDrive hydration、真实 Provider 请求、修改冻结 SPEC、默认启用应用层 WriteClient、把 Fake Transport 成功当作现场验收。I1-B（隔离库真实写入、Metadata/UUID/SHA 回读、断连与重复运行）须 Owner 单独批准；在此之前 I1-A 只报 **Offline Verified**。
   - **2026-11-14（Owner 授权 I1-B1：真实 MCP 能力发现与只读验证）：** 允许在 macOS 上用官方 DEVONthink MCP 执行 `initialize`/`tools/list`/分页与只读调用，记录版本、schema 摘要与能力矩阵；发现真实契约缺陷时允许在独立 PR 修复 `DEVONthinkReadOnlyClient` 并通过 macOS CI。仍**禁止**任何写工具调用、真实记录/Group 创建与生产库记录级查询；Owner 本轮未指定隔离测试库，因此库级验收记为 `BLOCKED`。结果见 `docs/I1-B1-CAPABILITY-DISCOVERY.md`；写入提案见 `docs/I1-B2-AUTHORIZATION-PROPOSAL.md`（**未获批准前不得执行**）。
   - **2026-11-14（I1-B2 预检与隔离库绑定，未授权写入）：** 完成默认拒绝执行边界（`Sources/FormaCore/Import/ImportWriteBoundary.swift`）；Owner 创建 `Forma_I1B2_Sandbox` 后，通过只读 `get_databases` 完成绑定（名称精确、`is_inbox=false`、与生产库 UUID 不同、初始 0 条记录、根下 6 个子项 = 3 个系统组 + 3 个智能组），并复核 3 个写工具 schema digest、8 个 Metadata 字段与 4 个合成文件 SHA-256。预检报告见 `docs/I1-B2-PREFLIGHT.md`。**本轮仍为零写调用**；写入需 Owner 明确批准提案后才可执行。
+  - **2026-11-14（Owner 授权 I1-B2 真实写入，并在隔离库完成验收）：** 授权仅在 `Forma_I1B2_Sandbox` 与本轮 `Forma_I1B2/<run-id>` 内使用 `create_group_path`、`import_file`（`mode=import`）与 `set_record_custom_metadata`（`mode=merge`，8 个 identifier），预算 4 条记录 / 2 个 Group；禁止删除、移动、Replicant、字段定义变更与任何生产库写入。真实调用全部经 `GuardedImportWriteTransport`（实现见 PR #74）。结果：4 条合成记录全部导入，源/目标标准 SHA-256 逐字节一致，Metadata merge 后逐字段回读通过且未写入字段未被改动，重复执行 `SKIP_VERIFIED` 且不再调用 `import_file`，冲突拒绝覆盖，超时后以只读回查判定（写入实际已落库），断连无盲重试，重启恢复无重复记录，生产库零写入。报告见 `docs/I1-B2-ACCEPTANCE.md`。`import_file` 精确返回结构与 `dropped_fields` 部分成功路径仍为 **NOT_VERIFIED**。
 - 首阶段 Prototype 只读隔离 DEVONthink 库，禁止任何写入；生产 Project_Archive 现有 991 条记录不可修改。
 - SPEC 产品契约有变化须先获 Owner 批准修订；一般实现细节以 PLAN 和对应 Issue 为准。
 - 公开仓库只允许脱敏/合成案例；真实资料留本地。
