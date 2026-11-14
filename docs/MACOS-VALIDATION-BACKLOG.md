@@ -21,12 +21,12 @@
 
 | # | 项目 | 关联 | 当前状态 | 阻塞条件 |
 | --- | --- | --- | --- | --- |
-| M1 | 真实 DEVONthink MCP 能力与版本核验 | #10 / P0 | Deferred | 隔离测试库与只读凭据 |
+| M1 | 真实 DEVONthink MCP 能力与版本核验 | #10 / P0 | **Partially verified**（2026-11-14，I1-B1 现场探测完成） | 剩余：分页路径与跨版本漂移；读写范围仅限本轮授权 |
 | M2 | Keychain 与原生权限行为 | #18 / P2 | Deferred | 真实 macOS 会话 |
 | M3 | PDFKit 实际抽取兼容性 | #13 / P1 | Deferred | 真实文档夹具 |
 | M4 | OneDrive SF_DATALESS / hydration / 书签恢复 | #13 / P1 | Deferred | 授权 OneDrive 目录 |
 | M5 | SwiftUI 交互与真实 GUI 验证 | #17 #18 / P2 | Deferred | 人工交互 |
-| M6 | Import 真实隔离库写入与崩溃恢复 | #21 #22 / I1 | Deferred（未授权） | I1 授权 + 隔离库 |
+| M6 | Import 真实隔离库写入与崩溃恢复 | #21 #22 / I1 | **Verified（Limited Scope）**（2026-11-14，I1-B2）；响应前断连、写入中崩溃、partial success 仍 Deferred | 新写预算 / 真实崩溃注入 / 部分成功授权 |
 | M7 | Developer ID 签名、公证与独立发行 | #24 / R1 | Deferred（未授权） | 证书与分发决策 |
 | M8 | Mac App Store 沙盒兼容性 | #52 / R1 | Deferred（渠道未定） | 重新选择该渠道 |
 | M9 | 10,000 文件真实扫描性能验收 | #20 / P3-A | Deferred | 真实目录 + 硬件记录 |
@@ -39,13 +39,11 @@
 
 - **关联**：Issue #10（E0 / P0）。
 - **已在 DevBox 完成**：`DEVONthinkReadOnlyClient` 的请求/响应编解码、`MCPStdio` 的子进程边界与超时、12 字段契约的类型与只读方法清单；`Tests/FormaCoreTests/MCPTests.swift` 用假传输覆盖了协议层。
-- **为什么无法在 Linux 验证**：需要真实 DEVONthink 应用、`tools/list` 实际返回值与隔离测试库；假传输不能证明线上能力。
-- **需要**：macOS 14+、DEVONthink 版本（待现场记录）、隔离测试库 UUID。
+- **macOS 现场完成（2026-11-14，I1-B1/B2）**：DEVONthink 4.4.2 + MCP 4.4.2（`devonthink-mcp` 1.0.0，协议 `2025-06-18`，`--stdio`）；`initialize`/`tools/list`（62 工具、单页无 `nextCursor`、全部无 `outputSchema`）；读工具真实响应形状、UUID 大小写敏感性、`get_record_parents`/`get_record_custom_metadata` 的批量封装均已记录，见 `docs/I1-B1-CAPABILITY-DISCOVERY.md`。
+- **仍未验证**：跨 DEVONthink/MCP 版本的行为漂移（只测过 4.4.2）；`tools/list` 分页路径（现场未出现第二页，分页分支只有假传输覆盖）。
 - **所需权限/资源**：只读访问；不得使用生产 `Project_Archive`（991 条记录不可修改）。
-- **测试步骤**：只读探针 → `tools/list` 与 `classify_record`/`lookup_records` 逐项对照 → 记录返回字段与 `nativeTypeStatus` 的差距。
-- **预期证据**：真实 MCP 响应原文（脱敏）、字段级对照表、V3 未确认项清单。
-- **通过条件**：12 字段中可确认项有明确证据，未确认项显式标记 `unverified`，且无写入调用。
-- **当前阻塞**：隔离测试库与只读凭据未提供。
+- **通过条件**：字段级对照表存在、未确认项显式标记 `unverified`、且无写入调用。
+- **当前状态**：只读部分已验证；剩余项随 DEVONthink 升级复核，不阻塞 I1 收尾。
 
 ### M2 Apple Keychain 与原生权限行为
 
@@ -98,14 +96,12 @@
 ### M6 Import 真实隔离库写入、原生 Metadata 回读与崩溃恢复
 
 - **关联**：Issue #21、#22（E5 / I1）。
-- **已在 DevBox 完成**：无实现。I1 **未授权**；组件分类、可离线准备的范围与逐项完成条件见 `docs/I1-OFFLINE-PREPARATION.md`（设计评估，不含代码）。不得把模拟通过写成 Import 验收成功。
-- **为什么无法在 Linux 验证**：写入 DEVONthink 需要真实 MCP 写能力与隔离库；崩溃恢复需真实进程被杀。
-- **需要**：I1 授权、隔离测试库、单写者状态机与 Ledger schema 冻结。
-- **所需权限/资源**：隔离库读写；生产库永不触碰。
-- **测试步骤**：Preflight → 单记录写入 → 幂等重复 → 创建后崩溃 → 重启恢复 → 冲突 hold。
-- **预期证据**：四态（`SKIP_VERIFIED`/`IMPORT`/`CONFLICT_HOLD`/`VERIFY_REQUIRED`）的真实转移记录与原生 Metadata 回读值。
-- **通过条件**：写入后回读一致、重复不产生第二条、崩溃后可恢复到确定状态。
-- **当前阻塞**：I1 未授权（外部授权阻塞，不是技术阻塞）。
+- **DevBox / macOS CI 已交付**：Preflight 20 码、`ImportLedger`（v1 + v2 授权摘要列）、`ImportSingleWriter` 租约、四态仲裁、`ImportExecutor`、默认拒绝边界 `ImportWriteBoundary`、`GuardedImportWriteTransport` 与真实适配器 `DEVONthinkMCPWriteTransport`；契约见 `docs/ADR-I1-A-IMPORT-CONTRACT.md`，实现见 PR #62–#75。
+- **macOS 现场已验证（2026-11-14，I1-B2，限定范围）**：隔离库 + 2 个 Group + 4 条合成记录；源/目标标准 SHA-256 4/4 逐字节一致；Metadata merge 逐字段回读（6 非空 + 2 显式 null → missing，4 个未写入字段未被改动）；重复运行 `SKIP_VERIFIED` 且 `import_file` 调用 0；冲突拒绝覆盖；写请求超时后写入已落库 → `VERIFY_REQUIRED` 且未重试；发送前断连（请求未发出）无盲重试；进程重启后重跑无重复记录；生产库零写入；沙盒对象未删除。见 `docs/I1-B2-ACCEPTANCE.md`。
+- **仍未验证（Deferred）**：请求发出后、响应前断连；写入进行中被强杀的崩溃恢复（真实 MCP；Fake Transport 已覆盖）；`dropped_fields` / 部分成功；`import_file` 精确返回结构；异步可见性延迟场景。
+- **为什么无法在 DevBox 验证**：写入 DEVONthink 需要真实 MCP 写能力与隔离库；崩溃恢复需真实进程被杀与真实传输。
+- **仍需**：新的写预算（返回结构、部分成功）与真实崩溃注入设计。
+- **通过条件**：上述 Deferred 项在授权范围内各自取得实测证据；在此之前 M6 只按限定范围记录。
 
 ### M7 Developer ID 签名、公证与独立发行
 
