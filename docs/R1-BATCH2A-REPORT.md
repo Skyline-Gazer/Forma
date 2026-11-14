@@ -62,7 +62,8 @@ WorkspaceModel.restore()
 
 | 场景 | 观察 | 判定 |
 | --- | --- | --- |
-| 首次授权 + 正常扫描 | `register` 成功（`security_scoped=1`），扫描 `complete`，3 条 entry 全 `present` | PASS |
+| 首次授权（API 路径）+ 正常扫描 | `register` 成功（`security_scoped=1`），扫描 `complete`，3 条 entry 全 `present` | PASS |
+| 首次授权（应用内 `NSOpenPanel` 路径） | 未被验证：本轮授权通过 CLI 夹具走同一 `SourceWorkspace.register`，未在 GUI 面板中选目录 | NOT_VERIFIED |
 | 权限失效（`chmod 000`） | 扫描 `incomplete`，issue = `unreadable`，`missing` 计数 **0**，历史 entry ID 全部保留 | PASS |
 | 扫描 incomplete 时历史不被标记 missing | 同上（`listing.state=incomplete`，`missing=0`） | PASS |
 | 恢复权限 + 重新授权 | 可用性 `accessible`；`reauthorize` 同一目录 → `updated(accessible)`；重扫 `complete`、ID 稳定 | PASS |
@@ -147,7 +148,7 @@ GUI 证据来自 Accessibility 树文本转储（`ax-empty.txt`、`ax-pending.tx
 | Baseline 静态验收（bundle id / 签名 / 结构 / 依赖） | PASS |
 | Baseline 应用资源（SwiftPM resource bundle） | **FAIL**（缺 `Forma_FormaCore.bundle`） |
 | Baseline 启动路径 | **FAIL**（资源 bundle 缺失；修法见 §1） |
-| M01 书签授权 / 扫描 / 撤销 / 重授权 / 身份校验 | PASS |
+| M01 书签授权 / 扫描 / 撤销 / 重授权 / 身份校验 | PASS（授权经 API 夹具；GUI 面板选目录 NOT_VERIFIED） |
 | M01 删除根目录的分类（`missing` vs `bookmark_stale`） | **FAIL** |
 | M01 外部卷 / iCloud | BLOCKED |
 | M02 添加 / 读取 / 更新 / 轮换 / 删除 / 迁移 / 回滚 | PASS |
