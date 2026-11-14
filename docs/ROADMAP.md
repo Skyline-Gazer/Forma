@@ -1,6 +1,6 @@
 # Forma — Implementation Roadmap (Approved Planning Baseline)
 
-**状态：P0/P1/P2 已授权并完成工程实现；P3-A（离线评测基础设施）已授权进行中；I1 已收尾——I1-A 离线实现、I1-B0 执行边界硬化、I1-B1 真实 MCP 能力发现与只读验证、I1-B2 隔离库真实 Import 集成验收均已完成，整体结论为 **Import Integration Verified（Limited Scope / 限定范围）**，见下方「I1 最终状态」；`import_file` 精确返回结构、`dropped_fields` 部分成功路径、响应前断连与写入中崩溃仍为 NOT_VERIFIED，Replicant 与生产迁移未验证/未授权；**P3-B 真实模型评测、I2、R1 均未授权**（R1 仅有 `docs/R1-READINESS.md` 的技术调查与实施方案，不等于开发授权）。**  
+**状态：P0/P1/P2 已授权并完成工程实现；P3-A（离线评测基础设施）已授权进行中；I1 已收尾——I1-A 离线实现、I1-B0 执行边界硬化、I1-B1 真实 MCP 能力发现与只读验证、I1-B2 隔离库真实 Import 集成验收均已完成，整体结论为「Import Integration Verified（Limited Scope / 限定范围）」，见下方「I1 最终状态」；`import_file` 精确返回结构、`dropped_fields` 部分成功路径、响应前断连与写入中崩溃仍为 NOT_VERIFIED，Replicant 与生产迁移未验证/未授权；P3-B 真实模型评测、I2、R1 均未授权（R1 仅有 `docs/R1-READINESS.md` 的技术调查与实施方案，不等于开发授权）。**  
 **基线：** [SPEC v0.1.1 FROZEN](SPEC.md) · [PLAN v0.1](PLAN.md) · [PLAN PR #1 merged](https://github.com/Skyline-Gazer/Forma/pull/1) · [P2 验收报告](P2-ACCEPTANCE.md) · [I1-A 离线验收](I1-A-ACCEPTANCE.md) · [I1-B1 能力发现](I1-B1-CAPABILITY-DISCOVERY.md) · [I1-B2 预检](I1-B2-PREFLIGHT.md) · [I1-B2 现场验收](I1-B2-ACCEPTANCE.md) · [R1 Readiness](R1-READINESS.md)  
 **Owner 决策记录：** 2026-11-11（P0/P1 授权）· 2026-11-12（P2 收尾接受 + P3 拆分授权）· 2026-11-13（I1-A）· 2026-11-14（I1-B1、I1-B2 预检、库绑定与写入授权；I1 收尾文档修订），详见下方「授权历史」
 
@@ -73,7 +73,7 @@ P2 的 E2/E3 可部分并行，但用户可操作的 Prototype 应形成完整 M
   - **2026-11-14（I1-B2 预检与隔离库绑定，未授权写入）：** 完成默认拒绝执行边界（`Sources/FormaCore/Import/ImportWriteBoundary.swift`）；Owner 创建 `Forma_I1B2_Sandbox` 后，通过只读 `get_databases` 完成绑定（名称精确、`is_inbox=false`、与生产库 UUID 不同、初始 0 条记录、根下 6 个子项 = 3 个系统组 + 3 个智能组），并复核 3 个写工具 schema digest、8 个 Metadata 字段与 4 个合成文件 SHA-256。预检报告见 `docs/I1-B2-PREFLIGHT.md`。**本轮仍为零写调用**；写入需 Owner 明确批准提案后才可执行。
   - **2026-11-14（Owner 授权 I1-B2 真实写入，并在隔离库完成验收）：** 授权仅在 `Forma_I1B2_Sandbox` 与本轮 `Forma_I1B2/<run-id>` 内使用 `create_group_path`、`import_file`（`mode=import`）与 `set_record_custom_metadata`（`mode=merge`，8 个 identifier），预算 4 条记录 / 2 个 Group；禁止删除、移动、Replicant、字段定义变更与任何生产库写入。真实调用全部经 `GuardedImportWriteTransport`（实现见 PR #74）。结果：4 条合成记录全部导入，源/目标标准 SHA-256 逐字节一致，Metadata merge 后逐字段回读通过且未写入字段未被改动，重复执行 `SKIP_VERIFIED` 且不再调用 `import_file`，冲突拒绝覆盖，超时后以只读回查判定（写入实际已落库），断连无盲重试，重启恢复无重复记录，生产库零写入。报告见 `docs/I1-B2-ACCEPTANCE.md`。`import_file` 精确返回结构与 `dropped_fields` 部分成功路径仍为 **NOT_VERIFIED**。
   - **2026-11-14（I1 收尾：只读取证复核、文档纠错与 Issue 收敛；未新增任何写入授权）：** 复核实基线 `dev` @ `e1a1379`（PR #75 合并，CI run `43581724081` success），PR #71–#75 全部 merged。收尾只做只读工作：未调用任何 DEVONthink 写工具，未刷新写预算，未触碰沙盒对象，未访问生产库，未同步 CNB，`main` 与 ADS pin 未改，SPEC v0.1.1 未改。文档修订：`docs/I1-B2-ACCEPTANCE.md` 把“写请求超时 / 发送前断连 / 发送后响应前断连”三种情况分开判定（第三种为 **NOT_VERIFIED**）、把 Metadata 表述修正为“6 非空 + 2 显式 null → missing + 4 未写入”、把 `import_file` 返回结构拆成“适配器层结论 VERIFIED / 字段结构 NOT_VERIFIED”。原始证据目录 `~/.forma/evidence/i1-b2/` 位于运行主机（macOS），本轮复核主机为 DevBox，**未重读**该目录，因此现场观察值保持原记录强度、未验证项不升格。R1 仅完成技术调查与实施方案（`docs/R1-READINESS.md`），**不构成开发授权**。
-- 首阶段 Prototype 只读隔离 DEVONthink 库，禁止任何写入；生产 Project_Archive 现有 991 条记录不可修改。
+- 默认只读：除 I1-B2 已按 Owner 批准、在隔离库与本轮 Group 内完成的限定写入外，Forma 对 DEVONthink **默认禁止任何写入**；生产 Project_Archive 现有 991 条记录不可修改。任何新的真实写入（含 I1 剩余探针、崩溃注入、I2 Replicant、生产迁移）都需要 Owner 单独授权与新预算。
 - SPEC 产品契约有变化须先获 Owner 批准修订；一般实现细节以 PLAN 和对应 Issue 为准。
 - 公开仓库只允许脱敏/合成案例；真实资料留本地。
 - 不引入 Rust/Tauri、独立 RAG/Vector DB 或不必要服务。

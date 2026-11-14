@@ -1,6 +1,8 @@
 # I1 离线准备评估（I1-OFFLINE-PREPARATION）
 
-> 状态：**设计评估，不含实现**。I1 未授权；本文件不新增 Import Executor、不定义已批准的持久化 schema、不连接 DEVONthink 写入。它记录"哪些组件可以在 DevBox 离线准备、各自需要什么才能开始、以及为什么本轮没有写代码"。
+> 状态：**历史文档（2026-11-13 的 I1 授权前评估）**。文中「I1 未授权」反映的是写作当时的事实，已被 2026-11-13/14 的 I1-A/B0/B1/B2 授权与验收取代；当前状态见 `docs/ROADMAP.md`「I1 最终状态」与 `docs/I1-B2-ACCEPTANCE.md`。原文保留不改，作为授权前边界推理的证据。
+>
+> 原始说明：**设计评估，不含实现**。本文件不新增 Import Executor、不定义已批准的持久化 schema、不连接 DEVONthink 写入。它记录"哪些组件可以在 DevBox 离线准备、各自需要什么才能开始、以及为什么本轮没有写代码"。
 >
 > 关联：Issue [#7](https://github.com/Skyline-Gazer/Forma/issues/7)、[#21](https://github.com/Skyline-Gazer/Forma/issues/21)、[#22](https://github.com/Skyline-Gazer/Forma/issues/22)、`docs/PLAN.md` §10、`docs/ROADMAP.md`（I1 未授权）、`docs/MACOS-VALIDATION-BACKLOG.md` M6。
 
