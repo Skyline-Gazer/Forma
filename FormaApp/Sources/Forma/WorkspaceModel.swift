@@ -254,6 +254,9 @@ final class WorkspaceModel: ObservableObject {
     /// `scheduleReload()`.
     private var isRestoring = false
     private var auxWork: Task<Void, Never>?
+    /// The MCP client a discovery is using. Held so quitting can close the child
+    /// instead of leaving it to the process teardown.
+    private var discoveryClient: DEVONthinkReadOnlyClient?
 
     private static let store = UserDefaults.standard
 
@@ -849,10 +852,18 @@ final class WorkspaceModel: ObservableObject {
         auxWork?.cancel()
     }
 
+    /// Cancels the model's tasks and closes any MCP child they were using.
+    ///
+    /// Cancellation is not completion: the scan row keeps `scanning` and the next
+    /// launch reports it as interrupted. Nothing here records success.
     func cancelAll() {
         work?.cancel()
         fileWork?.cancel()
         auxWork?.cancel()
+        if let client = discoveryClient {
+            discoveryClient = nil
+            Task { await client.close() }
+        }
     }
 
     // MARK: - Export, load and revalidate
@@ -1224,6 +1235,7 @@ final class WorkspaceModel: ObservableObject {
             defer { auxWork = nil; if phase == .discoveringMCP { phase = .idle } }
             phase = .discoveringMCP
             let client = DEVONthinkReadOnlyClient()
+            discoveryClient = client
             do {
                 let found = try await client.discover()
                 if !Task.isCancelled { capabilities = found }
@@ -1231,6 +1243,7 @@ final class WorkspaceModel: ObservableObject {
                 if !Task.isCancelled { show(error, operation: .discoverMCP, fallback: .unavailable) }
             }
             await client.close()
+            if discoveryClient === client { discoveryClient = nil }
         }
     }
 

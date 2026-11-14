@@ -30,6 +30,19 @@ public actor SourceWorkspace {
         }
     }
 
+    /// What a fresh process found waiting for it.
+    ///
+    /// The rows are read *before* the sweep, because the phase they had is the
+    /// only record of what the previous process actually did; after the sweep
+    /// they are all `verify_required`. Nothing here writes to DEVONthink, and
+    /// nothing is retried.
+    public func importRecoveryOverview(at date: Date = Date()) throws -> ImportRecoveryOverview {
+        let ledger = ImportLedger(database: store.database)
+        let before = try ledger.inFlightOperations().filter { $0.phase != .verifyRequired }
+        let outcome = try ImportRecovery.open(ledger, at: date)
+        return ImportRecoveryPresenter.overview(before: before, after: outcome.inFlight)
+    }
+
     public func listing(_ scope: SourceScope) throws -> SourceListing {
         try store.database.read { db in
             let current = try SourceStore.scope(db, id: scope.id)
