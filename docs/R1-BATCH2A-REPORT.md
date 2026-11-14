@@ -1,6 +1,6 @@
-# R1 Batch 2A — Real macOS Acceptance（执行结果：BLOCKED）
+# R1 Batch 2A — Real macOS Acceptance（现场验证：BLOCKED；工程部分：已完成）
 
-状态：**BLOCKED — 执行主机不是 macOS**。本报告只记录实际执行到的部分与阻塞证据；没有执行的项目一律标记 BLOCKED，不写成 PASS/NOT_VERIFIED 的混合。
+状态：**现场验证 BLOCKED — 执行主机不是 macOS**；**无真实写入的工程部分（T05/T06/T04 接线）已完成并经 macOS CI 验证**（#87/#88/#89）。本报告记录实际执行到的部分与阻塞证据；没有执行的项目一律标记 BLOCKED，不写成 PASS/NOT_VERIFIED 的混合。
 
 - 授权：Owner 2026-11-14 批准 R1 Batch 2A（仅无 DEVONthink 写入的现场验证）。
 - 执行会话主机：Linux DevBox（`Linux 7.0.0-42-generic x86_64`）。
@@ -138,3 +138,54 @@
 9. 证据写入 `~/.forma/evidence/r1-batch2a/`，仓库只提交脱敏报告。
 
 每一步都要记录：GUI 实际显示、持久化数据变化、MCP 真实调用、以及是否涉及写入中恢复（本批不应涉及）。
+
+## 12. Mac Agent 验收入口（Batch 2A 工程完成后）
+
+工程部分已实现（T05 #87 / T06 #88 / T04 接线 #89），现场验证仍未执行。在真实 macOS 上按下面顺序执行即可，不需要再写代码。
+
+### 12.1 前置
+
+- macOS 14+、DEVONthink 4.4.2（记录实际版本）、可登录桌面会话。
+- 构建：`sh scripts/build_app.sh`（或 `gh run download <run-id> -n Forma-app-adhoc`）。
+- 记录：`sw_vers`、`system_profiler SPSoftwareDataType`、`codesign -dv --verbose=4 Forma.app`、`spctl -a -vv Forma.app`。
+
+### 12.2 书签（M01 / T05）
+
+1. 新建合成目录（例如 `~/FormaBatch2A/source`，放 2–3 个文本文件）。
+2. 应用内 **Add Source…** 选择它 → **Scan** → 状态应为 `Scan complete`，侧栏无警告图标。
+3. 在「系统设置 → 隐私与安全性 → 文件与文件夹」中撤销该目录（或删除目录后重建同名空目录）。
+4. 再 **Scan**：应显示 `Incomplete scan`；横幅标题为「Access was revoked」或「Folder not found」；历史条目**不得**变成 `Missing`。
+5. 点 **Reauthorize…** 重新选择**同一目录**：横幅消失、状态回到 `Scan complete`。
+6. 再点 **Reauthorize…** 但选择**另一个目录**：应提示「That folder is not the source this entry was registered from.」，且原来源仍可用（不静默替换）。
+
+### 12.3 Keychain（M02 / T06）
+
+- 自动化入口：`swift test --filter KeychainCredentialStoreTests`（真实 login keychain，使用一次性合成 service 并在用后删除）。
+- 手工入口：应用 Settings 中保存/读取 API key；随后 `security find-generic-password -s com.skyline-gazer.forma.provider-api-key` 应能看到条目（**不要**删除真实条目）。
+- 锁定态：锁屏后触发一次读取，记录错误是否为 `credential_locked`；无法稳定复现则记 **NOT_VERIFIED**。
+- 已知限制：文件型 login keychain 不回读 `kSecAttrAccessible`；真实属性验证需要 data protection keychain 或真机人工确认。
+
+### 12.4 MCP（M03）
+
+1. 应用内「DEVONthink MCP」发现按钮：记录 `initialize`/`tools/list` 的版本与工具数。
+2. `pgrep -fl 'DEVONthink MCP --stdio'` 记录子进程；`pgrep -P <Forma pid>` 确认归属。
+3. 只终止本次实例的子进程（`kill <pid>`），再点一次发现：应建立新连接并重新协商；**不得**终止 DEVONthink 主程序或他人会话的子进程。
+4. 记录 schema digest 与 B1/B2 基线是否一致（漂移时写侧应拒绝写入，但本批不触发写入）。
+
+### 12.5 恢复回查（M04 / T04）
+
+1. 正常启动，确认恢复横幅（无未决操作时不应出现）。
+2. 制造未决操作（仅测试机）：备份 `~/Library/Application Support/Forma/workspace.sqlite` 后，用 `sqlite3` 插入一条 `verify_required` 行（`import_runs` + `import_operations`，`key_digest` 用任意合成串；`target_database` 填隔离库 UUID；`target_group_path` 填 `["Forma_I1B2","r1"]`）。
+3. 重启应用：横幅应显示 `outcome unknown`，且 **Recheck read-only** 在未确认范围时不可用。
+4. 点 **Read Scope…** 填隔离库 UUID / 名称 / `Forma_I1B2/r1` → 确认；**Recheck read-only** 变为可用。
+5. 点击回查：无 `actual_uuid` 时结果应为 `unverifiable`（原因 `no_record_uuid`），操作**保持** `verify_required`；若把 `actual_uuid` 填成 B2 记录之一并把 `source_sha256` 填成该记录源文件 SHA，则应得到 `verified`。
+6. 确认没有新的 DEVONthink 记录产生，`import_operations` 行数不变（除手工插入的那一条）。
+
+### 12.6 退出（M04）
+
+- 正常退出（⌘Q）：`pgrep -fl 'Forma.app/Contents/MacOS/Forma'` 与 MCP 子进程都应消失；重启后横幅状态与退出前一致。
+- 强制退出（Activity Monitor）：重启后仍能看到未决操作（Ledger 清扫生效）。
+
+### 12.7 证据
+
+写入 `~/.forma/evidence/r1-batch2a/`：`versions.txt`、`bookmark-*.txt`、`keychain-*.txt`、`mcp-*.txt`、`recovery-*.txt`、`screenshots/`。仓库只提交脱敏报告。
