@@ -1,8 +1,8 @@
 # Forma — Implementation Roadmap (Approved Planning Baseline)
 
-**状态：P0/P1/P2 已授权并完成工程实现；P3-A（离线评测基础设施）已授权进行中；I1-A（离线 Import 基础）已授权并完成离线实现，I1-B 真实写入未授权；P3-B 真实模型评测、I1-B/I2/R1 未授权。**  
-**基线：** [SPEC v0.1.1 FROZEN](SPEC.md) · [PLAN v0.1](PLAN.md) · [PLAN PR #1 merged](https://github.com/Skyline-Gazer/Forma/pull/1) · [P2 验收报告](P2-ACCEPTANCE.md)  
-**Owner 决策记录：** 2026-11-11（P0/P1 授权）· 2026-11-12（P2 收尾接受 + P3 拆分授权，见下方「授权历史」）
+**状态：P0/P1/P2 已授权并完成工程实现；P3-A（离线评测基础设施）已授权进行中；I1-A（离线 Import 基础）已授权并完成离线实现；I1-B1（真实 MCP 能力发现与只读验证）已授权并完成现场探测，其中库级验收因未指定隔离库而为 `BLOCKED`；I1-B2 真实写入、P3-B 真实模型评测、I2、R1 未授权。**  
+**基线：** [SPEC v0.1.1 FROZEN](SPEC.md) · [PLAN v0.1](PLAN.md) · [PLAN PR #1 merged](https://github.com/Skyline-Gazer/Forma/pull/1) · [P2 验收报告](P2-ACCEPTANCE.md) · [I1-B1 能力发现](I1-B1-CAPABILITY-DISCOVERY.md)  
+**Owner 决策记录：** 2026-11-11（P0/P1 授权）· 2026-11-12（P2 收尾接受 + P3 拆分授权）· 2026-11-13（I1-A）· 2026-11-14（I1-B1），详见下方「授权历史」
 
 ## 已批准的三项 Owner 决策
 
@@ -50,6 +50,7 @@ P2 的 E2/E3 可部分并行，但用户可操作的 Prototype 应形成完整 M
     - I1 / I2 / R1：未授权。
     - 质量阈值（precision_auto ≥95%、coverage ≥70%、field_precision ≥98%、high_confidence_error_rate ≤2%）仍为待批候选值；正式 Gate 须在真实测量、分层、区间与风险分析后由 Owner 再次批准，Agent 不得自行宣布其已成为验收标准。
   - **2026-11-13（Owner 授权 I1-A：可靠 Import 的离线设计确认与基础实现）：** 允许在 DevBox + macOS CI 内开发 Preflight、SHA/快照校验、幂等操作键、版本化 SQLite Intent/Ledger、四态仲裁、单写者与重启恢复、Fake MCP Transport、故障注入与独立回读验证。幂等键为 `(source_id, snapshot_fingerprint, manifest_revision, target_association_id, operation_kind)`；写入前先持久化 Intent；不确定副作用进入 VERIFY_REQUIRED；不声明未经真实接口证明的 exactly-once。**明确禁止**：真实 DEVONthink 写工具调用、真实记录/Group 创建、生产库写入、真实文件 Import、真实 OneDrive hydration、真实 Provider 请求、修改冻结 SPEC、默认启用应用层 WriteClient、把 Fake Transport 成功当作现场验收。I1-B（隔离库真实写入、Metadata/UUID/SHA 回读、断连与重复运行）须 Owner 单独批准；在此之前 I1-A 只报 **Offline Verified**。
+  - **2026-11-14（Owner 授权 I1-B1：真实 MCP 能力发现与只读验证）：** 允许在 macOS 上用官方 DEVONthink MCP 执行 `initialize`/`tools/list`/分页与只读调用，记录版本、schema 摘要与能力矩阵；发现真实契约缺陷时允许在独立 PR 修复 `DEVONthinkReadOnlyClient` 并通过 macOS CI。仍**禁止**任何写工具调用、真实记录/Group 创建与生产库记录级查询；Owner 本轮未指定隔离测试库，因此库级验收记为 `BLOCKED`。结果见 `docs/I1-B1-CAPABILITY-DISCOVERY.md`；写入提案见 `docs/I1-B2-AUTHORIZATION-PROPOSAL.md`（**未获批准前不得执行**）。
 - 首阶段 Prototype 只读隔离 DEVONthink 库，禁止任何写入；生产 Project_Archive 现有 991 条记录不可修改。
 - SPEC 产品契约有变化须先获 Owner 批准修订；一般实现细节以 PLAN 和对应 Issue 为准。
 - 公开仓库只允许脱敏/合成案例；真实资料留本地。
