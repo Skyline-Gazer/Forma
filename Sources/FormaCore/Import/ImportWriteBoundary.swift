@@ -217,12 +217,19 @@ public actor ImportWriteAuthorization {
     }
 
     /// Marks a record as belonging to this run, using an *observed* database
-    /// UUID — normally from the independent readback, never from a request
-    /// parameter the server merely echoed.
-    public func recordVerified(uuid: String, database: String) throws {
+    /// UUID and parent path — normally from the independent readback, never from
+    /// a request parameter the server merely echoed.
+    ///
+    /// The parent check matters: a record that merely lives in the same database
+    /// (a leftover from someone else's work) must not become a metadata target.
+    public func recordVerified(uuid: String, database: String, parentPath: [String]) throws {
         guard database.uppercased() == scope.databaseID.uppercased() else {
             throw ImportWriteRefusal(code: .databaseNotInScope, tool: .setRecordCustomMetadata,
                                      detail: "observed database is not the authorized database")
+        }
+        guard scope.contains(path: parentPath) else {
+            throw ImportWriteRefusal(code: .groupPathOutsideScope, tool: .setRecordCustomMetadata,
+                                     detail: "observed parent group is outside the authorized prefix")
         }
         provenRecords.insert(uuid.uppercased())
     }
@@ -293,7 +300,8 @@ public actor GuardedImportWriteTransport: ImportWriteTransport {
                 throw ImportWriteRefusal(code: .databaseNotInScope, tool: .importFile,
                                          detail: "lookup returned a record from another database")
             }
-            try await authorization.recordVerified(uuid: record.uuid, database: record.database)
+            try await authorization.recordVerified(uuid: record.uuid, database: record.database,
+                                                  parentPath: record.parentPath)
         }
         return result
     }

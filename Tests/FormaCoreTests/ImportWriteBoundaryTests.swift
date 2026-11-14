@@ -170,7 +170,8 @@ struct ImportWriteBoundaryTests {
     @Test func unknownMetadataIdentifierIsRefusedBeforeAnyWrite() async throws {
         let base = FakeImportTransport()
         let authorization = ImportWriteAuthorization(scope: Self.scope())
-        try await authorization.recordVerified(uuid: "uuid-1", database: Self.database)
+        try await authorization.recordVerified(uuid: "uuid-1", database: Self.database,
+                                               parentPath: Self.prefix + ["batch-1"])
         let guarded = GuardedImportWriteTransport(base: base, authorization: authorization,
                                                   sourcePath: { _ in Self.approvedPath })
         await #expect(throws: ImportWriteRefusal.self) {
@@ -180,6 +181,26 @@ struct ImportWriteBoundaryTests {
         #expect(await base.metadataCalls == 0)
         #expect(await authorization.grantedCount == 0)
     }
+
+    /// A record can live in the authorized database and still not belong to this
+    /// run — a leftover from someone else's work. It must not become a metadata
+    /// target, so the proof carries the observed parent group too.
+    @Test func recordOutsideTheApprovedGroupIsNotAValidMetadataTarget() async throws {
+        let base = FakeImportTransport()
+        let authorization = ImportWriteAuthorization(scope: Self.scope())
+        await #expect(throws: ImportWriteRefusal.self) {
+            try await authorization.recordVerified(uuid: "uuid-1", database: Self.database,
+                                                   parentPath: ["SomeOtherGroup"])
+        }
+        let guarded = GuardedImportWriteTransport(base: base, authorization: authorization,
+                                                  sourcePath: { _ in Self.approvedPath })
+        await #expect(throws: ImportWriteRefusal.self) {
+            try await guarded.writeMetadata(ImportMetadataRequest(
+                uuid: "uuid-1", metadata: ["projectname": "x"], source: Self.source()))
+        }
+        #expect(await base.metadataCalls == 0)
+    }
+
 
     @Test func metadataWriteRequiresARecordProvenInScope() async throws {
         let base = FakeImportTransport()
@@ -192,7 +213,8 @@ struct ImportWriteBoundaryTests {
         }
         // A database claim the tool cannot send is not evidence either.
         await #expect(throws: ImportWriteRefusal.self) {
-            try await authorization.recordVerified(uuid: "uuid-foreign", database: Self.foreignDatabase)
+            try await authorization.recordVerified(uuid: "uuid-foreign", database: Self.foreignDatabase,
+                                                   parentPath: Self.prefix + ["batch-1"])
         }
         #expect(await base.metadataCalls == 0)
         #expect(await authorization.isProven("uuid-foreign") == false)
@@ -204,7 +226,8 @@ struct ImportWriteBoundaryTests {
                               parentPath: Self.prefix + ["batch-1"], metadata: [:],
                               sha256: String(repeating: "d", count: 64), associationBasis: nil))
         let authorization = ImportWriteAuthorization(scope: Self.scope())
-        try await authorization.recordVerified(uuid: "uuid-1", database: Self.database)
+        try await authorization.recordVerified(uuid: "uuid-1", database: Self.database,
+                                               parentPath: Self.prefix + ["batch-1"])
         let guarded = GuardedImportWriteTransport(base: base, authorization: authorization,
                                                   sourcePath: { _ in Self.approvedPath })
         try await guarded.writeMetadata(ImportMetadataRequest(
