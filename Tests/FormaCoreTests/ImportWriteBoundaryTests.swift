@@ -257,6 +257,7 @@ struct ImportWriteBoundaryTests {
                 path: "/tmp/not-approved.md", destination: Self.prefix.joined(separator: "/"),
                 database: Self.database, mode: "import"))
         }
+        #expect(await authorization.refusalCounts[.sourcePathNotInScope] == 1)
         #expect(await authorization.grantedCount == 0)
         _ = try await authorization.permit(.importFile(
             path: Self.approvedPath, destination: Self.prefix.joined(separator: "/"),

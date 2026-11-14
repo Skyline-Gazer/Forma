@@ -129,6 +129,7 @@ public actor ImportWriteAuthorization {
     private var groupsUsed = 0
     private var provenRecords: Set<String> = []
     private var issued: [ImportWriteGrant] = []
+    private var refusals: [ImportWriteDenial: Int] = [:]
 
     public init(scope: ImportWriteScope, clock: @escaping @Sendable () -> Date = Date.init) {
         self.scope = scope
@@ -140,77 +141,75 @@ public actor ImportWriteAuthorization {
     public var createdGroups: Int { groupsUsed }
     public var log: [ImportWriteGrant] { issued }
     public var provenRecordIDs: Set<String> { provenRecords }
+    /// Refusals by code. The audit of a run has to show what was attempted and
+    /// stopped, not only what succeeded.
+    public var refusalCounts: [ImportWriteDenial: Int] { refusals }
+
+    /// Records the refusal before throwing, so the audit trail keeps attempts
+    /// the boundary stopped.
+    private func deny(_ code: ImportWriteDenial, _ tool: ImportWriteTool,
+                      _ detail: String) -> ImportWriteRefusal {
+        refusals[code, default: 0] += 1
+        return ImportWriteRefusal(code: code, tool: tool, detail: detail)
+    }
 
     /// Decides one request. Throws a refusal with a stable code; nothing is
     /// reserved when the request is refused.
     public func permit(_ request: ImportWriteRequest) throws -> ImportWriteGrant {
         guard scope.tools.contains(request.tool) else {
-            throw ImportWriteRefusal(code: .toolNotInScope, tool: request.tool,
-                                     detail: "tool is not in the authorized set")
+            throw deny(.toolNotInScope, request.tool, "tool is not in the authorized set")
         }
         switch request {
         case let .createGroup(location, database):
             guard database.uppercased() == scope.databaseID.uppercased() else {
-                throw ImportWriteRefusal(code: .databaseNotInScope, tool: request.tool,
-                                         detail: "database is not the authorized database")
+                throw deny(.databaseNotInScope, request.tool, "database is not the authorized database")
             }
             let path = Self.split(location)
             guard !path.isEmpty, scope.contains(path: path) else {
-                throw ImportWriteRefusal(code: .groupPathOutsideScope, tool: request.tool,
-                                         detail: "group path is outside the authorized prefix")
+                throw deny(.groupPathOutsideScope, request.tool, "group path is outside the authorized prefix")
             }
             guard groupsUsed < scope.groupLimit else {
-                throw ImportWriteRefusal(code: .groupBudgetExhausted, tool: request.tool,
-                                         detail: "group budget exhausted")
+                throw deny(.groupBudgetExhausted, request.tool, "group budget exhausted")
             }
             groupsUsed += 1
             return record(request)
 
         case let .importFile(path, destination, database, mode):
             guard database.uppercased() == scope.databaseID.uppercased() else {
-                throw ImportWriteRefusal(code: .databaseNotInScope, tool: request.tool,
-                                         detail: "database is not the authorized database")
+                throw deny(.databaseNotInScope, request.tool, "database is not the authorized database")
             }
             guard mode == "import" else {
-                throw ImportWriteRefusal(code: .modeNotInScope, tool: request.tool,
-                                         detail: "only mode=import is authorized")
+                throw deny(.modeNotInScope, request.tool, "only mode=import is authorized")
             }
             let destinationPath = Self.split(destination)
             guard !destinationPath.isEmpty, scope.contains(path: destinationPath) else {
-                throw ImportWriteRefusal(code: .groupPathOutsideScope, tool: request.tool,
-                                         detail: "destination is outside the authorized prefix")
+                throw deny(.groupPathOutsideScope, request.tool, "destination is outside the authorized prefix")
             }
             guard scope.sourcePaths.contains(ImportWriteScope.canonical(path)) else {
-                throw ImportWriteRefusal(code: .sourcePathNotInScope, tool: request.tool,
-                                         detail: "source path is not one of the approved synthetic files")
+                throw deny(.sourcePathNotInScope, request.tool, "source path is not one of the approved synthetic files")
             }
             guard grantsUsed < scope.recordLimit else {
-                throw ImportWriteRefusal(code: .recordBudgetExhausted, tool: request.tool,
-                                         detail: "record budget exhausted")
+                throw deny(.recordBudgetExhausted, request.tool, "record budget exhausted")
             }
             grantsUsed += 1
             return record(request)
 
         case let .setMetadata(recordUUID, metadata):
             guard !metadata.isEmpty else {
-                throw ImportWriteRefusal(code: .malformedRequest, tool: request.tool,
-                                         detail: "metadata is empty")
+                throw deny(.malformedRequest, request.tool, "metadata is empty")
             }
             for (identifier, value) in metadata {
                 guard scope.metadataIdentifiers.contains(identifier) else {
                     // The server auto-creates unknown identifiers; a typo would
                     // permanently widen the field table.
-                    throw ImportWriteRefusal(code: .metadataIdentifierNotInScope, tool: request.tool,
-                                             detail: "identifier \(identifier) is not authorized")
+                    throw deny(.metadataIdentifierNotInScope, request.tool, "identifier \(identifier) is not authorized")
                 }
                 if let value, !value.isEmpty, value.utf8.count > 512 {
-                    throw ImportWriteRefusal(code: .metadataValueTooLong, tool: request.tool,
-                                             detail: "value for \(identifier) exceeds the accepted length")
+                    throw deny(.metadataValueTooLong, request.tool, "value for \(identifier) exceeds the accepted length")
                 }
             }
             guard provenRecords.contains(recordUUID.uppercased()) else {
-                throw ImportWriteRefusal(code: .recordNotProvenInScope, tool: request.tool,
-                                         detail: "record has not been verified in the authorized database")
+                throw deny(.recordNotProvenInScope, request.tool, "record has not been verified in the authorized database")
             }
             return record(request)
         }
@@ -224,12 +223,10 @@ public actor ImportWriteAuthorization {
     /// (a leftover from someone else's work) must not become a metadata target.
     public func recordVerified(uuid: String, database: String, parentPath: [String]) throws {
         guard database.uppercased() == scope.databaseID.uppercased() else {
-            throw ImportWriteRefusal(code: .databaseNotInScope, tool: .setRecordCustomMetadata,
-                                     detail: "observed database is not the authorized database")
+            throw deny(.databaseNotInScope, .setRecordCustomMetadata, "observed database is not the authorized database")
         }
         guard scope.contains(path: parentPath) else {
-            throw ImportWriteRefusal(code: .groupPathOutsideScope, tool: .setRecordCustomMetadata,
-                                     detail: "observed parent group is outside the authorized prefix")
+            throw deny(.groupPathOutsideScope, .setRecordCustomMetadata, "observed parent group is outside the authorized prefix")
         }
         provenRecords.insert(uuid.uppercased())
     }
