@@ -1,0 +1,820 @@
+{
+  "captured_at": "2026-11-14T12:36:04",
+  "devonthink_app_version": "4.4.2",
+  "mcp_server_name": "devonthink-mcp",
+  "mcp_server_version": "1.0.0",
+  "protocol_version": "2025-06-18",
+  "tool_count": 62,
+  "tools": [
+    {
+      "name": "capture_web_page",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": false,
+      "destructive_hint": false,
+      "idempotent_hint": false,
+      "input_schema_sha256": "ac8e26a96fe9111b4035f1a99ecaaf3a088741627de64a69e4d71d502bf38dd5",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 984,
+      "required_arguments": [
+        "url"
+      ]
+    },
+    {
+      "name": "chat_response",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "a5378ae8e119d604b4e461afb5047e45f6e70c88845a4c2c3f33cacf894cd3f5",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 1106,
+      "required_arguments": [
+        "prompt"
+      ]
+    },
+    {
+      "name": "classify_record",
+      "capability": "Record search",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "617650cd27ec9ff4b985f69f6cf3d34ab4262b1bfb353dddb7475198bffa1690",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 210,
+      "required_arguments": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "clear_record_reminder",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": false,
+      "destructive_hint": true,
+      "idempotent_hint": true,
+      "input_schema_sha256": "6677571f9f092d0de3604fdc25eb6aafd57fdf474353290f8132a564c1a0bf5f",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 218,
+      "required_arguments": []
+    },
+    {
+      "name": "convert_record",
+      "capability": "Metadata write",
+      "read_only_hint": false,
+      "destructive_hint": false,
+      "idempotent_hint": false,
+      "input_schema_sha256": "d425b9d41769c0b83941dbaca2766a3678e15ae01a2993c9085b371dfd8ed96b",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 409,
+      "required_arguments": [
+        "format"
+      ]
+    },
+    {
+      "name": "create_group_path",
+      "capability": "Group creation",
+      "read_only_hint": false,
+      "destructive_hint": false,
+      "idempotent_hint": true,
+      "input_schema_sha256": "6256d00d2755137648ed10e28fa1b946db9bc30b601feefc741b303758fd439a",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 273,
+      "required_arguments": [
+        "location"
+      ]
+    },
+    {
+      "name": "create_record",
+      "capability": "Record import/create",
+      "read_only_hint": false,
+      "destructive_hint": false,
+      "idempotent_hint": false,
+      "input_schema_sha256": "7c95c6d015bd3d14d2b34080ba689b7b31d56f9b1e052a66ffda5ff679156f65",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 1736,
+      "required_arguments": [
+        "name",
+        "type"
+      ]
+    },
+    {
+      "name": "download_pdf_from_doi",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": false,
+      "destructive_hint": false,
+      "idempotent_hint": false,
+      "input_schema_sha256": "f6f14746abe08845b343a5c626c839ee5786a631fe0c5e262ece7314799a5260",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 789,
+      "required_arguments": []
+    },
+    {
+      "name": "duplicate_record",
+      "capability": "Record import/create",
+      "read_only_hint": false,
+      "destructive_hint": false,
+      "idempotent_hint": false,
+      "input_schema_sha256": "a59e593d1736989d6d53cdd17d4ca56cda78f7ccded104fe08be641492172027",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 449,
+      "required_arguments": [
+        "destination"
+      ]
+    },
+    {
+      "name": "export_record",
+      "capability": "File/content export",
+      "read_only_hint": false,
+      "destructive_hint": true,
+      "idempotent_hint": true,
+      "input_schema_sha256": "98800e1c336a983a5e7fc8df812e3525695a4e9288dae91f5ed6524df6bf6937",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 348,
+      "required_arguments": [
+        "path"
+      ]
+    },
+    {
+      "name": "extract_record_content",
+      "capability": "File/content export",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "fef845c5cb4bf8e291ce5b35c8cd45185d487f86159829f00d80c414d6fbd807",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 1535,
+      "required_arguments": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "extract_record_highlights",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "f7895262df2765c05992517f3b9388835f8850d6de500912bda9157edca62ec3",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 268,
+      "required_arguments": []
+    },
+    {
+      "name": "extract_record_mentions",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "738c3a5f238fb6993791c842a12d2967f6f2260c50b00b93ad152b5a0878f1b8",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 274,
+      "required_arguments": []
+    },
+    {
+      "name": "extract_record_visuals",
+      "capability": "File/content export",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "7540ab99e4d497d58e7dc87360486836394098ea4c292b3979e3f1a051eefc9a",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 856,
+      "required_arguments": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "find_similar_records",
+      "capability": "Record search",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "06896dfbb06cea105c3c74c454e121507dca0035bddf5578d763e72cab8b3621",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 1224,
+      "required_arguments": []
+    },
+    {
+      "name": "get_current_record",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 33,
+      "required_arguments": []
+    },
+    {
+      "name": "get_databases",
+      "capability": "Database discovery",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "ab09c1e9bfb2d63005f92c514ee11fb57d9673bf73e076d1dd8f5daf657f89e8",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 279,
+      "required_arguments": []
+    },
+    {
+      "name": "get_group_tree",
+      "capability": "Record parents",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "42a09b658d3a16497b6b68a31bfe5d079d70322e5a139bfbc62babed8a6b8425",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 610,
+      "required_arguments": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "get_imported_record_path",
+      "capability": "Content/hash inspection",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "17c7d4d2e25d7b678bd4efb79a247c774e1950751b09fb6ea29fe2e20c56b853",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 340,
+      "required_arguments": []
+    },
+    {
+      "name": "get_labels",
+      "capability": "Metadata field definitions",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 33,
+      "required_arguments": []
+    },
+    {
+      "name": "get_record_annotation",
+      "capability": "Record properties",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "f9e755ea15c7998d8d819acb306dc0a6369734606e4f5fbb8379b1b063a94163",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 318,
+      "required_arguments": []
+    },
+    {
+      "name": "get_record_children",
+      "capability": "Record parents",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "0bbe031e3dd6354442a1b04e4806eade66b930c7ef6139fb087a54ec097369fd",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 403,
+      "required_arguments": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "get_record_custom_metadata",
+      "capability": "Metadata read",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "6dcd23cb719f0aff2d3bc7fd61970a7c404ffc6bae9639cae28b4c1a90a671e0",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 317,
+      "required_arguments": []
+    },
+    {
+      "name": "get_record_duplicates",
+      "capability": "Record search",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "f9e755ea15c7998d8d819acb306dc0a6369734606e4f5fbb8379b1b063a94163",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 318,
+      "required_arguments": []
+    },
+    {
+      "name": "get_record_external_references",
+      "capability": "Record properties",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "c09043dbae1c9eb286b1b08bff2d9e95351e49481e23b81c64bd85ae37be069b",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 535,
+      "required_arguments": []
+    },
+    {
+      "name": "get_record_links",
+      "capability": "Record properties",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "be52f3dee2d68a506d0f317fb776e319d4b9e8cf305c67f39ee464d75d6dd760",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 597,
+      "required_arguments": []
+    },
+    {
+      "name": "get_record_outline",
+      "capability": "File/content export",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "a517b257887f7d50702596e088229944b5dcb0193487ef730722761915437ca7",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 212,
+      "required_arguments": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "get_record_parents",
+      "capability": "Record parents",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "216bb4cb4e93ea3bda55842f5ce97ea9a95f800a0f057f7198ab6f519213e9c6",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 698,
+      "required_arguments": []
+    },
+    {
+      "name": "get_record_properties",
+      "capability": "Record properties",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "f9e755ea15c7998d8d819acb306dc0a6369734606e4f5fbb8379b1b063a94163",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 318,
+      "required_arguments": []
+    },
+    {
+      "name": "get_record_reminder",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "f9e755ea15c7998d8d819acb306dc0a6369734606e4f5fbb8379b1b063a94163",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 318,
+      "required_arguments": []
+    },
+    {
+      "name": "get_record_tags",
+      "capability": "Record properties",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "6677571f9f092d0de3604fdc25eb6aafd57fdf474353290f8132a564c1a0bf5f",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 218,
+      "required_arguments": []
+    },
+    {
+      "name": "get_record_text",
+      "capability": "File/content export",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "f9e755ea15c7998d8d819acb306dc0a6369734606e4f5fbb8379b1b063a94163",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 318,
+      "required_arguments": []
+    },
+    {
+      "name": "get_record_thumbnails",
+      "capability": "File/content export",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "94d252d4f0054ce268c86396b6763466559893bd9a6b5e3b66f8c91f80ac675a",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 468,
+      "required_arguments": []
+    },
+    {
+      "name": "get_record_unlinked_wiki_links",
+      "capability": "Record properties",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "8afbb4165f1a3ecc9bdf3e4024699ef3c8b46e7cedbfb6ad09a64c47c7fed0c4",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 641,
+      "required_arguments": []
+    },
+    {
+      "name": "get_record_versions",
+      "capability": "Record properties",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "f9e755ea15c7998d8d819acb306dc0a6369734606e4f5fbb8379b1b063a94163",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 318,
+      "required_arguments": []
+    },
+    {
+      "name": "get_selected_records",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 33,
+      "required_arguments": []
+    },
+    {
+      "name": "import_file",
+      "capability": "Record import/create",
+      "read_only_hint": false,
+      "destructive_hint": false,
+      "idempotent_hint": false,
+      "input_schema_sha256": "3642cf6990596a9b7814c846a018004b4fe9694b6af35b5d2cd468a4611b0d2f",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 557,
+      "required_arguments": [
+        "path"
+      ]
+    },
+    {
+      "name": "is_running",
+      "capability": "Database discovery",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 33,
+      "required_arguments": []
+    },
+    {
+      "name": "list_custom_metadata_fields",
+      "capability": "Metadata field definitions",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "d3c354b373a921cc2d998e0cd1431eef4fa7dfce38c6c08af50785921e663ee7",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 141,
+      "required_arguments": []
+    },
+    {
+      "name": "list_database_tags",
+      "capability": "Database discovery",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "fc783ef9d81ffbc38a5da276e9ba24f4e59ad4591b048d9c122116ed1625d780",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 179,
+      "required_arguments": []
+    },
+    {
+      "name": "lookup_records",
+      "capability": "Record search",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "af50e37fe8c53d0bd1b526e6d10dbbec71da970d1fc3515edea641ff5a6b4fa0",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 1004,
+      "required_arguments": []
+    },
+    {
+      "name": "mark_record_text",
+      "capability": "Metadata write",
+      "read_only_hint": false,
+      "destructive_hint": false,
+      "idempotent_hint": true,
+      "input_schema_sha256": "14ec1bce53161341ef4b0a2c41f55fe930c7acf2fe97da50b0e067ec4cb0769f",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 1170,
+      "required_arguments": [
+        "strings"
+      ]
+    },
+    {
+      "name": "merge_records",
+      "capability": "Record import/create",
+      "read_only_hint": false,
+      "destructive_hint": true,
+      "idempotent_hint": false,
+      "input_schema_sha256": "46830f55a73eed567abc694a964092bde9d9ce6a548c5aea66a8415bfaa73dad",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 712,
+      "required_arguments": [
+        "uuids"
+      ]
+    },
+    {
+      "name": "move_record",
+      "capability": "Record import/create",
+      "read_only_hint": false,
+      "destructive_hint": false,
+      "idempotent_hint": true,
+      "input_schema_sha256": "5538f08a0cdc86ca33358978708866b07e200d6a09a0a8fa32cb32d91167d710",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 854,
+      "required_arguments": [
+        "destination"
+      ]
+    },
+    {
+      "name": "ocr_record",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": false,
+      "destructive_hint": false,
+      "idempotent_hint": false,
+      "input_schema_sha256": "52ad64cdba0a6a20a8c93201e42d27932e898fa40bb0bf743edd30520bf12ffc",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 225,
+      "required_arguments": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "open_record",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": false,
+      "destructive_hint": false,
+      "idempotent_hint": true,
+      "input_schema_sha256": "681d6a74d46419fbbaf8cee9f2245dd8ce502dcff5561d23629b64af87b66ee8",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 755,
+      "required_arguments": []
+    },
+    {
+      "name": "replicate_record",
+      "capability": "Record import/create",
+      "read_only_hint": false,
+      "destructive_hint": false,
+      "idempotent_hint": true,
+      "input_schema_sha256": "3d01e5ca019f3f08c565cb6eb5d2fd714547b54cfb04a6fe40b5a2c703802295",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 466,
+      "required_arguments": [
+        "destination"
+      ]
+    },
+    {
+      "name": "research_topic",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "a6a474d466e27134b42b0a0fbf987b7644a0039af967d70ed6ab16ace3cd11d1",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 979,
+      "required_arguments": [
+        "query"
+      ]
+    },
+    {
+      "name": "resolve_book_metadata",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": false,
+      "destructive_hint": true,
+      "idempotent_hint": true,
+      "input_schema_sha256": "dcf301dee22f809218f758c3b2fd349c404e84659da2ecc367e71810a9668e2a",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 1407,
+      "required_arguments": []
+    },
+    {
+      "name": "resolve_doi_metadata",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": false,
+      "destructive_hint": true,
+      "idempotent_hint": true,
+      "input_schema_sha256": "4d7025e87913b67cbbd8db42dd17d99c21590d48e96432525987ffdb0eac1f25",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 762,
+      "required_arguments": []
+    },
+    {
+      "name": "search_crossref",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "ded6a00578d06cab6f74e60677ba59bcbc751f2a143c4b2dde2e241c229fef83",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 412,
+      "required_arguments": [
+        "query"
+      ]
+    },
+    {
+      "name": "search_records",
+      "capability": "Record search",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "10bda20ab6341baf27d6ce57126176e840ecdabc1fd73040069ffbfa95300a03",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 2150,
+      "required_arguments": [
+        "query"
+      ]
+    },
+    {
+      "name": "set_record_annotation",
+      "capability": "Metadata write",
+      "read_only_hint": false,
+      "destructive_hint": true,
+      "idempotent_hint": false,
+      "input_schema_sha256": "97ada3a97fea382da97eab67dd2527711ce25f91578e9ca478b41590c1fc73c5",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 1035,
+      "required_arguments": [
+        "uuid",
+        "text"
+      ]
+    },
+    {
+      "name": "set_record_custom_metadata",
+      "capability": "Metadata write",
+      "read_only_hint": false,
+      "destructive_hint": true,
+      "idempotent_hint": true,
+      "input_schema_sha256": "f1aa770b370095f3c2280d8a617dbe3078eeee04da794a746ac925dd71a7fdb0",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 632,
+      "required_arguments": [
+        "metadata"
+      ]
+    },
+    {
+      "name": "set_record_reminder",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": false,
+      "destructive_hint": true,
+      "idempotent_hint": true,
+      "input_schema_sha256": "b6cb6cf2618680d8713e83d99bf7eadd0fd0317e839c04248d480039bce2a218",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 631,
+      "required_arguments": [
+        "due_date"
+      ]
+    },
+    {
+      "name": "set_record_tags",
+      "capability": "Metadata write",
+      "read_only_hint": false,
+      "destructive_hint": true,
+      "idempotent_hint": true,
+      "input_schema_sha256": "c71ef00d0e0d71f78e3cf5927c5a4392c4e651edbfd821812bbf69e109dc07c2",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 478,
+      "required_arguments": [
+        "tags"
+      ]
+    },
+    {
+      "name": "summarize_record_highlights",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": false,
+      "destructive_hint": false,
+      "idempotent_hint": false,
+      "input_schema_sha256": "9d0e0af05e1db67f5521bcb73e06d8d1b209b3d37674b4e50b0f62faaebfe4d2",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 943,
+      "required_arguments": []
+    },
+    {
+      "name": "summarize_record_mentions",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": false,
+      "destructive_hint": false,
+      "idempotent_hint": false,
+      "input_schema_sha256": "64d41203240cf8d1c74265bd84bd4a7870d568faecdf8ec4b38dea4964c54e01",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 978,
+      "required_arguments": []
+    },
+    {
+      "name": "transcribe_record",
+      "capability": "Unsupported/unknown",
+      "read_only_hint": true,
+      "destructive_hint": null,
+      "idempotent_hint": null,
+      "input_schema_sha256": "563c3a9635ca93b08810feb5f871d1fb59358b8d41fbb2b5345170668389c77a",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 507,
+      "required_arguments": [
+        "uuid"
+      ]
+    },
+    {
+      "name": "trash_record",
+      "capability": "Record import/create",
+      "read_only_hint": false,
+      "destructive_hint": true,
+      "idempotent_hint": true,
+      "input_schema_sha256": "791606c0affd4232c1d28e193792481d05cfde4e65c3bd9fab07d0028997eef2",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 360,
+      "required_arguments": []
+    },
+    {
+      "name": "update_record",
+      "capability": "Metadata write",
+      "read_only_hint": false,
+      "destructive_hint": true,
+      "idempotent_hint": true,
+      "input_schema_sha256": "63a34f7139d6ec42770df0e24ba8bf295c1260386cd68e247dfaa7dd9dad0f0a",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 1408,
+      "required_arguments": []
+    },
+    {
+      "name": "update_record_content",
+      "capability": "Metadata write",
+      "read_only_hint": false,
+      "destructive_hint": true,
+      "idempotent_hint": false,
+      "input_schema_sha256": "6c7b07242f8c43f09c2883b9d582f1aab7fcc0afc91d236a993c8c6f04caca21",
+      "output_schema_sha256": null,
+      "input_schema_bytes": 1169,
+      "required_arguments": [
+        "uuid"
+      ]
+    }
+  ],
+  "custom_metadata_field_definitions": {
+    "source": "list_custom_metadata_fields include_disabled=true (live, app-wide)",
+    "total_fields": 33,
+    "enabled_fields": 12,
+    "governed_identifiers": {
+      "projectname": {
+        "label": "项目名称",
+        "native_type": "string",
+        "disabled": false
+      },
+      "completionyear": {
+        "label": "完成年份",
+        "native_type": "string",
+        "disabled": false
+      },
+      "bidderentity": {
+        "label": "投标主体",
+        "native_type": "string",
+        "disabled": false
+      },
+      "department": {
+        "label": "业务部门",
+        "native_type": "string",
+        "disabled": false
+      },
+      "salesowner": {
+        "label": "销售负责人",
+        "native_type": "string",
+        "disabled": false
+      },
+      "endcustomer": {
+        "label": "最终客户",
+        "native_type": "string",
+        "disabled": false
+      },
+      "biddeadline": {
+        "label": "投标截止日期",
+        "native_type": "string",
+        "disabled": false
+      },
+      "tenderreference": {
+        "label": "招标编号",
+        "native_type": "string",
+        "disabled": false
+      },
+      "bsdcode": {
+        "label": "BSD标识",
+        "native_type": "string",
+        "disabled": false
+      },
+      "documentcategory": {
+        "label": "文档类别",
+        "native_type": "string",
+        "disabled": false
+      },
+      "documenttype": {
+        "label": "文档类型",
+        "native_type": "string",
+        "disabled": false
+      },
+      "issuer": {
+        "label": "出具厂商",
+        "native_type": "string",
+        "disabled": false
+      }
+    },
+    "notes": "All 12 are native type string, none disabled. Only 'status' and 'format' carry a values array (set type). No enumeration values exist for the 12 governed fields."
+  },
+  "capture_host": "REDACTED — raw artifacts held in the local authorized evidence directory only",
+  "scope": "Global discovery only. No database name, UUID, record identifier, host path or business content is included."
+}
