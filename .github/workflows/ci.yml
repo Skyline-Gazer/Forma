@@ -52,9 +52,37 @@ jobs:
       - uses: actions/checkout@v4
       - name: Assemble and ad-hoc sign Forma.app
         run: sh scripts/build_app.sh
+      - name: Verify the assembled bundle
+        run: sh scripts/verify_app_bundle.sh build/Forma.app
+      # `build/*.app` (not `build/Forma.app`) so the archive root is the bundle:
+      # downloading it yields `Forma.app/Contents/…`, not a bare `Contents/`.
       - name: Upload the development bundle
         uses: actions/upload-artifact@v4
         with:
           name: Forma-app-adhoc
-          path: build/Forma.app
+          path: build/*.app
           if-no-files-found: error
+
+  # The job the Batch 2A field run showed was missing: uploading a bundle that
+  # crashes on launch looked exactly like a successful package job. This one
+  # downloads the artifact the user would get, re-verifies it and starts it.
+  launch-smoke:
+    name: macOS app launch smoke
+    needs: package
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the development bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: Forma-app-adhoc
+          path: artifact
+      - name: Assert the artifact is a complete .app
+        run: |
+          ls -la artifact
+          test -d artifact/Forma.app || { echo "error: artifact root is not Forma.app" >&2; exit 1; }
+      - name: Verify structure and strict signature
+        run: sh scripts/verify_app_bundle.sh artifact/Forma.app
+      - name: Launch and observe
+        run: sh scripts/smoke_app.sh artifact/Forma.app

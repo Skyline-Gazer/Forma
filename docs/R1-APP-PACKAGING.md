@@ -1,13 +1,35 @@
-# R1 — macOS App Packaging (Batch 1)
+# R1 — macOS App Packaging
 
-状态：**开发用打包工程，非发行物**。
+状态：**开发用打包工程，非发行物**；**Batch 2A.1 已修复资源 bundle 布局与启动缺陷**。
 
-> **2026-11-15 现场更正：**当前脚本产出的 bundle **不能启动**——`scripts/build_app.sh` 只拷贝 `Forma_FormaApp.bundle`，未拷贝 SwiftPM 为 FormaCore 生成的 `Forma_FormaCore.bundle`，应用在 `MappingProfile.shipped()` 处因 `NSBundle.module` 缺失而 `fatalError`；把该 bundle 补到 `.app` 根目录虽可启动，却会使 `codesign --verify --strict` 报 `unsealed contents present in the bundle root`。因此"能启动"与"可签名"当前互斥，见 `docs/R1-BATCH2A-REPORT.md` §1。
-
-- 本轮产出：`FormaApp/Info.plist`、`FormaApp/Forma.entitlements`、`scripts/build_app.sh`、CI `macOS app package` job。
+- 产出：`FormaApp/Info.plist`、`FormaApp/Forma.entitlements`、`scripts/build_app.sh`、`scripts/verify_app_bundle.sh`、`scripts/smoke_app.sh`，CI jobs `macOS app package` + `macOS app launch smoke`。
 - 签名：**ad-hoc**（`codesign --sign -`），Hardened Runtime 已开启。
 - **未做**：Developer ID 证书、`notarytool` 公证、staple、Gatekeeper 干净机验证、DMG、更新机制、App Store 打包。
-- 基线：`dev` @ `a3a3cf7`（R1 Batch 1 授权，见 `docs/R1-READINESS.md`）。
+
+## 0. 现场缺陷与修复（2026-11-15）
+
+Batch 2A 在真实 macOS 上发现 CI 产物**无法启动**：
+
+```
+Fatal error: could not load resource bundle:
+  from …/Forma.app/Forma_FormaCore.bundle
+  or  …/FormaApp/.build/…/release/Forma_FormaCore.bundle
+```
+
+根因有两个，必须一起修：
+
+1. `build_app.sh` 拷贝的是从未存在的 `Forma_FormaApp.bundle`，**从未拷贝** `Forma_FormaCore.bundle`；
+2. SwiftPM 生成的 `Bundle.module` 访问器只查 **`.app` 根目录**与编译机路径。根目录不是可封存位置，`codesign --verify --strict` 会报 `unsealed contents present in the bundle root`；放进 `Contents/Resources` 又找不到。所以"能启动"与"可签名"当时互斥。
+
+修复方式（不修改 SwiftPM 生成的 accessor）：
+
+| 改动 | 作用 |
+| --- | --- |
+| `Sources/FormaCore/Support/FormaResourceBundle.swift` | 应用自己解析资源 bundle：`Bundle.main.resourceURL` → 可执行文件目录 → `.app` 根（兼容旧布局）→ `Bundle(for:)` 路径；找不到返回 `nil` |
+| 5 处 `Bundle.module.url(...)` 改为 `FormaResourceBundle.url(...)` | 缺资源时抛 `FormaError.unavailable`（可诊断），而不是 `fatalError` 崩溃 |
+| `build_app.sh` 拷贝 `$BIN/*.bundle` 到 `Contents/Resources/`，`Forma_FormaCore.bundle` 缺失即失败 | 资源随包，且位于可封存位置 |
+| 脚本断言必需资源存在、根目录无 `.bundle` | 不允许"打包成功但缺资源" |
+| CI `launch-smoke` job | 下载**发布的 artifact**，复验结构+严格签名，真正启动并观察存活 |
 
 ## 1. Bundle 结构
 
@@ -15,64 +37,81 @@
 Forma.app/
   Contents/
     Info.plist
-    MacOS/Forma                 # SwiftPM 产物，原样拷入
-    Resources/                  # 资源 bundle（若有）、AppIcon.icns（若存在）
+    MacOS/Forma
+    Resources/
+      Forma_FormaCore.bundle/
+        Contents/Info.plist
+        Contents/Resources/            # Profiles、Schemas、CasePack、Eligibility 政策
+      AppIcon.icns                     # 可选，目前未提供
     _CodeSignature/
 ```
 
-| Info.plist 键 | 值 | 理由 |
+`.app` 根目录**不得**出现任何 `.bundle`：那是未封存内容，`codesign --strict` 会拒绝。
+
+### 1.1 资源解析顺序
+
+`FormaResourceBundle` 依次检查：
+
+1. `Bundle.main.resourceURL` → `Contents/Resources`（标准位置，签名安全）
+2. `Bundle.main.executableURL` 所在目录（开发运行）
+3. `Bundle.main.bundleURL`（旧布局/根目录，仅兼容，不用于产物）
+4. `Bundle(for: BundleToken.self).resourceURL`、`.bundleURL`（测试与框架宿主）
+
+不包含 `.build` 编译机路径：发行产物不能依赖构建机。解析结果缓存一次；任一 loader 在 `nil` 时抛 `FormaError.unavailable`。
+
+## 2. Info.plist
+
+| 键 | 值 | 理由 |
 | --- | --- | --- |
-| `CFBundleIdentifier` | `io.github.skyline-gazer.forma` | Owner 候选值；与现有 OSLog subsystem 一致（§2） |
-| `CFBundleExecutable` | `Forma` | 与 `swift build --product Forma` 的产物同名 |
-| `CFBundleName` / `CFBundleDisplayName` | `Forma` | 菜单与 Finder 名称 |
+| `CFBundleIdentifier` | `io.github.skyline-gazer.forma` | 与 OSLog subsystem 一致 |
+| `CFBundleExecutable` | `Forma` | SwiftPM 产物名 |
+| `CFBundleName` / `CFBundleDisplayName` | `Forma` | 菜单与 Finder |
 | `CFBundlePackageType` | `APPL` | — |
-| `CFBundleShortVersionString` / `CFBundleVersion` | `0.1.0` / `1` | 开发版本；发行前需与 Release Tag 绑定 |
-| `LSMinimumSystemVersion` | `14.0` | 与 `Package.swift` 的 `.macOS(.v14)` 一致 |
-| `LSApplicationCategoryType` | `public.app-category.productivity` | App Store 元数据兼容，当前不提交 |
-| `NSPrincipalClass` | `NSApplication` | SwiftUI `App` 生命周期进入 AppKit 事件循环 |
-| `CFBundleIconFile` | `AppIcon` | 资源入口已接线；图形资产未提供，缺省时使用系统通用图标 |
-| `NSSupportsSuddenTermination` | `false` | 突然终止会跳过 `applicationWillTerminate`（以及任何 AppKit 终止回调），而退出时必须在其中取消任务并关闭 MCP 子进程（T04） |
-| `NSSupportsAutomaticTermination` | `false` | 同上 |
+| `CFBundleShortVersionString` / `CFBundleVersion` | `0.1.0` / `1` | 开发版本 |
+| `LSMinimumSystemVersion` | `14.0` | 与 `Package.swift` 一致 |
+| `LSApplicationCategoryType` | `public.app-category.productivity` | 发行元数据预留 |
+| `NSPrincipalClass` | `NSApplication` | SwiftUI `App` 进入 AppKit 事件循环 |
+| `CFBundleIconFile` | `AppIcon` | 入口已接线；资产未提供 |
+| `NSSupportsSuddenTermination` / `NSSupportsAutomaticTermination` | `false` | 两者都会跳过 `applicationWillTerminate`，而退出时必须在其中取消任务并关闭 MCP 子进程 |
 
-## 2. Bundle identifier 兼容性报告
+## 3. Bundle identifier 兼容性
 
-| 现有标识 | 位置 | 与候选值的关系 | 处置 |
+| 现有标识 | 位置 | 关系 | 处置 |
 | --- | --- | --- | --- |
-| `io.github.skyline-gazer.forma` | `Sources/FormaCore/Diagnostics.swift` 的 `Logger(subsystem:)` | **完全相同** | 保留；打包后日志子系统与 bundle id 一致 |
-| `com.skyline-gazer.forma.provider-api-key` | `Sources/FormaCore/Providers/ProviderKeyStore.swift` 的 `kSecAttrService` | 不同字符串 | **本轮不改**。Keychain service 是独立命名空间，不必等于 bundle id；但与 bundle id 的团队前缀不一致，若将来统一命名，已存条目会变成孤儿 |
-| `com.devon-technologies.think.mcp-server` | B1 文档 | 第三方标识 | 不属于 Forma，不打包、不复制 |
+| `io.github.skyline-gazer.forma` | `Diagnostics.swift` OSLog subsystem | 完全相同 | 保留 |
+| `com.skyline-gazer.forma.provider-api-key` | `ProviderKeyStore.swift` Keychain service | 不同前缀 | **不改名**；改名会让已存密钥成孤儿，必须先迁移 |
+| `com.devon-technologies.think.mcp-server` | 第三方 | 非 Forma | 不打包 |
 
-结论：
+## 4. Entitlements 与签名
 
-1. **没有发现冲突**：仓库内不存在第二处 `CFBundleIdentifier`，也没有 `.xcodeproj` 的 `PRODUCT_BUNDLE_IDENTIFIER` 可以漂移。
-2. **Keychain service 名与 bundle id 前缀不一致是已知差异**，不构成功能故障（service 名由 Forma 自定），但**改名必须先做迁移**：读旧 service → 写新 service → 删除旧条目，失败保留旧条目。R1 Batch 1 **不执行任何迁移**（授权明确禁止）。
-3. 因此本轮不修改 `ProviderKeyStore` 中的字符串；该项作为 Batch 2 的独立任务，未获授权前保持原样。
+`FormaApp/Forma.entitlements` 为空字典，且有意为空：Hardened Runtime 是签名选项；不开沙盒（Developer ID 方向）；不申请 Apple Events（禁止 AppleScript 通道）；不申请全盘访问（只用用户授权目录的 security-scoped bookmark）。
 
-## 3. Entitlements 与签名
+```
+codesign --force --options runtime --timestamp=none \
+    --entitlements FormaApp/Forma.entitlements --sign - Forma.app
+codesign --verify --strict --verbose=2 Forma.app
+```
 
-- `FormaApp/Forma.entitlements` 为空字典，且是**有意**为空：Hardened Runtime 是签名选项，不是 entitlement；不开 App Sandbox（当前渠道为 Developer ID 方向）；不申请 Apple Events（禁止 AppleScript 通道）；不申请全盘访问（只读用户通过面板授权并保存为 security-scoped bookmark）。
-- 签名命令：`codesign --force --options runtime --timestamp=none --entitlements … --sign - Forma.app`。
-- 校验命令：`codesign --verify --strict --verbose=2`、`codesign -dv --verbose=4`、`plutil -lint`、`bundle id` 断言。
+## 5. CI
 
-## 4. CI
+| job | 内容 |
+| --- | --- |
+| `macOS app package` | `build_app.sh`（构建→组装→资源断言→ad-hoc 签名→严格验签）→ `verify_app_bundle.sh` → 上传 `build/*.app`（archive 根为 `Forma.app/`） |
+| `macOS app launch smoke` | 下载同一 artifact → 断言根目录是 `Forma.app` → 复验结构与严格签名 → `smoke_app.sh`：启动、存活 5 s、收集崩溃日志、清理进程与子进程 |
 
-新增 job `macOS app package`（macos-15 + Xcode 26.3）：
+`smoke_app.sh` 的退出码：`0` 通过；`1` 失败（未启动或观察期内退出）；`3` 当前会话没有 Aqua（GUI 不可用），此时**不宣称启动通过**，由运行者记录环境限制。
 
-1. `sh scripts/build_app.sh` → 组装 + ad-hoc 签名 + 自检；
-2. 上传 `build/Forma.app` 为构建产物 `Forma-app-adhoc`。
-
-产物是**开发验证用**：ad-hoc 签名不能分发给其他机器，无法通过 Gatekeeper 的开发者身份校验。
-
-## 5. 未验证项（不得视为发行就绪）
+## 6. 未验证项（不得视为发行就绪）
 
 | 项 | 状态 |
 | --- | --- |
-| Developer ID 签名 | **NOT_VERIFIED**（无证书） |
-| 公证与 staple | **NOT_VERIFIED**（`notarytool` 未运行） |
-| 干净机安装与 Gatekeeper | **NOT_VERIFIED** |
-| 公证后的 `.app` 内 `Process()` 拉起 DEVONthink MCP | **NOT_VERIFIED**（Hardened Runtime 下未实测） |
+| 从 CI artifact 启动（本机 macOS） | 由 `launch-smoke` job 证明；**macOS 27 现场仍未对修复后产物复测** |
+| Developer ID 签名 | NOT_VERIFIED（无证书） |
+| 公证与 staple | NOT_VERIFIED |
+| 干净机安装与 Gatekeeper | NOT_VERIFIED |
+| 公证后 `.app` 内 `Process()` 拉起 DEVONthink MCP | NOT_VERIFIED |
 | 正式图标、DMG、更新机制 | 未开始 |
-| App Sandbox / Mac App Store | 未授权、未验证（`docs/MACOS-VALIDATION-BACKLOG.md` M8） |
-| 版本号与 Release Tag 绑定 | 未开始（发行阶段） |
+| App Sandbox / Mac App Store | 未授权、未验证（`MACOS-VALIDATION-BACKLOG.md` M8） |
+| macOS 14.x 运行时 | BLOCKED（无设备） |
 
-只有在 Developer ID + 公证 + 干净机三项真实通过后，才可以讨论发行；本轮不宣称 `.app` 可发布。
+只有 Developer ID + 公证 + 干净机三项真实通过后，才可以讨论发行；当前 `.app` 是开发验证产物。

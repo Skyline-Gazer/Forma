@@ -401,7 +401,7 @@ public struct ProviderMappingClient: Sendable {
     }
 
     static func proposalSchemaData() -> Data? {
-        guard let url = Bundle.module.url(forResource: "proposal-1.0.schema", withExtension: "json") else {
+        guard let url = FormaResourceBundle.url(forResource: "proposal-1.0.schema", withExtension: "json") else {
             return nil
         }
         return try? Data(contentsOf: url)
