@@ -119,7 +119,7 @@
 | 错误响应 | **Compatible**（`isError` → `.refused`；JSON-RPC 错误 → `.remoteStatus`）。注：`Record not found` 被映射为 `.refused`，描述文案不准确但类型正确 |
 | 超时/取消 | **Not verified**（真实服务响应过快，未触发超时路径；取消语义仅由假传输覆盖） |
 
-两处缺陷在独立 PR 中修复：`parents(of:)` 与 `metadata(of:)` 改用 `uuids` 批量形态，并以回显的 `uuid` 与 `succeeded/failed` 计数绑定/校验；`customMetadata` 不再从属性响应推断。修复后对真实服务的全部读路径实测通过。
+两处缺陷已在独立 PR [#69](https://github.com/Skyline-Gazer/Forma/pull/69)（squash 合并为 `fa1dde6`）修复：`parents(of:)` 与 `metadata(of:)` 改用 `uuids` 批量形态，并以回显的 `uuid` 与 `succeeded/failed` 计数绑定/校验；`customMetadata` 不再从属性响应推断。该 PR 的 macOS CI（FormaCore tests / macOS app build / Benchmark smoke）全部通过。修复后对真实服务的全部读路径实测通过。
 
 ## 9. 隔离范围内的只读证据
 
