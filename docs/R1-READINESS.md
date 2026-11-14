@@ -1,9 +1,9 @@
 # R1 — Readiness Assessment & Implementation Plan
 
-状态：**调查与实施方案，未获开发授权**。本文不实现 R1 应用代码，不改变 MCP 写入授权，不改变发行渠道决策，不修改冻结 SPEC。
+状态：**调查与实施方案已交付；R1 Batch 1 工程部分已实施**（见 §5.1）。本文不改变 MCP 写入授权，不改变发行渠道决策，不修改冻结 SPEC。
 
 - 依据：Issue [#24](https://github.com/Skyline-Gazer/Forma/issues/24)、[#9](https://github.com/Skyline-Gazer/Forma/issues/9)、[#52](https://github.com/Skyline-Gazer/Forma/issues/52)、`docs/SPEC.md`、`docs/PLAN.md`、`docs/ROADMAP.md`
-- 代码基线：`dev` @ `e1a1379`
+- 调查基线：`dev` @ `e1a1379`；Batch 1 实施基线：`dev` @ `a3a3cf7`
 - 调查方法：只读源码审计（逐类型/函数引用），不运行任何真实 DEVONthink 调用，不新增写入
 
 ## 0. 结论摘要
@@ -252,10 +252,27 @@ R1 交付物（技术侧）：`.app` bundle 布局、`Info.plist`（bundle id、
 | R1-R02 | Setapp / MAS 条件性评估（仅当选择该渠道） | R01 | Release env | Owner（渠道决策） | 结论为 PASS/FAIL/BLOCKED，不预设可上架 |
 | R1-R03 | 发布前仓库转 private + 访问复核 | R01 | Release env | Owner | 可见性、CI、依赖拉取、签名流水线全部复核 |
 
+### 5.1 Batch 1 执行记录（2026-11-14）
+
+Owner 授权 Batch 1：T01、T02、T03、T04、T07、T08。仅 DevBox + 合成测试 + GitHub macOS CI。
+
+| Task | 状态 | 交付 |
+| --- | --- | --- |
+| R1-T01 | **DevBox Implemented · macOS CI Verified** | `DEVONthinkImportReadAdapter`（PR #79） |
+| R1-T03 | **DevBox Implemented · macOS CI Verified** | `MCPConnectionSupervisor` + 写工具契约复核（PR #80） |
+| R1-T02 | **DevBox Implemented · macOS CI Verified** | `ImportRuntime`（PR #83） |
+| R1-T04 | **DevBox Implemented · macOS CI Verified** | 启动清扫、六态呈现、只读回查入口、非阻塞退出（PR #84） |
+| R1-T07 | **DevBox Implemented · macOS CI Verified** | `.app` 组装 + ad-hoc 签名 + package job（PR #81；`docs/R1-APP-PACKAGING.md`） |
+| R1-T08 | **DevBox Implemented · macOS CI Verified** | 诊断事件、stderr 有界缓冲、显式授权导出（PR #82） |
+
+Batch 1 未触碰的边界：无真实 DEVONthink 写入、无写预算消耗、无 Developer ID / 公证、无发行、无 CNB 同步、`main` 与 ADS pin 未改、SPEC 未改。
+
+仍未验证：一切**真实 macOS** 项（M01–M06）与**发行环境**项（R01–R03）；`docs/R1-BATCH1-HANDOFF.md` 是接续入口。
+
 ## 6. 需要 Owner 决策的事项
 
-1. **是否正式授权 R1 开发**（在独立授权前，不写任何 R1 应用代码）。
-2. 若授权：建议分两批——**批次 1** 仅 DevBox + macOS CI 可完成项（T01–T04、T07、T08），**批次 2** 真实 macOS 与发行项（T05/T06 的现场部分、M01–M06、R01–R03）。
+1. ~~是否正式授权 R1 开发~~ → **已授权 Batch 1（2026-11-14）**，工程部分已完成（§5.1）。**Batch 2 仍未授权**。
+2. 若授权：建议分两批——**批次 1** 仅 DevBox + macOS CI 可完成项（T01–T04、T07、T08，已完成）；**批次 2** 真实 macOS 与发行项（T05/T06 的现场部分、M01–M06、R01–R03），等待授权。
 3. **bundle identifier 与发行渠道**：bundle id 必须在 Keychain service 迁移（T06）之前定案；渠道沿用 2026-11-12 决策，不因 R1 调查而改变。
 4. **Keychain 可访问性策略**：`WhenUnlocked`（更严，锁屏后探针失败）还是 `AfterFirstUnlockThisDeviceOnly`（更宽松，无后台 Worker 也可用）。
 5. **R1-M05 的写预算**：崩溃注入会产生真实记录，必须单独批准，且与 I1 剩余探针（响应前断连、`dropped_fields`、返回结构）分开审批，不合并预算。
@@ -266,6 +283,8 @@ R1 交付物（技术侧）：`.app` bundle 布局、`Info.plist`（bundle id、
 | --- | --- | --- |
 | 代码存在性与接线情况 | 逐文件/逐符号阅读（§1 的引用） | **VERIFIED**（本机只读） |
 | 缺失能力 | `grep` 无引用（`ImportRecovery`、`ImportExecutor`、`NSApplicationDelegate`、`.xcodeproj`） | **VERIFIED**（本机只读） |
-| macOS 运行时行为 | 无真实 macOS 会话 | **NOT_VERIFIED** |
+| macOS 运行时行为 | 无真实 macOS 会话 | **NOT_VERIFIED**（Batch 1 未改变） |
+| Batch 1 代码的编译与单测 | GitHub macOS CI（每个 PR） | **macOS CI Verified**（PR #79–#84） |
+| Batch 1 的 GUI 行为（横幅、禁用状态、退出清理） | 仅编译通过，未人工操作 | **NOT_VERIFIED** |
 | 签名/公证/MCP 在 Hardened Runtime 下启动 | 无证书、无发行环境 | **NOT_VERIFIED** |
 | B2 现场结论 | 沿用 `docs/I1-B2-ACCEPTANCE.md`，本轮未重读原始证据 | 见该文 §0.2 |
