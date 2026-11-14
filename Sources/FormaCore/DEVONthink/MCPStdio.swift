@@ -53,6 +53,9 @@ struct MCPConfiguration: Sendable {
     let arguments: [String]
     var timeout: Duration = .seconds(10)
     var maximumFrameBytes = 2 * 1024 * 1024
+    /// How many stderr bytes to keep in memory. The text is never logged or
+    /// exported; only a digest and lengths leave this process.
+    var stderrLimit = StderrCapture.defaultLimit
 
     static let devonThink = Self(
         executable: URL(fileURLWithPath: "/Applications/DEVONthink.app/Contents/Library/LoginItems/DEVONthink MCP.app/Contents/MacOS/DEVONthink MCP"),
@@ -63,8 +66,10 @@ struct MCPConfiguration: Sendable {
 private final class MCPChild: Sendable {
     let input: FileHandle
     let output: AsyncThrowingStream<Data, any Error>
+    let stderr: StderrCapture
     private let process: Process
     private let source: any DispatchSourceRead
+    private let stderrSource: any DispatchSourceRead
 
     init(configuration: MCPConfiguration) throws {
         let process = Process()
@@ -74,17 +79,38 @@ private final class MCPChild: Sendable {
         let output = stdout.fileHandleForReading
         let inputFD = input.fileDescriptor
         let outputFD = output.fileDescriptor
+        let stderrPipe = Pipe()
+        let stderrOutput = stderrPipe.fileHandleForReading
+        let stderrFD = stderrOutput.fileDescriptor
         guard fcntl(inputFD, F_SETNOSIGPIPE, 1) == 0,
               fcntl(inputFD, F_SETFL, O_NONBLOCK) == 0,
-              fcntl(outputFD, F_SETFL, O_NONBLOCK) == 0 else {
+              fcntl(outputFD, F_SETFL, O_NONBLOCK) == 0,
+              fcntl(stderrFD, F_SETFL, O_NONBLOCK) == 0 else {
             throw FormaError.unavailable
         }
         process.executableURL = configuration.executable
         process.arguments = configuration.arguments
         process.standardInput = stdin
         process.standardOutput = stdout
-        process.standardError = FileHandle.nullDevice
+        process.standardError = stderrPipe
+        let capture = StderrCapture(limit: configuration.stderrLimit)
         do { try process.run() } catch { throw FormaError.unavailable }
+        // stderr is drained continuously: a full pipe would block the child, and
+        // a blocked child looks exactly like a hung server. The bytes stay in a
+        // bounded in-memory buffer; only a digest and lengths are ever reported.
+        let stderrSource = DispatchSource.makeReadSource(fileDescriptor: stderrFD,
+                                                         queue: .global(qos: .utility))
+        stderrSource.setEventHandler {
+            var bytes = Data(count: 16 * 1024)
+            let count = bytes.withUnsafeMutableBytes { Darwin.read(stderrFD, $0.baseAddress, $0.count) }
+            if count > 0 {
+                bytes.count = count
+                capture.append(bytes)
+            } else if count < 0 && errno != EAGAIN && errno != EINTR {
+                stderrSource.cancel()
+            }
+        }
+        stderrSource.setCancelHandler { try? stderrOutput.close() }
 
         let (stream, continuation) = AsyncThrowingStream<Data, any Error>.makeStream(
             bufferingPolicy: .bufferingOldest(256)
@@ -113,14 +139,18 @@ private final class MCPChild: Sendable {
         }
         self.input = input
         self.output = stream
+        self.stderr = capture
         self.process = process
         self.source = source
+        self.stderrSource = stderrSource
         source.activate()
+        stderrSource.activate()
     }
 
     deinit {
         try? input.close()
         source.cancel()
+        stderrSource.cancel()
         let process = process
         guard process.isRunning else { return }
         process.terminate()
@@ -143,9 +173,18 @@ actor MCPStdio {
     private var nextID = 0
     private var pending: [Int: Pending] = [:]
     private var terminalError: FormaError?
+    /// The last child's stderr summary, kept after the child is gone so a
+    /// post-mortem can still say how much the peer wrote and that it was bounded.
+    private var lastStderr: StderrSnapshot = .empty
 
     init(configuration: MCPConfiguration) {
         self.configuration = configuration
+    }
+
+    /// A digest and lengths for the child's stderr. Never the text: the raw bytes
+    /// stay in the capture buffer on this machine and are not exported.
+    func stderrSnapshot() -> StderrSnapshot {
+        child?.stderr.snapshot() ?? lastStderr
     }
 
     func request(_ method: String, parameters: [String: MCPValue] = [:]) async throws -> MCPValue {
@@ -307,6 +346,7 @@ actor MCPStdio {
         terminalError = error
         reader?.cancel()
         reader = nil
+        if let child { lastStderr = child.stderr.snapshot() }
         child = nil
         frame = Data()
         for id in Array(pending.keys) { fail(id, with: error) }
