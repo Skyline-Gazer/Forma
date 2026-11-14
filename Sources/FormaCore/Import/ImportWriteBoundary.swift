@@ -41,7 +41,7 @@ public enum ImportWriteDenial: String, Sendable, Equatable {
     case groupPathOutsideScope
     case modeNotInScope
     case metadataIdentifierNotInScope
-    case metadataValueNotString
+    case metadataValueTooLong
     case sourcePathNotInScope
     case recordNotProvenInScope
     case recordBudgetExhausted
@@ -164,7 +164,7 @@ public actor ImportWriteAuthorization {
                                          detail: "group budget exhausted")
             }
             groupsUsed += 1
-            return record(request, detail: location)
+            return record(request)
 
         case let .importFile(path, destination, database, mode):
             guard database.uppercased() == scope.databaseID.uppercased() else {
@@ -189,7 +189,7 @@ public actor ImportWriteAuthorization {
                                          detail: "record budget exhausted")
             }
             grantsUsed += 1
-            return record(request, detail: path)
+            return record(request)
 
         case let .setMetadata(recordUUID, metadata):
             guard !metadata.isEmpty else {
@@ -204,7 +204,7 @@ public actor ImportWriteAuthorization {
                                              detail: "identifier \(identifier) is not authorized")
                 }
                 if let value, !value.isEmpty, value.utf8.count > 512 {
-                    throw ImportWriteRefusal(code: .metadataValueNotString, tool: request.tool,
+                    throw ImportWriteRefusal(code: .metadataValueTooLong, tool: request.tool,
                                              detail: "value for \(identifier) exceeds the accepted length")
                 }
             }
@@ -212,7 +212,7 @@ public actor ImportWriteAuthorization {
                 throw ImportWriteRefusal(code: .recordNotProvenInScope, tool: request.tool,
                                          detail: "record has not been verified in the authorized database")
             }
-            return record(request, detail: recordUUID)
+            return record(request)
         }
     }
 
@@ -231,8 +231,8 @@ public actor ImportWriteAuthorization {
         provenRecords.contains(uuid.uppercased())
     }
 
-    private func record(_ request: ImportWriteRequest, detail: String) -> ImportWriteGrant {
-        let grant = ImportWriteGrant(tool: request.tool, digest: Self.digest(request, detail: detail),
+    private func record(_ request: ImportWriteRequest) -> ImportWriteGrant {
+        let grant = ImportWriteGrant(tool: request.tool, digest: Self.digest(request),
                                      issuedAt: clock())
         issued.append(grant)
         return grant
@@ -242,7 +242,7 @@ public actor ImportWriteAuthorization {
         path.split(separator: "/").map(String.init).filter { !$0.isEmpty && $0 != "." }
     }
 
-    static func digest(_ request: ImportWriteRequest, detail: String) -> String {
+    static func digest(_ request: ImportWriteRequest) -> String {
         let text: String
         switch request {
         case let .createGroup(location, database):
@@ -254,7 +254,6 @@ public actor ImportWriteAuthorization {
                 .joined(separator: "\n")
             text = "\(request.tool.rawValue)|\(recordUUID.uppercased())|\(body)"
         }
-        _ = detail
         return SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 }
