@@ -2,7 +2,7 @@
 
 状态：**Guard Ready · Database Binding BLOCKED**（Owner 尚未创建隔离库）。
 
-结论先说：默认拒绝边界已实现并有 13 例拦截测试；但 `Forma_I1B2_Sandbox` 在 DEVONthink 中**尚不存在**，因此 §2 的库绑定无法完成，数据库级流程按要求停止。Owner 在 GUI 创建该库后，只需重新执行一次只读发现即可把状态推进为 `B2 Preflight Ready — Awaiting Owner Write Authorization`。
+结论先说：默认拒绝边界已实现并有 **14 例**拦截测试；但 `Forma_I1B2_Sandbox` 在 DEVONthink 中**尚不存在**，因此 §2 的库绑定无法完成，数据库级流程按要求停止。Owner 在 GUI 创建该库后，只需重新执行一次只读发现即可把状态推进为 `B2 Preflight Ready — Awaiting Owner Write Authorization`。
 
 本轮 MCP 写工具调用数：**0**。
 
@@ -80,14 +80,14 @@
 | Metadata identifier | 上述 8 个 |
 | 源文件路径 | 上述 4 个规范化绝对路径 |
 | 预算 | 记录 4、分组 2（授权即扣减） |
-| Metadata 目标 | 必须已由观测到的 `databaseUUID` 证明属于本库 |
+| Metadata 目标 | 必须已由**观测到的** `databaseUUID` 与 `parentPath` 证明属于本库且位于授权 Group 内 |
 | `import_file` 模式 | 仅 `mode=import` |
 
 拒绝发生在调用传输层之前；拒绝不消耗预算。
 
 ## 9. 工具调用拦截测试
 
-`Tests/FormaCoreTests/ImportWriteBoundaryTests.swift`，13 例全部通过（本地 `swift test`：541 用例通过）：
+`Tests/FormaCoreTests/ImportWriteBoundaryTests.swift`，14 例全部通过（本地 `swift test`：542 用例通过）：
 
 | 用例 | 断言 |
 | --- | --- |
@@ -98,6 +98,7 @@
 | `mode=index` | 拒绝 |
 | 未知 metadata identifier | 拒绝；`metadataCalls==0` |
 | 未证明记录的 metadata 写入 | 拒绝；`metadataCalls==0` |
+| 同库但父组在授权前缀之外的记录 | 拒绝（不作为 metadata 目标）；`metadataCalls==0` |
 | 记录预算第 5 条 / 分组预算第 3 个 | 拒绝；底层计数停在上限 |
 | 被拒请求不消耗预算 | 后续合法请求仍可通过 |
 | 回读返回他库记录 | 整体拒绝，且不记入已证明集合 |
