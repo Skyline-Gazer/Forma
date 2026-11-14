@@ -216,7 +216,10 @@ struct ImportRuntimeTests {
         let outcome = try await rig.runtime.execute([request(rig)], authorization: authorization())
 
         #expect(outcome.results.map(\.outcome) == [.importRecord])
-        #expect(outcome.results.first?.attempts == 1)
+        // One create, one recorded attempt row: the executor's own counter also
+        // counts the readback step, so the ledger is the honest place to look.
+        let stored = try #require(try rig.ledger.operation(keyDigest: rig.intent.key.digest))
+        #expect(try rig.ledger.attempts(operationID: stored.id).count == 1)
         // The guarded surface demanded exactly one grant, and the fake saw one create.
         #expect(await rig.transport.createCalls == 1)
         #expect(await rig.transport.lookupCalls >= 1)
