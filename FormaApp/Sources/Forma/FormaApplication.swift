@@ -95,17 +95,17 @@ final class FormaApplicationState: ObservableObject {
     }
 
     /// Records the scope a person explicitly confirmed for the read-only check.
-    func confirmRecoveryScope(databaseID: String, databaseName: String, groupPath: String) {
-        let path = groupPath.split(separator: "/").map(String.init).filter { !$0.isEmpty }
-        guard let scope = ImportRecoveryScopeConfirmation(
-            databaseID: databaseID.trimmingCharacters(in: .whitespacesAndNewlines),
-            databaseName: databaseName.trimmingCharacters(in: .whitespacesAndNewlines),
-            groupPath: path, confirmedAt: Date(), confirmedBy: "operator") else {
+    ///
+    /// Validation lives in `RecoveryScopeDraft` (FormaCore) so the sheet and its
+    /// tests agree on what "valid" means. The UI only renders the verdict.
+    func confirmRecoveryScope(_ draft: RecoveryScopeDraft) {
+        switch draft.validation {
+        case .ready(let scope):
+            recoveryScope = scope
+            recoveryReviewReason = nil
+        case .incomplete, .invalidUUID:
             recoveryReviewReason = "invalid_scope"
-            return
         }
-        recoveryScope = scope
-        recoveryReviewReason = nil
     }
 
     /// The read-only recheck.
@@ -338,11 +338,13 @@ private struct ImportRecoveryBanner: View {
 private struct RecoveryScopeSheet: View {
     @ObservedObject var state: FormaApplicationState
     @Environment(\.dismiss) private var dismiss
-    @State private var databaseID = ""
-    @State private var databaseName = ""
-    @State private var groupPath = ""
+    @State private var draft = RecoveryScopeDraft()
 
-    private var isInvalid: Bool { state.recoveryReviewReason == "invalid_scope" }
+    /// Live validation: an incomplete form is not an error yet, a filled form with
+    /// a non-UUID is.
+    private var isInvalid: Bool {
+        state.recoveryReviewReason == "invalid_scope" || draft.validation == .invalidUUID
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -351,13 +353,13 @@ private struct RecoveryScopeSheet: View {
             Text("Forma will read the records of interrupted operations in this database and group. It never writes and never retries an import.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            TextField("Database UUID", text: $databaseID)
+            TextField("Database UUID", text: $draft.databaseID)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("recovery-database-id")
-            TextField("Database name (label only)", text: $databaseName)
+            TextField("Database name (label only)", text: $draft.databaseName)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("recovery-database-name")
-            TextField("Group path, e.g. Forma_I1B2/r1", text: $groupPath)
+            TextField("Group path, e.g. Forma_I1B2/r1", text: $draft.groupPath)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("recovery-group-path")
             if isInvalid {
@@ -367,12 +369,16 @@ private struct RecoveryScopeSheet: View {
             }
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button("Cancel") {
+                    draft.reset()
+                    dismiss()
+                }
                 Button("Confirm read-only scope") {
-                    state.confirmRecoveryScope(databaseID: databaseID,
-                                               databaseName: databaseName,
-                                               groupPath: groupPath)
-                    if state.recoveryScope != nil { dismiss() }
+                    state.confirmRecoveryScope(draft)
+                    if state.recoveryScope != nil {
+                        draft.reset()
+                        dismiss()
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
                 .accessibilityIdentifier("confirm-recovery-scope")
