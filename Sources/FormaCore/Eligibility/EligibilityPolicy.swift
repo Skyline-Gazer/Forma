@@ -348,7 +348,7 @@ public struct EligibilityPolicy: Codable, Sendable, Equatable {
     }
 
     public static func shipped() throws -> EligibilityPolicy {
-        guard let url = Bundle.module.url(forResource: "forma-eligibility.v1", withExtension: "json"),
+        guard let url = FormaResourceBundle.url(forResource: "forma-eligibility.v1", withExtension: "json"),
               let data = try? Data(contentsOf: url) else { throw FormaError.unavailable }
         return try decode(data)
     }

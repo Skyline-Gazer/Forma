@@ -52,9 +52,50 @@ jobs:
       - uses: actions/checkout@v4
       - name: Assemble and ad-hoc sign Forma.app
         run: sh scripts/build_app.sh
+      - name: Verify the assembled bundle
+        run: sh scripts/verify_app_bundle.sh build/Forma.app
+      # A zip artifact does not preserve POSIX permissions, so the downloaded
+      # bundle arrived without its executable bit and could not be launched. A
+      # tarball keeps the modes *and* extracts to `Forma.app/…`, never a bare
+      # `Contents/`.
+      - name: Archive the bundle
+        run: tar -czf build/Forma-app-adhoc.tar.gz -C build Forma.app
       - name: Upload the development bundle
         uses: actions/upload-artifact@v4
         with:
           name: Forma-app-adhoc
-          path: build/Forma.app
+          path: build/Forma-app-adhoc.tar.gz
           if-no-files-found: error
+
+  # The job the Batch 2A field run showed was missing: uploading a bundle that
+  # crashes on launch looked exactly like a successful package job. This one
+  # downloads the artifact the user would get, re-verifies it and starts it.
+  launch-smoke:
+    name: macOS app launch smoke
+    needs: package
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the development bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: Forma-app-adhoc
+          path: artifact
+      - name: Extract the artifact
+        run: |
+          ls -la artifact
+          tar -xzf artifact/Forma-app-adhoc.tar.gz -C artifact
+          test -d artifact/Forma.app || { echo "error: artifact does not contain Forma.app" >&2; exit 1; }
+          test -x artifact/Forma.app/Contents/MacOS/Forma || { echo "error: executable bit lost" >&2; exit 1; }
+      - name: Verify structure and strict signature
+        run: sh scripts/verify_app_bundle.sh artifact/Forma.app
+      # Files present is not the same as files readable: the field crash was a
+      # bundle the runtime could not open.
+      - name: Verify the artifact can open its resources
+        run: |
+          swift build --product FormaResourceCheck --force-resolved-versions
+          BIN=$(swift build --product FormaResourceCheck --show-bin-path)
+          "$BIN/FormaResourceCheck" artifact/Forma.app
+      - name: Launch and observe
+        run: sh scripts/smoke_app.sh artifact/Forma.app

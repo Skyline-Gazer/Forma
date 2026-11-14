@@ -192,8 +192,10 @@ public struct MappingProfile: Decodable, Sendable, Equatable {
 
     public static func load(resource name: String) throws -> MappingProfile {
         // `.process` places each resource at the bundle root, so the lookup
-        // uses the file name alone.
-        guard let url = Bundle.module.url(forResource: name, withExtension: "json"),
+        // uses the file name alone. The bundle is resolved by
+        // `FormaResourceBundle`, not `Bundle.module`: the accessor SwiftPM
+        // generates looks in the `.app` root, which cannot be sealed.
+        guard let url = FormaResourceBundle.url(forResource: name, withExtension: "json"),
               let data = try? Data(contentsOf: url) else { throw FormaError.unavailable }
         return try MappingProfile.decode(data)
     }

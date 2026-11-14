@@ -10,6 +10,9 @@ let package = Package(
         // benchmark workflow builds and runs it explicitly, so a slow hosted
         // runner can never turn a unit-test PR into a red build.
         .executable(name: "FormaBenchmark", targets: ["FormaBenchmark"]),
+        // Packaging diagnostic: reads an assembled `.app` and reports whether the
+        // resources it ships can actually be opened. Not part of the app.
+        .executable(name: "FormaResourceCheck", targets: ["FormaResourceCheck"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.8.0"),
@@ -42,6 +45,7 @@ let package = Package(
             .process("Eligibility/Policies"),
         ]),
         .executableTarget(name: "FormaBenchmark", dependencies: ["FormaCore"]),
+        .executableTarget(name: "FormaResourceCheck", dependencies: ["FormaCore"]),
         .testTarget(name: "FormaCoreTests", dependencies: [
             "FormaCore",
             .product(name: "ZIPFoundation", package: "ZIPFoundation"),

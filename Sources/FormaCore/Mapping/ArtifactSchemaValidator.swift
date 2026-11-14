@@ -204,7 +204,7 @@ public struct ArtifactSchema: Sendable {
     static func load(resource name: String, schemaVersion: String) throws -> ArtifactSchema {
         // `.process` places each schema at the bundle root, so the lookup uses
         // the file name alone.
-        guard let url = Bundle.module.url(forResource: "\(name).schema", withExtension: "json"),
+        guard let url = FormaResourceBundle.url(forResource: "\(name).schema", withExtension: "json"),
               let data = try? Data(contentsOf: url) else { throw FormaError.unavailable }
         return try ArtifactSchema(id: name, schemaVersion: schemaVersion, data: data)
     }

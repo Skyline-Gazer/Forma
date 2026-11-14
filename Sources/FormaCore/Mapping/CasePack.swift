@@ -205,7 +205,7 @@ public struct CasePack: Codable, Sendable, Equatable {
     }
 
     public static func shipped() throws -> CasePack {
-        guard let url = Bundle.module.url(forResource: "forma-governance-cases.v1", withExtension: "json"),
+        guard let url = FormaResourceBundle.url(forResource: "forma-governance-cases.v1", withExtension: "json"),
               let data = try? Data(contentsOf: url) else { throw FormaError.unavailable }
         return try decode(data)
     }
