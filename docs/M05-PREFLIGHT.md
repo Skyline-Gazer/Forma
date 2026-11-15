@@ -8,13 +8,15 @@
 
 在**可丢弃的隔离目标**上，验证"写入结果未知 → `VERIFY_REQUIRED` → 只读回查 → 重启后无重复"这条链路在真实 MCP 下的行为，覆盖三种触发点：
 
-| 探针 | 触发方式 | 期望的副作用状态 |
+| 探针 | 触发方式 | 客户端可确认的事实 |
 | --- | --- | --- |
-| T 超时 | 对**本次自己启动的** MCP 子进程 `SIGSTOP`，使请求超过客户端预算 | 请求已发出，可能已落库 |
-| D 发送后断连 | 对本次 MCP 子进程 `SIGKILL`，在 create 发出后、响应前 | 请求已发出，结果未知 |
-| C 崩溃 | 在 create 在途时终止 **Forma 进程**（不是 DEVONthink） | 进程死亡，Intent 已落库 |
+| T 超时（T02） | 对**本次自己启动的** MCP 子进程 `SIGSTOP`，使请求超过客户端预算 | 只是"客户端超时"。按 `MCPStdio.send` 的结构，超时意味着**整帧已写入管道**；它**不**证明服务端已读取或已执行（SIGSTOP 仍可能挡住读取；恢复后请求会继续执行） |
+| D 发送后断连（T03） | 对本次 MCP 子进程 `SIGKILL`，在 create 发出后、响应前 | 只是"连接断开"。若断开发生在写帧之前，服务端根本没有收到请求；客户端**无法**区分"写前失联"与"写后失联" |
+| C 崩溃（T04） | 在 create 在途时终止 **Forma 进程**（不是 DEVONthink） | 进程死亡；Intent 已落库。触发点同样依赖发送边界，当前不可观测 |
 
 `C` 是本轮**明确禁止**执行的项目；方案中保留，待授权。
+
+> **发送边界（2026-11-15 修订）**：上表原先写"请求已发出，可能已落库"，把"客户端调用返回超时"当作"服务端收到写请求"，属于混淆。可观测性的准确划分见 §14；在 §14 的可观测方案落地前，T02/T03 的触发点只能记为 **NOT_VERIFIED**。
 
 ## 2. 非目标
 
@@ -41,23 +43,28 @@
 
 ## 4. 预算（提案值，需 Owner 批准）
 
-| 维度 | 上限 |
-| --- | --- |
-| 目标数据库 | 1（可丢弃；优先新建 `Forma_M05_Sandbox`，不复用 I1-B2 沙盒） |
-| Group | 2（`Forma_M05`、`<run-id>`） |
-| 记录 | 3（对应 T/D/C 三个探针，各 1 条） |
-| `import_file` 调用 | 3（`mode=import`，仅 3 个合成文件） |
-| `set_record_custom_metadata` 调用 | ≤ 6 总数，且**每条记录 ≤ 1 次** |
-| 合成源文件 | 3（字节固定，SHA-256 见 §12.1） |
-| 删除 / 移动 / trash / Replicant | 0 |
-| 字段定义变更 | 0 |
+总预算不变（1 个可丢弃库、2 个 Group、3 条记录、3 次 `import_file`、≤6 次 metadata）。下表把同一笔预算**按探针**拆开，避免把 T04 的预留额度用在 T02/T03 上：
+
+| 维度 | T02（超时） | T03（发送后断连） | T04（崩溃，**未单独批准不得使用**） | 合计 |
+| --- | --- | --- | --- | --- |
+| `import_file`（`mode=import`） | 1 | 1 | 1（预留） | 3 |
+| 记录 | 1 | 1 | 1（预留） | 3 |
+| `set_record_custom_metadata` | ≤ 1 | ≤ 1 | ≤ 1（预留） | ≤ 3（总上限仍为 6） |
+| Group | 共用 `Forma_M05`（1）与 `<run-id>`（1） | 同左 | 同左 | 2 |
+| 合成源文件 | `m05-t1.md` | `m05-d2.md` | `m05-m3.md` | 3 |
+
+规则：
+
+- T02 与 T03 各自只能使用本列额度；T04 的 1 次 import / 1 条记录 / ≤1 次 metadata 属**预留**，未获 T04 单独批准前不得动用，也不得挪给 T02/T03；
+- metadata 的**总数 ≤ 6** 与**每条记录 ≤ 1 次**两条限制同时有效（T02/T03 合计仅 2 次，剩余额度不构成授权）；
+- 不含：数据库创建、Group 之外的移动、删除/trash/Replicant、字段定义变更（均为 0）。
 
 三类预算（imports / groups / metadata）都在 `ImportWriteScope` 中，并由
 `ImportWriteAuthorization.permit` 在调用传输层之前检查：
 
 - 被拒绝的请求不消耗预算，也到不了 transport；
 - 预算在**授予**时消费，超时、断连、取消都不退还（防止崩溃循环超支）；
-- metadata 除总数外还有逐记录上限，六个调用不能集中在一条记录上。
+- metadata 除总数外还有逐记录上限，六个调用不能集中在一条记录上；`ImportLedger.spend` 在单个 SQLite 写事务内完成读取-校验-递增-落库（见 §4.1 与 `M05-SAFETY-AUDIT.md` §1.2）。
 
 ### 4.1 预算日志（跨实例）
 
@@ -101,11 +108,11 @@
 | 步 | 操作 | 断言 |
 | --- | --- | --- |
 | 1 | 建组 `Forma_M05/<run-id>` | 回读 children 证明库与父组；返回载荷无 UUID 也可接受 |
-| 2 | 记录 T：create 发出前 `SIGSTOP` 子进程，等待超时，恢复进程 | `FormaError.timeout`；Ledger `verify_required`；attempts=1 |
-| 3 | 回查 T | 若记录存在且身份+字节确认 → `readback_verified`；否则保持 `verify_required` |
-| 4 | 记录 D：create 发出后 `SIGKILL` 子进程 | `disconnected`；Ledger `verify_required`；**不重发** |
-| 5 | 回查 D | 同上 |
-| 6 | 记录 C（**未授权，暂不执行**）：create 在途终止 Forma 进程 | 重启后 `verify_required` + 只读结论 |
+| 2 | 记录 T02：**先**确认发送边界可观测（§14）；当前不可观测时本步不执行 | 不得以"客户端超时"代替"服务端已收到"；`SIGSTOP` 的施加点无法证明帧是否已写出 |
+| 3 | 回查 T02 | 若记录存在且身份+字节确认 → `readback_verified`；否则保持 `verify_required` |
+| 4 | 记录 T03：**先**确认发送边界可观测（§14）；当前不可观测时本步不执行 | 写前失联与写后失联在客户端不可区分，故不得声称"请求已发出" |
+| 5 | 回查 T03 | 同上 |
+| 6 | 记录 T04（**未授权，暂不执行**）：create 在途终止 Forma 进程 | 重启后 `verify_required` + 只读结论；仅在发送边界可观测后才具备触发条件 |
 
 每步同时记录：guard 的 `log`（授权次数）、`refusalCounts`（必须为空）、`provenRecordIDs`、真实写调用计数。
 
@@ -192,7 +199,41 @@
 4. 先跑离线 QA 编排（§12.1），确认预算、计划、故障矩阵与报告格式；失败则停止。
 5. 构造 scope；`plan` 必须输出 3 条 `would_execute`、`limits` 与
    `authorizationDigest`，且 `refusals` 为空。
-6. 按 §8 执行 T、D；C 仅在 Owner 对崩溃注入单独批准后执行。
+6. 按 §8 执行 T02/T03：**前提是 §14 的发送边界可观测性已具备**；否则这两项保持 NOT_VERIFIED，不执行。T04（崩溃注入）是**独立申请**，不得与 T02/T03 的批准或额度混用。
 7. 每次触发后按 §6 判定，再按 §7 做重启回查。
 8. 导出 Ledger、审计、预算 journal 行与 QA report JSON；按 §10 对账。
 9. 记录 PASS/FAIL/BLOCKED；未获授权不清理。
+
+## 14. 发送边界的可观测性复核（2026-11-15，只读）
+
+结论：**T02/T03 的发送边界当前不可观测 → NOT_VERIFIED**；本轮未做任何真实故障注入，也未连接真实写入执行路径。
+
+### 14.1 客户端能证明什么
+
+| 阶段 | 代码位置 | 能否作为留存证据 |
+| --- | --- | --- |
+| prepared | `ImportWriteAuthorization.permit` 授予、参数构造完成 | **能**：guard 授权计数与 `refusalCounts` |
+| request bytes written / fully framed | `MCPStdio.send` 要求 `write()` 写满整帧，否则立即 `.disconnected` | **不能**：没有事件或日志；只能由"超时而非断开"间接推断 |
+| server may have executed | 帧进入管道后、响应前 | **不能** |
+| response received | `request` 返回后 | **能**：`transcript.append(tool)` 只在成功返回后追加 |
+
+- `timeout` 蕴含 `send()` 已成功返回（写失败会立刻以 `.disconnected` 失败，不会等到超时）；但这是结构推断，没有可留存的时间点。
+- 超时后连接被丢弃（`discard(connection, because:)`），之后到达的响应不可归因，因此"超时"不能证明服务端未执行。
+
+### 14.2 服务端与进程边界
+
+- `DEVONthink MCP` 在统一日志只输出 `[MCP] <private>`，内容不可读，不能作为请求边界。
+- `MCPConfiguration` 是 internal，生产初始化器硬编码 `.devonThink`，没有可替换端点；**当前无法插入本地 stdio relay 而不改代码**。
+- `SIGSTOP` / `SIGKILL` 只能作用于本次自己启动的子进程（父进程归属可用 `ppid` 证明），但"施加时刻"与"帧是否已写出"无法对齐。
+
+### 14.3 具备实施条件所需的前提（未实施）
+
+1. 在 `MCPStdio.send` 增加本地、脱敏、可关闭的**发送事件**（帧 id、写入字节数、时间戳）；或
+2. 提供显式端点覆盖（环境变量或注入点），运行一个只记录帧边界的本地 relay，不解析业务载荷；
+3. 任何方案都必须证明：不改变请求字节、不把业务内容落盘、进程所有权明确。
+
+在上述条件满足前：T02/T03 = **NOT_VERIFIED**，T04 不具备触发条件。不得以随机 sleep、PID 存活或客户端超时充当"发送成功"证据。
+
+### 14.4 预算复核
+
+PR #112 之后预算仍为 1 库 / 2 Group / 3 记录 / 3 次 `import_file` / ≤6 次 metadata；按探针拆分见 §4。`ImportLedger.spend` 的事务化不改变授权语义与计数单位。
