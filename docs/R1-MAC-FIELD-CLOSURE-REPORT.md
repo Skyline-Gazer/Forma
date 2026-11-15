@@ -136,7 +136,7 @@
 | 写工具调用（`import_file` / `create_group_path` / `set_record_custom_metadata` / move / trash 等） | **0** |
 | 预算消费 / journal 写入 | 0 |
 | 生产库记录级查询 | 0 |
-| 只读调用 | `initialize`、`tools/list`、`get_databases`、`get_record_children`（沙盒组，用于前后对账）、应用侧回查 1 次（`1 verified`） |
+| 只读调用 | `initialize`（2 次）、`tools/list`（2 次）、`get_databases`（1 次）、`get_record_children`（1 次，沙盒 `r1` 组）、应用侧回查 1 次（`1 verified`） |
 | 沙盒对象变化 | 无：`r1` 组子项 JSON 摘要与上一轮完全相同（`28275fdf…`） |
 
 ## 9. 仍未验证 / 未授权
@@ -176,4 +176,4 @@ Issue #98 维持 **2 条**已确认观察，本轮**不新增**。
 | `~/.forma/evidence/r1-f01/m04/` | 八步复测的 AX 转储（空表单、非法 UUID、合法后错误消失、Confirm、Cancel、重开、回查） |
 | `~/.forma/evidence/m05/t01-schema-digests.json` | 62 工具 schema 自校与三个写工具 digest |
 | `~/.forma/evidence/m05/synthetic/` | 三份合成文件 |
-| `~/.forma/evidence/m05/r1-children-now.json` | 沙盒组子项前后对账 |
+| `~/.forma/evidence/m05/r1-children-now.json` | 沙盒 `r1` 组子项，与上一轮基线摘要相同 |
