@@ -164,3 +164,42 @@ has spent thirty-eight builds on a state machine can still miss "this read retur
 the caller means" and "this cache is being used as a source of record". Both shapes are recorded as review checks inside
 `docs/P2-ACCEPTANCE.md` §8, whose purpose is the P3 go/no-go judgement rather than a checklist of its own:
 two numbered items there name them, and nothing in that section is a standing review procedure.
+
+## Learning Loop (Pilot)
+
+Forma is piloting the ADS Learning Loop (tracked by Issue #98). The point is narrow: when a real delivery
+exposes a failure mode the current checks did not catch, record **why** in one place so the same shape is
+recognised next time. It is not a per-pull-request ritual and it adds no gate.
+
+**Trigger conditions — record only when one fires:**
+
+1. a real defect recurs on a production or acceptance path;
+2. the same root cause causes rework (repeat fix or repeat review round);
+3. a false pass: a check reports success while behaviour is wrong;
+4. platform/contract mismatch: an external error code, observability limit or behaviour contradicts the
+   local contract;
+5. the acceptance method fails: an assertion does not match the property under test, or the verification
+   technique cannot drive the real path.
+
+**Record format** — five fields, written in the delivery's own PR or Issue, with one summary line in #98:
+
+```text
+Failure:      the observed failure (behaviour, environment, point in time)
+Root cause:   a reproducible cause, not "somebody forgot"
+Prevention:   the concrete test/check/doc change that makes it visible next time
+Evidence:     links to Issues/PRs, CI runs, test names, files
+Scope:        where the lesson applies, and where it does not
+```
+
+**Regression rule.** For a reproducible defect, prefer evidence that the new test fails on the old
+behaviour: reproduce the failure first (or mutate the fix), then show it passes. Opt-in or manual checks
+stay out of the default gate. If a deterministic test is impossible, say so in `Prevention` and give the
+alternative evidence instead of pretending coverage.
+
+**Non-goals.** No ADS pin change, no automatic ADS standard edits, no new blocking gate or CI job, no
+per-PR lesson requirement, no tracker of its own, no timers or agent orchestration. A lesson that needs a
+change to the ADS standard itself is reviewed in the ADS repository, not here.
+
+**Evaluation.** After 3–5 naturally occurring deliveries (not manufactured ones), record
+**Adopt / Adjust / Drop** in Issue #98. Historical cases #92–#97 calibrated the format and are not counted
+as observations.

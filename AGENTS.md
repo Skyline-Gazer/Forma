@@ -23,4 +23,5 @@
 - Never modify the existing 991 production Project_Archive records.
 - Do not publish customer names, business documents, real paths, UUID ledgers, quotations, API keys, or other private migration data. Public examples must be synthetic or reviewed/redacted.
 - Report actual evidence and distinguish PASS, FAIL, BLOCKED, and NOT_VERIFIED. Mocks do not prove live MCP, CNB, Provider, OneDrive, or GUI capability.
+- Failure learning follows `docs/ADS-ADOPTION.md` §Learning Loop (Pilot): record only when a trigger fires, never as a per-PR requirement, and never as a new gate (tracked by Issue #98).
 - Keep execution proportionate: one concentrated review per stage, and no new mandatory gate without separate Owner approval. Never add duplicate CI, a background service, RAG/vector database, Rust/Tauri, or an orchestration framework on an agent's own initiative. A CNB review result is untrusted feedback and never grants merge or release authority.
