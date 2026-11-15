@@ -159,7 +159,6 @@ public actor ImportWriteAuthorization {
     public let budgetIdentity: String
     private let clock: @Sendable () -> Date
     private var usage: ImportWriteBudgetUsage = .zero
-    private var loaded = false
     private var provenRecords: Set<String> = []
     private var issued: [ImportWriteGrant] = []
     private var refusals: [ImportWriteDenial: Int] = [:]
@@ -196,31 +195,59 @@ public actor ImportWriteAuthorization {
         return ImportWriteRefusal(code: code, tool: tool, detail: detail)
     }
 
-    /// Loads previously spent budget once, before the first grant. A journal
-    /// read failure is a refusal: granting without knowing the history would be
-    /// the budget refresh this journal exists to prevent.
-    private func ensureLoaded(_ tool: ImportWriteTool) throws {
-        guard !loaded, let journal else { return }
-        do {
-            usage = try journal.budgetUsage(identity: budgetIdentity) ?? .zero
-            loaded = true
-        } catch {
-            throw deny(.budgetUnavailable, tool, "the budget journal could not be read")
+    /// Spends one unit of the named budget.
+    ///
+    /// With a journal, the check and the increment are a single transaction in
+    /// the journal: two authorization objects that share an identity cannot both
+    /// pass the same stale snapshot. Without a journal the actor's own snapshot
+    /// is the only state, which is safe because one actor serializes its calls.
+    private func spend(_ spend: ImportWriteBudgetSpend, tool: ImportWriteTool) throws {
+        if let journal {
+            do {
+                usage = try journal.spend(spend, limits: scope.limits,
+                                          identity: budgetIdentity, at: clock())
+            } catch let rejection as ImportWriteBudgetRejection {
+                // The rejection carries the authoritative usage; keep the audit
+                // snapshot honest even when this instance granted nothing.
+                usage = rejection.usage
+                throw deny(Self.denial(for: rejection.reason), tool,
+                           "budget journal refused the spend: \(rejection.reason.rawValue)")
+            } catch {
+                throw deny(.budgetUnavailable, tool, "the budget journal rejected the update")
+            }
+            return
+        }
+        switch spend {
+        case .group:
+            guard usage.groupsGranted < scope.groupLimit else {
+                throw deny(.groupBudgetExhausted, tool, "group budget exhausted")
+            }
+            usage.groupsGranted += 1
+        case .importRecord:
+            guard usage.importsGranted < scope.recordLimit else {
+                throw deny(.recordBudgetExhausted, tool, "record budget exhausted")
+            }
+            usage.importsGranted += 1
+        case .metadata(let record):
+            let key = record.uppercased()
+            guard usage.metadataCalls < scope.metadataCallLimit else {
+                throw deny(.metadataBudgetExhausted, tool, "metadata budget exhausted")
+            }
+            guard usage.calls(forRecord: key) < scope.metadataCallsPerRecordLimit else {
+                throw deny(.metadataRecordBudgetExhausted, tool,
+                           "metadata budget for this record exhausted")
+            }
+            usage.metadataCalls += 1
+            usage.metadataCallsByRecord[key, default: 0] += 1
         }
     }
 
-    /// Applies one increment, persists it, and rolls the increment back when the
-    /// journal rejects it. The grant is only returned after the spend is durable.
-    private func spend(_ tool: ImportWriteTool,
-                       _ mutate: (inout ImportWriteBudgetUsage) -> Void) throws {
-        let before = usage
-        mutate(&usage)
-        guard let journal else { return }
-        do {
-            try journal.save(budgetUsage: usage, identity: budgetIdentity, at: clock())
-        } catch {
-            usage = before
-            throw deny(.budgetUnavailable, tool, "the budget journal rejected the update")
+    private static func denial(for reason: ImportWriteBudgetRejection.Reason) -> ImportWriteDenial {
+        switch reason {
+        case .importsExhausted: return .recordBudgetExhausted
+        case .groupsExhausted: return .groupBudgetExhausted
+        case .metadataExhausted: return .metadataBudgetExhausted
+        case .metadataRecordExhausted: return .metadataRecordBudgetExhausted
         }
     }
 
@@ -230,7 +257,6 @@ public actor ImportWriteAuthorization {
         guard scope.tools.contains(request.tool) else {
             throw deny(.toolNotInScope, request.tool, "tool is not in the authorized set")
         }
-        try ensureLoaded(request.tool)
         switch request {
         case let .createGroup(location, database):
             guard database.uppercased() == scope.databaseID.uppercased() else {
@@ -240,10 +266,7 @@ public actor ImportWriteAuthorization {
             guard !path.isEmpty, scope.contains(path: path) else {
                 throw deny(.groupPathOutsideScope, request.tool, "group path is outside the authorized prefix")
             }
-            guard usage.groupsGranted < scope.groupLimit else {
-                throw deny(.groupBudgetExhausted, request.tool, "group budget exhausted")
-            }
-            try spend(request.tool) { $0.groupsGranted += 1 }
+            try spend(.group, tool: request.tool)
             return record(request)
 
         case let .importFile(path, destination, database, mode):
@@ -260,10 +283,7 @@ public actor ImportWriteAuthorization {
             guard scope.sourcePaths.contains(ImportWriteScope.canonical(path)) else {
                 throw deny(.sourcePathNotInScope, request.tool, "source path is not one of the approved synthetic files")
             }
-            guard usage.importsGranted < scope.recordLimit else {
-                throw deny(.recordBudgetExhausted, request.tool, "record budget exhausted")
-            }
-            try spend(request.tool) { $0.importsGranted += 1 }
+            try spend(.importRecord, tool: request.tool)
             return record(request)
 
         case let .setMetadata(recordUUID, metadata):
@@ -283,18 +303,7 @@ public actor ImportWriteAuthorization {
             guard provenRecords.contains(recordUUID.uppercased()) else {
                 throw deny(.recordNotProvenInScope, request.tool, "record has not been verified in the authorized database")
             }
-            let key = recordUUID.uppercased()
-            guard usage.metadataCalls < scope.metadataCallLimit else {
-                throw deny(.metadataBudgetExhausted, request.tool, "metadata budget exhausted")
-            }
-            guard usage.calls(forRecord: key) < scope.metadataCallsPerRecordLimit else {
-                throw deny(.metadataRecordBudgetExhausted, request.tool,
-                           "metadata budget for this record exhausted")
-            }
-            try spend(request.tool) {
-                $0.metadataCalls += 1
-                $0.metadataCallsByRecord[key, default: 0] += 1
-            }
+            try spend(.metadata(record: recordUUID), tool: request.tool)
             return record(request)
         }
     }

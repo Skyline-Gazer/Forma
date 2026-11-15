@@ -60,15 +60,48 @@ public struct ImportWriteBudgetUsage: Sendable, Equatable, Codable {
     }
 }
 
+/// One budget unit a permit wants to spend.
+public enum ImportWriteBudgetSpend: Sendable, Equatable {
+    case importRecord
+    case group
+    /// The record key is stored uppercase, as observed everywhere else.
+    case metadata(record: String)
+}
+
+/// A refusal produced inside the journal transaction, together with the
+/// authoritative usage at that moment. Carrying the snapshot lets the caller
+/// report the real spend without a second read.
+public struct ImportWriteBudgetRejection: Error, Equatable, Sendable {
+    public enum Reason: String, Sendable, Equatable, Codable {
+        case importsExhausted = "imports_exhausted"
+        case groupsExhausted = "groups_exhausted"
+        case metadataExhausted = "metadata_exhausted"
+        case metadataRecordExhausted = "metadata_record_exhausted"
+    }
+
+    public let reason: Reason
+    public let usage: ImportWriteBudgetUsage
+
+    public init(reason: Reason, usage: ImportWriteBudgetUsage) {
+        self.reason = reason
+        self.usage = usage
+    }
+}
+
 /// Where spent budget is recorded so a new process cannot start from zero.
 ///
 /// The journal is keyed by the authorization digest. A run that constructs a new
 /// `ImportWriteAuthorization` for the same digest restores what was already
 /// spent; a run under a different authorization has its own row.
 ///
-/// Both methods throw. A journal that cannot be read or written fails the
-/// request closed: an unrecorded grant would be budget the ledger never saw.
+/// `spend` is the only mutator: the limit check and the increment happen inside
+/// one transaction, so two authorization objects sharing the same identity
+/// cannot both pass a check against the same old snapshot. Every method throws;
+/// a journal that cannot be read or written fails the request closed.
 public protocol ImportWriteBudgetJournal: Sendable {
     func budgetUsage(identity: String) throws -> ImportWriteBudgetUsage?
-    func save(budgetUsage: ImportWriteBudgetUsage, identity: String, at date: Date) throws
+    /// Atomically checks `limits`, increments one unit, persists it, and returns
+    /// the new usage. Throws `ImportWriteBudgetRejection` when a limit is hit.
+    func spend(_ spend: ImportWriteBudgetSpend, limits: ImportWriteBudgetLimits,
+               identity: String, at date: Date) throws -> ImportWriteBudgetUsage
 }
