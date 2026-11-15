@@ -38,7 +38,12 @@ keep_open() {
 /// The fixture peer is a `/bin/sh` process, and CI runners start one in well
 /// over a second under load, so the default budget is generous. A test that
 /// needs a timeout must create one deliberately - never by racing the clock.
-private func fake(_ script: String, timeout: Duration = .seconds(15), frameLimit: Int = 2 * 1024 * 1024) -> MCPConfiguration {
+///
+/// 30 s, not 15: two separate dev/PR runs have timed out at 15 s while the same
+/// code passed on the next run (PR #97, #99). Under `swift test --parallel` on a
+/// three-core runner, process startup is the variable, and a test that measures
+/// behaviour rather than latency should not be the one that fails.
+private func fake(_ script: String, timeout: Duration = .seconds(30), frameLimit: Int = 2 * 1024 * 1024) -> MCPConfiguration {
     MCPConfiguration(executable: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", peerPrelude + "\n" + script],
                      timeout: timeout, maximumFrameBytes: frameLimit)
 }
