@@ -23,12 +23,12 @@ import Foundation
 public actor ImportExecutor {
     private let ledger: ImportLedger
     private let writer: ImportSingleWriter
-    private let write: any ImportWriteTransport
+    private let write: any ImportWriteSurface
     private let read: any ImportReadTransport
     private let clock: @Sendable () -> Date
 
     public init(ledger: ImportLedger, writer: ImportSingleWriter,
-                write: any ImportWriteTransport, read: any ImportReadTransport,
+                write: any ImportWriteSurface, read: any ImportReadTransport,
                 clock: @escaping @Sendable () -> Date = Date.init) {
         self.ledger = ledger
         self.writer = writer
