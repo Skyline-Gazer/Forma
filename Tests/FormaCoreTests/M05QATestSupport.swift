@@ -82,6 +82,7 @@ enum M05QA {
         let groupGuard: GuardedImportWriteTransport
         let intents: [ImportIntent]
         let clearances: [ImportPreflightClearance]
+        let preflight: ImportAuthorization
     }
 
     enum Refusal: String, Error, Equatable {
@@ -98,6 +99,14 @@ enum M05QA {
 
     static func groupPath(_ approval: Approval) -> [String] {
         [groupRoot, approval.runID]
+    }
+
+    /// The preflight authorization (name/prefix based) whose digest binds the
+    /// clearance and the intent. The runtime authorization is a separate object
+    /// with its own digest and budget identity.
+    static func preflightAuthorization(_ approval: Approval) -> ImportAuthorization {
+        ImportAuthorization(databaseName: databaseID, groupPrefix: groupPath(approval),
+                            authorizedBy: approval.approvedBy, issuedAt: approval.issuedAt)
     }
 
     static func scope(prefix: [String]) -> ImportWriteScope {
@@ -150,7 +159,8 @@ enum M05QA {
             authorizationDigest: authorizationDigest)
     }
 
-    static func clearance(_ intent: ImportIntent) throws -> ImportPreflightClearance {
+    static func clearance(_ intent: ImportIntent,
+                          authorization: ImportAuthorization) throws -> ImportPreflightClearance {
         let profile = try MappingProfile.projectArchive()
         let manifest = try ImportFixtures.manifest(revision: intent.key.manifestRevision)
         return ImportPreflight.evaluate(ImportPreflightInput(
@@ -158,9 +168,7 @@ enum M05QA {
             expectations: ImportExpectations(profileID: profile.profileID,
                                              profileVersion: profile.profileVersion,
                                              schemaVersion: manifest.schemaVersion),
-            authorization: ImportAuthorization(
-                databaseName: databaseID, groupPrefix: intent.groupPath,
-                authorizedBy: "synthetic-owner", issuedAt: now),
+            authorization: authorization,
             source: ImportSourceFacts(state: .present, authorized: true, readable: true,
                                       hydrationPending: false,
                                       snapshotFingerprint: intent.key.snapshotFingerprint,
@@ -218,16 +226,18 @@ enum M05QA {
 
         var intents: [ImportIntent] = []
         var clearances: [ImportPreflightClearance] = []
+        let preflight = preflightAuthorization(approval)
         for (index, file) in files.enumerated() {
             let intent = try intent(file, runID: runID, approval: approval,
-                                    authorizationDigest: authorization.digest,
+                                    authorizationDigest: preflight.digest,
                                     metadata: ["projectname": "M05-\(index + 1)"])
             intents.append(intent)
-            clearances.append(try clearance(intent))
+            clearances.append(try clearance(intent, authorization: preflight))
         }
         return Stack(database: database, ledger: ledger, transport: transport, runtime: runtime,
                      runID: runID, authorization: authorization, scope: runtimeScope,
-                     groupGuard: groupGuard, intents: intents, clearances: clearances)
+                     groupGuard: groupGuard, intents: intents, clearances: clearances,
+                     preflight: preflight)
     }
 
     static func requests(_ stack: Stack) -> [ImportRuntimeRequest] {
@@ -306,7 +316,7 @@ enum M05QA {
     static func seedCrashResidue(_ stack: Stack, file: SyntheticFile,
                                  uuid: String) async throws -> ImportIntent {
         let intent = try intent(file, runID: stack.runID, approval: .canonical,
-                                authorizationDigest: stack.authorization.digest,
+                                authorizationDigest: stack.preflight.digest,
                                 metadata: ["projectname": "M05-CRASH"])
         let operation = ImportOperationRecord(
             runID: stack.runID, key: intent.key,
