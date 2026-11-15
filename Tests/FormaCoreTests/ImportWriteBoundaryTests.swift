@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Testing
 
 @testable import FormaCore
@@ -23,12 +24,15 @@ struct ImportWriteBoundaryTests {
 
     static func scope(tools: Set<ImportWriteTool> = Set(ImportWriteTool.allCases),
                       identifiers: Set<String> = allowedIdentifiers,
-                      recordLimit: Int = 4, groupLimit: Int = 2) -> ImportWriteScope {
+                      recordLimit: Int = 4, groupLimit: Int = 2,
+                      metadataLimit: Int = 4, metadataPerRecord: Int = 2) -> ImportWriteScope {
         ImportWriteScope(
             databaseID: database, groupPrefix: prefix, tools: tools,
             metadataIdentifiers: identifiers,
             sourcePaths: [approvedPath, otherApprovedPath],
-            recordLimit: recordLimit, groupLimit: groupLimit)
+            recordLimit: recordLimit, groupLimit: groupLimit,
+            metadataCallLimit: metadataLimit,
+            metadataCallsPerRecordLimit: metadataPerRecord)
     }
 
     static func source() -> ImportSourceBinding {
@@ -323,5 +327,243 @@ struct ImportWriteBoundaryTests {
         try await guarded.writeMetadata(ImportMetadataRequest(
             uuid: "uuid-1", metadata: ["documentcategory": "99_TEST"], source: Self.source()))
         #expect(await base.metadataCalls == 1)
+    }
+
+    // MARK: - Metadata budget
+
+    private static func prove(_ authorization: ImportWriteAuthorization,
+                              _ uuid: String) async throws {
+        try await authorization.recordVerified(uuid: uuid, database: database,
+                                               parentPath: prefix + ["batch-1"])
+    }
+
+    @Test func metadataTotalBudgetStopsTheNextCallBeforeTheTransport() async throws {
+        let base = FakeImportTransport()
+        let authorization = ImportWriteAuthorization(
+            scope: Self.scope(metadataLimit: 2, metadataPerRecord: 3))
+        let guarded = GuardedImportWriteTransport(base: base, authorization: authorization,
+                                                  sourcePath: { _ in Self.approvedPath })
+        try await Self.prove(authorization, "uuid-1")
+        try await Self.prove(authorization, "uuid-2")
+        try await guarded.writeMetadata(ImportMetadataRequest(
+            uuid: "uuid-1", metadata: ["projectname": "A"], source: Self.source()))
+        try await guarded.writeMetadata(ImportMetadataRequest(
+            uuid: "uuid-2", metadata: ["projectname": "B"], source: Self.source()))
+        await #expect(throws: ImportWriteRefusal.self) {
+            try await guarded.writeMetadata(ImportMetadataRequest(
+                uuid: "uuid-1", metadata: ["projectname": "C"], source: Self.source()))
+        }
+        #expect(await base.metadataCalls == 2)
+        #expect(await authorization.metadataGrantedCount == 2)
+    }
+
+    @Test func metadataPerRecordBudgetStopsTheSecondCallForOneRecord() async throws {
+        let base = FakeImportTransport()
+        let authorization = ImportWriteAuthorization(
+            scope: Self.scope(metadataLimit: 5, metadataPerRecord: 1))
+        let guarded = GuardedImportWriteTransport(base: base, authorization: authorization,
+                                                  sourcePath: { _ in Self.approvedPath })
+        try await Self.prove(authorization, "uuid-1")
+        try await Self.prove(authorization, "uuid-2")
+        try await guarded.writeMetadata(ImportMetadataRequest(
+            uuid: "uuid-1", metadata: ["projectname": "A"], source: Self.source()))
+        await #expect(throws: ImportWriteRefusal.self) {
+            try await guarded.writeMetadata(ImportMetadataRequest(
+                uuid: "uuid-1", metadata: ["issuer": "B"], source: Self.source()))
+        }
+        // The per-record limit did not spend the other record's allowance.
+        try await guarded.writeMetadata(ImportMetadataRequest(
+            uuid: "uuid-2", metadata: ["projectname": "C"], source: Self.source()))
+        #expect(await base.metadataCalls == 2)
+        #expect(await authorization.metadataGrantedCount == 2)
+        let usage = await authorization.budget
+        #expect(usage.calls(forRecord: "uuid-1") == 1)
+    }
+
+    @Test func aDeniedMetadataCallKeepsBothCountersAndTheTransportUntouched() async throws {
+        let base = FakeImportTransport()
+        let authorization = ImportWriteAuthorization(
+            scope: Self.scope(metadataLimit: 1, metadataPerRecord: 1))
+        let guarded = GuardedImportWriteTransport(base: base, authorization: authorization,
+                                                  sourcePath: { _ in Self.approvedPath })
+        try await Self.prove(authorization, "uuid-1")
+        await #expect(throws: ImportWriteRefusal.self) {
+            // Not proven: refused before the budget is considered.
+            try await guarded.writeMetadata(ImportMetadataRequest(
+                uuid: "uuid-9", metadata: ["projectname": "x"], source: Self.source()))
+        }
+        #expect(await authorization.metadataGrantedCount == 0)
+        #expect(await authorization.refusalCounts[.recordNotProvenInScope] == 1)
+        #expect(await base.metadataCalls == 0)
+    }
+
+    // MARK: - Spent budget is not refunded
+
+    @Test func timeoutDoesNotRefundTheImportBudget() async throws {
+        let base = FakeImportTransport()
+        await base.setFault(.createAfterApply)
+        let authorization = ImportWriteAuthorization(scope: Self.scope(recordLimit: 2))
+        let guarded = GuardedImportWriteTransport(base: base, authorization: authorization,
+                                                  sourcePath: { _ in Self.approvedPath })
+        await #expect(throws: FormaError.self) { _ = try await guarded.create(Self.createRequest()) }
+        #expect(await authorization.grantedCount == 1)
+        _ = try await guarded.create(Self.createRequest())
+        await #expect(throws: ImportWriteRefusal.self) { _ = try await guarded.create(Self.createRequest()) }
+        #expect(await base.createCalls == 2)
+    }
+
+    @Test func disconnectDoesNotRefundTheImportBudget() async throws {
+        let base = FakeImportTransport()
+        await base.setFault(.createBeforeApply)
+        let authorization = ImportWriteAuthorization(scope: Self.scope(recordLimit: 2))
+        let guarded = GuardedImportWriteTransport(base: base, authorization: authorization,
+                                                  sourcePath: { _ in Self.approvedPath })
+        await #expect(throws: FormaError.self) { _ = try await guarded.create(Self.createRequest()) }
+        #expect(await authorization.grantedCount == 1)
+        _ = try await guarded.create(Self.createRequest())
+        #expect(await base.createCalls == 2)
+    }
+
+    @Test func cancellationDoesNotRefundTheImportBudget() async throws {
+        let base = FakeImportTransport()
+        await base.setCreateDelay(300_000_000)
+        let authorization = ImportWriteAuthorization(scope: Self.scope(recordLimit: 2))
+        let guarded = GuardedImportWriteTransport(base: base, authorization: authorization,
+                                                  sourcePath: { _ in Self.approvedPath })
+        let task = Task { _ = try await guarded.create(Self.createRequest()) }
+        try await Task.sleep(nanoseconds: 20_000_000)
+        task.cancel()
+        _ = try? await task.value
+        // The grant was issued before the transport noticed the cancellation.
+        #expect(await authorization.grantedCount == 1)
+        await base.setCreateDelay(0)
+        _ = try await guarded.create(Self.createRequest())
+        await #expect(throws: ImportWriteRefusal.self) { _ = try await guarded.create(Self.createRequest()) }
+        #expect(await base.createCalls == 2)
+    }
+
+    // MARK: - Cross-instance budget (journal)
+
+    @Test func aSecondAuthorizationUnderTheSameJournalDoesNotRefreshImports() async throws {
+        let journal = MemoryBudgetJournal()
+        let base = FakeImportTransport()
+        let first = ImportWriteAuthorization(scope: Self.scope(recordLimit: 1),
+                                             journal: journal, identity: "approval-1")
+        let firstGuard = GuardedImportWriteTransport(base: base, authorization: first)
+        { _ in Self.approvedPath }
+        _ = try await firstGuard.create(Self.createRequest())
+
+        let second = ImportWriteAuthorization(scope: Self.scope(recordLimit: 1),
+                                              journal: journal, identity: "approval-1")
+        let secondGuard = GuardedImportWriteTransport(base: base, authorization: second)
+        { _ in Self.approvedPath }
+        await #expect(throws: ImportWriteRefusal.self) {
+            _ = try await secondGuard.create(Self.createRequest())
+        }
+        #expect(await second.grantedCount == 0)
+        #expect(await second.refusalCounts[.recordBudgetExhausted] == 1)
+        #expect(await base.createCalls == 1)
+    }
+
+    @Test func aSecondAuthorizationUnderTheSameJournalDoesNotRefreshMetadata() async throws {
+        let journal = MemoryBudgetJournal()
+        let base = FakeImportTransport()
+        let first = ImportWriteAuthorization(
+            scope: Self.scope(metadataLimit: 1, metadataPerRecord: 1),
+            journal: journal, identity: "approval-1")
+        try await Self.prove(first, "uuid-1")
+        let firstGuard = GuardedImportWriteTransport(base: base, authorization: first)
+        { _ in Self.approvedPath }
+        try await firstGuard.writeMetadata(ImportMetadataRequest(
+            uuid: "uuid-1", metadata: ["projectname": "A"], source: Self.source()))
+
+        let second = ImportWriteAuthorization(
+            scope: Self.scope(metadataLimit: 1, metadataPerRecord: 1),
+            journal: journal, identity: "approval-1")
+        try await Self.prove(second, "uuid-1")
+        let secondGuard = GuardedImportWriteTransport(base: base, authorization: second)
+        { _ in Self.approvedPath }
+        await #expect(throws: ImportWriteRefusal.self) {
+            try await secondGuard.writeMetadata(ImportMetadataRequest(
+                uuid: "uuid-1", metadata: ["issuer": "B"], source: Self.source()))
+        }
+        #expect(await second.refusalCounts[.metadataBudgetExhausted] == 1)
+        #expect(await base.metadataCalls == 1)
+    }
+
+    @Test func differentIdentitiesHaveSeparateBudgets() async throws {
+        let journal = MemoryBudgetJournal()
+        let base = FakeImportTransport()
+        let first = ImportWriteAuthorization(scope: Self.scope(recordLimit: 1),
+                                             journal: journal, identity: "approval-1")
+        let firstGuard = GuardedImportWriteTransport(base: base, authorization: first)
+        { _ in Self.approvedPath }
+        _ = try await firstGuard.create(Self.createRequest())
+        let other = ImportWriteAuthorization(scope: Self.scope(recordLimit: 1),
+                                             journal: journal, identity: "approval-2")
+        let otherGuard = GuardedImportWriteTransport(base: base, authorization: other)
+        { _ in Self.approvedPath }
+        _ = try await otherGuard.create(Self.createRequest())
+        #expect(await base.createCalls == 2)
+        #expect(journal.usage(identity: "approval-1")?.importsGranted == 1)
+        #expect(journal.usage(identity: "approval-2")?.importsGranted == 1)
+    }
+
+    @Test func anUnreadableJournalRefusesInsteadOfGranting() async throws {
+        let journal = MemoryBudgetJournal()
+        journal.setReadsFail(true)
+        let base = FakeImportTransport()
+        let authorization = ImportWriteAuthorization(scope: Self.scope(),
+                                                     journal: journal, identity: "approval-1")
+        let guarded = GuardedImportWriteTransport(base: base, authorization: authorization,
+                                                  sourcePath: { _ in Self.approvedPath })
+        await #expect(throws: ImportWriteRefusal.self) {
+            _ = try await guarded.create(Self.createRequest())
+        }
+        #expect(await authorization.refusalCounts[.budgetUnavailable] == 1)
+        #expect(await authorization.grantedCount == 0)
+        #expect(await base.createCalls == 0)
+    }
+
+    @Test func anUnwritableJournalRollsBackTheGrant() async throws {
+        let journal = MemoryBudgetJournal()
+        journal.setWritesFail(true)
+        let base = FakeImportTransport()
+        let authorization = ImportWriteAuthorization(scope: Self.scope(),
+                                                     journal: journal, identity: "approval-1")
+        let guarded = GuardedImportWriteTransport(base: base, authorization: authorization,
+                                                  sourcePath: { _ in Self.approvedPath })
+        await #expect(throws: ImportWriteRefusal.self) {
+            _ = try await guarded.create(Self.createRequest())
+        }
+        #expect(await authorization.grantedCount == 0)
+        #expect(await base.createCalls == 0)
+        #expect(journal.usage(identity: "approval-1") == nil)
+    }
+
+    @Test func theLedgerJournalCarriesSpendAcrossAuthorizationInstances() async throws {
+        let database = try DatabaseQueue()
+        var migrator = DatabaseMigrator()
+        ImportLedgerMigrations.register(into: &migrator)
+        try migrator.migrate(database)
+        let ledger = ImportLedger(database: database)
+        let base = FakeImportTransport()
+        let first = ImportWriteAuthorization(scope: Self.scope(recordLimit: 1),
+                                             journal: ledger, identity: "approval-1")
+        let firstGuard = GuardedImportWriteTransport(base: base, authorization: first)
+        { _ in Self.approvedPath }
+        _ = try await firstGuard.create(Self.createRequest())
+
+        // A fresh ledger handle over the same database, as in a new process.
+        let reopened = ImportLedger(database: database)
+        #expect(try reopened.budgetUsage(identity: "approval-1")?.importsGranted == 1)
+        let second = ImportWriteAuthorization(scope: Self.scope(recordLimit: 1),
+                                              journal: reopened, identity: "approval-1")
+        let secondGuard = GuardedImportWriteTransport(base: base, authorization: second)
+        { _ in Self.approvedPath }
+        await #expect(throws: ImportWriteRefusal.self) {
+            _ = try await secondGuard.create(Self.createRequest())
+        }
+        #expect(await base.createCalls == 1)
     }
 }

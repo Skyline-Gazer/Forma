@@ -25,6 +25,35 @@ struct ImportRuntimeTests {
         let intent: ImportIntent
         let clearance: ImportPreflightClearance
         let preflightAuthorization: ImportAuthorization
+        let runID: UUID
+    }
+
+    /// The same session shape as the production runtime: the ledger is the
+    /// budget journal, keyed by the authorization digest.
+    private static func session(transport: FakeImportTransport, ledger: ImportLedger,
+                                clock: @escaping @Sendable () -> Date) -> @Sendable (ImportRuntimeAuthorization) -> ImportWriteSession {
+        { authorization in
+            let guardAuthorization = ImportWriteAuthorization(
+                scope: authorization.scope, journal: ledger,
+                identity: authorization.digest, clock: clock)
+            let surface = GuardedImportWriteTransport(
+                base: transport, authorization: guardAuthorization,
+                sourcePath: { binding in
+                    "\(sourceRoot)/\(binding.relativePath)"
+                })
+            return ImportWriteSession(surface: surface, authorization: guardAuthorization,
+                                      close: {})
+        }
+    }
+
+    private func runtime(ledger: ImportLedger, transport: FakeImportTransport,
+                         owner: String) -> ImportRuntime {
+        let fixed = Self.now
+        let writer = ImportSingleWriter(ledger: ledger, owner: owner, clock: { fixed })
+        return ImportRuntime(ledger: ledger, writer: writer, read: transport,
+                             clock: { fixed },
+                             makeSession: Self.session(transport: transport, ledger: ledger,
+                                                       clock: { fixed }))
     }
 
     private func makeRig() async throws -> Rig {
@@ -40,20 +69,7 @@ struct ImportRuntimeTests {
             authorizationDigest: String(repeating: "f", count: 64), startedAt: Self.now))
 
         let transport = FakeImportTransport()
-        let fixed = Self.now
-        let writer = ImportSingleWriter(ledger: ledger, owner: "test", clock: { fixed })
-        let runtime = ImportRuntime(ledger: ledger, writer: writer, read: transport,
-                                    clock: { fixed }) { authorization in
-            let guardAuthorization = ImportWriteAuthorization(scope: authorization.scope,
-                                                              clock: { fixed })
-            let surface = GuardedImportWriteTransport(
-                base: transport, authorization: guardAuthorization,
-                sourcePath: { binding in
-                    "\(Self.sourceRoot)/\(binding.relativePath)"
-                })
-            return ImportWriteSession(surface: surface, authorization: guardAuthorization,
-                                      close: {})
-        }
+        let runtime = self.runtime(ledger: ledger, transport: transport, owner: "test")
 
         // The import contract addresses a database by UUID; the human name is
         // only used for the reserved-production check.
@@ -63,7 +79,7 @@ struct ImportRuntimeTests {
                                                authorization: preflight)
         let clearance = try ImportFixtures.clearance(for: intent, authorization: preflight)
         return Rig(ledger: ledger, transport: transport, runtime: runtime, intent: intent,
-                   clearance: clearance, preflightAuthorization: preflight)
+                   clearance: clearance, preflightAuthorization: preflight, runID: runID)
     }
 
     private func authorization(
@@ -249,5 +265,65 @@ struct ImportRuntimeTests {
             target: ImportTargetFacts(exists: false, writable: false),
             capability: ImportCapabilityFacts(writeToolsAvailable: true, readbackAvailable: true),
             expectedSHA256: intent.source.contentSHA256, now: Self.now))
+    }
+
+    // MARK: - Scope and plan agree
+
+    @Test("the plan exposes the budget and refuses more writes than the scope allows")
+    func planRefusesOversizedRun() async throws {
+        let rig = try await makeRig()
+        let other = try ImportFixtures.intent(runID: rig.runID, sourceID: UUID(),
+                                              database: Self.sandboxID,
+                                              authorization: rig.preflightAuthorization)
+        let otherClearance = try ImportFixtures.clearance(for: other,
+                                                          authorization: rig.preflightAuthorization)
+        let granted = authorization() // recordLimit == 1
+        let plan = try await rig.runtime.plan(
+            [request(rig), ImportRuntimeRequest(intent: other, clearance: otherClearance)],
+            authorization: granted)
+
+        #expect(plan.limits == granted.scope.limits)
+        #expect(plan.authorizationDigest == granted.digest)
+        #expect(plan.refusals.map(\.code).contains(.planExceedsBudget))
+        #expect(plan.willWrite == false)
+    }
+
+    @Test("the plan refuses a metadata identifier the scope never granted")
+    func planRefusesMetadataOutsideScope() async throws {
+        let rig = try await makeRig()
+        let intent = try ImportFixtures.intent(runID: rig.runID, database: Self.sandboxID,
+                                               authorization: rig.preflightAuthorization,
+                                               metadata: ["not_authorized": "x"])
+        let clearance = try ImportFixtures.clearance(for: intent,
+                                                     authorization: rig.preflightAuthorization)
+        let plan = try await rig.runtime.plan(
+            [ImportRuntimeRequest(intent: intent, clearance: clearance)],
+            authorization: authorization())
+
+        #expect(plan.refusals.map(\.code).contains(.planOutsideScope))
+        #expect(plan.willWrite == false)
+    }
+
+    @Test("a new runtime over the same ledger does not refresh the budget")
+    func newRuntimeDoesNotRefreshBudget() async throws {
+        let rig = try await makeRig()
+        let granted = authorization()
+        let first = try await rig.runtime.execute([request(rig)], authorization: granted)
+        #expect(first.results.map(\.phase) == [.readbackVerified])
+
+        let second = try ImportFixtures.intent(runID: rig.runID, sourceID: UUID(),
+                                               database: Self.sandboxID,
+                                               authorization: rig.preflightAuthorization)
+        let secondClearance = try ImportFixtures.clearance(for: second,
+                                                           authorization: rig.preflightAuthorization)
+        // A different runtime and writer, as after a process restart; the ledger
+        // still holds the spend for this authorization digest.
+        let restarted = runtime(ledger: rig.ledger, transport: rig.transport, owner: "test-2")
+        let outcome = try await restarted.execute(
+            [ImportRuntimeRequest(intent: second, clearance: secondClearance)],
+            authorization: granted)
+
+        #expect(outcome.results.map(\.reason) == [.writeRefused])
+        #expect(await rig.transport.createCalls == 1)
     }
 }

@@ -133,6 +133,9 @@ public enum ImportReason: String, Codable, Sendable, CaseIterable {
     case identityUnconfirmed = "identity_unconfirmed"
     /// The target cannot prove the content digest, so nothing is verified.
     case hashUnverified = "hash_unverified"
+    /// The write boundary refused the call before it reached the transport.
+    /// This is a known absence of effect, not an unknown outcome.
+    case writeRefused = "write_refused"
     /// The ledger holds no operation to continue.
     case intentMissing = "intent_missing"
     /// The clearance was decided for other facts than this operation's.

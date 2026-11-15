@@ -69,7 +69,9 @@ public struct ImportRuntimeAuthorization: Sendable, Equatable {
             scope.databaseID.uppercased(), scope.groupPrefix.joined(separator: "/"),
             scope.tools.map(\.rawValue).sorted().joined(separator: ","),
             scope.metadataIdentifiers.sorted().joined(separator: ","),
+            scope.sourcePaths.sorted().joined(separator: ","),
             String(scope.recordLimit), String(scope.groupLimit),
+            String(scope.metadataCallLimit), String(scope.metadataCallsPerRecordLimit),
             contract.digests.keys.sorted().map { "\($0)=\(contract.digests[$0] ?? "")" }.joined(separator: ","),
             authorizedBy, String(issuedAt.timeIntervalSince1970),
             expiresAt.map { String($0.timeIntervalSince1970) } ?? "none",
@@ -89,6 +91,10 @@ public enum ImportRuntimeRefusalCode: String, Codable, Sendable, CaseIterable {
     case authorizationAlreadyUsed = "authorization_already_used"
     case noRequests = "no_requests"
     case requestTargetMismatch = "request_target_mismatch"
+    /// The requests that would write exceed the scope's record budget.
+    case planExceedsBudget = "plan_exceeds_budget"
+    /// A request would use a tool or a metadata identifier the scope did not grant.
+    case planOutsideScope = "plan_outside_scope"
     case executionFailed = "execution_failed"
 }
 
@@ -133,6 +139,21 @@ public struct ImportRunPlan: Sendable, Equatable {
     public let mode: ImportRuntimeAuthorization.Mode
     public let entries: [ImportPlanEntry]
     public let refusals: [ImportRuntimeRefusal]
+    /// Budget the scope allows, when an authorization was supplied. A plan is
+    /// comparable with the approval instead of being a second, silent opinion.
+    public let limits: ImportWriteBudgetLimits?
+    /// Digest of the authorization the plan was made under.
+    public let authorizationDigest: String?
+
+    init(mode: ImportRuntimeAuthorization.Mode, entries: [ImportPlanEntry],
+         refusals: [ImportRuntimeRefusal], limits: ImportWriteBudgetLimits? = nil,
+         authorizationDigest: String? = nil) {
+        self.mode = mode
+        self.entries = entries
+        self.refusals = refusals
+        self.limits = limits
+        self.authorizationDigest = authorizationDigest
+    }
 
     public var willWrite: Bool {
         mode == .write && refusals.isEmpty && entries.contains { $0.action == .wouldExecute }
@@ -185,7 +206,13 @@ public actor ImportRuntime {
         let root = sourceRoot.standardizedFileURL
         self.init(ledger: ledger, writer: writer, read: read, clock: clock) { authorization in
             let surface = DEVONthinkMCPWriteTransport(sourceRoot: root)
-            let guardAuthorization = ImportWriteAuthorization(scope: authorization.scope, clock: clock)
+            // The ledger is the budget journal and the authorization digest is
+            // the identity: a new runtime (or a new process over the same
+            // ledger) continues from what this approval already spent instead
+            // of starting a fresh budget.
+            let guardAuthorization = ImportWriteAuthorization(
+                scope: authorization.scope, journal: ledger,
+                identity: authorization.digest, clock: clock)
             let guarded = GuardedImportWriteTransport(
                 base: surface, authorization: guardAuthorization,
                 sourcePath: { binding in
@@ -232,8 +259,40 @@ public actor ImportRuntime {
             return ImportPlanEntry(keyDigest: request.intent.key.digest, action: .wouldExecute,
                                    recordedPhase: nil, blockingCodes: [])
         }
+        if let authorization {
+            refusals.append(contentsOf: Self.planRefusals(
+                wouldWrite: entries.filter { $0.action == .wouldExecute }.count,
+                requests: requests, authorization: authorization))
+        }
         return ImportRunPlan(mode: authorization?.mode ?? .planOnly, entries: entries,
-                             refusals: refusals)
+                             refusals: refusals,
+                             limits: authorization?.scope.limits,
+                             authorizationDigest: authorization?.digest)
+    }
+
+    /// Whether the requests fit the scope's tools, field table and record
+    /// budget. A plan that quietly exceeds its approval would be found out only
+    /// by the fifth call; these refusals happen before a surface exists.
+    static func planRefusals(wouldWrite: Int, requests: [ImportRuntimeRequest],
+                             authorization: ImportRuntimeAuthorization) -> [ImportRuntimeRefusal] {
+        let scope = authorization.scope
+        var refusals: [ImportRuntimeRefusal] = []
+        if wouldWrite > scope.recordLimit {
+            refusals.append(.init(.planExceedsBudget,
+                                  detail: "the plan would import more records than the scope allows"))
+        }
+        if wouldWrite > 0, !scope.tools.contains(.importFile) {
+            refusals.append(.init(.planOutsideScope,
+                                  detail: "the scope does not authorize import_file"))
+        }
+        for request in requests {
+            let metadata = Set(request.intent.metadata.keys)
+            if !metadata.isSubset(of: scope.metadataIdentifiers) {
+                refusals.append(.init(.planOutsideScope,
+                                      detail: "an operation writes a metadata identifier outside the scope"))
+            }
+        }
+        return refusals
     }
 
     // MARK: - Execution
@@ -250,6 +309,15 @@ public actor ImportRuntime {
         if requests.isEmpty {
             refusals.append(.init(.noRequests, detail: "the run contains no operations"))
         }
+        // Count the operations that would actually write: a key already in the
+        // ledger is a replay, not a new record. The scope and the plan have to
+        // agree before a surface exists.
+        let wouldWrite = try requests.filter { request in
+            request.clearance.verdict == .pass
+                && (try ledger.operation(keyDigest: request.intent.key.digest)) == nil
+        }.count
+        refusals.append(contentsOf: Self.planRefusals(
+            wouldWrite: wouldWrite, requests: requests, authorization: authorization))
         guard refusals.isEmpty else {
             return ImportRunOutcome(mode: mode, refusals: refusals, results: [])
         }
