@@ -434,6 +434,21 @@ public actor ImportExecutor {
                                          actualUUID: uuid, reason: .identityUnconfirmed, attempts: attempts)
         }
 
+        // The guard will not let a metadata write target this record until an
+        // independent read has proven it is in the authorized database and
+        // parent group. The facts here are the snapshot's, not the request's.
+        do {
+            try await write.recordVerified(uuid: snapshot.uuid, database: snapshot.database,
+                                           parentPath: snapshot.parentPath)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // Nothing was written: the proof could not be established.
+            return ImportExecutionResult(phase: current.phase, outcome: nil,
+                                         actualUUID: uuid, reason: .writeRefused,
+                                         attempts: attempts)
+        }
+
         // Fields somebody else changed survive.
         let conflicts = Self.conflictingFields(snapshot.metadata, intent.metadata)
         if !conflicts.isEmpty {

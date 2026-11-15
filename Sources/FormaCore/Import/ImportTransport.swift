@@ -26,7 +26,21 @@ public protocol ImportGroupCreating: Sendable {
 }
 
 /// Everything a bounded import run may invoke on the target.
-public protocol ImportWriteSurface: ImportWriteTransport, ImportGroupCreating {}
+public protocol ImportWriteSurface: ImportWriteTransport, ImportGroupCreating {
+    /// Tells the surface that an *independent read* verified this record in the
+    /// authorized database and parent group.
+    ///
+    /// The guard requires this proof before it will let a metadata write target
+    /// the record; a UUID returned by `create` alone is not proof. The executor
+    /// calls this with the snapshot's own facts, never with request parameters.
+    func recordVerified(uuid: String, database: String, parentPath: [String]) async throws
+}
+
+extension ImportWriteSurface {
+    /// Surfaces that do no policy (the raw DEVONthink transport) accept the
+    /// notification without acting on it.
+    public func recordVerified(uuid: String, database: String, parentPath: [String]) async throws {}
+}
 
 public protocol ImportReadTransport: Sendable {
     /// Independent read of one record. Never the write call's own response.

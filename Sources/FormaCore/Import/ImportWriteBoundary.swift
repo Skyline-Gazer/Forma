@@ -398,6 +398,13 @@ public actor GuardedImportWriteTransport: ImportWriteSurface {
         return try await base.createGroup(database: database, path: path)
     }
 
+    /// Forwards a proof the executor established with the independent read.
+    /// The authorization re-checks the observed database and parent path.
+    public func recordVerified(uuid: String, database: String, parentPath: [String]) async throws {
+        try await authorization.recordVerified(uuid: uuid, database: database,
+                                              parentPath: parentPath)
+    }
+
     public func lookup(_ query: ImportLookupQuery) async throws -> ImportLookupResult {
         let database = await authorization.databaseID
         guard query.database.uppercased() == database.uppercased() else {
