@@ -43,16 +43,31 @@
 
 | 维度 | 上限 |
 | --- | --- |
-| 目标数据库 | 1（可丢弃；建议新建 `Forma_M05_Sandbox`，或经 Owner 同意复用现有隔离库） |
+| 目标数据库 | 1（可丢弃；优先新建 `Forma_M05_Sandbox`，不复用 I1-B2 沙盒） |
 | Group | 2（`Forma_M05`、`<run-id>`） |
 | 记录 | 3（对应 T/D/C 三个探针，各 1 条） |
 | `import_file` 调用 | 3（`mode=import`，仅 3 个合成文件） |
-| `set_record_custom_metadata` 调用 | ≤ 6（每条 ≤1 次 merge × 最多 2 个阶段：首次 + 恢复补写） |
-| 合成源文件 | 3（字节固定、SHA-256 公开可复算） |
+| `set_record_custom_metadata` 调用 | ≤ 6 总数，且**每条记录 ≤ 1 次** |
+| 合成源文件 | 3（字节固定，SHA-256 见 §12.1） |
 | 删除 / 移动 / trash / Replicant | 0 |
 | 字段定义变更 | 0 |
 
-记录与 Group 预算在**授权时一次性写入 scope**；guard 在调用传输层之前扣减，被拒请求不消耗预算（`ImportWriteBoundaryTests` 覆盖）。**Metadata 调用上限是计划级约束**（guard 只校验 identifier 与目标记录，不计次），执行时必须按 §10 的计数对账；如实际超出，停止并报告。
+三类预算（imports / groups / metadata）都在 `ImportWriteScope` 中，并由
+`ImportWriteAuthorization.permit` 在调用传输层之前检查：
+
+- 被拒绝的请求不消耗预算，也到不了 transport；
+- 预算在**授予**时消费，超时、断连、取消都不退还（防止崩溃循环超支）；
+- metadata 除总数外还有逐记录上限，六个调用不能集中在一条记录上。
+
+### 4.1 预算日志（跨实例）
+
+已花费计数以**运行时授权 digest** 为 key，持久化在 Ledger v3 的
+`import_write_budgets` 表。启动新进程、构造新 `ImportRuntime` 或新的
+`ImportWriteAuthorization`，只要 identity 相同，就从已花费值继续。
+
+- journal 读失败 → `budgetUnavailable`，拒绝授予；
+- journal 写失败 → 回滚本次增量，`budgetUnavailable`，grant 不返回；
+- 损坏的逐记录 JSON 视为 storage 错误，**不降级为零预算**。
 
 ## 5. 身份键与 Intent 持久化
 
@@ -138,6 +153,34 @@
 | 目标/来源逐项阻断（A1–A7 / B1–B6） | `ImportB0BoundaryTests` |
 | 默认拒绝与预算 | `ImportWriteBoundaryTests` |
 | 运行入口授权（生产库/预算/一次性授权） | `ImportRuntimeTests` |
+| 预算 journal 跨实例恢复 / 读写失败 fail-closed | `ImportWriteBoundaryTests`（SQLite journal、`budgetUnavailable`） |
+| 拒绝不触达 transport、超时/断连/取消不退款 | `ImportWriteBoundaryTests` |
+| scope 与计划一致（预算/字段表） | `ImportRuntimeTests`（`plan_exceeds_budget`、`plan_outside_scope`） |
+
+### 12.1 离线 QA 执行编排（`M05QA`，仅测试目标）
+
+`Tests/FormaCoreTests/M05QATestSupport.swift` + `M05QAExecutionTests.swift` 是
+可复现的 M05 预演，不进入应用或 CLI，不新增后台任务：
+
+- 默认 plan-only；没有显式 `Approval` 直接拒绝；
+- 三份字节字面量合成文件，SHA-256 由内容重算：
+
+| 文件 | 字节 | SHA-256 |
+| --- | --- | --- |
+| `synthetic/m05-t1.md` | 64 | `5d15b3be667c4a31bc62d80bd7f71ebf677be51288f19e5e851cbc6353ce863f` |
+| `synthetic/m05-d2.md` | 68 | `310042446ae4086bc1a82cb9994661d444a0dd0920d0850af192308cd8a224ff` |
+| `synthetic/m05-m3.md` | 61 | `5d8285744b36803e8ccf10d95a9df1ee3d028a0605b2698acf290a6c85d4de4f` |
+
+- 三条独立 operation key；一次运行三个探针（已落库但响应丢失 / 已发送未落库 /
+  metadata 失败），按 sourceID 注入故障，不依赖调用顺序；
+- 断言每键恰好一次 create、无重复记录、未知结果保留为 `verify_required`；
+- 重启用同一 SQLite 的新 handle + `ImportRecovery.open` + 只读 reviewer，
+  断言写调用不增加；
+- 崩溃残留用显式 `record_observed` 持久化状态模拟，清扫 `interrupted=1`；
+- 报告含授权 digest、预算上限/已花费、三类调用计数、拒绝原因，JSON 稳定。
+
+运行：macOS CI 的 `FormaCore tests` 全量执行（`swift test --filter "M05 QA execution"`）。
+它证明状态机、预算与守卫；**不证明**真实 MCP、真实进程崩溃或 OS 级调度。
 
 这些是**合成**证据：它们证明状态机与守卫，不证明真实 MCP 行为。
 
@@ -146,8 +189,10 @@
 1. Owner 批准 `docs/M05-AUTHORIZATION-PROPOSAL.md`（含预算与目标库）。
 2. 只读绑定目标库，记录基线计数与 3 个工具 digest。
 3. 生成 3 个合成文件并记录 SHA-256。
-4. 构造 scope；`plan` 输出核对（应显示 3 条 `would_execute`）。
-5. 按 §8 执行 T、D；C 仅在 Owner 对崩溃注入单独批准后执行。
-6. 每次触发后按 §6 判定，再按 §7 做重启回查。
-7. 导出 Ledger、审计与写调用计数；按 §10 对账。
-8. 记录 PASS/FAIL/BLOCKED；未获授权不清理。
+4. 先跑离线 QA 编排（§12.1），确认预算、计划、故障矩阵与报告格式；失败则停止。
+5. 构造 scope；`plan` 必须输出 3 条 `would_execute`、`limits` 与
+   `authorizationDigest`，且 `refusals` 为空。
+6. 按 §8 执行 T、D；C 仅在 Owner 对崩溃注入单独批准后执行。
+7. 每次触发后按 §6 判定，再按 §7 做重启回查。
+8. 导出 Ledger、审计、预算 journal 行与 QA report JSON；按 §10 对账。
+9. 记录 PASS/FAIL/BLOCKED；未获授权不清理。
