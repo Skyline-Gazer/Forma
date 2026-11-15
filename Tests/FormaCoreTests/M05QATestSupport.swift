@@ -136,7 +136,7 @@ enum M05QA {
         let source = ImportSourceBinding(
             sourceID: file.sourceID, scopeID: scopeID, relativePath: file.relativePath,
             snapshotFingerprint: snapshot, contentSHA256: file.sha256,
-            byteCount: file.bytes.count, readSessionID: "m05-session")
+            byteCount: Int64(file.bytes.count), readSessionID: "m05-session")
         let entry = ManifestEntry(
             sourceID: file.sourceID, snapshotFingerprint: snapshot, snapshotRevision: 1,
             sourceVersion: 1, relativePath: file.relativePath, state: .validated,
@@ -287,7 +287,7 @@ enum M05QA {
             authorizationDigest: stack.authorization.digest,
             limits: stack.scope.limits,
             budget: budget,
-            refusals: refusalCounts.mapKeys(\.rawValue),
+            refusals: refusalCounts.mapKeys { $0.rawValue },
             probes: probes,
             createCalls: await stack.transport.createCalls,
             metadataCalls: await stack.transport.metadataCalls,
@@ -305,6 +305,7 @@ enum M05QA {
                                 metadata: ["projectname": "M05-CRASH"])
         let operation = ImportOperationRecord(
             runID: stack.runID, key: intent.key,
+            targetDatabase: databaseID, targetGroupPath: intent.groupPath,
             intendedMetadataDigest: String(repeating: "0", count: 64),
             intendedMetadataJSON: "{}", sourceSHA256: intent.source.contentSHA256,
             authorizationDigest: intent.authorizationDigest, createdAt: now)

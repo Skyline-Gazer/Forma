@@ -380,6 +380,16 @@ public actor GuardedImportWriteTransport: ImportWriteSurface {
         self.sourcePath = sourcePath
     }
 
+    /// The spend the wrapped authorization recorded, for the audit report.
+    public var budget: ImportWriteBudgetUsage {
+        get async { await authorization.budget }
+    }
+
+    /// Refusals by code, from the wrapped authorization.
+    public var refusalCounts: [ImportWriteDenial: Int] {
+        get async { await authorization.refusalCounts }
+    }
+
     /// Group creation goes through the same permit as every other write: there
     /// is no path to the transport that skips the boundary.
     public func createGroup(database: String, path: [String]) async throws -> String {
