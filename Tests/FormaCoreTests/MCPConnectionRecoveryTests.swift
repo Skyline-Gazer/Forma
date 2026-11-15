@@ -39,7 +39,8 @@ keep_open() {
 private func config(_ script: String, extra: [String] = []) -> MCPConfiguration {
     MCPConfiguration(executable: URL(fileURLWithPath: "/bin/sh"),
                      arguments: ["-c", prelude + "\n" + script, "forma-fixture"] + extra,
-                     timeout: .seconds(15))
+                     // Same budget as MCPTests: process startup varies on CI.
+                     timeout: .seconds(30))
 }
 
 private func canonicalDigest(_ json: String) throws -> String {
