@@ -36,7 +36,7 @@
 | --- | --- | --- | --- |
 | 1 | 原始 `.app` 严格验签与资源完整性 | **PASS（macOS CI）** | job `macOS app launch smoke`：`codesign --verify --strict` 通过、`Identifier`、`flags=0x10002(adhoc,runtime)`；`FormaResourceCheck`：`missing: none`、`unreadable: none`、`COMPLETE`；本地静态复核见 §1 |
 | 2 | 原始 `.app` 真实启动与稳定性 | **PASS（macOS CI）** | 同一 job：`open -n` 后 `pid` 存在、`alive after 5s: yes`、`PASS`；启动前后无其他 Forma 实例，结束后无残留子进程 |
-| 3 | NSOpenPanel 授权的合成来源目录 | **BLOCKED** | 需可交互 macOS 会话；步骤见 `docs/R1-GUI-VERIFICATION.md` §4 与 `docs/R1-BATCH2A-REPORT.md` §12.2 |
+| 3 | NSOpenPanel 授权的合成来源目录 | **BLOCKED** | 需可交互 macOS 会话；步骤见 `docs/R1-GUI-VERIFICATION.md` §4 与 `docs/R1-BATCH2A-REPORT.md` §2 |
 | 4 | 删除根目录后的 `.missing` 分类与历史保留 | **BLOCKED** | 同上；分类逻辑本身已有 12 例回归（`SourceAvailabilityClassificationTests`），但 UI 现场未复测 |
 | 5 | 真实键盘输入下的 Read Scope 表单 | **BLOCKED** | 需辅助功能授权与有人值守会话；AX 文本注入已证伪（#95），校验逻辑有 6 例测试 |
 | 6 | 仅已批准隔离库范围的 Recovery 只读回查 | **BLOCKED** | 需 DEVONthink 与授权范围；本机无 DEVONthink |
@@ -69,8 +69,8 @@
 
 1. 用 §1 的 artifact 在本机跑 `scripts/verify_app_bundle.sh` 与 `scripts/smoke_app.sh`（现场复核 CI 结论）；
 2. 按 `docs/R1-GUI-VERIFICATION.md` §4 做 8 步表单验收；
-3. 按 `docs/R1-BATCH2A-REPORT.md` §12.2 做删除根目录与重授权；
-4. 按 §12.5 做 Recovery 只读回查（仅隔离库范围）；
-5. 按 §12.6 做退出/重启与子进程清理。
+3. 按 `docs/R1-BATCH2A-REPORT.md` §2 做删除根目录与重授权（分类回归见 `Tests/FormaCoreTests/SourceAvailabilityClassificationTests.swift`）；
+4. 按 `docs/R1-BATCH2A-REPORT.md` §5 与 `docs/R1-GUI-VERIFICATION.md` §4（步骤 4–5）做 Recovery 只读回查（仅隔离库范围）；
+5. 按 `docs/R1-BATCH2A-REPORT.md` §5 的"正常退出 / 重新启动"两行做退出、重启与子进程清理（启动存活可用 `scripts/smoke_app.sh` 复核）。
 
 记录到 `~/.forma/evidence/r1-batch2a2/`，仓库只提交脱敏结论；在此之前不上调任何 `NOT_VERIFIED`。
