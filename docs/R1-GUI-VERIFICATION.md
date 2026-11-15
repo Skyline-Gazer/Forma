@@ -27,8 +27,17 @@
    - `incomplete`：仍在填写，不报错；
    - `invalidUUID`：填满但 UUID 非法，提示红色错误；
    - `ready(ImportRecoveryScopeConfirmation)`：可确认，UUID 规范化为大写，组路径按 `/` 切分并丢空段。
-2. 表单（`RecoveryScopeSheet`）绑定该 draft；「Confirm」只在 `.ready` 时设置读范围，否则设置 `invalid_scope`；「Cancel」清空 draft。
-3. 测试 `RecoveryScopeDraftTests`（6 例）：空表单、缺字段、非法 UUID、合法规范化、单段组路径、重复确认条款一致、reset。
+2. 表单（`RecoveryScopeSheet`）绑定该 draft；「Confirm」只在 `.ready` 时设置读范围；「Cancel」清空 draft。
+3. 测试 `RecoveryScopeDraftTests`：空表单、缺字段、非法 UUID、合法规范化、单段组路径、重复确认条款一致、reset。
+4. **缺陷 A 修复（2026-11-15，2A.3 现场发现）**：此前 sheet 的错误条件是
+   `state.recoveryReviewReason == "invalid_scope" || draft.validation == .invalidUUID`，
+   一次失败提交后应用级 reason 粘滞，合法输入仍显示红色错误。现在：
+   - `RecoveryScopeDraft` 增加 `hasAttemptedConfirmation` 与 `feedback`
+     （`none / missingFields / invalidUUID / ready`），**只**由草稿本身决定；
+   - sheet 只渲染 `draft.feedback`，不再读取应用级 reason；
+   - 应用级 `invalid_scope` 不再由表单写入，banner 只承载 Recovery 状态；
+   - 每次打开 sheet 与 Cancel 都 `reset()`，旧错误不会跨会话出现；
+   - 回归测试覆盖"失败提交后改为合法输入 → 立即 `.ready`"（缺陷本体的反例）。
 
 这覆盖了"输入内容 → 校验 → 确认动作 → 错误提示 → 后续结果"里的**决策部分**；真实键入事件仍不可自动验证。
 

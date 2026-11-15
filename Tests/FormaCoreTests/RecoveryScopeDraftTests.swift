@@ -67,8 +67,56 @@ struct RecoveryScopeDraftTests {
 
     @Test func resetClearsEverything() {
         var form = draft()
+        form.attemptConfirmation()
         form.reset()
         #expect(form == RecoveryScopeDraft())
         #expect(form.validation == .incomplete)
+        #expect(form.feedback == .none)
+    }
+
+    // MARK: - Form feedback (field defect A)
+
+    @Test func anUntouchedEmptyFormShowsNoError() {
+        #expect(RecoveryScopeDraft().feedback == .none)
+        // Filling only some fields is still not an error until Confirm is pressed.
+        #expect(draft(group: "").feedback == .none)
+    }
+
+    @Test func submittingAnEmptyFormShowsTheMissingFieldsError() {
+        var form = RecoveryScopeDraft()
+        form.attemptConfirmation()
+        #expect(form.feedback == .missingFields)
+    }
+
+    @Test func anInvalidUUIDIsAnErrorEvenBeforeSubmitting() {
+        #expect(draft(id: "not-a-uuid").feedback == .invalidUUID)
+    }
+
+    @Test func correctingTheInputClearsTheErrorImmediately() {
+        // The field defect: after a failed submit the form stayed red even when
+        // every field became valid, because the view OR-ed a stale application
+        // reason into its own error condition. Feedback now derives only from the
+        // draft, so valid input cannot coexist with an error.
+        var form = RecoveryScopeDraft()
+        form.attemptConfirmation()
+        #expect(form.feedback == .missingFields)
+
+        form.databaseID = uuid
+        form.databaseName = "Sandbox"
+        form.groupPath = "Forma_I1B2/r1"
+        #expect(form.feedback == .ready)
+    }
+
+    @Test func fixingAnInvalidUUIDClearsTheError() {
+        var form = draft(id: "not-a-uuid")
+        #expect(form.feedback == .invalidUUID)
+        form.databaseID = uuid
+        #expect(form.feedback == .ready)
+    }
+
+    @Test func aSubmittedButValidFormIsReadyWithoutAnError() {
+        var form = draft()
+        form.attemptConfirmation()
+        #expect(form.feedback == .ready)
     }
 }

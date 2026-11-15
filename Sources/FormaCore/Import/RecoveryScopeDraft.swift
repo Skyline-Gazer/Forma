@@ -12,11 +12,17 @@ public struct RecoveryScopeDraft: Sendable, Equatable {
     public var databaseID: String
     public var databaseName: String
     public var groupPath: String
+    /// True once the person pressed Confirm in this sheet presentation. It only
+    /// exists so an untouched empty form is not accused of an error; it is not
+    /// application state and it is cleared by `reset()`.
+    public var hasAttemptedConfirmation: Bool
 
-    public init(databaseID: String = "", databaseName: String = "", groupPath: String = "") {
+    public init(databaseID: String = "", databaseName: String = "", groupPath: String = "",
+                hasAttemptedConfirmation: Bool = false) {
         self.databaseID = databaseID
         self.databaseName = databaseName
         self.groupPath = groupPath
+        self.hasAttemptedConfirmation = hasAttemptedConfirmation
     }
 
     public enum Validation: Sendable, Equatable {
@@ -64,6 +70,36 @@ public struct RecoveryScopeDraft: Sendable, Equatable {
         return .ready(confirmation)
     }
 
+    /// What the sheet should show right now.
+    ///
+    /// It is derived **only** from this draft. The application's recovery reason
+    /// (for example `no_authorized_scope`) describes the banner, not the form; the
+    /// field defect was exactly that mixture — a valid form kept showing an error
+    /// because a stale application-level reason was OR-ed into the view.
+    public enum Feedback: Sendable, Equatable {
+        case none
+        case missingFields
+        case invalidUUID
+        case ready
+    }
+
+    public var feedback: Feedback {
+        switch validation {
+        case .ready:
+            return .ready
+        case .invalidUUID:
+            return .invalidUUID
+        case .incomplete:
+            return hasAttemptedConfirmation ? .missingFields : .none
+        }
+    }
+
+    /// Marks that Confirm was pressed. Call it before reading `validation` when
+    /// the person submits; it changes nothing about the values themselves.
+    public mutating func attemptConfirmation() {
+        hasAttemptedConfirmation = true
+    }
+
     /// Clears the draft. Used by "Cancel" and after a successful confirmation, so
     /// a reopened sheet never presents a previously confirmed scope as if it were
     /// a new one.
@@ -71,5 +107,6 @@ public struct RecoveryScopeDraft: Sendable, Equatable {
         databaseID = ""
         databaseName = ""
         groupPath = ""
+        hasAttemptedConfirmation = false
     }
 }
