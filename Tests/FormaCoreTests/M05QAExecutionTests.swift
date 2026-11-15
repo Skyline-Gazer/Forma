@@ -104,6 +104,7 @@ struct M05QAExecutionTests {
                 == .verifyRequired)
         let writesBefore = await stack.transport.createCalls
         let metadataBefore = await stack.transport.metadataCalls
+        let readsBefore = await stack.transport.readCalls
 
         // A new process: same database, new handle, no in-memory state.
         let reopened = ImportLedger(database: stack.database)
@@ -126,7 +127,7 @@ struct M05QAExecutionTests {
         // The recovery path holds no write surface: nothing new was sent.
         #expect(await stack.transport.createCalls == writesBefore)
         #expect(await stack.transport.metadataCalls == metadataBefore)
-        #expect(await stack.transport.readCalls == 1)
+        #expect(await stack.transport.readCalls == readsBefore + 1)
     }
 
     @Test("crash residue is swept and reviewed without a write")
