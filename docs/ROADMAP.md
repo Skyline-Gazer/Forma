@@ -2,6 +2,7 @@
 
 **状态：P0/P1/P2 已授权并完成工程实现；P3-A（离线评测基础设施）已授权进行中；I1 已收尾——整体结论为「Import Integration Verified（Limited Scope / 限定范围）」，见下方「I1 最终状态」；`import_file` 精确返回结构、`dropped_fields` 部分成功路径、响应前断连与写入中崩溃仍为 NOT_VERIFIED，Replicant 与生产迁移未验证/未授权；**R1 Batch 1 已完成工程实现（Engineering Verified）**；**R1 Batch 2A/2A.1/2A.2/2A.3 已在 macOS 现场执行**：打包产物通过资源可读、严格验签、CI 启动冒烟与真机 GUI 启动；安全作用域书签跨重启可恢复；GUI 键入已现场走通（含输入法切换与逐字段回读）；**缺陷 A（失败提交后合法输入仍显示旧错误）已修复（#103），待新产物现场复测**；**Keychain 锁定态、外部卷/iCloud、macOS 14.x、签名/公证/发行仍为 NOT_VERIFIED 或 BLOCKED**；**M05（写入中故障恢复）仅有预检与写入授权申请（#104），未授权、未执行**；P3-B 真实模型评测、I2、R1 Batch 2B 均未授权。**  
 **基线：** [SPEC v0.1.1 FROZEN](SPEC.md) · [PLAN v0.1](PLAN.md) · [PLAN PR #1 merged](https://github.com/Skyline-Gazer/Forma/pull/1) · [P2 验收报告](P2-ACCEPTANCE.md) · [I1-A 离线验收](I1-A-ACCEPTANCE.md) · [I1-B1 能力发现](I1-B1-CAPABILITY-DISCOVERY.md) · [I1-B2 预检](I1-B2-PREFLIGHT.md) · [I1-B2 现场验收](I1-B2-ACCEPTANCE.md) · [R1 Readiness](R1-READINESS.md) · [R1 Batch 1 Handoff](R1-BATCH1-HANDOFF.md) · [R1 App Packaging](R1-APP-PACKAGING.md) · [R1 Batch 2A 报告](R1-BATCH2A-REPORT.md) · [R1 Batch 2A.1 修复报告](R1-BATCH2A1-REPORT.md) · [GUI 验证](R1-GUI-VERIFICATION.md) · [M05 预检](M05-PREFLIGHT.md) · [M05 写入授权申请](M05-AUTHORIZATION-PROPOSAL.md)  
+**Batch 2B 文档：** [Preflight 报告](R1-BATCH2B-PREFLIGHT-REPORT.md) · [交接](R1-BATCH2B-HANDOFF.md)  
 **Owner 决策记录：** 2026-11-11（P0/P1 授权）· 2026-11-12（P2 收尾接受 + P3 拆分授权）· 2026-11-13（I1-A）· 2026-11-14（I1-B1、I1-B2、I1 收尾、R1 Batch 1、R1 Batch 2A 现场与无写入工程）· 2026-11-15（R1 Batch 2A.1 工程修复），详见下方「授权历史」
 
 ## 已批准的三项 Owner 决策
