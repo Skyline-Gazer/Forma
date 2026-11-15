@@ -313,6 +313,7 @@ struct ImportRuntimeTests {
 
         let second = try ImportFixtures.intent(runID: rig.runID, sourceID: UUID(),
                                                database: Self.sandboxID,
+                                               associationBasis: "budget-probe-\(UUID().uuidString)",
                                                authorization: rig.preflightAuthorization)
         let secondClearance = try ImportFixtures.clearance(for: second,
                                                            authorization: rig.preflightAuthorization)

@@ -337,6 +337,13 @@ struct ImportWriteBoundaryTests {
                                                parentPath: prefix + ["batch-1"])
     }
 
+    private static func seedRecord(_ transport: FakeImportTransport, _ uuid: String) async {
+        await transport.seed(.init(uuid: uuid, database: database,
+                                   parentPath: prefix + ["batch-1"], metadata: [:],
+                                   sha256: String(repeating: "d", count: 64),
+                                   associationBasis: nil))
+    }
+
     @Test func metadataTotalBudgetStopsTheNextCallBeforeTheTransport() async throws {
         let base = FakeImportTransport()
         let authorization = ImportWriteAuthorization(
@@ -345,6 +352,8 @@ struct ImportWriteBoundaryTests {
                                                   sourcePath: { _ in Self.approvedPath })
         try await Self.prove(authorization, "uuid-1")
         try await Self.prove(authorization, "uuid-2")
+        await Self.seedRecord(base, "uuid-1")
+        await Self.seedRecord(base, "uuid-2")
         try await guarded.writeMetadata(ImportMetadataRequest(
             uuid: "uuid-1", metadata: ["projectname": "A"], source: Self.source()))
         try await guarded.writeMetadata(ImportMetadataRequest(
@@ -365,6 +374,8 @@ struct ImportWriteBoundaryTests {
                                                   sourcePath: { _ in Self.approvedPath })
         try await Self.prove(authorization, "uuid-1")
         try await Self.prove(authorization, "uuid-2")
+        await Self.seedRecord(base, "uuid-1")
+        await Self.seedRecord(base, "uuid-2")
         try await guarded.writeMetadata(ImportMetadataRequest(
             uuid: "uuid-1", metadata: ["projectname": "A"], source: Self.source()))
         await #expect(throws: ImportWriteRefusal.self) {
@@ -407,6 +418,9 @@ struct ImportWriteBoundaryTests {
                                                   sourcePath: { _ in Self.approvedPath })
         await #expect(throws: FormaError.self) { _ = try await guarded.create(Self.createRequest()) }
         #expect(await authorization.grantedCount == 1)
+        // The fault was only for the first probe; the budget must not have
+        // returned, so the next grant still spends the second unit.
+        await base.setFault(.none)
         _ = try await guarded.create(Self.createRequest())
         await #expect(throws: ImportWriteRefusal.self) { _ = try await guarded.create(Self.createRequest()) }
         #expect(await base.createCalls == 2)
@@ -420,6 +434,7 @@ struct ImportWriteBoundaryTests {
                                                   sourcePath: { _ in Self.approvedPath })
         await #expect(throws: FormaError.self) { _ = try await guarded.create(Self.createRequest()) }
         #expect(await authorization.grantedCount == 1)
+        await base.setFault(.none)
         _ = try await guarded.create(Self.createRequest())
         #expect(await base.createCalls == 2)
     }
@@ -460,7 +475,10 @@ struct ImportWriteBoundaryTests {
         await #expect(throws: ImportWriteRefusal.self) {
             _ = try await secondGuard.create(Self.createRequest())
         }
-        #expect(await second.grantedCount == 0)
+        // `grantedCount` is spend, not "grants issued by this object": the
+        // second instance restored the first's unit and refused on top of it.
+        let restored = await second.budget
+        #expect(restored.importsGranted == 1)
         #expect(await second.refusalCounts[.recordBudgetExhausted] == 1)
         #expect(await base.createCalls == 1)
     }
@@ -468,6 +486,7 @@ struct ImportWriteBoundaryTests {
     @Test func aSecondAuthorizationUnderTheSameJournalDoesNotRefreshMetadata() async throws {
         let journal = MemoryBudgetJournal()
         let base = FakeImportTransport()
+        await Self.seedRecord(base, "uuid-1")
         let first = ImportWriteAuthorization(
             scope: Self.scope(metadataLimit: 1, metadataPerRecord: 1),
             journal: journal, identity: "approval-1")
