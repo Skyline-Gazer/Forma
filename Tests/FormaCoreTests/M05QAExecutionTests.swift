@@ -55,7 +55,7 @@ struct M05QAExecutionTests {
         #expect(Set(stack.intents.map(\.key.digest)).count == 3)
         for (file, intent) in zip(M05QA.files, stack.intents) {
             #expect(intent.source.contentSHA256 == file.sha256)
-            #expect(intent.source.byteCount == file.bytes.count)
+            #expect(intent.source.byteCount == Int64(file.bytes.count))
             #expect(intent.targetDatabase == M05QA.databaseID)
             #expect(intent.groupPath == M05QA.groupPath(.canonical))
         }
