@@ -63,19 +63,27 @@ public struct ImportRuntimeAuthorization: Sendable, Equatable {
     /// A digest of the whole authorization. Two runs under different terms have
     /// different digests, and the ledger records which one an operation used.
     public var digest: String {
-        let text = [
+        let targetTerms = [
             mode.rawValue, target.databaseID.uppercased(), target.databaseName,
-            target.groupPath.joined(separator: "/"), target.declaredDisposable ? "disposable" : "shared",
+            target.groupPath.joined(separator: "/"),
+            target.declaredDisposable ? "disposable" : "shared",
+        ].joined(separator: "|")
+        let scopeTerms = [
             scope.databaseID.uppercased(), scope.groupPrefix.joined(separator: "/"),
             scope.tools.map(\.rawValue).sorted().joined(separator: ","),
             scope.metadataIdentifiers.sorted().joined(separator: ","),
             scope.sourcePaths.sorted().joined(separator: ","),
             String(scope.recordLimit), String(scope.groupLimit),
             String(scope.metadataCallLimit), String(scope.metadataCallsPerRecordLimit),
-            contract.digests.keys.sorted().map { "\($0)=\(contract.digests[$0] ?? "")" }.joined(separator: ","),
+        ].joined(separator: "|")
+        let contractTerms = contract.digests.keys.sorted()
+            .map { "\($0)=\(contract.digests[$0] ?? "")" }
+            .joined(separator: ",")
+        let lifecycle = [
             authorizedBy, String(issuedAt.timeIntervalSince1970),
             expiresAt.map { String($0.timeIntervalSince1970) } ?? "none",
         ].joined(separator: "|")
+        let text = [targetTerms, scopeTerms, contractTerms, lifecycle].joined(separator: "|")
         return SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 }
@@ -312,9 +320,9 @@ public actor ImportRuntime {
         // Count the operations that would actually write: a key already in the
         // ledger is a replay, not a new record. The scope and the plan have to
         // agree before a surface exists.
-        let wouldWrite = try requests.filter { request in
-            request.clearance.verdict == .pass
-                && (try ledger.operation(keyDigest: request.intent.key.digest)) == nil
+        let wouldWrite = try requests.filter { request -> Bool in
+            guard request.clearance.verdict == .pass else { return false }
+            return try ledger.operation(keyDigest: request.intent.key.digest) == nil
         }.count
         refusals.append(contentsOf: Self.planRefusals(
             wouldWrite: wouldWrite, requests: requests, authorization: authorization))

@@ -454,7 +454,7 @@ public actor ImportExecutor {
                                   after: .metadataObserved, request: intent, error: nil)
             } catch is CancellationError {
                 throw CancellationError()
-            } catch let refusal as ImportWriteRefusal {
+            } catch is ImportWriteRefusal {
                 // Refused before the metadata call: the record is known, the
                 // bytes are verified, and nothing was written. Reporting an
                 // unknown outcome here would invent uncertainty.
