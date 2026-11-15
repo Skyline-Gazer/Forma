@@ -100,9 +100,9 @@ enum M05QA {
         [groupRoot, approval.runID]
     }
 
-    static func scope() -> ImportWriteScope {
+    static func scope(prefix: [String]) -> ImportWriteScope {
         ImportWriteScope(
-            databaseID: databaseID, groupPrefix: [groupRoot],
+            databaseID: databaseID, groupPrefix: prefix,
             tools: Set(ImportWriteTool.allCases), metadataIdentifiers: identifiers,
             sourcePaths: Set(files.map(\.absolutePath)),
             recordLimit: limits.imports, groupLimit: limits.groups,
@@ -122,7 +122,7 @@ enum M05QA {
             target: ImportIsolatedTarget(databaseID: databaseID, databaseName: databaseName,
                                          groupPath: groupPath(approval),
                                          declaredDisposable: true),
-            scope: scope(),
+            scope: scope(prefix: groupPath(approval)),
             authorizedBy: approval.approvedBy, issuedAt: approval.issuedAt)
     }
 
@@ -165,7 +165,8 @@ enum M05QA {
                                       hydrationPending: false,
                                       snapshotFingerprint: intent.key.snapshotFingerprint,
                                       sha256: intent.source.contentSHA256),
-            target: ImportTargetFacts(exists: false, writable: false),
+            target: ImportTargetFacts(exists: true, writable: true, availableBytes: 10_000,
+                                      requiredBytes: 1_000),
             capability: ImportCapabilityFacts(writeToolsAvailable: true, readbackAvailable: true),
             expectedSHA256: intent.source.contentSHA256, now: now))
     }
@@ -188,7 +189,11 @@ enum M05QA {
         let transport = FakeImportTransport()
         let fixed = now
         let writer = ImportSingleWriter(ledger: ledger, owner: "m05-qa", clock: { fixed })
-        let scope = scope()
+        // Setup creates the two approved groups; the run itself is authorized
+        // only for its own group. Both share the approval's journal identity,
+        // so the group budget is the single two-group allowance.
+        let setupScope = scope(prefix: [groupRoot])
+        let runtimeScope = scope(prefix: groupPath(approval))
         let runtime = ImportRuntime(ledger: ledger, writer: writer, read: transport,
                                     clock: { fixed }) { runtimeAuthorization in
             let guardAuthorization = ImportWriteAuthorization(
@@ -204,7 +209,7 @@ enum M05QA {
         }
         let groupGuard = GuardedImportWriteTransport(
             base: transport,
-            authorization: ImportWriteAuthorization(scope: scope, journal: ledger,
+            authorization: ImportWriteAuthorization(scope: setupScope, journal: ledger,
                                                     identity: authorization.digest,
                                                     clock: { fixed }),
             sourcePath: { binding in
@@ -221,7 +226,7 @@ enum M05QA {
             clearances.append(try clearance(intent))
         }
         return Stack(database: database, ledger: ledger, transport: transport, runtime: runtime,
-                     runID: runID, authorization: authorization, scope: scope,
+                     runID: runID, authorization: authorization, scope: runtimeScope,
                      groupGuard: groupGuard, intents: intents, clearances: clearances)
     }
 
