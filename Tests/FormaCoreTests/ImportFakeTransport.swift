@@ -59,6 +59,11 @@ actor FakeImportTransport: ImportWriteSurface, ImportReadTransport {
     /// Creates the record without the fields, so the metadata step still has to
     /// happen. Separate from `fault` because the two are independent failures.
     var createWithoutMetadata = false
+    /// Per-file overrides, so one run can carry several independent probes
+    /// without depending on call order.
+    var createFaultsBySource: [UUID: Fault] = [:]
+    var metadataFaultsBySource: [UUID: Fault] = [:]
+    var createWithoutMetadataSources: Set<UUID> = []
     /// Records that become visible only when `create` runs, so the *post-create*
     /// recovery lookup can see candidates the pre-create lookup did not.
     var extraRecordsAfterCreate: [Stored] = []
@@ -80,6 +85,9 @@ actor FakeImportTransport: ImportWriteSurface, ImportReadTransport {
     func setCreateDelay(_ nanoseconds: UInt64) { createDelayNanoseconds = nanoseconds }
     func setReadbackSHAVerified(_ value: Bool) { readbackSHAVerified = value }
     func setCreateWithoutMetadata(_ value: Bool) { createWithoutMetadata = value }
+    func setCreateFault(_ fault: Fault, forSource id: UUID) { createFaultsBySource[id] = fault }
+    func setMetadataFault(_ fault: Fault, forSource id: UUID) { metadataFaultsBySource[id] = fault }
+    func setCreateWithoutMetadata(forSource id: UUID) { createWithoutMetadataSources.insert(id) }
     func setExtraRecordsAfterCreate(_ records: [Stored]) { extraRecordsAfterCreate = records }
     func setReadbackOverride(_ metadata: [String: String?]?) { readbackMetadataOverride = metadata }
     func setReadCancellation(_ value: Bool) { readCancellation = value }
@@ -125,7 +133,8 @@ actor FakeImportTransport: ImportWriteSurface, ImportReadTransport {
         if createDelayNanoseconds > 0 {
             try await Task.sleep(nanoseconds: createDelayNanoseconds)
         }
-        if fault == .createBeforeApply {
+        let effective = createFaultsBySource[request.source.sourceID] ?? fault
+        if effective == .createBeforeApply {
             for extra in extraRecordsAfterCreate { records[extra.uuid] = extra }
             throw FormaError.disconnected
         }
@@ -133,19 +142,22 @@ actor FakeImportTransport: ImportWriteSurface, ImportReadTransport {
         let uuid = "uuid-\(next)"
         // A create may or may not carry the fields; the transport that leaves them
         // out is what the metadata step exists for.
-        let metadata = createWithoutMetadata ? [:] : request.metadata
+        let leavesFieldsOut = createWithoutMetadata
+            || createWithoutMetadataSources.contains(request.source.sourceID)
+        let metadata = leavesFieldsOut ? [:] : request.metadata
         records[uuid] = Stored(uuid: uuid, database: request.database, parentPath: request.groupPath,
                                metadata: metadata, sha256: request.source.contentSHA256,
                                associationBasis: request.associationBasis)
         for extra in extraRecordsAfterCreate { records[extra.uuid] = extra }
-        if fault == .createAfterApply { throw FormaError.timeout }
+        if effective == .createAfterApply { throw FormaError.timeout }
         return uuid
     }
 
     func writeMetadata(_ request: ImportMetadataRequest) async throws {
         metadataCalls += 1
         events.append("metadata")
-        if fault == .metadata { throw FormaError.disconnected }
+        let effective = metadataFaultsBySource[request.source.sourceID] ?? fault
+        if effective == .metadata { throw FormaError.disconnected }
         guard var record = records[request.uuid] else { throw FormaError.invalidResponse }
         // A metadata write fills the named slots; it does not clear the others.
         for (key, value) in request.metadata { record.metadata[key] = value }

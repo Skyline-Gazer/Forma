@@ -380,12 +380,29 @@ public actor GuardedImportWriteTransport: ImportWriteSurface {
         self.sourcePath = sourcePath
     }
 
+    /// The spend the wrapped authorization recorded, for the audit report.
+    public var budget: ImportWriteBudgetUsage {
+        get async { await authorization.budget }
+    }
+
+    /// Refusals by code, from the wrapped authorization.
+    public var refusalCounts: [ImportWriteDenial: Int] {
+        get async { await authorization.refusalCounts }
+    }
+
     /// Group creation goes through the same permit as every other write: there
     /// is no path to the transport that skips the boundary.
     public func createGroup(database: String, path: [String]) async throws -> String {
         _ = try await authorization.permit(.createGroup(
             location: path.joined(separator: "/"), database: database))
         return try await base.createGroup(database: database, path: path)
+    }
+
+    /// Forwards a proof the executor established with the independent read.
+    /// The authorization re-checks the observed database and parent path.
+    public func recordVerified(uuid: String, database: String, parentPath: [String]) async throws {
+        try await authorization.recordVerified(uuid: uuid, database: database,
+                                              parentPath: parentPath)
     }
 
     public func lookup(_ query: ImportLookupQuery) async throws -> ImportLookupResult {
