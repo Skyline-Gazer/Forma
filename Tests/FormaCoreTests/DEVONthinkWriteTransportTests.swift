@@ -37,8 +37,10 @@ struct DEVONthinkWriteTransportTests {
     """#
 
     private static func fake(_ script: String) throws -> MCPConfiguration {
+        // Same budget as MCPTests: a `/bin/sh` fixture under parallel load is the
+        // variable, and these tests observe arguments, not latency.
         MCPConfiguration(executable: URL(fileURLWithPath: "/bin/sh"),
-                         arguments: ["-c", prelude + "\n" + script], timeout: .seconds(15))
+                         arguments: ["-c", prelude + "\n" + script], timeout: .seconds(30))
     }
 
     private static func source() -> ImportSourceBinding {
