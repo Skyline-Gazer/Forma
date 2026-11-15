@@ -9,18 +9,25 @@
 
 | 项 | 请求值 |
 | --- | --- |
-| 目标数据库 | **1 个可丢弃库**。建议由 Owner 新建 `Forma_M05_Sandbox`；若 Owner 选择复用现有 `Forma_I1B2_Sandbox`，需明确同意在其中的**新组**写入 |
+| 目标数据库 | **1 个可丢弃库，优先新建 `Forma_M05_Sandbox`**，由 Owner 在 Mac 上独立准备；不复用 I1-B2 沙盒。若确需复用，必须由 Owner 单独同意并在其中使用**新组** |
 | 目标 Group | 2 个：`Forma_M05` 与 `<run-id>`（仅本轮） |
 | 记录 | **3 条**（对应超时、发送后断连、崩溃三个探针，各 1 条） |
 | 允许的写工具 | `create_group_path`、`import_file`（仅 `mode=import`）、`set_record_custom_metadata`（仅 `mode=merge`） |
 | Metadata 字段 | 仅 B2 已确认的 8 个 string identifier：`projectname`、`documentcategory`、`documenttype`、`issuer`、`bidderentity`、`endcustomer`、`completionyear`、`biddeadline` |
-| Metadata 调用上限 | ≤ 6（每条记录 ≤1 次 merge × 最多 2 个阶段）。这是**计划级**约束：guard 校验 identifier 与目标记录但不计次，执行时按调用计数对账 |
-| 合成源文件 | 3 个，仓库内脚本生成、字节固定、SHA-256 可复算；不使用任何业务文件 |
+| Metadata 调用上限 | ≤ 6 总数，且**每条记录 ≤ 1 次**。由 guard 在调用传输层前强制；计数按授权 digest 持久化在 Ledger v3 |
+| 合成源文件 | 3 个字节字面量文件，SHA-256：`5d15b3be…863f`（64 B）、`31004244…24ff`（68 B）、`5d828574…de4f`（61 B）；完整值见 `M05-PREFLIGHT.md` §12.1；不使用任何业务文件 |
 | 删除 / 移动 / trash / Replicant / 字段定义变更 | **0** |
 | 生产库记录级查询 | **0** |
 | 真实崩溃注入 | **1 次**，且仅限在 create 在途时终止 **Forma 进程**；不终止 DEVONthink 主程序、不终止他人会话的 MCP 子进程。此项如需与 T/D 分开批准，可单列 |
 
 所有请求都在 `ImportWriteScope` 中编码；guard 在调用传输层之前拒绝越界请求，被拒请求不消耗预算。
+
+执行的硬约束：
+
+- 三类预算分别计数（imports / groups / metadata），被拒请求不消耗、不到达 transport；
+- 超时、断连、取消不退预算；journal 读/写失败一律拒绝（`budget_unavailable`）；
+- 同一授权 digest 在新进程/新 runtime 中恢复已花费计数，不刷新为零；
+- `plan` 必须同时给出 `limits` 与 `authorizationDigest`，超出记录预算或字段表的计划在建立连接前被拒绝（`plan_exceeds_budget` / `plan_outside_scope`）。
 
 ## 2. 执行前置（全部满足才启动）
 
@@ -30,12 +37,14 @@
 4. 3 个合成文件生成完毕，SHA-256 记录在证据目录。
 5. 无其他 Forma 实例；无未解释的在途 Import。
 6. `plan` 输出与预期一致（3 条 `would_execute`，0 条阻断）。
+7. 离线 QA 编排（`M05QAExecutionTests`）全绿，并附稳定 JSON 报告；任何一项失败即停止。
 
 ## 3. 明确的停止条件
 
 - 任一目标校验失败、schema digest 漂移、guard 拒绝、出现预期外对象、同一操作键产生第二条记录、观测到生产库；
 - 任一探针进入 `VERIFY_REQUIRED` 后，必须先完成只读回查并记录结论，才可进行下一探针；
 - 出现无法解释的返回形状或计数不符时，停止并报告，不"再试一次"。
+- 预算 journal 行与计划预算不一致，或出现 `budget_unavailable`；
 
 ## 4. 回滚与清理
 
@@ -54,7 +63,9 @@ MCP 没有事务，本授权**不包含删除**。因此：
 3. 重启后的只读回查结论（`verified` / `differs` / `unverifiable`）；
 4. 真实写调用计数（按工具）与 `refusalCounts`（必须为空）；
 5. 记录/组实际数量与预算对账；
-6. 目标字节与源字节的标准 SHA-256。
+6. 目标字节与源字节的标准 SHA-256；
+7. 预算 journal 行：`identity`（授权 digest）、imports/groups/metadata 计数与逐记录计数；
+8. 离线 QA 的 report JSON（预算、digest、三类调用计数、拒绝原因）与实际报告的字段对照。
 
 证据仅保存在运行主机 `~/.forma/evidence/m05/`；仓库只提交脱敏报告。
 
