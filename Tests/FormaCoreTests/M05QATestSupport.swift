@@ -202,19 +202,14 @@ enum M05QA {
         // so the group budget is the single two-group allowance.
         let setupScope = scope(prefix: [groupRoot])
         let runtimeScope = scope(prefix: groupPath(approval))
+        // The same session factory production uses; only the transport differs.
+        let session = ImportWriteSessionFactory.make(
+            ledger: ledger, sourceRoot: URL(fileURLWithPath: sourceRoot),
+            approvedSourcePaths: Set(files.map(\.absolutePath)), clock: { fixed }) {
+                (surface: transport, close: {})
+            }
         let runtime = ImportRuntime(ledger: ledger, writer: writer, read: transport,
-                                    clock: { fixed }) { runtimeAuthorization in
-            let guardAuthorization = ImportWriteAuthorization(
-                scope: runtimeAuthorization.scope, journal: ledger,
-                identity: runtimeAuthorization.digest, clock: { fixed })
-            let surface = GuardedImportWriteTransport(
-                base: transport, authorization: guardAuthorization,
-                sourcePath: { binding in
-                    ImportWriteScope.canonical("\(sourceRoot)/\(binding.relativePath)")
-                })
-            return ImportWriteSession(surface: surface, authorization: guardAuthorization,
-                                      close: {})
-        }
+                                    clock: { fixed }, makeSession: session)
         let groupGuard = GuardedImportWriteTransport(
             base: transport,
             authorization: ImportWriteAuthorization(scope: setupScope, journal: ledger,

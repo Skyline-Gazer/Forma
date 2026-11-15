@@ -28,22 +28,14 @@ struct ImportRuntimeTests {
         let runID: UUID
     }
 
-    /// The same session shape as the production runtime: the ledger is the
-    /// budget journal, keyed by the authorization digest.
+    /// The production session factory; only the transport is the fake.
     private static func session(transport: FakeImportTransport, ledger: ImportLedger,
                                 clock: @escaping @Sendable () -> Date) -> @Sendable (ImportRuntimeAuthorization) -> ImportWriteSession {
-        { authorization in
-            let guardAuthorization = ImportWriteAuthorization(
-                scope: authorization.scope, journal: ledger,
-                identity: authorization.digest, clock: clock)
-            let surface = GuardedImportWriteTransport(
-                base: transport, authorization: guardAuthorization,
-                sourcePath: { binding in
-                    "\(sourceRoot)/\(binding.relativePath)"
-                })
-            return ImportWriteSession(surface: surface, authorization: guardAuthorization,
-                                      close: {})
-        }
+        ImportWriteSessionFactory.make(
+            ledger: ledger, sourceRoot: URL(fileURLWithPath: sourceRoot),
+            approvedSourcePaths: [sourcePath], clock: clock) {
+                (surface: transport, close: {})
+            }
     }
 
     private func runtime(ledger: ImportLedger, transport: FakeImportTransport,

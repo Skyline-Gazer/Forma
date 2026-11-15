@@ -183,6 +183,47 @@ struct ImportWriteSession: Sendable {
     let close: @Sendable () async -> Void
 }
 
+/// Builds the one session shape a write run may use.
+///
+/// Production and the offline QA harness both call this, so "the same guard,
+/// the same journal, the same identity" is a property of the code rather than a
+/// claim that two closures happen to match. Only the transport differs.
+enum ImportWriteSessionFactory {
+    typealias Surface = (surface: any ImportWriteSurface,
+                         close: @Sendable () async -> Void)
+
+    static func make(ledger: ImportLedger, sourceRoot: URL,
+                     approvedSourcePaths: Set<String>,
+                     clock: @escaping @Sendable () -> Date,
+                     surface: @escaping @Sendable () -> Surface)
+        -> @Sendable (ImportRuntimeAuthorization) -> ImportWriteSession {
+        let root = sourceRoot.standardizedFileURL
+        let approved = Set(approvedSourcePaths.map { ImportWriteScope.canonical($0) })
+        return { authorization in
+            let made = surface()
+            // The ledger is the budget journal and the authorization digest is
+            // the identity: a new runtime (or a new process over the same
+            // ledger) continues from what this approval already spent.
+            let guardAuthorization = ImportWriteAuthorization(
+                scope: authorization.scope, journal: ledger,
+                identity: authorization.digest, clock: clock)
+            let guarded = GuardedImportWriteTransport(
+                base: made.surface, authorization: guardAuthorization,
+                sourcePath: { binding in
+                    // The scope stores canonical paths; compute the same form
+                    // here or a symlinked prefix (for example /tmp) would make
+                    // an approved file look foreign.
+                    let path = ImportWriteScope.canonical(
+                        root.appendingPathComponent(binding.relativePath)
+                            .standardizedFileURL.path)
+                    return approved.contains(path) ? path : nil
+                })
+            return ImportWriteSession(surface: guarded, authorization: guardAuthorization,
+                                      close: made.close)
+        }
+    }
+}
+
 /// The only entry point that can execute an import.
 ///
 /// It exists to make three things structural rather than remembered:
@@ -210,26 +251,14 @@ public actor ImportRuntime {
     public init(ledger: ImportLedger, writer: ImportSingleWriter, read: any ImportReadTransport,
                 sourceRoot: URL, approvedSourcePaths: Set<String>,
                 clock: @escaping @Sendable () -> Date = Date.init) {
-        let approved = Set(approvedSourcePaths.map { ImportWriteScope.canonical($0) })
-        let root = sourceRoot.standardizedFileURL
-        self.init(ledger: ledger, writer: writer, read: read, clock: clock) { authorization in
-            let surface = DEVONthinkMCPWriteTransport(sourceRoot: root)
-            // The ledger is the budget journal and the authorization digest is
-            // the identity: a new runtime (or a new process over the same
-            // ledger) continues from what this approval already spent instead
-            // of starting a fresh budget.
-            let guardAuthorization = ImportWriteAuthorization(
-                scope: authorization.scope, journal: ledger,
-                identity: authorization.digest, clock: clock)
-            let guarded = GuardedImportWriteTransport(
-                base: surface, authorization: guardAuthorization,
-                sourcePath: { binding in
-                    let path = root.appendingPathComponent(binding.relativePath).standardizedFileURL.path
-                    return approved.contains(path) ? path : nil
-                })
-            return ImportWriteSession(surface: guarded, authorization: guardAuthorization,
-                                      close: { await surface.close() })
-        }
+        let session = ImportWriteSessionFactory.make(
+            ledger: ledger, sourceRoot: sourceRoot,
+            approvedSourcePaths: approvedSourcePaths, clock: clock) {
+                let surface = DEVONthinkMCPWriteTransport(sourceRoot: sourceRoot.standardizedFileURL)
+                return (surface: surface, close: { await surface.close() })
+            }
+        self.init(ledger: ledger, writer: writer, read: read, clock: clock,
+                  makeSession: session)
     }
 
     init(ledger: ImportLedger, writer: ImportSingleWriter, read: any ImportReadTransport,

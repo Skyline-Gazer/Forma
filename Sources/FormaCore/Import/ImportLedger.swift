@@ -583,26 +583,51 @@ extension ImportLedger: ImportWriteBudgetJournal {
             guard let row = try Row.fetchOne(
                 db, sql: "SELECT * FROM import_write_budgets WHERE identity = ?",
                 arguments: [identity]) else { return nil }
-            let raw: String = row["metadata_by_record"]
-            guard let data = raw.data(using: .utf8),
-                  let byRecord = try? JSONDecoder().decode([String: Int].self, from: data) else {
-                throw FormaError.storage
-            }
-            return ImportWriteBudgetUsage(
-                importsGranted: row["imports_granted"], groupsGranted: row["groups_granted"],
-                metadataCalls: row["metadata_calls"], metadataCallsByRecord: byRecord)
+            return try Self.budgetUsage(row)
         }
     }
 
-    /// Replaces the row for this identity. The authorization only calls this
-    /// after an increment, so the stored value is always the spend including
-    /// the request being decided.
-    public func save(budgetUsage: ImportWriteBudgetUsage, identity: String, at date: Date) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(budgetUsage.metadataCallsByRecord),
-              let raw = String(data: data, encoding: .utf8) else { throw FormaError.storage }
+    /// Checks the limit and applies the increment in one write transaction.
+    ///
+    /// Two authorization objects that share an identity may call this at the
+    /// same time; SQLite serializes the transactions, so one of them sees the
+    /// other's increment and is refused. There is no read-then-write pair the
+    /// caller could interleave, which is what makes the budget total rather than
+    /// per-instance.
+    public func spend(_ spend: ImportWriteBudgetSpend, limits: ImportWriteBudgetLimits,
+                      identity: String, at date: Date) throws -> ImportWriteBudgetUsage {
         try database.write { db in
+            var usage: ImportWriteBudgetUsage
+            if let row = try Row.fetchOne(
+                db, sql: "SELECT * FROM import_write_budgets WHERE identity = ?",
+                arguments: [identity]) {
+                usage = try Self.budgetUsage(row)
+            } else {
+                usage = .zero
+            }
+            switch spend {
+            case .importRecord:
+                guard usage.importsGranted < limits.imports else {
+                    throw ImportWriteBudgetRejection(reason: .importsExhausted, usage: usage)
+                }
+                usage.importsGranted += 1
+            case .group:
+                guard usage.groupsGranted < limits.groups else {
+                    throw ImportWriteBudgetRejection(reason: .groupsExhausted, usage: usage)
+                }
+                usage.groupsGranted += 1
+            case .metadata(let record):
+                let key = record.uppercased()
+                guard usage.metadataCalls < limits.metadataCalls else {
+                    throw ImportWriteBudgetRejection(reason: .metadataExhausted, usage: usage)
+                }
+                guard usage.calls(forRecord: key) < limits.metadataCallsPerRecord else {
+                    throw ImportWriteBudgetRejection(reason: .metadataRecordExhausted,
+                                                     usage: usage)
+                }
+                usage.metadataCalls += 1
+                usage.metadataCallsByRecord[key, default: 0] += 1
+            }
             try db.execute(sql: """
                 INSERT INTO import_write_budgets
                     (identity, imports_granted, groups_granted, metadata_calls,
@@ -614,10 +639,31 @@ extension ImportLedger: ImportWriteBudgetJournal {
                     metadata_calls = excluded.metadata_calls,
                     metadata_by_record = excluded.metadata_by_record,
                     updated_at = excluded.updated_at
-                """, arguments: [identity, budgetUsage.importsGranted,
-                                  budgetUsage.groupsGranted, budgetUsage.metadataCalls,
-                                  raw, date.timeIntervalSince1970])
+                """, arguments: [identity, usage.importsGranted,
+                                  usage.groupsGranted, usage.metadataCalls,
+                                  try Self.budgetMapJSON(usage.metadataCallsByRecord),
+                                  date.timeIntervalSince1970])
+            return usage
         }
+    }
+
+    private static func budgetUsage(_ row: Row) throws -> ImportWriteBudgetUsage {
+        let raw: String = row["metadata_by_record"]
+        guard let data = raw.data(using: .utf8),
+              let byRecord = try? JSONDecoder().decode([String: Int].self, from: data) else {
+            throw FormaError.storage
+        }
+        return ImportWriteBudgetUsage(
+            importsGranted: row["imports_granted"], groupsGranted: row["groups_granted"],
+            metadataCalls: row["metadata_calls"], metadataCallsByRecord: byRecord)
+    }
+
+    private static func budgetMapJSON(_ map: [String: Int]) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(map),
+              let raw = String(data: data, encoding: .utf8) else { throw FormaError.storage }
+        return raw
     }
 }
 
