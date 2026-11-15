@@ -214,6 +214,13 @@ public actor ImportExecutor {
             try ledger.transition(keyDigest: stored.keyDigest, to: .cancelled, at: clock(),
                                   errorCode: "cancelled")
             throw CancellationError()
+        } catch let refusal as ImportWriteRefusal {
+            // The boundary refused the lookup; no read request was sent, so the
+            // absent record is a known fact rather than an unknown outcome.
+            try? ledger.transition(keyDigest: stored.keyDigest, to: .failed, at: clock(),
+                                   errorCode: refusal.code.rawValue)
+            return ImportExecutionResult(phase: .failed, outcome: nil, actualUUID: nil,
+                                         reason: .writeRefused, attempts: 0)
         } catch {
             try ledger.transition(keyDigest: stored.keyDigest, to: .verifyRequired, at: clock(),
                                   errorCode: Self.code(for: error))
@@ -260,6 +267,13 @@ public actor ImportExecutor {
             try ledger.transition(keyDigest: stored.keyDigest, to: .verifyRequired, at: clock(),
                                   errorCode: "cancelled")
             throw CancellationError()
+        } catch let refusal as ImportWriteRefusal {
+            // The guard refused before the transport call. Nothing was sent, so
+            // there is no unknown outcome to adopt and no lookup to run.
+            try? ledger.transition(keyDigest: stored.keyDigest, to: .failed, at: clock(),
+                                   errorCode: refusal.code.rawValue)
+            return ImportExecutionResult(phase: .failed, outcome: nil, actualUUID: nil,
+                                         reason: .writeRefused, attempts: 0)
         } catch {
             try recordAttempt(operation: stored, attempt: 1, before: .intentPersisted,
                               after: nil, request: intent, error: Self.code(for: error))
@@ -440,6 +454,13 @@ public actor ImportExecutor {
                                   after: .metadataObserved, request: intent, error: nil)
             } catch is CancellationError {
                 throw CancellationError()
+            } catch is ImportWriteRefusal {
+                // Refused before the metadata call: the record is known, the
+                // bytes are verified, and nothing was written. Reporting an
+                // unknown outcome here would invent uncertainty.
+                return ImportExecutionResult(phase: current.phase, outcome: nil,
+                                             actualUUID: uuid, reason: .writeRefused,
+                                             attempts: attempts)
             } catch {
                 try recordAttempt(operation: stored, attempt: attempts + 1, before: current.phase,
                                   after: nil, request: intent, error: Self.code(for: error))

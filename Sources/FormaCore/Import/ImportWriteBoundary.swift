@@ -46,6 +46,12 @@ public enum ImportWriteDenial: String, Sendable, Equatable {
     case recordNotProvenInScope
     case recordBudgetExhausted
     case groupBudgetExhausted
+    case metadataBudgetExhausted
+    case metadataRecordBudgetExhausted
+    /// The journal could not be read or written. Nothing is granted when the
+    /// spend cannot be recorded, because an unrecorded grant is budget nobody
+    /// can account for afterwards.
+    case budgetUnavailable
     case malformedRequest
 }
 
@@ -94,10 +100,17 @@ public struct ImportWriteScope: Sendable, Equatable {
     public let sourcePaths: Set<String>
     public let recordLimit: Int
     public let groupLimit: Int
+    /// Total `set_record_custom_metadata` grants. Defaults to zero: metadata
+    /// writes were previously unbudgeted, and an old scope must not silently
+    /// regain that ability.
+    public let metadataCallLimit: Int
+    /// Grants against any single record. Defaults to zero for the same reason.
+    public let metadataCallsPerRecordLimit: Int
 
     public init(databaseID: String, groupPrefix: [String], tools: Set<ImportWriteTool>,
                 metadataIdentifiers: Set<String>, sourcePaths: Set<String>,
-                recordLimit: Int, groupLimit: Int) {
+                recordLimit: Int, groupLimit: Int,
+                metadataCallLimit: Int = 0, metadataCallsPerRecordLimit: Int = 0) {
         self.databaseID = databaseID
         self.groupPrefix = groupPrefix
         self.tools = tools
@@ -105,6 +118,14 @@ public struct ImportWriteScope: Sendable, Equatable {
         self.sourcePaths = Set(sourcePaths.map(Self.canonical))
         self.recordLimit = recordLimit
         self.groupLimit = groupLimit
+        self.metadataCallLimit = metadataCallLimit
+        self.metadataCallsPerRecordLimit = metadataCallsPerRecordLimit
+    }
+
+    public var limits: ImportWriteBudgetLimits {
+        ImportWriteBudgetLimits(imports: recordLimit, groups: groupLimit,
+                                metadataCalls: metadataCallLimit,
+                                metadataCallsPerRecord: metadataCallsPerRecordLimit)
     }
 
     static func canonical(_ path: String) -> String {
@@ -116,29 +137,51 @@ public struct ImportWriteScope: Sendable, Equatable {
     }
 }
 
-/// Default-deny authorization state for one B2 run.
+/// Default-deny authorization state for one run.
 ///
 /// Budget is consumed by *granting*, not by executing: a grant that is never
 /// acted on still cannot be replaced by another one for free, so a crash loop
-/// cannot quietly exceed the approved record count. There is no API to return
-/// budget or to widen the scope after construction.
+/// cannot quietly exceed the approved counts. There is no API to return budget
+/// or to widen the scope after construction.
+///
+/// When a journal is supplied, the counters are stacked on top of what that
+/// journal already recorded for `identity` (normally the runtime
+/// authorization's digest). A new process, a new runtime or a second
+/// authorization object for the same identity therefore continues from the
+/// spent budget instead of restarting at zero. A journal that refuses to record
+/// the update fails the grant closed.
 public actor ImportWriteAuthorization {
     private let scope: ImportWriteScope
+    private let journal: (any ImportWriteBudgetJournal)?
+    /// Stable name of the budget row. It should be the runtime authorization
+    /// digest: two approvals with equal scope values still need separate
+    /// budgets, and one approval keeps its budget across restarts.
+    public let budgetIdentity: String
     private let clock: @Sendable () -> Date
-    private var grantsUsed = 0
-    private var groupsUsed = 0
+    private var usage: ImportWriteBudgetUsage = .zero
+    private var loaded = false
     private var provenRecords: Set<String> = []
     private var issued: [ImportWriteGrant] = []
     private var refusals: [ImportWriteDenial: Int] = [:]
 
-    public init(scope: ImportWriteScope, clock: @escaping @Sendable () -> Date = Date.init) {
+    public init(scope: ImportWriteScope,
+                journal: (any ImportWriteBudgetJournal)? = nil,
+                identity: String? = nil,
+                clock: @escaping @Sendable () -> Date = Date.init) {
         self.scope = scope
+        self.journal = journal
+        self.budgetIdentity = identity ?? Self.identity(for: scope)
         self.clock = clock
     }
 
     public var databaseID: String { scope.databaseID }
-    public var grantedCount: Int { grantsUsed }
-    public var createdGroups: Int { groupsUsed }
+    public var limits: ImportWriteBudgetLimits { scope.limits }
+    /// Everything spent so far, per tool. The three budgets can be reconciled
+    /// separately from this snapshot.
+    public var budget: ImportWriteBudgetUsage { usage }
+    public var grantedCount: Int { usage.importsGranted }
+    public var createdGroups: Int { usage.groupsGranted }
+    public var metadataGrantedCount: Int { usage.metadataCalls }
     public var log: [ImportWriteGrant] { issued }
     public var provenRecordIDs: Set<String> { provenRecords }
     /// Refusals by code. The audit of a run has to show what was attempted and
@@ -153,12 +196,41 @@ public actor ImportWriteAuthorization {
         return ImportWriteRefusal(code: code, tool: tool, detail: detail)
     }
 
+    /// Loads previously spent budget once, before the first grant. A journal
+    /// read failure is a refusal: granting without knowing the history would be
+    /// the budget refresh this journal exists to prevent.
+    private func ensureLoaded(_ tool: ImportWriteTool) throws {
+        guard !loaded, let journal else { return }
+        do {
+            usage = try journal.budgetUsage(identity: budgetIdentity) ?? .zero
+            loaded = true
+        } catch {
+            throw deny(.budgetUnavailable, tool, "the budget journal could not be read")
+        }
+    }
+
+    /// Applies one increment, persists it, and rolls the increment back when the
+    /// journal rejects it. The grant is only returned after the spend is durable.
+    private func spend(_ tool: ImportWriteTool,
+                       _ mutate: (inout ImportWriteBudgetUsage) -> Void) throws {
+        let before = usage
+        mutate(&usage)
+        guard let journal else { return }
+        do {
+            try journal.save(budgetUsage: usage, identity: budgetIdentity, at: clock())
+        } catch {
+            usage = before
+            throw deny(.budgetUnavailable, tool, "the budget journal rejected the update")
+        }
+    }
+
     /// Decides one request. Throws a refusal with a stable code; nothing is
     /// reserved when the request is refused.
     public func permit(_ request: ImportWriteRequest) throws -> ImportWriteGrant {
         guard scope.tools.contains(request.tool) else {
             throw deny(.toolNotInScope, request.tool, "tool is not in the authorized set")
         }
+        try ensureLoaded(request.tool)
         switch request {
         case let .createGroup(location, database):
             guard database.uppercased() == scope.databaseID.uppercased() else {
@@ -168,10 +240,10 @@ public actor ImportWriteAuthorization {
             guard !path.isEmpty, scope.contains(path: path) else {
                 throw deny(.groupPathOutsideScope, request.tool, "group path is outside the authorized prefix")
             }
-            guard groupsUsed < scope.groupLimit else {
+            guard usage.groupsGranted < scope.groupLimit else {
                 throw deny(.groupBudgetExhausted, request.tool, "group budget exhausted")
             }
-            groupsUsed += 1
+            try spend(request.tool) { $0.groupsGranted += 1 }
             return record(request)
 
         case let .importFile(path, destination, database, mode):
@@ -188,10 +260,10 @@ public actor ImportWriteAuthorization {
             guard scope.sourcePaths.contains(ImportWriteScope.canonical(path)) else {
                 throw deny(.sourcePathNotInScope, request.tool, "source path is not one of the approved synthetic files")
             }
-            guard grantsUsed < scope.recordLimit else {
+            guard usage.importsGranted < scope.recordLimit else {
                 throw deny(.recordBudgetExhausted, request.tool, "record budget exhausted")
             }
-            grantsUsed += 1
+            try spend(request.tool) { $0.importsGranted += 1 }
             return record(request)
 
         case let .setMetadata(recordUUID, metadata):
@@ -210,6 +282,18 @@ public actor ImportWriteAuthorization {
             }
             guard provenRecords.contains(recordUUID.uppercased()) else {
                 throw deny(.recordNotProvenInScope, request.tool, "record has not been verified in the authorized database")
+            }
+            let key = recordUUID.uppercased()
+            guard usage.metadataCalls < scope.metadataCallLimit else {
+                throw deny(.metadataBudgetExhausted, request.tool, "metadata budget exhausted")
+            }
+            guard usage.calls(forRecord: key) < scope.metadataCallsPerRecordLimit else {
+                throw deny(.metadataRecordBudgetExhausted, request.tool,
+                           "metadata budget for this record exhausted")
+            }
+            try spend(request.tool) {
+                $0.metadataCalls += 1
+                $0.metadataCallsByRecord[key, default: 0] += 1
             }
             return record(request)
         }
@@ -244,6 +328,20 @@ public actor ImportWriteAuthorization {
 
     static func split(_ path: String) -> [String] {
         path.split(separator: "/").map(String.init).filter { !$0.isEmpty && $0 != "." }
+    }
+
+    /// Default budget identity when the caller does not pass one. The runtime
+    /// always passes the authorization digest instead.
+    static func identity(for scope: ImportWriteScope) -> String {
+        let text = [
+            scope.databaseID.uppercased(), scope.groupPrefix.joined(separator: "/"),
+            scope.tools.map(\.rawValue).sorted().joined(separator: ","),
+            scope.metadataIdentifiers.sorted().joined(separator: ","),
+            scope.sourcePaths.sorted().joined(separator: ","),
+            String(scope.recordLimit), String(scope.groupLimit),
+            String(scope.metadataCallLimit), String(scope.metadataCallsPerRecordLimit),
+        ].joined(separator: "|")
+        return SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     static func digest(_ request: ImportWriteRequest) -> String {

@@ -50,6 +50,9 @@ actor FakeImportTransport: ImportWriteSurface, ImportReadTransport {
     var lookupInconclusive = false
     /// Makes a lookup take long enough for a cancellation test to land.
     var lookupDelayNanoseconds: UInt64 = 0
+    /// Makes a create take long enough for a cancellation test to land, and
+    /// therefore allow the task to be cancelled after the boundary granted it.
+    var createDelayNanoseconds: UInt64 = 0
     /// When false the independent read cannot prove the bytes, which is what a
     /// target without a verifiable digest looks like.
     var readbackSHAVerified = true
@@ -74,6 +77,7 @@ actor FakeImportTransport: ImportWriteSurface, ImportReadTransport {
     func setFault(_ fault: Fault) { self.fault = fault }
     func setLookupInconclusive(_ value: Bool) { lookupInconclusive = value }
     func setLookupDelay(_ nanoseconds: UInt64) { lookupDelayNanoseconds = nanoseconds }
+    func setCreateDelay(_ nanoseconds: UInt64) { createDelayNanoseconds = nanoseconds }
     func setReadbackSHAVerified(_ value: Bool) { readbackSHAVerified = value }
     func setCreateWithoutMetadata(_ value: Bool) { createWithoutMetadata = value }
     func setExtraRecordsAfterCreate(_ records: [Stored]) { extraRecordsAfterCreate = records }
@@ -118,6 +122,9 @@ actor FakeImportTransport: ImportWriteSurface, ImportReadTransport {
         createCalls += 1
         events.append("create")
         lastCreateRequest = request
+        if createDelayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: createDelayNanoseconds)
+        }
         if fault == .createBeforeApply {
             for extra in extraRecordsAfterCreate { records[extra.uuid] = extra }
             throw FormaError.disconnected

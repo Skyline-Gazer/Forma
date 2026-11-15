@@ -573,6 +573,54 @@ public struct ImportLedger: Sendable {
     }
 }
 
+// MARK: - Write budget journal
+
+extension ImportLedger: ImportWriteBudgetJournal {
+    /// Reads what one authorization already spent. A malformed stored map is a
+    /// storage error, not an empty budget: "unreadable" must never become "fresh".
+    public func budgetUsage(identity: String) throws -> ImportWriteBudgetUsage? {
+        try database.read { db in
+            guard let row = try Row.fetchOne(
+                db, sql: "SELECT * FROM import_write_budgets WHERE identity = ?",
+                arguments: [identity]) else { return nil }
+            let raw: String = row["metadata_by_record"]
+            guard let data = raw.data(using: .utf8),
+                  let byRecord = try? JSONDecoder().decode([String: Int].self, from: data) else {
+                throw FormaError.storage
+            }
+            return ImportWriteBudgetUsage(
+                importsGranted: row["imports_granted"], groupsGranted: row["groups_granted"],
+                metadataCalls: row["metadata_calls"], metadataCallsByRecord: byRecord)
+        }
+    }
+
+    /// Replaces the row for this identity. The authorization only calls this
+    /// after an increment, so the stored value is always the spend including
+    /// the request being decided.
+    public func save(budgetUsage: ImportWriteBudgetUsage, identity: String, at date: Date) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(budgetUsage.metadataCallsByRecord),
+              let raw = String(data: data, encoding: .utf8) else { throw FormaError.storage }
+        try database.write { db in
+            try db.execute(sql: """
+                INSERT INTO import_write_budgets
+                    (identity, imports_granted, groups_granted, metadata_calls,
+                     metadata_by_record, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(identity) DO UPDATE SET
+                    imports_granted = excluded.imports_granted,
+                    groups_granted = excluded.groups_granted,
+                    metadata_calls = excluded.metadata_calls,
+                    metadata_by_record = excluded.metadata_by_record,
+                    updated_at = excluded.updated_at
+                """, arguments: [identity, budgetUsage.importsGranted,
+                                  budgetUsage.groupsGranted, budgetUsage.metadataCalls,
+                                  raw, date.timeIntervalSince1970])
+        }
+    }
+}
+
 // MARK: - Migrations
 
 public enum ImportLedgerMigrations {
@@ -656,6 +704,21 @@ public enum ImportLedgerMigrations {
         // missing digest is an absent fact rather than a fabricated one.
         migrator.registerMigration("import-ledger-v2") { db in
             try db.execute(sql: "ALTER TABLE import_operations ADD COLUMN authorization_digest TEXT")
+        }
+        // v3 stores spent write budget per authorization identity. Without it a
+        // restarted process would begin at zero while the approval's limits
+        // stayed the same, which is the refresh M05 must not allow.
+        migrator.registerMigration("import-ledger-v3") { db in
+            try db.execute(sql: """
+                CREATE TABLE import_write_budgets (
+                    identity TEXT PRIMARY KEY NOT NULL,
+                    imports_granted INTEGER NOT NULL,
+                    groups_granted INTEGER NOT NULL,
+                    metadata_calls INTEGER NOT NULL,
+                    metadata_by_record TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                );
+                """)
         }
     }
 }
