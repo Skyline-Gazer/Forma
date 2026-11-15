@@ -140,7 +140,7 @@ enum M05QA {
         let entry = ManifestEntry(
             sourceID: file.sourceID, snapshotFingerprint: snapshot, snapshotRevision: 1,
             sourceVersion: 1, relativePath: file.relativePath, state: .validated,
-            target: ManifestTarget(databaseName: databaseName,
+            target: ManifestTarget(databaseName: databaseID,
                                    groupPath: groupPath(approval), resolved: true),
             eligibleForAutoExecution: true)
         return ImportIntent(
@@ -159,7 +159,7 @@ enum M05QA {
                                              profileVersion: profile.profileVersion,
                                              schemaVersion: manifest.schemaVersion),
             authorization: ImportAuthorization(
-                databaseName: databaseName, groupPrefix: intent.groupPath,
+                databaseName: databaseID, groupPrefix: intent.groupPath,
                 authorizedBy: "synthetic-owner", issuedAt: now),
             source: ImportSourceFacts(state: .present, authorized: true, readable: true,
                                       hydrationPending: false,
