@@ -97,15 +97,15 @@ final class FormaApplicationState: ObservableObject {
     /// Records the scope a person explicitly confirmed for the read-only check.
     ///
     /// Validation lives in `RecoveryScopeDraft` (FormaCore) so the sheet and its
-    /// tests agree on what "valid" means. The UI only renders the verdict.
+    /// tests agree on what "valid" means. A refused confirmation writes nothing:
+    /// the form owns its own error text, and the application-level reason is for
+    /// the banner only. Mixing the two is what left a valid form showing a stale
+    /// error (field defect A).
     func confirmRecoveryScope(_ draft: RecoveryScopeDraft) {
-        switch draft.validation {
-        case .ready(let scope):
-            recoveryScope = scope
-            recoveryReviewReason = nil
-        case .incomplete, .invalidUUID:
-            recoveryReviewReason = "invalid_scope"
-        }
+        guard case .ready(let scope) = draft.validation else { return }
+        recoveryScope = scope
+        // Clear a stale refusal from an earlier build or session if one lingers.
+        if recoveryReviewReason == "invalid_scope" { recoveryReviewReason = nil }
     }
 
     /// The read-only recheck.
@@ -340,10 +340,21 @@ private struct RecoveryScopeSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft = RecoveryScopeDraft()
 
-    /// Live validation: an incomplete form is not an error yet, a filled form with
-    /// a non-UUID is.
-    private var isInvalid: Bool {
-        state.recoveryReviewReason == "invalid_scope" || draft.validation == .invalidUUID
+    /// Form-local feedback only.
+    ///
+    /// The application's `recoveryReviewReason` describes the banner (for example
+    /// `no_authorized_scope`); consulting it here is what kept a valid form red
+    /// after one failed submit (field defect A). `RecoveryScopeDraft` owns this
+    /// decision so it is testable without a window.
+    private var errorText: String? {
+        switch draft.feedback {
+        case .none, .ready:
+            return nil
+        case .missingFields:
+            return "Enter a database UUID, a name and at least one group component."
+        case .invalidUUID:
+            return "The database UUID is not a valid UUID."
+        }
     }
 
     var body: some View {
@@ -362,10 +373,11 @@ private struct RecoveryScopeSheet: View {
             TextField("Group path, e.g. Forma_I1B2/r1", text: $draft.groupPath)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("recovery-group-path")
-            if isInvalid {
-                Text("Enter a database UUID, a name and at least one group component.")
+            if let errorText {
+                Text(errorText)
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .accessibilityIdentifier("recovery-scope-error")
             }
             HStack {
                 Spacer()
@@ -374,16 +386,22 @@ private struct RecoveryScopeSheet: View {
                     dismiss()
                 }
                 Button("Confirm read-only scope") {
+                    draft.attemptConfirmation()
+                    // Dismiss and commit only on a valid submission. Checking the
+                    // application's `recoveryScope` here would also dismiss after a
+                    // failed submit whenever an earlier scope was already confirmed.
+                    guard draft.feedback == .ready else { return }
                     state.confirmRecoveryScope(draft)
-                    if state.recoveryScope != nil {
-                        draft.reset()
-                        dismiss()
-                    }
+                    draft.reset()
+                    dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
                 .accessibilityIdentifier("confirm-recovery-scope")
             }
         }
+        // A sheet may be reused across presentations; start from an empty draft so
+        // a previous attempt's error can never appear on a fresh form.
+        .onAppear { draft.reset() }
         .padding(20)
         .frame(width: 480)
     }
