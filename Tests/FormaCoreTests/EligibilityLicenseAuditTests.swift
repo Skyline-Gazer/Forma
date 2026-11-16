@@ -100,7 +100,8 @@ struct EligibilityLicenseAuditTests {
         let policy = try EligibilityPolicy.shipped()
         let audit = try Self.read("docs/IMPORT-ELIGIBILITY-LICENSE-AUDIT.md")
         let rows = audit.split(separator: "\n").compactMap { line -> (String, String, String)? in
-            let cells = line.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+            let cells = line.split(separator: "|", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
             guard cells.count >= 5, Int(cells[1]) != nil else { return nil }
             let ruleID = cells[2].replacingOccurrences(of: "`", with: "")
             let decision = cells[3]
