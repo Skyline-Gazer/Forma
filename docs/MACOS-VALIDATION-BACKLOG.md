@@ -31,7 +31,7 @@
 | M8 | Mac App Store 沙盒兼容性 | #52 / R1 | Deferred（渠道未定） | 重新选择该渠道 |
 | M9 | 10,000 文件真实扫描性能验收 | #20 / P3-A | Deferred | 真实目录 + 硬件记录 |
 | M10 | 真实 Provider 外发授权、Keychain 与日志脱敏现场核验 | #20 / P3-A + P3-B | Deferred（部分未授权） | Provider 凭据、外发授权、真实 macOS 会话 |
-| M11 | Import Eligibility 生产接入与真实目录误排除复核 | #51 / P3-A | Deferred（接入未授权） | Owner 批准 Contract Delta + 授权目录 |
+| M11 | Import Eligibility 生产接入与真实目录误排除复核 | #51 / P3-A | **Implemented, default off**（#116–#121 已合并）；现场 **NOT_VERIFIED**（本轮无可用 macOS 主机） | macOS 现场合成+真实目录；默认启用需 Owner 再确认；切片 5 未授权 |
 
 ## 2. 各项明细
 
@@ -154,14 +154,14 @@
 ### M11 Import Eligibility 生产接入与真实目录误排除复核
 
 - **关联**：Issue #51（P3-A / I1）、PLAN §7.3、`docs/IMPORT-ELIGIBILITY-POLICY.md`。
-- **已在 DevBox 完成**：版本化 JSON Policy、原创 `EligibilityClassifier`、四态决策、解释性 `RuleMatch`、无副作用 `EligibilityView`、Owner 覆写与失效、dry-run 统计、五项资格指标、20 组合成误排除 fixture、10k 合成规模确定性测试；切片 2f 追加只读事实探测（`EligibilityFactCollector`：`CACHEDIR.TAG` 签名、嵌套 `.git`、`git ls-files` 索引）、`protection_facts` 排除门禁与 `eligibility.v2` 策略。**实现**已在 DevBox 完成并经 macOS CI 编译与合成夹具测试；生产 `buildContext` / `MappingEngine` 默认输入未接线。
-- **为什么无法在 Linux 验证**：Linux 无 Swift 工具链且 FormaCore 依赖 Darwin/CryptoKit/PDFKit/Security，整包不可编译，因此 Swift 编译与测试以 macOS CI 为准。**仍需 macOS 现场确认的是行为，不是实现**：APFS 上的真实 `.git` 目录与 `gitdir:` 文件、`CACHEDIR.TAG` 的真实缓存目录、OneDrive dataless 与权限失败下的探测结果、以及真实业务目录上的误排除复核。
-- **需要**：Owner 对 `docs/IMPORT-ELIGIBILITY-POLICY.md` §10 Contract Delta 的批准；一个授权的真实目录（不得使用生产 991 条记录）；人工复核工作流。
-- **所需权限/资源**：只读目录授权；合成或经批准脱敏的业务样本；macOS 14+ 与已安装 Git。
-- **测试步骤**：真实目录扫描 → `probeEligibilityFacts` → eligibility dry-run → 与人工标注比对 → 复核每一个 `EXCLUDE` 与 `REVIEW` → 记录规则命中、逐事实 provenance 与策略 digest；对授权根属于更大仓库子目录、嵌套仓库、符号链接 `.git`、超大/无签名 `CACHEDIR.TAG` 各留一条现场记录。
-- **预期证据**：真实目录的资格统计（脱敏）、误排除清单与处理结论、策略 digest 与版本。
-- **通过条件**：应保护业务样本零误排除（或有明确人工确认记录）；扫描身份、missing 判定与 Context 默认行为未变；接入改动经 Owner 批准。
-- **当前阻塞**：生产接入未授权（Contract Delta 未批准）、真实目录未提供；本项为 **Deferred**，不把合成 fixture 结果写成真实误排除率达标。
+- **已在 DevBox 完成（截至 2026-11-16）**：版本化 JSON Policy、原创 `EligibilityClassifier`、四态决策、解释性 `RuleMatch`、无副作用 `EligibilityView`、Owner 覆写与失效、dry-run 统计、五项资格指标、20 组合成误排除 fixture、10k 合成规模确定性测试；切片 2f 追加只读事实探测（`EligibilityFactCollector`：`CACHEDIR.TAG` 签名、嵌套 `.git`、`git ls-files` 索引）、`protection_facts` 排除门禁与 `eligibility.v2` 策略。
+- **工程接入已完成并合并（#116–#121，`dev` @ `f9bd4ea`）**：Contract Delta A–E 已获 Owner 批准并修订冻结文本（SPEC v0.1.2 / PLAN v0.2，PR #116）；切片 1–4 已分别合并——#117 `inputDigest` 绑定 `policy_digest` + 判定指纹（完整清单模式逐字节不变）、#118 `buildContext(…, eligibility:)` / `MappingRunRequest.eligibility` 的 opt-in 接线（未入 Mapping 的记录在 outcome 具名）、#119 Manifest 可选资格块 + `schema_version 1.1` + 按声明版本校验、#120 运行级 `EligibilityReport` 与路径无关导出；#121 文档收敛。四片均经 macOS CI 全绿。**生产默认过滤仍未启用**（Owner 条件 3）；**切片 5（I1 Executor 写入前重判）未授权**。
+- **仍需 macOS 现场确认的是行为，不是实现**：APFS 上的真实 `.git` 目录与 `gitdir:` 文件、`CACHEDIR.TAG` 的真实缓存目录、OneDrive dataless 与权限失败下的探测结果、以及真实业务目录上的误排除复核。**2026-11-16 本轮执行会话无可用 macOS 主机**（两台已配置 SSH 主机认证被拒，与 R1 Batch 2A 记录一致）→ 现场项一律 **NOT_VERIFIED**，不得以 CI 绿或合成夹具替代。
+- **与 M10 的分工**：M10 覆盖真实 Provider 外发、Keychain 与日志脱敏；M11 覆盖资格策略、真实目录误排除与默认启用门。二者证据不可互相替代，也不得因为一项通过而关闭另一项。
+- **需要（现场）**：可用的 macOS 主机；只读合成目录先跑合成验收（夹具与 Runbook 见 `docs/M11-SYNTHETIC-RUNBOOK.md`）；随后由 Owner 提供授权真实目录（不得使用生产 991 条记录）并做人工复核。
+- **测试步骤**：合成目录 → `FormaAcceptance m11`（或按 Runbook 手工执行）→ 逐案例 PASS/FAIL/NOT_VERIFIED + 策略 digest；真实目录 → 扫描 → `probeEligibilityFacts` → dry-run → 与人工标注比对 → 复核每个 `EXCLUDE`/`REVIEW` → 记录规则命中、逐事实 provenance 与策略 digest。
+- **通过条件**：应保护业务样本零误排除（或有明确人工确认记录）；扫描身份、missing 判定与 Context 默认行为未变；**默认启用另需 Owner 再确认**。
+- **当前状态**：工程侧 = **Implemented, default off**；现场侧 = **NOT_VERIFIED（无 macOS 主机）**；默认启用 = **未授权**。
 
 ## 3. 维护规则
 

@@ -6,9 +6,11 @@
 
 ## 1. 当前已实施与未实施
 
-已实施（不动契约）：`SourceListing` → `EligibilityView` 纯函数视图、四态决策与解释、dry-run 统计/导出、覆写与失效逻辑、只读事实探测、`mappingCandidates()`。
-未实施（本提案对象）：把视图接入生产 `ContextBuilder` / `MappingEngine` 默认输入、把资格结论写入 Manifest 工件、Executor 写入前重判（属 I1，另行授权）。
-已实施（2026-11-16）：上述三处接入均已落地，且默认行为保持完整清单模式（见上条实施记录）。
+**已实施（视图层，2e/2f，未动契约）**：`SourceListing` → `EligibilityView` 纯函数视图、四态决策与解释、dry-run 统计/导出、覆写与失效逻辑、只读事实探测、`mappingCandidates()`。
+
+**已实施（切片 1–4，2026-11-16 合并，默认关闭）**：`inputDigest` 绑定 `policy_digest` 与判定指纹（#117）；`buildContext(…, eligibility:)` 与 `MappingRunRequest.eligibility` 的 opt-in 接线（#118）；Manifest 可选资格块 + `schema_version 1.1` + 按声明版本校验（#119）；运行级 `EligibilityReport` 与路径无关导出（#120）。
+
+**未实施 / 未授权**：切片 5（I1 Executor 写入前重判）；**生产默认过滤的正式启用**（Owner 条件 3：全链路完成 + macOS 真实目录验证 + Owner 再确认）；真实目录误排除复核（`MACOS-VALIDATION-BACKLOG` M11 现场项，本轮无 macOS 主机 → NOT_VERIFIED）。上述三项互不替代。
 
 ## 2. 与冻结文本的逐条冲突点
 
