@@ -37,16 +37,25 @@ struct ManifestEligibilityBlockTests {
                             discoveredCount: 12, mappedCount: 9, unmappedCount: 3)
     }
 
-    private func entry() -> ManifestEntry {
+    private func entry(_ scanned: SourceEntry? = nil) -> ManifestEntry {
         ManifestEntry(
-            sourceID: sourceID, snapshotFingerprint: digest, snapshotRevision: 1, sourceVersion: 1,
-            relativePath: "项目/公告.pdf", state: .hold,
+            sourceID: scanned?.id ?? sourceID,
+            snapshotFingerprint: scanned?.snapshotFingerprint ?? digest,
+            snapshotRevision: scanned?.snapshotRevision ?? 1,
+            sourceVersion: scanned?.sourceVersion ?? 1,
+            relativePath: scanned?.relativePath ?? "项目/公告.pdf", state: .hold,
             target: ManifestTarget(databaseName: "库", groupPath: ["组"], resolved: false),
             metadata: MetadataValues.allUnknown,
             fields: MetadataFieldID.allCases.map { field in
                 FieldOutcome(field: field, value: nil, status: .unknown, conflicts: [])
             },
             associations: [], invalidatedReason: nil, providerReasoning: nil)
+    }
+
+    private static func envelopeKeys(of data: Data) throws -> Set<String> {
+        let root = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let envelope = try #require(root["envelope"] as? [String: Any])
+        return Set(envelope.keys)
     }
 
     // MARK: - The block
@@ -76,8 +85,9 @@ struct ManifestEligibilityBlockTests {
         let violations = try ArtifactSchemaValidator.manifest(forSchemaVersion: "1.0").violations(data)
         #expect(violations.isEmpty, "violations: \(violations.map { $0.logSummary })")
         // The 1.0 artifact must not carry the new key at all: a 1.0 payload
-        // with an eligibility block is not a 1.0 payload.
-        #expect(!String(decoding: data, as: UTF8.self).contains("eligibility"))
+        // with an eligibility block is not a 1.0 payload. (The report's own
+        // "eligibility" *validation group* predates the block and is not it.)
+        #expect(try Self.envelopeKeys(of: data).contains("eligibility") == false)
     }
 
     // MARK: - Schema versions
@@ -120,7 +130,8 @@ struct ManifestEligibilityBlockTests {
         // A 1.0 artifact, byte for byte what the program wrote before the
         // filter existed: no eligibility key anywhere in the payload.
         let data = try FormaJSON.encode(Manifest(envelope: envelope(profile: selected), entries: [entry()]))
-        #expect(!String(decoding: data, as: UTF8.self).contains("eligibility"))
+        #expect(try Self.envelopeKeys(of: data).contains("eligibility") == false,
+                "a 1.0 envelope must not carry the block")
         let violations = try ArtifactSchemaValidator.manifest(forSchemaVersion: "1.0").violations(data)
         #expect(violations.isEmpty, "violations: \(violations.map { $0.logSummary })")
         let decoded = try FormaJSON.decode(Manifest.self, from: data)
@@ -132,10 +143,16 @@ struct ManifestEligibilityBlockTests {
     func filteredManifestSurvivesStorage() async throws {
         let fixture = try SourceFixture()
         defer { fixture.cleanUp() }
+        try fixture.write("示例项目_2026/公告.pdf", at: "示例项目_2026/01_招标/公告.pdf")
         let workspace = try SourceWorkspace(databaseURL: fixture.database)
         let scope = try await workspace.register(fixture.root)
+        _ = try await workspace.scan(scope)
+        let listing = try await workspace.listing(scope)
+        let scanned = try #require(listing.entries.first)
         let selected = try profile()
-        let manifest = Manifest(envelope: envelope(profile: selected, eligibility: block()), entries: [entry()])
+        // The entry must be the scanned one: manifest entries carry a foreign
+        // key to the source table, and a fabricated id is not a source.
+        let manifest = Manifest(envelope: envelope(profile: selected, eligibility: block()), entries: [entry(scanned)])
         let stored = try await workspace.saveManifest(manifest, scopeID: scope.id)
         #expect(stored.envelope.eligibility != nil)
         #expect(stored.envelope.schemaVersion == "1.1")
