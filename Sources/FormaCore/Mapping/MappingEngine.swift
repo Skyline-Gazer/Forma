@@ -44,6 +44,9 @@ public struct MappingRunRequest: Sendable {
     public let scope: SourceScope
     public let profile: MappingProfile
     public let context: ProjectContext
+    /// Every discovered record the caller knows about. In full-listing mode
+    /// this is also the mapping input; in eligibility-filtered mode it is the
+    /// superset the filter was applied to.
     public let entries: [SourceEntry]
     public let evidence: [UUID: [EvidenceRecord]]
     public let provider: ProbeProvider
@@ -51,10 +54,18 @@ public struct MappingRunRequest: Sendable {
     public let allowCloud: Bool
     public let redaction: RedactionPlan
     public let entryLimit: Int
+    /// The eligible subset this run maps, when eligibility filtering is on.
+    ///
+    /// `nil` is the compatibility path: every discovered record is mapped,
+    /// exactly as before eligibility existed. The selection and the context
+    /// must agree — a filtered run whose context was built from a different
+    /// set would map files the context knows nothing about.
+    public let eligibility: EligibilitySelection?
 
     public init(scope: SourceScope, profile: MappingProfile, context: ProjectContext, entries: [SourceEntry],
                 evidence: [UUID: [EvidenceRecord]], provider: ProbeProvider, model: String, allowCloud: Bool,
-                redaction: RedactionPlan = .none, entryLimit: Int = MappingPrompt.defaultEntryLimit) {
+                redaction: RedactionPlan = .none, entryLimit: Int = MappingPrompt.defaultEntryLimit,
+                eligibility: EligibilitySelection? = nil) {
         self.scope = scope
         self.profile = profile
         self.context = context
@@ -65,6 +76,18 @@ public struct MappingRunRequest: Sendable {
         self.allowCloud = allowCloud
         self.redaction = redaction
         self.entryLimit = max(1, entryLimit)
+        self.eligibility = eligibility
+    }
+
+    /// The records this run actually maps.
+    ///
+    /// In filtered mode this is the eligible subset, intersected with the
+    /// caller's own set: a caller that narrowed the run to some files keeps
+    /// that narrowing, and the filter can only remove files, never add them.
+    public var mappingEntries: [SourceEntry] {
+        guard let eligibility else { return entries }
+        let eligible = Set(eligibility.entries.map(\.id))
+        return entries.filter { eligible.contains($0.id) }
     }
 }
 
@@ -80,6 +103,17 @@ public struct MappingRunOutcome: Sendable {
     /// Answers that named an `entry_ref` the program never issued. They are
     /// counted and refused, never matched by name.
     public let refusedReferences: Int
+    /// Discovered records that did not enter Mapping, in full-listing mode
+    /// because the caller never filtered and in filtered mode because
+    /// eligibility held them back.
+    ///
+    /// They are named here rather than dropped: a manifest that simply lacks a
+    /// file reads as "the directory does not contain it", which is a different
+    /// statement from "this file was not eligible" (SPEC v0.1.2 §10.1-5).
+    public let unmappedSourceIDs: [UUID]
+    /// The policy identity and decision fingerprint this run was decided
+    /// under, when eligibility filtering was on.
+    public let eligibilityBinding: ContextEligibilityBinding?
 }
 
 /// Turns a listing, a context and an evidence registry into a validated
@@ -106,6 +140,10 @@ public actor MappingEngine {
 
     public func run(_ request: MappingRunRequest) async -> MappingRunOutcome {
         let evidence = request.evidence
+        // The records this run maps. In filtered mode this is the eligible
+        // subset; the records it leaves out are named in the outcome, so a
+        // manifest that lacks a file is never ambiguous about why.
+        let entries = request.mappingEntries
         var answers: [UUID: ProposalForEntry] = [:]
         var usage = MappingUsage()
         var requests = 0
@@ -115,7 +153,7 @@ public actor MappingEngine {
 
         // First pass over every batch.
         var state = BatchState(nextRef: 1)
-        let first = Self.batches(from: request.entries, context: request.context, limit: request.entryLimit,
+        let first = Self.batches(from: entries, context: request.context, limit: request.entryLimit,
                                  state: &state)
         for batch in Self.withEvidence(first, evidence: evidence) {
             let attempt = await answerer.answer(provider: request.provider, model: request.model,
@@ -130,7 +168,7 @@ public actor MappingEngine {
         }
 
         var current = evidence
-        var resolved = validate(request: request, answers: Array(answers.values), evidence: current)
+        var resolved = validate(request: request, entries: entries, answers: Array(answers.values), evidence: current)
 
         // One bounded re-ask: only entries that hold because no body evidence
         // exists yet, and only where reading the file is actually possible.
@@ -171,7 +209,7 @@ public actor MappingEngine {
                     if Task.isCancelled { break }
                 }
             }
-            resolved = validate(request: request, answers: Array(answers.values), evidence: current)
+            resolved = validate(request: request, entries: entries, answers: Array(answers.values), evidence: current)
         }
 
         let envelope = ManifestEnvelope(
@@ -185,8 +223,11 @@ public actor MappingEngine {
             createdAt: .now, state: resolved.manifestState
         )
         let manifest = Manifest(envelope: envelope, entries: resolved.entries, report: resolved.report)
+        let mapped = Set(entries.map(\.id))
+        let unmapped = request.entries.map(\.id).filter { !mapped.contains($0) }
         return MappingRunOutcome(manifest: manifest, batches: first.count, requests: requests, usage: usage,
-                                 modelID: modelID, failures: failures, refusedReferences: refused)
+                                 modelID: modelID, failures: failures, refusedReferences: refused,
+                                 unmappedSourceIDs: unmapped, eligibilityBinding: request.eligibility?.binding)
     }
 
     // MARK: - Batching
@@ -294,9 +335,14 @@ public actor MappingEngine {
         return refused
     }
 
-    private func validate(request: MappingRunRequest, answers: [ProposalForEntry],
+    /// Validates the records this run mapped.
+    ///
+    /// `entries` is the mapped subset, not the discovered superset: a record
+    /// that never entered Mapping is not an unanswered entry, it is a record
+    /// the run did not cover, and the two are reported by different means.
+    private func validate(request: MappingRunRequest, entries: [SourceEntry], answers: [ProposalForEntry],
                           evidence: [UUID: [EvidenceRecord]]) -> ResolvedRun {
-        let input = ValidationInput(profile: request.profile, context: request.context, entries: request.entries,
+        let input = ValidationInput(profile: request.profile, context: request.context, entries: entries,
                                     evidence: evidence, proposals: answers)
         let result = ManifestValidator(input).validate()
         let counts = result.report.counts
