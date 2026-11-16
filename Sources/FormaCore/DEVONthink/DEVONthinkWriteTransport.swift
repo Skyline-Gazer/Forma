@@ -56,8 +56,14 @@ public actor DEVONthinkMCPWriteTransport: ImportWriteSurface {
     static let preferredVersion = "2025-06-18"
     static let supportedVersions: Set<String> = [preferredVersion, "2025-03-26", "2024-11-05"]
 
-    public init(sourceRoot: URL) {
-        self.init(configuration: .devonThink, sourceRoot: sourceRoot, contract: .i1B2Baseline)
+    /// `sendEventLog`, when set, journals every request frame the connection
+    /// writes (`MCPSendEvent`). Production defaults to nil: nothing is written
+    /// and no file is created unless a caller deliberately asks for
+    /// send-boundary evidence, as M05 fault-injection runs must (§14.3).
+    public init(sourceRoot: URL, sendEventLog: URL? = nil) {
+        var configuration = MCPConfiguration.devonThink
+        configuration.sendEventLog = sendEventLog
+        self.init(configuration: configuration, sourceRoot: sourceRoot, contract: .i1B2Baseline)
     }
 
     /// `contract` defaults to none so a test can exercise the tool wiring without

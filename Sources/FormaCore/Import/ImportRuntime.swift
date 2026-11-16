@@ -248,13 +248,18 @@ public actor ImportRuntime {
     static let reservedProductionNames: Set<String> = ["project_archive"]
     private var usedAuthorizations: Set<String> = []
 
+    /// `sendEventLog` is the M05 send-boundary journal for the write surface
+    /// this runtime builds (see `DEVONthinkMCPWriteTransport`); nil — the
+    /// default — keeps production behavior byte-identical and file-free.
     public init(ledger: ImportLedger, writer: ImportSingleWriter, read: any ImportReadTransport,
                 sourceRoot: URL, approvedSourcePaths: Set<String>,
-                clock: @escaping @Sendable () -> Date = Date.init) {
+                clock: @escaping @Sendable () -> Date = Date.init,
+                sendEventLog: URL? = nil) {
         let session = ImportWriteSessionFactory.make(
             ledger: ledger, sourceRoot: sourceRoot,
             approvedSourcePaths: approvedSourcePaths, clock: clock) {
-                let surface = DEVONthinkMCPWriteTransport(sourceRoot: sourceRoot.standardizedFileURL)
+                let surface = DEVONthinkMCPWriteTransport(sourceRoot: sourceRoot.standardizedFileURL,
+                                                          sendEventLog: sendEventLog)
                 return (surface: surface, close: { await surface.close() })
             }
         self.init(ledger: ledger, writer: writer, read: read, clock: clock,

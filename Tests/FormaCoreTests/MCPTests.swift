@@ -43,9 +43,10 @@ keep_open() {
 /// code passed on the next run (PR #97, #99). Under `swift test --parallel` on a
 /// three-core runner, process startup is the variable, and a test that measures
 /// behaviour rather than latency should not be the one that fails.
-private func fake(_ script: String, timeout: Duration = .seconds(30), frameLimit: Int = 2 * 1024 * 1024) -> MCPConfiguration {
+private func fake(_ script: String, timeout: Duration = .seconds(30), frameLimit: Int = 2 * 1024 * 1024,
+                  sendEventLog: URL? = nil) -> MCPConfiguration {
     MCPConfiguration(executable: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", peerPrelude + "\n" + script],
-                     timeout: timeout, maximumFrameBytes: frameLimit)
+                     timeout: timeout, maximumFrameBytes: frameLimit, sendEventLog: sendEventLog)
 }
 
 @Test func mcpDiscoveryNegotiatesAndCollectsPaginatedSchemas() async throws {
@@ -363,4 +364,63 @@ private func fake(_ script: String, timeout: Duration = .seconds(30), frameLimit
     let afterClose = await transport.stderrSnapshot()
     #expect(afterClose.byteCount >= snapshot.byteCount)
     #expect(afterClose.sha256.count == 64)
+}
+
+@Test func mcpSendJournalRetainsFrameBoundaryWithoutPayload() async throws {
+    let logURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent("forma-mcp-send-\(UUID().uuidString).jsonl")
+    defer { try? FileManager.default.removeItem(at: logURL) }
+    let marker = "SENSITIVE-\(UUID().uuidString)-path"
+    let transport = MCPStdio(configuration: fake(#"""
+    next
+    respond "$id" '"first"'
+    next
+    respond "$id" '"second"'
+    keep_open
+    """#, sendEventLog: logURL))
+    _ = try await transport.request("tools/call", parameters: [
+        "name": .string("import_file"),
+        "arguments": .object(["path": .string(marker)]),
+    ])
+    _ = try await transport.request("tools/call", parameters: ["path": .string(marker)])
+    #expect(await transport.sendEventLogFailures == 0)
+    await transport.close()
+    let text = try String(contentsOf: logURL, encoding: .utf8)
+    let events = try text.split(separator: "\n").map {
+        try JSONDecoder().decode(MCPSendEvent.self, from: Data($0.utf8))
+    }
+    #expect(events.count == 2)
+    #expect(events.map(\.sequence) == [1, 2])
+    #expect(events.map(\.requestID) == [1, 2])
+    #expect(events.map(\.method) == ["tools/call", "tools/call"])
+    #expect(events.allSatisfy { $0.outcome == .written })
+    #expect(events.allSatisfy { $0.pid == Int(getpid()) })
+    // The journal must carry no payload: not the argument values, and not even
+    // the tool name (which lives inside `params`, never in the frame envelope).
+    #expect(!text.contains(marker))
+    #expect(!text.contains("import_file"))
+    // The retained byte count is the exact frame that went out: canonical JSON
+    // plus the single newline delimiter, unchanged by the journal itself.
+    let firstFrame = try MCPValue.object([
+        "jsonrpc": .string("2.0"), "id": .integer(1), "method": .string("tools/call"),
+        "params": .object([
+            "name": .string("import_file"),
+            "arguments": .object(["path": .string(marker)]),
+        ]),
+    ]).canonicalData().count + 1
+    #expect(events[0].bytes == firstFrame)
+}
+
+@Test func mcpSendJournalIsOffUnlessConfigured() async throws {
+    let configuration = fake("""
+    next
+    respond "$id" '"ok"'
+    keep_open
+    """)
+    #expect(configuration.sendEventLog == nil)
+    let transport = MCPStdio(configuration: configuration)
+    let reply = try await transport.request("tools/call", parameters: ["path": .string("no-evidence-file")])
+    #expect(reply == .string("ok"))
+    #expect(await transport.sendEventLogFailures == 0)
+    await transport.close()
 }
