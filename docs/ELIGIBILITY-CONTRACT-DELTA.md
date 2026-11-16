@@ -1,6 +1,6 @@
-# Eligibility — SPEC/PLAN 契约差异提案（等待 Owner 决策）
+# Eligibility — SPEC/PLAN 契约差异提案（Owner 已批准 A–E）
 
-状态：**PENDING OWNER**。本提案不修改代码、不修改 `SPEC.md`/`PLAN.md`，是 [Issue #51](https://github.com/Skyline-Gazer/Forma/issues/51) P3-A 项 1 要求的正式差异提案。基线：`dev` @ `6bd17bb`。上位文档：`docs/IMPORT-ELIGIBILITY-POLICY.md` §10（六个必须回答的问题，本提案逐一给出答案）。
+状态：**APPROVED — Owner 正式批准 A–E 全量（2026-11-16，见 ROADMAP 授权历史）**。契约修订已落地：SPEC v0.1.2（§6.1-1、§6.3、§10.1-1、§10.1-5、§13 版本历史与迁移记录）与 PLAN v0.2（§6.1、§7.1、模块表、§16）；本文保留为决策依据原文。实施边界：切片 1–4 已授权（本文 §5 顺序）；切片 5（I1 Executor 重判）未授权；**生产默认过滤启用**须全链路完成、macOS 真实目录验证与 Owner 再确认（Owner 授权条件 3）。基线：`dev` @ `6b52071`。
 
 ## 1. 当前已实施与未实施
 

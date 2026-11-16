@@ -1,8 +1,8 @@
 # Forma — 产品与技术规范（SPEC）
 
-**版本：** v0.1.1  
-**状态：** FROZEN — Owner 已确认，允许进入 PLAN 编制；尚未批准实施  
-**日期：** 2026-11-10  
+**版本：** v0.1.2  
+**状态：** FROZEN — v0.1.2；2026-11-16 Owner 正式批准 Eligibility 契约修订（A–E），修订史与迁移记录见 §13  
+**日期：** 2026-11-10（v0.1.1）/ 2026-11-16（v0.1.2）  
 **产品仓库：** https://github.com/Skyline-Gazer/Forma  
 **参考来源：** `Skyline-Gazer/tmp@cba4bc35831b67ebb3a41bfbc70a9fe89c7b428b`  
 **授权范围：** 已授权 Agent 在 Forma 仓库编制 PLAN；**未授权创建 GitHub Project、Issues 或开始产品开发**。
@@ -160,7 +160,7 @@ Scanner → Context Builder → AI Mapper → Validator
 
 ### 6.1 工作机制
 
-1. 程序读取完整文件清单和目录树，先组织“项目级上下文”，而非每个文件重复调用 AI。
+1. 程序读取完整文件清单和目录树；扫描、身份、missing 与覆盖统计在任何资格判定下均作用于完整清单。向模型组织“项目级上下文”时支持两种输入模式：**完整清单模式（当前生产默认）**与**资格过滤模式**——后者以 `ImportEligibilityPolicy` 判定的 INCLUDE 子集作为 Mapping 批次输入，且其输入摘要必须绑定 `policy_digest` 与参与判定的决策摘要；切换默认模式须在全链路实现、macOS 真实目录验证与 Owner 再确认之后。项目级上下文先行组织，而非每个文件重复调用 AI。
 2. 向模型提供目标 Profile Schema、字段约束、**约 20–30 条精选典型案例**和该批文件上下文。
 3. 模型使用受约束的 JSON 输出，明确每个文件用途、归属、元数据、来源证据与不确定性。
 4. 如果不确定，程序按需提取少量证据：PDF 标题/前几页、DOCX 正文、XLSX 结构与必要单元格、相关同项目资料；再做一次针对性复判。**Prototype 必须实际覆盖 PDF/DOCX/XLSX 的最小只读抽取**，其他格式和 OCR 完整支持可延后；无法可靠提取时记录能力边界，不虚称正文已读取。
@@ -213,7 +213,7 @@ AI 只能提出语义部分，原始文件身份由程序产生。结构示意�
 
 **Confidence 不决定写入许可：** AI 可提供定性判断及其理由，程序依独立的证据规则决定 `eligible_for_auto_execution`，例如项目身份与分类关键证据存在、来源无冲突、Schema 有效、快照有效。不得用“已填写字段数/总字段数”代替证据可靠度，也不得以模型自报 high 作为唯一门禁；对高影响/法律主体字段采用字段级政策。
 
-**Manifest 绑定：** 每份最终 Manifest 保存 `source_id`、`snapshot_fingerprint`、`profile_version`、`case_pack_version`、`model_provider/model_id`、输入来源及决策版本。输入修改后旧决策自动失效，不能在恢复时静默重判或使用过期结果。
+**Manifest 绑定：** 每份最终 Manifest 保存 `source_id`、`snapshot_fingerprint`、`profile_version`、`case_pack_version`、`model_provider/model_id`、输入来源及决策版本。输入修改后旧决策自动失效，不能在恢复时静默重判或使用过期结果。资格过滤模式下生成的 Manifest 额外保存 `policy_id`、`policy_version`、`policy_digest` 与“已发现未映射”计数（含规则分布）；不含该块的旧 Manifest 按原契约继续有效，Validator 不得以新版本 Schema 要求旧工件携带该块。
 
 ## 7. 去重、关联和 Replicant
 
@@ -270,11 +270,11 @@ AI 只能提出语义部分，原始文件身份由程序产生。结构示意�
 
 ### 10.1 首个 Prototype（本轮设计目标）
 
-1. 使用真实本地或 OneDrive 目录树扫描；对同一来源连续两次扫描，内容/路径未变的 `source_id` 集合必须一致；内容变化能使 `snapshot_fingerprint` 变化并使旧 Manifest 失效。文件移动、云端换 inode、同路径替换均有明确状态与非误合并测试。
+1. 使用真实本地或 OneDrive 目录树扫描；对同一来源连续两次扫描，内容/路径未变的 `source_id` 集合必须一致；内容变化能使 `snapshot_fingerprint` 变化并使旧 Manifest 失效。文件移动、云端换 inode、同路径替换均有明确状态与非误合并测试。资格判定不改变本条：`source_id`、missing 判定与覆盖率统计仍作用于完整清单；被排除记录不视为目录中不存在。
 2. 使用真实、可配置的 AI 模型 API 输出符合 Schema 的结构化映射；至少验证两种 Provider 的相同测试输入与 Schema 解析容错。第二种 Provider 的稳定性问题应记录，不要求两者分类结果完全一致。
 3. 同时演示 Project Archive 与独立 Vendor Library 两个 Profile；独立厂商资料不强迫填写项目。支持 PDF、DOCX、XLSX 的最小只读证据抽取和提取失败回退；其它格式后续扩展。
 4. 正确区分关键反例：空白报价模板/真实报价、商务标/独立报价、填好响应的技术表/通用技术表、项目授权/通用操作指南、通用 Datasheet/客户专用投标方案，以及项目名含“采购”但正文为投标稿。
-5. Manifest 有来源定位、字段级 Evidence、缺失项、冲突项、版本与快照信息；Validator 可以校验、拒绝不可信证据和导出结果。Mapper 实际无法触达任何 MCP 写入工具。
+5. Manifest 有来源定位、字段级 Evidence、缺失项、冲突项、版本与快照信息；Validator 可以校验、拒绝不可信证据和导出结果。Mapper 实际无法触达任何 MCP 写入工具。资格过滤模式下，报告额外单列“已发现未进入 Mapping 的记录数”及其原因/规则分布，不得以零值默认省略。
 6. **独立评测集**：目标 ≥150 条，经可核验正文/业务证据人工或独立审核建立金标准，六类/主要反例场景各争取 ≥10 条；不存在足够合格资料时明确报告未达样本量，**禁止宣称通过该项类别准确率验收**，不可把 78 条有限正文核验直接当成完整金标准。Few-shot/评测集按来源 UUID、文件来源簇和 SHA-256（存在时）排除交集与近重复；按项目簇隔离更优。
 7. **指标与判定公式**：`coverage = auto_mapped / total`；`precision_auto = correct_auto_mapped / auto_mapped`；`high_confidence_error_rate = incorrect_high_confidence / high_confidence_predictions`（不能误称普通错误率为过度自信率）；`field_precision = correct_nonnull_field_predictions / evaluated_nonnull_field_predictions`，另外逐字段记录漏填；`hold_rate = held / total`。展示混淆矩阵、每 Profile/类别分层样本数与可信区间/不确定性。Prototype 报告必须同时给出业务接受阈值建议和实际测量；在 Owner 未批准阈值前不得宣称最终质量 Gate 通过。
 8. **只读 MCP 验证**：在隔离测试数据库进行 read-only 查询，对照 Record Identity、既存记录与同项目重复候选；模拟三态决策，但 **Prototype 全程零写入 DEVONthink**。不能把“零写入”理解为“禁止查询”。
@@ -323,3 +323,17 @@ AI 只能提出语义部分，原始文件身份由程序产生。结构示意�
 - 本 SPEC 明确的 Profile、字段语义、AI 执行权限、共享与去重政策如需改变，必须修订 SPEC；一般模块划分、库选型和迭代顺序由后续 PLAN 决定。
 
 **下一道明确审批边界：** SPEC 已冻结；Agent 现可编制并提交候选 PLAN 供 Owner 集中复核。PLAN 经复核且获得 Owner 另一次明确授权后，才可建立 GitHub Project Roadmap、Issues 并进入产品开发。
+
+## 13. 版本历史与迁移记录
+
+| 版本 | 日期 | 变更 | 依据 |
+| --- | --- | --- | --- |
+| v0.1.1 | 2026-11-10 | 首版冻结 | Owner 冻结确认 |
+| v0.1.2 | 2026-11-16 | Owner 正式批准（APPROVE A–E）后修订四条款：§6.1-1 输入双模式与摘要绑定；§6.3 Manifest 绑定可选资格块；§10.1-1 不变量加固；§10.1-5 已发现未映射单列验收；新增本节 | ROADMAP 授权历史 2026-11-16；`docs/ELIGIBILITY-CONTRACT-DELTA.md` |
+
+迁移记录（v0.1.1 → v0.1.2）：
+
+- 无数据迁移、无 Schema 原位改写。`schema_version=1.0` 的 Manifest、既有 Context revision 与 SQLite 记录全部按原契约继续有效；Validator 不得对旧工件要求新块。
+- 资格扩展仅以**可选**方式引入：`schema_version=1.1` 新增可选 `eligibility` 块（PLAN §7.1）。
+- 完整清单模式下 `inputDigest` 计算与 v0.1.1 逐字节一致，这是兼容模式的机械含义。
+- 本修订不授权：生产默认过滤切换、I1 Executor 写入前重判、DEVONthink 写入、真实 Provider 外发；各自需要单独批准。
