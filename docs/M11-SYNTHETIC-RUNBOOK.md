@@ -22,13 +22,13 @@ cd <repo>
 swift run FormaAcceptance m11 --output ~/m11-synthetic-report.json
 ```
 
-若该命令在本机尚不存在（夹具 PR 未合并），按 §5 的手工替代步骤执行，并在报告中写明使用了手工路径。
+若该命令不存在（旧版检出），先 `git pull` 到含 `Sources/FormaAcceptance` 的提交；仍不可用时按 §5 的手工替代步骤执行，并在报告中写明使用了手工路径。
 
 命令结束后：
 
 - 标准输出打印逐案例 `PASS` / `FAIL` / `NOT_VERIFIED` 与策略 digest；
 - `~/m11-synthetic-report.json` 为完整证据（含 `policy_digest`、`decisions_digest`、逐案例细节）；
-- 退出码 `0` = 全部 PASS；`1` = 至少一个 FAIL；`2` = 参数/环境错误。
+- 退出码 `0` = 全部 PASS；`1` = 至少一个 FAIL；`3` = 无 FAIL 但存在 `NOT_VERIFIED`（例如宿主无 `git`）；`2` = 参数/环境错误。
 
 ## 4. 案例矩阵与期望
 
