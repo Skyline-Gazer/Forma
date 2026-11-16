@@ -12,10 +12,26 @@ extension SourceWorkspace {
     /// Builds the two-phase context for a scope and stores it as a new revision
     /// only when the inputs actually changed. An unchanged rescan therefore
     /// reuses the stored revision instead of minting a new one.
+    ///
+    /// `eligibility` switches the *input* of the context to the eligible
+    /// subset (SPEC v0.1.2 §6.1-1). It changes nothing about the scan: the
+    /// listing, the source identities, the missing decisions and the coverage
+    /// statistics stay exactly as the scan reported them, because they are
+    /// computed before this method is called. What changes is which records
+    /// the project context is built from, and the fingerprint that identifies
+    /// the revision — which now also carries the policy identity and the
+    /// decision fingerprint, so a rule change produces a new revision instead
+    /// of silently reusing the old one.
+    ///
+    /// Passing `nil` is the compatibility path: full-listing mode, byte for
+    /// byte the context this method built before eligibility existed.
     public func buildContext(scope: SourceScope, profile: MappingProfile,
-                             history: [ContextHistoryMatch] = []) async throws -> ProjectContext {
+                             history: [ContextHistoryMatch] = [],
+                             eligibility: EligibilitySelection? = nil) async throws -> ProjectContext {
         let listing = try listing(scope)
-        let digest = ContextBuilder.inputDigest(scopeID: scope.id, profile: profile, entries: listing.entries)
+        let entries = eligibility?.entries ?? listing.entries
+        let digest = ContextBuilder.inputDigest(scopeID: scope.id, profile: profile, entries: entries,
+                                                eligibility: eligibility?.binding)
         if let stored = try await storedContext(scope: scope, profile: profile, inputDigest: digest) {
             return stored
         }
@@ -23,7 +39,8 @@ extension SourceWorkspace {
             try MappingStore.nextContextRevision(scopeID: scope.id, profile: profile, in: db)
         }
         let context = ContextBuilder.build(
-            ContextBuilderInput(scopeID: scope.id, profile: profile, entries: listing.entries, history: history),
+            ContextBuilderInput(scopeID: scope.id, profile: profile, entries: entries, history: history,
+                                eligibility: eligibility?.binding),
             revision: revision
         )
         try await store.database.write { db in
