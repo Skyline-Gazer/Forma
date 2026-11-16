@@ -39,8 +39,9 @@ struct ContextEligibilityBindingTests {
                                             evidenceStrength: .contextual,
                                             explanationCode: "default_mapping_candidate",
                                             all: [EligibilityPredicate(entryStates: ["present"])])]
+        let selected = try profile()
         return EligibilityViewBuilder.build(EligibilityViewRequest(
-            listing: listing(entries), profile: try profile(),
+            listing: listing(entries), profile: selected,
             policy: EligibilityPolicy(policyVersion: EligibilityPolicy.currentVersion, rules: all),
             kind: .simulated))
     }
@@ -56,28 +57,32 @@ struct ContextEligibilityBindingTests {
     func fullListFormulaIsByteIdentical() throws {
         let entries = [entry("Project/公告.pdf"), entry("Project/2024/报价.docx"),
                        entry("Vendor/datasheet.xlsx", snapshot: String(repeating: "b", count: 64))]
+        let selected = try profile()
         // Independent reimplementation of the original function: header plus one
         // line per entry sorted by normalized path. If this ever stops matching
         // the production call, full-list contexts changed meaning.
         var hasher = SHA256()
-        hasher.update(data: Data("context.v1|\(scopeID.sourceKey)|\(try profile().versionKey)\n".utf8))
+        hasher.update(data: Data("context.v1|\(scopeID.sourceKey)|\(selected.versionKey)\n".utf8))
         for item in entries.sorted(by: { $0.normalizedRelativePath < $1.normalizedRelativePath }) {
             hasher.update(data: Data("\(item.id.sourceKey)|\(item.normalizedRelativePath)|\(item.state.rawValue)\n".utf8))
         }
         let legacy = hasher.finalize().map { String(format: "%02x", $0) }.joined()
-        #expect(ContextBuilder.inputDigest(scopeID: scopeID, profile: try profile(), entries: entries) == legacy)
-        #expect(ContextBuilder.inputDigest(scopeID: scopeID, profile: try profile(), entries: entries,
-                                           eligibility: nil) == legacy)
+        let produced = ContextBuilder.inputDigest(scopeID: scopeID, profile: selected, entries: entries)
+        let producedNil = ContextBuilder.inputDigest(scopeID: scopeID, profile: selected, entries: entries,
+                                                     eligibility: nil)
+        #expect(produced == legacy)
+        #expect(producedNil == legacy)
     }
 
     @Test("build() without a binding stores the v1 digest and is revision-reusable")
     func buildKeepsLegacyDigest() throws {
         let entries = [entry("Project/公告.pdf")]
+        let selected = try profile()
         let context = ContextBuilder.build(
-            ContextBuilderInput(scopeID: scopeID, profile: try profile(), entries: entries),
+            ContextBuilderInput(scopeID: scopeID, profile: selected, entries: entries),
             revision: 1, builtAt: Date(timeIntervalSince1970: 1_800_000_000))
-        #expect(context.inputDigest == ContextBuilder.inputDigest(
-            scopeID: scopeID, profile: try profile(), entries: entries))
+        let expected = ContextBuilder.inputDigest(scopeID: scopeID, profile: selected, entries: entries)
+        #expect(context.inputDigest == expected)
     }
 
     // MARK: - The binding
@@ -85,11 +90,12 @@ struct ContextEligibilityBindingTests {
     @Test("a binding changes the digest and every one of its fields is load-bearing")
     func bindingFieldsMatter() throws {
         let entries = [entry("Project/公告.pdf"), entry("Project/报价.docx")]
-        let base = try ContextBuilder.inputDigest(scopeID: scopeID, profile: profile(), entries: entries)
-        let bound = try ContextBuilder.inputDigest(scopeID: scopeID, profile: profile(), entries: entries,
-                                                   eligibility: binding)
+        let selected = try profile()
+        let base = ContextBuilder.inputDigest(scopeID: scopeID, profile: selected, entries: entries)
+        let bound = ContextBuilder.inputDigest(scopeID: scopeID, profile: selected, entries: entries,
+                                               eligibility: binding)
         #expect(bound != base, "filtered mode must not collide with full-list mode")
-        for altered in [
+        let alteredBindings = [
             ContextEligibilityBinding(policyID: "other", policyVersion: binding.policyVersion,
                                       policyDigest: binding.policyDigest, decisionsDigest: binding.decisionsDigest),
             ContextEligibilityBinding(policyID: binding.policyID, policyVersion: "eligibility.v3",
@@ -98,9 +104,10 @@ struct ContextEligibilityBindingTests {
                                       policyDigest: String(repeating: "3", count: 64), decisionsDigest: binding.decisionsDigest),
             ContextEligibilityBinding(policyID: binding.policyID, policyVersion: binding.policyVersion,
                                       policyDigest: binding.policyDigest, decisionsDigest: String(repeating: "4", count: 64)),
-        ] {
-            let digest = try ContextBuilder.inputDigest(scopeID: scopeID, profile: profile(),
-                                                        entries: entries, eligibility: altered)
+        ]
+        for altered in alteredBindings {
+            let digest = ContextBuilder.inputDigest(scopeID: scopeID, profile: selected,
+                                                    entries: entries, eligibility: altered)
             #expect(digest != bound, "binding field did not change the digest: \(altered)")
         }
     }
@@ -108,12 +115,14 @@ struct ContextEligibilityBindingTests {
     @Test("build() with a binding feeds the revision identity")
     func buildUsesBinding() throws {
         let candidates = [entry("Project/公告.pdf")]
+        let selected = try profile()
         let bound = ContextBuilder.build(
-            ContextBuilderInput(scopeID: scopeID, profile: try profile(), entries: candidates,
+            ContextBuilderInput(scopeID: scopeID, profile: selected, entries: candidates,
                                 eligibility: binding),
             revision: 2, builtAt: Date(timeIntervalSince1970: 1_800_000_000))
-        #expect(bound.inputDigest == try ContextBuilder.inputDigest(
-            scopeID: scopeID, profile: profile(), entries: candidates, eligibility: binding))
+        let expected = ContextBuilder.inputDigest(scopeID: scopeID, profile: selected,
+                                                  entries: candidates, eligibility: binding)
+        #expect(bound.inputDigest == expected)
     }
 
     // MARK: - decisionsDigest
@@ -126,10 +135,11 @@ struct ContextEligibilityBindingTests {
         let b1 = entry("Beta/two.pdf", id: second)
         let a2 = entry("Gamma/three.pdf", id: first)   // same identity, different path
         let b2 = entry("Delta/four.pdf", id: second)
-        #expect(try view([a1, b1]).decisionsDigest() == try view([a1, b1]).decisionsDigest())
-        #expect(try view([a1, b1]).decisionsDigest() == try view([b1, a1]).decisionsDigest())
-        #expect(try view([a1, b1]).decisionsDigest() == try view([a2, b2]).decisionsDigest(),
-                "renaming alone must not change the decisions fingerprint")
+        let ordered = try view([a1, b1]).decisionsDigest()
+        let reordered = try view([b1, a1]).decisionsDigest()
+        let renamed = try view([a2, b2]).decisionsDigest()
+        #expect(ordered == reordered)
+        #expect(ordered == renamed, "renaming alone must not change the decisions fingerprint")
     }
 
     @Test("the decisions fingerprint reacts to decisions, snapshots and policy identity")
@@ -140,11 +150,14 @@ struct ContextEligibilityBindingTests {
                                     evidenceStrength: .strong, explanationCode: "technical_noise",
                                     all: [EligibilityPredicate(basenames: ["公告.pdf"])])
         // Same basename, unknown protection facts => include flips to review.
-        #expect(try view([entryOne], rules: [noise]).decisionsDigest() != baseline)
-        #expect(try view([entry("Project/公告.pdf", snapshot: String(repeating: "c", count: 64))])
-            .decisionsDigest() != baseline, "a snapshot change must move the fingerprint")
+        let flipped = try view([entryOne], rules: [noise]).decisionsDigest()
+        #expect(flipped != baseline)
+        let resnapshot = entry("Project/公告.pdf", snapshot: String(repeating: "c", count: 64))
+        let moved = try view([resnapshot]).decisionsDigest()
+        #expect(moved != baseline, "a snapshot change must move the fingerprint")
+        let selected = try profile()
         let changedPolicy = EligibilityViewBuilder.build(EligibilityViewRequest(
-            listing: listing([entryOne]), profile: try profile(),
+            listing: listing([entryOne]), profile: selected,
             policy: EligibilityPolicy(policyVersion: "eligibility.v3",
                                       rules: [EligibilityRule(ruleID: "default", priority: 0, decision: .include,
                                                               evidenceStrength: .contextual,
@@ -161,9 +174,6 @@ struct ContextEligibilityBindingTests {
         #expect(stamped.policyVersion == built.policyVersion)
         #expect(stamped.policyDigest == built.policyDigest)
         #expect(stamped.decisionsDigest == built.decisionsDigest())
-        // The digest binds the candidate subset's identity, not paths: candidates with the same
-        // decisions but renamed files keep one decisions fingerprint while the context.v2 entry
-        // lines change — together they cover both contract obligations.
         #expect(stamped.decisionsDigest.count == 64)
     }
 }
