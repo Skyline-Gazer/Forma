@@ -176,18 +176,31 @@ public struct EligibilityView: Sendable, Equatable {
     }
 
     /// The fingerprint SPEC v0.1.2 §6.1-1 requires in the context digest for
-    /// eligibility-filtered mode: one line per record over stable source IDs,
-    /// snapshot fingerprints, decisions, deciding rules and override states,
-    /// sorted by ID. Paths, names and content never enter it — the digest
-    /// changes exactly when a decision changes, not when a file is renamed
-    /// (renames already change the entry lines of the context digest).
+    /// eligibility-filtered mode: one line per *candidate* over its stable
+    /// source ID, decision, deciding rule and override state, sorted by ID.
+    ///
+    /// What it deliberately leaves out is as important as what it keeps:
+    ///
+    /// - Paths and names, because the entry lines of the context digest
+    ///   already carry the membership of the candidates.
+    /// - Snapshot fingerprints, because content changes have never rebuilt a
+    ///   context (a file's bytes invalidate its own manifest entry). A
+    ///   snapshot change must not invalidate the whole workspace either.
+    /// - Records that are not candidates, because their judgement does not
+    ///   change what this context contains. They are reported by the
+    ///   eligibility export instead.
+    ///
+    /// The result therefore moves exactly when the mapping input moves: a
+    /// candidate becomes a non-candidate (the candidate set changes), a
+    /// candidate is decided by a different rule, an override is applied, or
+    /// the policy itself changes (the header carries version and digest).
     public func decisionsDigest() -> String {
         var hasher = SHA256()
         hasher.update(data: Data("eligibility-decisions.v1|\(policyVersion)|\(policyDigest)\n".utf8))
-        for item in entries.sorted(by: { $0.sourceID.uuidString < $1.sourceID.uuidString }) {
-            let line = "\(item.sourceID.uuidString)|\(item.entry.snapshotFingerprint)|"
-                + "\(item.decision.rawValue)|\(item.decidedByRuleID ?? "")|"
-                + "\(item.overrideState.rawValue)\n"
+        for item in entries.filter(\.isMappingCandidate)
+            .sorted(by: { $0.sourceID.uuidString < $1.sourceID.uuidString }) {
+            let line = "\(item.sourceID.uuidString)|\(item.decision.rawValue)|"
+                + "\(item.decidedByRuleID ?? "")|\(item.overrideState.rawValue)\n"
             hasher.update(data: Data(line.utf8))
         }
         return hasher.finalize().hexadecimalDigest

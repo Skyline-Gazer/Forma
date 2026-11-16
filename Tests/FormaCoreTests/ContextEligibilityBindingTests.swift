@@ -142,19 +142,22 @@ struct ContextEligibilityBindingTests {
         #expect(ordered == renamed, "renaming alone must not change the decisions fingerprint")
     }
 
-    @Test("the decisions fingerprint reacts to decisions, snapshots and policy identity")
+    @Test("the decisions fingerprint reacts to decisions and policy identity, not to content")
     func decisionsDigestIsSensitive() throws {
         let entryOne = entry("Project/公告.pdf")
         let baseline = try view([entryOne]).decisionsDigest()
         let noise = EligibilityRule(ruleID: "noise", priority: 5, decision: .exclude,
                                     evidenceStrength: .strong, explanationCode: "technical_noise",
                                     all: [EligibilityPredicate(basenames: ["公告.pdf"])])
-        // Same basename, unknown protection facts => include flips to review.
+        // Same basename, unknown protection facts => include flips to review,
+        // so the record leaves the candidate set and the fingerprint moves.
         let flipped = try view([entryOne], rules: [noise]).decisionsDigest()
         #expect(flipped != baseline)
+        // Content changes have never rebuilt a context; a snapshot change
+        // must not invalidate the whole workspace either.
         let resnapshot = entry("Project/公告.pdf", snapshot: String(repeating: "c", count: 64))
         let moved = try view([resnapshot]).decisionsDigest()
-        #expect(moved != baseline, "a snapshot change must move the fingerprint")
+        #expect(moved == baseline, "a content change must not move the fingerprint")
         let selected = try profile()
         let changedPolicy = EligibilityViewBuilder.build(EligibilityViewRequest(
             listing: listing([entryOne]), profile: selected,
