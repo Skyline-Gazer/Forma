@@ -46,6 +46,9 @@ let package = Package(
         ]),
         .executableTarget(name: "FormaBenchmark", dependencies: ["FormaCore"]),
         .executableTarget(name: "FormaResourceCheck", dependencies: ["FormaCore"]),
+        // M11 synthetic acceptance: runs the scan/probe/classifier/manifest
+        // pipeline against a temporary tree and prints a case-by-case report.
+        .executableTarget(name: "FormaAcceptance", dependencies: ["FormaCore"]),
         .testTarget(name: "FormaCoreTests", dependencies: [
             "FormaCore",
             .product(name: "ZIPFoundation", package: "ZIPFoundation"),
