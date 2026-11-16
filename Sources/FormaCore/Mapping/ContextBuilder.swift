@@ -103,9 +103,10 @@ public enum ContextBuilder {
                                    eligibility: ContextEligibilityBinding? = nil) -> String {
         var hasher = SHA256()
         if let eligibility {
-            hasher.update(data: Data("context.v2|\(scopeID.sourceKey)|\(profile.versionKey)|"
-                                     + "\(eligibility.policyID)|\(eligibility.policyVersion)|"
-                                     + "\(eligibility.policyDigest)|\(eligibility.decisionsDigest)\n".utf8))
+            let header = "context.v2|\(scopeID.sourceKey)|\(profile.versionKey)|"
+                + "\(eligibility.policyID)|\(eligibility.policyVersion)|"
+                + "\(eligibility.policyDigest)|\(eligibility.decisionsDigest)\n"
+            hasher.update(data: Data(header.utf8))
         } else {
             hasher.update(data: Data("context.v1|\(scopeID.sourceKey)|\(profile.versionKey)\n".utf8))
         }

@@ -185,9 +185,10 @@ public struct EligibilityView: Sendable, Equatable {
         var hasher = SHA256()
         hasher.update(data: Data("eligibility-decisions.v1|\(policyVersion)|\(policyDigest)\n".utf8))
         for item in entries.sorted(by: { $0.sourceID.uuidString < $1.sourceID.uuidString }) {
-            hasher.update(data: Data("\(item.sourceID.uuidString)|\(item.entry.snapshotFingerprint)|"
-                                     + "\(item.decision.rawValue)|\(item.decidedByRuleID ?? "")|"
-                                     + "\(item.overrideState.rawValue)\n".utf8))
+            let line = "\(item.sourceID.uuidString)|\(item.entry.snapshotFingerprint)|"
+                + "\(item.decision.rawValue)|\(item.decidedByRuleID ?? "")|"
+                + "\(item.overrideState.rawValue)\n"
+            hasher.update(data: Data(line.utf8))
         }
         return hasher.finalize().hexadecimalDigest
     }
