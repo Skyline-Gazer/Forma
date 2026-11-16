@@ -328,7 +328,7 @@ actor MCPStdio {
             Darwin.open($0, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR)
         }
         guard descriptor >= 0 else { throw FormaError.unavailable }
-        sendEvents = FileHandle(fileDescriptor: descriptor, closeOnDeinit: true)
+        sendEvents = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
     }
 
     private func recordSend(object: [String: MCPValue], attempted: Int, written: Int) {
