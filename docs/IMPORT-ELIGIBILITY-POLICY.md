@@ -1,6 +1,6 @@
 # Forma 导入资格策略（IMPORT-ELIGIBILITY-POLICY）
 
-> 状态：P3-A 切片 2e + 2f，Issue #51 的**离线**部分。冻结 SPEC v0.1.1 未改；生产扫描、Context 与 Mapping 的默认输入行为未改；I1 写入未开发。完成前静态审计见 [IMPORT-ELIGIBILITY-LICENSE-AUDIT](IMPORT-ELIGIBILITY-LICENSE-AUDIT.md)；§10 的正式契约差异提案见 [ELIGIBILITY-CONTRACT-DELTA](ELIGIBILITY-CONTRACT-DELTA.md)（PENDING OWNER）。
+> 状态：P3-A 切片 2e + 2f，Issue #51 的**离线**部分。SPEC v0.1.1→v0.1.2、PLAN v0.1→v0.2 契约修订已获 Owner 正式批准（A–E，2026-11-16，见 ROADMAP 授权历史）；在此之前生产扫描、Context 与 Mapping 的默认输入行为未改；I1 写入未开发。完成前静态审计见 [IMPORT-ELIGIBILITY-LICENSE-AUDIT](IMPORT-ELIGIBILITY-LICENSE-AUDIT.md)；契约差异提案与其批准记录见 [ELIGIBILITY-CONTRACT-DELTA](ELIGIBILITY-CONTRACT-DELTA.md)（APPROVED）。
 > 2e 交付纯规则引擎、资格视图、dry-run、统计与测试。2f 追加只读事实探测（§4.1）：文件元数据、`CACHEDIR.TAG` 与 Git 索引，全部只读。
 > 仍然没有 Provider 调用、没有 DEVONthink 写入、没有 OneDrive hydration，也没有把任何路径写进导出。
 
@@ -209,7 +209,7 @@ flowchart LR
 - Mole 的"最近 7 天默认不勾选"是删除风险控制，不是归档价值判据，**未迁移**。
 - 署名不能代替许可证授权；若未来希望复用其代码，须先取得权利人另行商业许可。
 
-## 10. Integration Contract Delta（**未实施，需 Owner 批准**）
+## 10. Integration Contract Delta（**Owner 已批准 A–E，2026-11-16；契约文本已修订，代码按切片 1–4 实施**）
 
 未来正式接入点是 `SourceListing → EligibilityView → ContextBuilder → MappingEngine`。本轮**只**提供 `EligibilityView.mappingCandidates()` 这个纯函数，生产 `buildContext` / `MappingEngine.run` 的默认输入未变。接入前必须先回答：
 
@@ -239,5 +239,5 @@ flowchart LR
 - 真实目录上的 Git tracked / 嵌套仓库 / `CACHEDIR.TAG` 现场复核（探测代码本身已由 2f §4.1 交付并有合成与临时目录级测试；现场行为属 M10/M11）。
 - 真实 OneDrive dataless 与权限失败现场验证（M4 / M10）。
 - 真实业务样本的误排除率对照（P3-B 外部前置条件）。
-- 生产 `buildContext`/`MappingEngine` 过滤接线（契约提案见 [ELIGIBILITY-CONTRACT-DELTA](ELIGIBILITY-CONTRACT-DELTA.md)，等待 Owner）。
+- 生产 `buildContext`/`MappingEngine` 过滤接线（契约已批准并完成修订，实施按 [ELIGIBILITY-CONTRACT-DELTA](ELIGIBILITY-CONTRACT-DELTA.md) §5 切片顺序进行）。
 - macOS 现场：真实目录上的策略统计与人工复核工作流（M11）。

@@ -1,6 +1,6 @@
 # Forma 技术实施计划（候选）
 
-版本：PLAN v0.1；基线：[SPEC v0.1.1 FROZEN](SPEC.md)；日期：2026-11-10。状态：提交 Owner 集中架构复核，**不代表开发、建 Project 或写入 DEVONthink 已获授权**。
+版本：PLAN v0.2；基线：[SPEC v0.1.2 FROZEN](SPEC.md)；日期：2026-11-16（v0.1：2026-11-10）。状态：契约与 SPEC v0.1.2 对齐（§6.1、§7.1、模块表、§16 修订史）；开发授权以 ROADMAP 授权历史为准。
 
 本轮只交付本文件。冻结 SPEC、应用代码、工程、CI、GitHub Issues/Project/Milestones 和生产档案均不改动。PLAN 通过复核后，仍须 Owner 另行明确授权才能建立 Roadmap、进入实施。下文所有运行指标均为待实施的验收要求，不能解读为已取得实测结果。
 
@@ -71,9 +71,9 @@ flowchart TD
 |---|---|---|
 | SourceAccess / Scanner | 授权目录 → 注册来源、完整扫描清单、快照 | 原生枚举及资源属性；不强制 hydration/全文/SHA；仅程序分配身份 |
 | EvidenceExtractor | 按需请求 → 定位到页/字符/单元格的证据片段 | 限页数、单元格数、解压大小和并发；明确未读、加密、损坏、占位未就绪 |
-| ContextBuilder | 全清单、目录邻近、文件簇 → 项目候选上下文 | 先发现来源项目再对齐只读历史；不假定固定层级，不把历史名称列表当真值 |
+| ContextBuilder | 全清单，或资格过滤后的 INCLUDE 子集、目录邻近、文件簇 → 项目候选上下文 | 先发现来源项目再对齐只读历史；不假定固定层级，不把历史名称列表当真值；过滤模式下 `inputDigest` 必须绑定 `policy_digest` 与决策摘要，完整清单模式的摘要计算与 v0.1 一致 |
 | AIProvider | 受控消息、Schema → 原始结构化响应、usage | 不持有文件写权限和 MCP 工具；实现差异在边界消化 |
-| MappingEngine | Profile、案例、上下文、证据 → MappingProposal | 项目级映射、冲突、未知、一次有界复判；不产生系统身份或执行许可 |
+| MappingEngine | Profile、案例、上下文、证据 → MappingProposal | 项目级映射、冲突、未知、一次有界复判；不产生系统身份或执行许可；资格过滤只改变其输入子集，不改变 Proposal/Manifest 的身份与验证规则 |
 | ManifestValidator | Proposal + 程序事实 → ManifestRevision | 语法、字段、证据、Profile、权限、快照、自动执行资格分层验证 |
 | Profile / CasePack | 版本化 JSON → 可复现政策与案例 | 两 Profile 分别演进；修改版本使相关验证过期 |
 | TaskStore | 领域状态 → SQLite 事务/查询 | 持久化重扫、取消、崩溃恢复、修正记录；不缓存全库正文 |
@@ -184,7 +184,7 @@ Profile JSON 至少包含 id/version、目标库绑定、Group 模板、类别/�
 
 ### 6.1 项目级上下文与调用次序
 
-1. 离线扫描完整清单，保留全部条目；按目录邻近性、命名实体、时间和文件簇构建候选。无法确定边界可存在多个候选；不以固定第 N 层作为项目。
+1. 离线扫描完整清单，保留全部条目；扫描、身份与覆盖统计始终作用于完整清单。按目录邻近性、命名实体、时间和文件簇构建候选。Context/Mapping 输入支持完整清单模式（当前默认）与资格过滤模式（INCLUDE 子集，显式启用；摘要绑定与默认切换门见 SPEC §6.1、§13）。无法确定边界可存在多个候选；不以固定第 N 层作为项目。
 2. 先进行批次/项目识别，输出候选成员关系和理由；可查询隔离 DT 的项目、Group、相关记录作为对照，历史匹配结果标明来源和匹配强度。
 3. 向模型发送 Profile 字段规则、20–30 条精选 Few-shot、项目上下文及该批文件清单。大型目录按候选项目切分；超出 token 上限时只分文件子批，共享同一已版本化项目上下文，并合并后检测成员冲突，不截断遗漏文件。
 4. 第一轮只提出 MappingProposal。Validator 标出缺证字段，程序按明确预算读取 PDF/DOCX/XLSX 证据；需要时只读查询相关历史。进行一次针对性复判，仍不足则 null/hold。不得无限循环调用模型。
@@ -218,7 +218,7 @@ Profile JSON 至少包含 id/version、目标库绑定、Group 模板、类别/�
 - ManifestEnvelope：程序填入 schema_version、manifest_id/revision、task_id、source_root_id、各 source_id/snapshot_fingerprint、profile_id/version、case_pack_version、provider/model_id、Prompt/提取器/脱敏版本、输入清单/上下文摘要、decision_version 和创建时间。
 - ManifestEntry：程序绑定 source_relative_path、目标数据库/Group 的符号意图与已核实绑定、12 metadata、用途/文档类型、associations、字段 evidence/conflicts、state、invalidated_reason、eligible_for_auto_execution 和验证报告。SHA/DT UUID 如存在仅来自系统事实。
 
-正式工件用版本化 JSON Schema，关闭非预期字段；明确 null/缺省/空字符串差异，枚举与字符串格式，source_id 引用唯一性和全清单覆盖由业务 Validator 补充。首版 `schema_version=1.0`；兼容迁移需新修订并再验证，不能将旧版本直接交 Executor。公开文档不放真实 Manifest。
+正式工件用版本化 JSON Schema，关闭非预期字段；明确 null/缺省/空字符串差异，枚举与字符串格式，source_id 引用唯一性和全清单覆盖由业务 Validator 补充。首版 `schema_version=1.0`；资格过滤产生的可选 `eligibility` 块以 `schema_version=1.1` 引入，Validator 同时接受 1.0 与 1.1，且不得对 1.0 工件要求该块。兼容迁移需新修订并再验证，不能将旧版本直接交 Executor。公开文档不放真实 Manifest。
 
 ### 7.2 Evidence 契约
 
@@ -241,7 +241,7 @@ invalidated 是修订有效性标志，保留原 decision state 供审计；不�
 
 导出包含 JSON Manifest、验证报告、缺失/冲突及版本摘要；用户可另选脱敏可分享版。离线查看和校验已保存工件不需要云端 Provider。
 
-> 实现状态（2026-11-13，P3-A 切片 2e，**不改变本节需求**）：`ImportEligibilityPolicy` 作为独立、版本化的规则层落地，输出 `INCLUDE` / `EXCLUDE` / `REVIEW` / `DEFER` 四态，严格区分 `Discovered != Mappable != ImportEligible`。它只消费显式事实（Git tracked、缓存标记、嵌套仓库、业务证据、源码/部署配置、可重建产物、扫描完整性），不改变 `SourceListing`、`source_id`、missing 判定、Context revision 或 Manifest；`ManifestValidator.computeEligibility` 的自动执行资格语义未改。生产 `buildContext` / `MappingEngine.run` 的默认输入**未接线**，`mappingCandidates()` 仅为纯函数投影；接入需按 `docs/IMPORT-ELIGIBILITY-POLICY.md` §10 的 Contract Delta 另行批准。真实 Git/缓存探测、真实业务误排除率对照与 I1 Executor 仍属后续阶段。
+> 实现状态（2026-11-13 落地 2e；2026-11-16 契约批准更新，**不改变本节需求**）：`ImportEligibilityPolicy` 作为独立、版本化的规则层落地，输出 `INCLUDE` / `EXCLUDE` / `REVIEW` / `DEFER` 四态，严格区分 `Discovered != Mappable != ImportEligible`。它只消费显式事实（Git tracked、缓存标记、嵌套仓库、业务证据、源码/部署配置、可重建产物、扫描完整性），不改变 `SourceListing`、`source_id`、missing 判定、Context revision 或 Manifest；`ManifestValidator.computeEligibility` 的自动执行资格语义未改。Contract Delta 提案已获 Owner 正式批准（APPROVE A–E，2026-11-16）并完成契约修订（SPEC v0.1.2；PLAN v0.2），生产接线按 `docs/ELIGIBILITY-CONTRACT-DELTA.md` §5 切片 1–4 实施中；`mappingCandidates()` 在接线完成前仍为纯函数投影。默认仍为完整清单模式，切换须满足全链路实现 + macOS 真实目录验证 + Owner 再确认。真实目录探测现场复核、真实业务误排除率对照与 I1 Executor（切片 5，未授权）仍属后续阶段。
 
 > 实现状态（2026-11-13，P3-A 切片 2f，**不改变本节需求**）：资格判定所需的三项结构事实改由只读探测建立——`EligibilityFactCollector`（`EligibilityFactProbe.swift`）读取文件元数据、祖先 `CACHEDIR.TAG` 与授权根自身的 Git 索引，全部经 `SourceRootAccess` 的逐段 `O_NOFOLLOW` 打开，`GIT_CEILING_DIRECTORIES` 固定为授权根，**不读取授权根之外的任何目录**。策略版本升为 `eligibility.v2`：每条 `EXCLUDE` 声明 `protection_facts`，未知即降级为 `REVIEW`（`protection_fact_unknown`）；授权根不是仓库顶层、仓库顶层在根之外、符号链接、超大标记、读取期间元数据变化、超时与取消分别报告为独立状态，绝不折算成"没有"。探测不推断业务证据与文件内容，不写源目录、不写库、不调用 Provider；macOS 文件系统、APFS 与 OneDrive 行为仍属现场验证。契约与已知限制见 `docs/IMPORT-ELIGIBILITY-POLICY.md` §4.1 / §4.2。
 
@@ -497,3 +497,12 @@ SQLite 丢失时先导入本地导出账本并与真实 DT 对账；没有账本
 | SPEC §12、PLAN_REQUEST交付与禁止项 | §1/2/13/14；单一候选PLAN/PR、不改SPEC、不建事项、不开发、不泄露资料 |
 
 本 PLAN 的批准对象是实施顺序与契约；实际能力、质量和费用需要按阶段产生证据。未经实测的事项以 §12 的状态为准。
+
+## 16. 版本历史与迁移记录
+
+| 版本 | 日期 | 变更 | 依据 |
+| --- | --- | --- | --- |
+| v0.1 | 2026-11-10 | 候选 PLAN，提交 Owner 集中复核 | PLAN PR #1 merged |
+| v0.2 | 2026-11-16 | 对齐 SPEC v0.1.2：§6.1-1 输入双模式；§7.1 `schema_version=1.1` 可选 eligibility 块与 Validator 双版本兼容；模块表 ContextBuilder/MappingEngine 注记；§6.1 实现状态更新为"契约已批准，切片 1–4 实施中"；新增本节 | `docs/ELIGIBILITY-CONTRACT-DELTA.md`（APPROVED A–E）；ROADMAP 授权历史 2026-11-16 |
+
+迁移：本次 PLAN 修订不改变任何已实现行为；实现按切片独立 PR 落地，每片以 macOS CI 与兼容性测试为验收。旧工件兼容规则见 SPEC §13。
