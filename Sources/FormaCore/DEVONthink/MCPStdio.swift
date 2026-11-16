@@ -57,10 +57,49 @@ struct MCPConfiguration: Sendable {
     /// exported; only a digest and lengths leave this process.
     var stderrLimit = StderrCapture.defaultLimit
 
+    /// When set, every frame written to the child's stdin is journalled here
+    /// as one JSON line per `MCPSendEvent` (opened with `O_APPEND`). No file
+    /// is created or touched when nil, which is the production default.
+    var sendEventLog: URL?
+
     static let devonThink = Self(
         executable: URL(fileURLWithPath: "/Applications/DEVONthink.app/Contents/Library/LoginItems/DEVONthink MCP.app/Contents/MacOS/DEVONthink MCP"),
         arguments: ["--stdio"]
     )
+}
+
+/// One retained fact about a frame this process wrote to the MCP child's
+/// stdin. It exists because `docs/M05-PREFLIGHT.md` §14 could not otherwise
+/// distinguish, after the fact, "the frame was fully sent and the reply timed
+/// out" from "the pipe died before anything left".
+///
+/// Only protocol metadata is retained: frame identity, byte count, timestamps
+/// and the writing pid. A JSON-RPC request frame carries a method name
+/// (`tools/call`), never a tool name, and arguments, parameter values, file
+/// paths, record contents and response bodies are never included.
+public struct MCPSendEvent: Codable, Sendable, Equatable {
+    public enum Outcome: String, Codable, Sendable {
+        /// The complete frame (including its newline delimiter) reached the child.
+        case written
+        /// `write()` returned early or with an error; the frame did not fully leave.
+        case partial
+    }
+    /// Per-transport-instance frame counter, 1-based. Cross-instance ordering
+    /// uses `pid` with `uptimeMillis` (monotone within one process), or
+    /// `epochMillis` across processes.
+    public let sequence: Int
+    /// JSON-RPC id for request frames; nil for notifications and for replies
+    /// this side sends back to the server.
+    public let requestID: Int?
+    public let method: String?
+    public let outcome: Outcome
+    /// Bytes actually written (0 when the write itself failed).
+    public let bytes: Int
+    public let epochMillis: Int64
+    public let uptimeMillis: Int64
+    /// Proves which process authored the frame — the same process that owns
+    /// the child it was sent to.
+    public let pid: Int
 }
 
 private final class MCPChild: Sendable {
@@ -176,6 +215,14 @@ actor MCPStdio {
     /// The last child's stderr summary, kept after the child is gone so a
     /// post-mortem can still say how much the peer wrote and that it was bounded.
     private var lastStderr: StderrSnapshot = .empty
+    /// Opt-in send-boundary journal (see `MCPConfiguration.sendEventLog`).
+    private var sendEvents: FileHandle?
+    private var sendSequence = 0
+    /// Journal appends that failed after the frame itself went out. A field,
+    /// not an error: the request's fate must never depend on the evidence log.
+    /// QA harnesses assert it stays 0 and treat any nonzero value as "this
+    /// run's send boundary is NOT evidence-retained".
+    private(set) var sendEventLogFailures = 0
 
     init(configuration: MCPConfiguration) {
         self.configuration = configuration
@@ -236,6 +283,7 @@ actor MCPStdio {
     func close() { close(with: .disconnected) }
 
     private func start() throws {
+        try openSendEventLog()
         let child = try MCPChild(configuration: configuration)
         self.child = child
         let output = child.output
@@ -266,7 +314,42 @@ actor MCPStdio {
             while count < 0 && errno == EINTR
             return count
         }
+        // The journal observes the write exactly as it landed: same bytes,
+        // same moment, no re-encoding of the request.
+        recordSend(object: object, attempted: bytes.count, written: written)
         guard written == bytes.count else { throw FormaError.disconnected }
+    }
+
+    /// Opens the opt-in send journal before any child exists, so a run that
+    /// asked for boundary evidence cannot silently proceed without it.
+    private func openSendEventLog() throws {
+        guard let url = configuration.sendEventLog else { return }
+        let descriptor = url.path.withCString {
+            Darwin.open($0, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR)
+        }
+        guard descriptor >= 0 else { throw FormaError.unavailable }
+        sendEvents = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+    }
+
+    private func recordSend(object: [String: MCPValue], attempted: Int, written: Int) {
+        guard sendEvents != nil else { return }
+        sendSequence += 1
+        let event = MCPSendEvent(
+            sequence: sendSequence,
+            requestID: object["id"]?.integer,
+            method: object["method"]?.string,
+            outcome: written == attempted ? .written : .partial,
+            bytes: max(written, 0),
+            epochMillis: Int64(Date().timeIntervalSince1970 * 1000),
+            uptimeMillis: Int64(DispatchTime.now().uptimeNanoseconds / 1_000_000),
+            pid: Int(getpid()))
+        do {
+            var data = try JSONEncoder().encode(event)
+            data.append(0x0a)
+            try sendEvents?.write(contentsOf: data)
+        } catch {
+            sendEventLogFailures += 1
+        }
     }
 
     private func consume(_ bytes: Data) {
@@ -348,6 +431,9 @@ actor MCPStdio {
         reader = nil
         if let child { lastStderr = child.stderr.snapshot() }
         child = nil
+        // Release the journal fd; a later reconnect reopens in append mode,
+        // so evidence from every connection of one run stays in one file.
+        sendEvents = nil
         frame = Data()
         for id in Array(pending.keys) { fail(id, with: error) }
     }

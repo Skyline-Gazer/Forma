@@ -213,7 +213,7 @@
 | 阶段 | 代码位置 | 能否作为留存证据 |
 | --- | --- | --- |
 | prepared | `ImportWriteAuthorization.permit` 授予、参数构造完成 | **能**：guard 授权计数与 `refusalCounts` |
-| request bytes written / fully framed | `MCPStdio.send` 要求 `write()` 写满整帧，否则立即 `.disconnected` | **不能**：没有事件或日志；只能由"超时而非断开"间接推断 |
+| request bytes written / fully framed | `MCPStdio.send` 要求 `write()` 写满整帧，否则立即 `.disconnected` | **能（2026-11-16 起）**：开启 `MCPConfiguration.sendEventLog` 后每帧留存一条 `MCPSendEvent`（sequence、JSON-RPC id、method、outcome、写入字节数、epoch/uptime 时间戳、pid）；未开启时仍不能 |
 | server may have executed | 帧进入管道后、响应前 | **不能** |
 | response received | `request` 返回后 | **能**：`transcript.append(tool)` 只在成功返回后追加 |
 
@@ -226,13 +226,15 @@
 - `MCPConfiguration` 是 internal，生产初始化器硬编码 `.devonThink`，没有可替换端点；**当前无法插入本地 stdio relay 而不改代码**。
 - `SIGSTOP` / `SIGKILL` 只能作用于本次自己启动的子进程（父进程归属可用 `ppid` 证明），但"施加时刻"与"帧是否已写出"无法对齐。
 
-### 14.3 具备实施条件所需的前提（未实施）
+### 14.3 具备实施条件所需的前提（2026-11-16 更新：前提 1 已落地）
 
-1. 在 `MCPStdio.send` 增加本地、脱敏、可关闭的**发送事件**（帧 id、写入字节数、时间戳）；或
-2. 提供显式端点覆盖（环境变量或注入点），运行一个只记录帧边界的本地 relay，不解析业务载荷；
-3. 任何方案都必须证明：不改变请求字节、不把业务内容落盘、进程所有权明确。
+1. 在 `MCPStdio.send` 增加本地、脱敏、可关闭的**发送事件**（帧 id、写入字节数、时间戳）；——**已实施**：`MCPSendEvent` JSONL 日志（`Sources/FormaCore/DEVONthink/MCPStdio.swift`），默认关闭；`DEVONthinkMCPWriteTransport(sourceRoot:sendEventLog:)` 与 `ImportRuntime(..., sendEventLog:)` 提供注入点，每次追加均带 `pid`。
+2. 提供显式端点覆盖（环境变量或注入点），运行一个只记录帧边界的本地 relay，不解析业务载荷；——未实施，不再作为必要条件：前提 1 已满足 §14.1 的留存要求。
+3. 任何方案都必须证明：不改变请求字节、不把业务内容落盘、进程所有权明确。——逐条对应：事件在 `write()` 返回之后记录同一字节计数，不触碰请求构造（测试断言事件 `bytes` 与帧的 canonical 编码逐字节相等）；字段白名单不含 params/result，测试断言日志文本不出现调用参数与工具名；`pid` 与子进程归属同进程，重连场景以 O_APPEND 汇入同一文件。
 
-在上述条件满足前：T02/T03 = **NOT_VERIFIED**，T04 不具备触发条件。不得以随机 sleep、PID 存活或客户端超时充当"发送成功"证据。
+在真实 macOS 运行中未开启该日志（或未留存事件）时，T02/T03 仍为 **NOT_VERIFIED**。开启日志后仍不得以随机 sleep、PID 存活或客户端超时充当"发送成功"证据；证据以 `MCPSendEvent.outcome == written` 的时间点为准。
+
+**边界仍未解除**：本项落地只补齐了工程前提；T02/T03 的执行还需要 Owner 批准方案性申请 A、准备 `Forma_M05_Sandbox`（§2 TARGET_NOT_PREPARED 未变），以及在真实 macOS 上运行。
 
 ### 14.4 预算复核
 
