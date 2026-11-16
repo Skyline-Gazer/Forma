@@ -144,7 +144,10 @@ struct ContextEligibilityBindingTests {
 
     @Test("the decisions fingerprint reacts to decisions and policy identity, not to content")
     func decisionsDigestIsSensitive() throws {
-        let entryOne = entry("Project/公告.pdf")
+        // One identity throughout: the same file before and after a content
+        // change, so the comparison is about the content and nothing else.
+        let fixed = UUID(uuidString: "00000000-0000-4000-8000-00000000A201")!
+        let entryOne = entry("Project/公告.pdf", id: fixed)
         let baseline = try view([entryOne]).decisionsDigest()
         let noise = EligibilityRule(ruleID: "noise", priority: 5, decision: .exclude,
                                     evidenceStrength: .strong, explanationCode: "technical_noise",
@@ -155,7 +158,7 @@ struct ContextEligibilityBindingTests {
         #expect(flipped != baseline)
         // Content changes have never rebuilt a context; a snapshot change
         // must not invalidate the whole workspace either.
-        let resnapshot = entry("Project/公告.pdf", snapshot: String(repeating: "c", count: 64))
+        let resnapshot = entry("Project/公告.pdf", id: fixed, snapshot: String(repeating: "c", count: 64))
         let moved = try view([resnapshot]).decisionsDigest()
         #expect(moved == baseline, "a content change must not move the fingerprint")
         let selected = try profile()
