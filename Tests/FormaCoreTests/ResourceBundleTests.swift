@@ -17,6 +17,7 @@ struct ResourceBundleTests {
         "forma-governance-cases.v1.json",
         "forma-eligibility.v1.json",
         "manifest-1.0.schema.json",
+        "manifest-1.1.schema.json",
         "proposal-1.0.schema.json",
     ]
 

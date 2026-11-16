@@ -216,6 +216,7 @@ public enum ArtifactSchemaValidator {
     private static let profileResult = Result { try ArtifactSchema.load(resource: "profile-1.0", schemaVersion: "1.0") }
     private static let proposalResult = Result { try ArtifactSchema.load(resource: "proposal-1.0", schemaVersion: "1.0") }
     private static let manifestResult = Result { try ArtifactSchema.load(resource: "manifest-1.0", schemaVersion: "1.0") }
+    private static let manifest11Result = Result { try ArtifactSchema.load(resource: "manifest-1.1", schemaVersion: "1.1") }
     private static let casePackResult = Result { try ArtifactSchema.load(resource: "casepack-1.0", schemaVersion: "1.0") }
     private static let goldRecordResult = Result { try ArtifactSchema.load(resource: "gold-record-1.0", schemaVersion: "1.0") }
     private static let goldSplitResult = Result { try ArtifactSchema.load(resource: "gold-split-1.0", schemaVersion: "1.0") }
@@ -223,7 +224,23 @@ public enum ArtifactSchemaValidator {
     public static var profile: ArtifactSchema { get throws { try profileResult.get() } }
     public static var proposal: ArtifactSchema { get throws { try proposalResult.get() } }
     public static var manifest: ArtifactSchema { get throws { try manifestResult.get() } }
+    public static var manifest11: ArtifactSchema { get throws { try manifest11Result.get() } }
     public static var casePack: ArtifactSchema { get throws { try casePackResult.get() } }
     public static var goldRecord: ArtifactSchema { get throws { try goldRecordResult.get() } }
     public static var goldSplit: ArtifactSchema { get throws { try goldSplitResult.get() } }
+
+    /// The manifest schema that matches an artifact's own version.
+    ///
+    /// A manifest is validated against the schema it declares, not against the
+    /// newest one: an artifact written before the eligibility block existed
+    /// must keep validating under 1.0, and a 1.1 artifact must not be able to
+    /// pass by pretending to be a 1.0 one. An unknown version has no schema,
+    /// so it fails as incompatible rather than being checked loosely.
+    public static func manifest(forSchemaVersion version: String) throws -> ArtifactSchema {
+        switch version {
+        case "1.0": return try manifestResult.get()
+        case "1.1": return try manifest11Result.get()
+        default: throw FormaError.incompatible
+        }
+    }
 }

@@ -106,8 +106,12 @@ public enum ManifestExport {
     /// Re-checks a written bundle without touching a provider or a source file.
     public static func revalidate(at url: URL) throws -> Revalidation {
         let manifestData = try Data(contentsOf: url.appendingPathComponent(manifestFile))
-        var violations = try ArtifactSchemaValidator.manifest.violations(manifestData).map(ValidationViolation.init)
         let manifest = try FormaJSON.decode(Manifest.self, from: manifestData)
+        // The artifact is checked against the schema it declares, so a bundle
+        // written before the eligibility block existed keeps validating under
+        // 1.0 and a 1.1 artifact must satisfy the 1.1 rules.
+        let schema = try ArtifactSchemaValidator.manifest(forSchemaVersion: manifest.schemaVersion)
+        var violations = try schema.violations(manifestData).map(ValidationViolation.init)
 
         let evidenceData = try Data(contentsOf: url.appendingPathComponent(evidenceFile))
         let evidence = try FormaJSON.decode([EvidenceRecord].self, from: evidenceData)
