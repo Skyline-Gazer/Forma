@@ -41,8 +41,8 @@ struct ManifestEligibilityBlockTests {
         ManifestEntry(
             sourceID: scanned?.id ?? sourceID,
             snapshotFingerprint: scanned?.snapshotFingerprint ?? digest,
-            snapshotRevision: scanned?.snapshotRevision ?? 1,
-            sourceVersion: scanned?.sourceVersion ?? 1,
+            snapshotRevision: scanned.map { Int($0.snapshotRevision) } ?? 1,
+            sourceVersion: scanned.map { Int($0.sourceVersion) } ?? 1,
             relativePath: scanned?.relativePath ?? "项目/公告.pdf", state: .hold,
             target: ManifestTarget(databaseName: "库", groupPath: ["组"], resolved: false),
             metadata: MetadataValues.allUnknown,
