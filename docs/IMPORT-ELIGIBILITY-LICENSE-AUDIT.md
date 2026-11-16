@@ -34,7 +34,7 @@
 1. **表达形式不同**：Mole 是 shell 字典与过程式清理脚本；Forma 是声明式 JSON 谓词（`all/any` 事实谓词、`priority`、`protection_facts`、`evidence_strength`）加纯函数 Swift 分类器。没有一行 Mole shell 逻辑被移植。
 2. **语义目标相反**：Mole 决定"哪些可以删除"；Forma 决定"哪些可以进入业务映射候选"。Mole 的"最近 7 天默认不勾选"等删除风险控制未被迁移；Forma 无任何删除/移动/清理语义（Issue #51 硬边界）。
 3. **规则数据原创**：全部 13 条规则 ID、`explanation_code`、优先级布局均为本仓库编写（第 4 节清单即评审通过的原文）；谓词语言（`basenames`/`basename_prefixes`/`path_components`/`facts` 枚举）不存在于 Mole。
-4. **通用事实不构成移植**：`CACHEDIR.TAG` 的签名内容（`Signature: 8a477f597d19...`）是 Public Content 标准（http://www.bford.info/cachedir/spec.html）；`.DS_Store`、AppleDouble `._*`、Office `~$*` 是跨产品命名约定事实，非 Mole 表达。
+4. **通用事实不构成移植**：`CACHEDIR.TAG` 的签名内容（`Signature: 8a477f597d28d172789f06886806bc55`，即规范声明的 `.IsCacheDirectory` 之 MD5，已对 bford.info 原始规范复核）是 Public Content 标准（https://bford.info/cachedir/spec.html）；`.DS_Store`、AppleDouble `._*`、Office `~$*` 是跨产品命名约定事实，非 Mole 表达。
 5. **无上游文本/fixture 复用**：测试夹具全部为本仓库构造的合成路径与事实（`Project/公告.pdf` 等命名与 Mole 测试无任何对应关系）；守护测试防止 policy 文本漂移。
 
 未采用清单：Mole 的默认家目录扫描、清理动作、白名单文件格式、输出文案——均未采用。
