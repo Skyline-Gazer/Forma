@@ -114,6 +114,10 @@ public struct MappingRunOutcome: Sendable {
     /// The policy identity and decision fingerprint this run was decided
     /// under, when eligibility filtering was on.
     public let eligibilityBinding: ContextEligibilityBinding?
+    /// What the filter did with every discovered record, when eligibility
+    /// filtering was on: the counts and the per-record explanation a report
+    /// needs (SPEC v0.1.2 §10.1-5).
+    public let eligibilityReport: EligibilityReport?
 }
 
 /// Turns a listing, a context and an evidence registry into a validated
@@ -235,9 +239,14 @@ public actor MappingEngine {
             createdAt: .now, state: resolved.manifestState, eligibility: eligibility
         )
         let manifest = Manifest(envelope: envelope, entries: resolved.entries, report: resolved.report)
+        // The report is the explanation of what the manifest does not contain,
+        // so it is produced by the run that actually mapped the subset rather
+        // than recomputed later from a policy that may have moved since.
+        let report = request.eligibility.map { $0.view.report(mappedSourceIDs: mapped) }
         return MappingRunOutcome(manifest: manifest, batches: first.count, requests: requests, usage: usage,
                                  modelID: modelID, failures: failures, refusedReferences: refused,
-                                 unmappedSourceIDs: unmapped, eligibilityBinding: request.eligibility?.binding)
+                                 unmappedSourceIDs: unmapped, eligibilityBinding: request.eligibility?.binding,
+                                 eligibilityReport: report)
     }
 
     // MARK: - Batching

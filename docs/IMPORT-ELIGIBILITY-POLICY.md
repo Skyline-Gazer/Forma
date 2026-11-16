@@ -181,6 +181,8 @@ flowchart LR
 
 关于体积：`estimated_excluded_logical_bytes` 是**逻辑大小**之和，不是物理磁盘可节省量。硬链接、APFS clone、OneDrive 占位文件、压缩与稀疏文件都使物理节省未知；导出的 `assumption` 明确写出这一点。
 
+运行级报告（2026-11-16，切片 4）：`EligibilityReport`（`Sources/FormaCore/Eligibility/EligibilityReport.swift`）把一个**实际运行**的资格决策整理成可执行报告——`discovered`/`mapped`/`unmapped`、`per_decision`、`per_rule`、逐记录说明（source id、decision、rule、reason、override state、是否 mapped）与五项指标；`EligibilityReportExport` 将其写成 `eligibility-report.json`（`FormaJSON` 美化编码 + SHA-256，路径无关，已存在且字节不同时拒绝覆盖）。`MappingRunOutcome.eligibilityReport` 在过滤模式下随运行返回，使"哪些记录没进 Mapping、为什么"不依赖界面存在。既有 `eligibility.v*` 与 1.0 Manifest 不受影响。
+
 关于 Token：没有真实 Provider usage 时 `token_reduction` 为 `unavailable`；只有调用方显式给出 `tokensPerExcludedFile` 才输出 `extrapolated`，并公开"每文件 token 恒定"的假设。它**不是**真实 Token 节省，也不是实付费用减少。
 
 ## 8. False-exclusion evaluation
