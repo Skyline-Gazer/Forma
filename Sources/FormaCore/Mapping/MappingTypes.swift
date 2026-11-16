@@ -484,6 +484,46 @@ public struct MappingProposal: Codable, Sendable, Equatable {
 
 // MARK: - Manifest
 
+/// What the eligibility filter decided, as the Manifest records it
+/// (SPEC v0.1.2 §6.3).
+///
+/// It exists so a reader of a Manifest can tell "this file was never
+/// eligible" from "this file does not exist": a filtered run maps a subset of
+/// the discovered records, and without this block the ones it left out would
+/// simply be absent — a statement the directory does not support.
+public struct ManifestEligibility: Codable, Sendable, Equatable {
+    public let policyID: String
+    public let policyVersion: String
+    /// SHA-256 over the canonical policy document.
+    public let policyDigest: String
+    /// SHA-256 over the per-record decisions the run was decided under.
+    public let decisionsDigest: String
+    /// Records the scan discovered, before the filter.
+    public let discoveredCount: Int
+    /// Records that entered Mapping.
+    public let mappedCount: Int
+    /// Records the filter held back.
+    public let unmappedCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case policyID = "policy_id", policyVersion = "policy_version"
+        case policyDigest = "policy_digest", decisionsDigest = "decisions_digest"
+        case discoveredCount = "discovered_count", mappedCount = "mapped_count"
+        case unmappedCount = "unmapped_count"
+    }
+
+    public init(policyID: String, policyVersion: String, policyDigest: String, decisionsDigest: String,
+                discoveredCount: Int, mappedCount: Int, unmappedCount: Int) {
+        self.policyID = policyID
+        self.policyVersion = policyVersion
+        self.policyDigest = policyDigest
+        self.decisionsDigest = decisionsDigest
+        self.discoveredCount = discoveredCount
+        self.mappedCount = mappedCount
+        self.unmappedCount = unmappedCount
+    }
+}
+
 public struct ManifestEnvelope: Codable, Sendable, Equatable {
     public let manifestID: UUID
     /// Program-assigned by storage when a revision is written; a rebased
@@ -510,6 +550,10 @@ public struct ManifestEnvelope: Codable, Sendable, Equatable {
     /// Constant false in the Prototype: eligibility is a policy simulation and
     /// no serialized manifest may claim authority to write.
     public let grantsExecution: Bool
+    /// Present when the run was eligibility-filtered. `nil` in a manifest
+    /// written before the filter existed, and in a full-listing run — both of
+    /// which stay valid without it (SPEC v0.1.2 §6.3).
+    public var eligibility: ManifestEligibility?
 
     enum CodingKeys: String, CodingKey {
         case manifestID = "manifest_id", revision, supersedesRevision = "supersedes_revision"
@@ -520,18 +564,21 @@ public struct ManifestEnvelope: Codable, Sendable, Equatable {
         case promptVersion = "prompt_version", extractorVersion = "extractor_version"
         case redactionVersion = "redaction_version", inputDigest = "input_digest"
         case contextDigest = "context_digest", createdAt = "created_at", state
-        case grantsExecution = "grants_execution"
+        case grantsExecution = "grants_execution", eligibility
     }
 
     public enum ManifestState: String, Codable, Sendable {
         case draft, validated, partiallyValidated = "partially_validated", invalidated
     }
 
+    /// `eligibility` is present only for a filtered run. Its presence is what
+    /// makes the artifact version 1.1: a manifest without it is byte-for-byte
+    /// the 1.0 artifact, and stays valid under the 1.0 schema (SPEC v0.1.2 §6.3).
     public init(manifestID: UUID, revision: Int, supersedesRevision: Int?, scopeID: UUID, sourceRootID: UUID,
                 profile: MappingProfile, casePack: (id: String, version: String), modelProvider: String,
                 modelID: String?, contextRevision: Int, promptVersion: String, extractorVersion: String,
                 redactionVersion: String?, inputDigest: String, contextDigest: String, createdAt: Date,
-                state: ManifestState) {
+                state: ManifestState, eligibility: ManifestEligibility? = nil) {
         self.manifestID = manifestID
         self.revision = revision
         self.supersedesRevision = supersedesRevision
@@ -539,7 +586,8 @@ public struct ManifestEnvelope: Codable, Sendable, Equatable {
         self.sourceRootID = sourceRootID
         self.profileID = profile.profileID
         self.profileVersion = profile.profileVersion
-        self.schemaVersion = "1.0"
+        self.schemaVersion = eligibility == nil ? "1.0" : "1.1"
+        self.eligibility = eligibility
         self.casePackID = casePack.id
         self.casePackVersion = casePack.version
         self.modelProvider = modelProvider
@@ -712,9 +760,13 @@ public struct Manifest: Codable, Sendable, Equatable {
         case schemaVersion = "schema_version", envelope, entries, report = "validation_report"
     }
 
-    public init(schemaVersion: String = "1.0", envelope: ManifestEnvelope, entries: [ManifestEntry],
+    /// The artifact version follows the envelope: a manifest that carries the
+    /// eligibility block is a 1.1 artifact, and one that does not is a 1.0
+    /// artifact. The parameter exists for tests that need to state a version
+    /// explicitly; leaving it out never disagrees with the envelope.
+    public init(schemaVersion: String? = nil, envelope: ManifestEnvelope, entries: [ManifestEntry],
                 report: ValidationReport = ValidationReport()) {
-        self.schemaVersion = schemaVersion
+        self.schemaVersion = schemaVersion ?? envelope.schemaVersion
         self.envelope = envelope
         self.entries = entries
         self.report = report
@@ -831,6 +883,9 @@ extension ManifestEnvelope {
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         state = try container.decode(ManifestState.self, forKey: .state)
         grantsExecution = try container.decode(Bool.self, forKey: .grantsExecution)
+        // Absent in every manifest written before the filter existed, and in
+        // every full-listing run. Both stay valid without it.
+        eligibility = try container.decodeIfPresent(ManifestEligibility.self, forKey: .eligibility)
         // An artifact that claims execution authority is not a Forma manifest.
         guard !grantsExecution else { throw FormaError.invalidOutput }
     }

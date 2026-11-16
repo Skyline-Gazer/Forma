@@ -212,6 +212,18 @@ public actor MappingEngine {
             resolved = validate(request: request, entries: entries, answers: Array(answers.values), evidence: current)
         }
 
+        let mapped = Set(entries.map(\.id))
+        let unmapped = request.entries.map(\.id).filter { !mapped.contains($0) }
+        // A filtered run records what it decided, so a reader of the artifact
+        // can tell the records it left out from records that do not exist.
+        let eligibility = request.eligibility.map { selection in
+            ManifestEligibility(
+                policyID: selection.binding.policyID, policyVersion: selection.binding.policyVersion,
+                policyDigest: selection.binding.policyDigest,
+                decisionsDigest: selection.binding.decisionsDigest,
+                discoveredCount: request.entries.count, mappedCount: entries.count,
+                unmappedCount: unmapped.count)
+        }
         let envelope = ManifestEnvelope(
             manifestID: UUID(), revision: 1, supersedesRevision: nil, scopeID: request.scope.id,
             sourceRootID: request.scope.rootID, profile: request.profile,
@@ -220,11 +232,9 @@ public actor MappingEngine {
             promptVersion: MappingPrompt.version, extractorVersion: EvidenceRegistry.extractorVersion,
             redactionVersion: request.redaction.isIdentity ? nil : RedactionPlan.version,
             inputDigest: request.context.inputDigest, contextDigest: Self.contextDigest(request.context),
-            createdAt: .now, state: resolved.manifestState
+            createdAt: .now, state: resolved.manifestState, eligibility: eligibility
         )
         let manifest = Manifest(envelope: envelope, entries: resolved.entries, report: resolved.report)
-        let mapped = Set(entries.map(\.id))
-        let unmapped = request.entries.map(\.id).filter { !mapped.contains($0) }
         return MappingRunOutcome(manifest: manifest, batches: first.count, requests: requests, usage: usage,
                                  modelID: modelID, failures: failures, refusedReferences: refused,
                                  unmappedSourceIDs: unmapped, eligibilityBinding: request.eligibility?.binding)
