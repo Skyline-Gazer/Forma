@@ -26,19 +26,46 @@ public struct ContextHistoryMatch: Sendable, Equatable {
     }
 }
 
+/// What eligibility-filter mode stamps into the context fingerprint
+/// (SPEC v0.1.2 §6.1-1; ELIGIBILITY-CONTRACT-DELTA D). A binding is present
+/// exactly when the entries below came from an eligibility-filtered input:
+/// the digest then covers the policy identity and the decision snapshot, so
+/// a rule change or a decision change yields a new revision instead of
+/// silently reusing an old context. `nil` is full-list mode, whose digest
+/// formula stays byte-for-byte the pre-v0.1.2 one.
+public struct ContextEligibilityBinding: Sendable, Equatable {
+    public let policyID: String
+    public let policyVersion: String
+    /// SHA-256 over the canonical policy document (`EligibilityPolicy.digest`).
+    public let policyDigest: String
+    /// SHA-256 over the per-record decisions (`EligibilityView.decisionsDigest()`).
+    public let decisionsDigest: String
+
+    public init(policyID: String, policyVersion: String, policyDigest: String, decisionsDigest: String) {
+        self.policyID = policyID
+        self.policyVersion = policyVersion
+        self.policyDigest = policyDigest
+        self.decisionsDigest = decisionsDigest
+    }
+}
+
 public struct ContextBuilderInput: Sendable {
     public let scopeID: UUID
     public let profile: MappingProfile
     public let entries: [SourceEntry]
     /// Only matches from a database the user authorized for this run.
     public let history: [ContextHistoryMatch]
+    /// Present only in eligibility-filtered mode (see `ContextEligibilityBinding`).
+    public let eligibility: ContextEligibilityBinding?
 
     public init(scopeID: UUID, profile: MappingProfile, entries: [SourceEntry],
-                history: [ContextHistoryMatch] = []) {
+                history: [ContextHistoryMatch] = [],
+                eligibility: ContextEligibilityBinding? = nil) {
         self.scopeID = scopeID
         self.profile = profile
         self.entries = entries
         self.history = history
+        self.eligibility = eligibility
     }
 }
 
@@ -66,9 +93,22 @@ public enum ContextBuilder {
     /// entry; they must not rebuild the whole workspace context. Directory
     /// additions, removals, moves and renames do change it, because membership
     /// is what those operations affect.
-    public static func inputDigest(scopeID: UUID, profile: MappingProfile, entries: [SourceEntry]) -> String {
+    ///
+    /// With `eligibility == nil` the bytes hashed are exactly the `context.v1`
+    /// formula that predates SPEC v0.1.2 — full-list mode stays digest-stable
+    /// by construction, which is what makes the compatibility path testable.
+    /// With a binding the header becomes `context.v2` and additionally covers
+    /// the policy identity and decision digest; entry lines are unchanged.
+    public static func inputDigest(scopeID: UUID, profile: MappingProfile, entries: [SourceEntry],
+                                   eligibility: ContextEligibilityBinding? = nil) -> String {
         var hasher = SHA256()
-        hasher.update(data: Data("context.v1|\(scopeID.sourceKey)|\(profile.versionKey)\n".utf8))
+        if let eligibility {
+            hasher.update(data: Data("context.v2|\(scopeID.sourceKey)|\(profile.versionKey)|"
+                                     + "\(eligibility.policyID)|\(eligibility.policyVersion)|"
+                                     + "\(eligibility.policyDigest)|\(eligibility.decisionsDigest)\n".utf8))
+        } else {
+            hasher.update(data: Data("context.v1|\(scopeID.sourceKey)|\(profile.versionKey)\n".utf8))
+        }
         for entry in entries.sorted(by: { $0.normalizedRelativePath < $1.normalizedRelativePath }) {
             hasher.update(
                 data: Data("\(entry.id.sourceKey)|\(entry.normalizedRelativePath)|\(entry.state.rawValue)\n".utf8)
@@ -79,7 +119,8 @@ public enum ContextBuilder {
 
     public static func build(_ input: ContextBuilderInput, revision: Int, builtAt: Date = .now) -> ProjectContext {
         let files = input.entries.filter { $0.state == .present || $0.state == .held }
-        let digest = inputDigest(scopeID: input.scopeID, profile: input.profile, entries: input.entries)
+        let digest = inputDigest(scopeID: input.scopeID, profile: input.profile, entries: input.entries,
+                                 eligibility: input.eligibility)
         let groups = cluster(files, profile: input.profile)
         let present = Set(files.map(\.id))
 

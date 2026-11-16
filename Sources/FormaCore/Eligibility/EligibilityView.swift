@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 // The derived view: a non-destructive projection of one `SourceListing`.
@@ -172,6 +173,30 @@ public struct EligibilityView: Sendable, Equatable {
     /// else, and the production mapping path does not call it in this slice.
     public func mappingCandidates() -> [SourceEntry] {
         entries.filter(\.isMappingCandidate).map(\.entry)
+    }
+
+    /// The fingerprint SPEC v0.1.2 §6.1-1 requires in the context digest for
+    /// eligibility-filtered mode: one line per record over stable source IDs,
+    /// snapshot fingerprints, decisions, deciding rules and override states,
+    /// sorted by ID. Paths, names and content never enter it — the digest
+    /// changes exactly when a decision changes, not when a file is renamed
+    /// (renames already change the entry lines of the context digest).
+    public func decisionsDigest() -> String {
+        var hasher = SHA256()
+        hasher.update(data: Data("eligibility-decisions.v1|\(policyVersion)|\(policyDigest)\n".utf8))
+        for item in entries.sorted(by: { $0.sourceID.uuidString < $1.sourceID.uuidString }) {
+            hasher.update(data: Data("\(item.sourceID.uuidString)|\(item.entry.snapshotFingerprint)|"
+                                     + "\(item.decision.rawValue)|\(item.decidedByRuleID ?? "")|"
+                                     + "\(item.overrideState.rawValue)\n".utf8))
+        }
+        return hasher.finalize().hexadecimalDigest
+    }
+
+    /// The binding a filtered Context input must carry: the entries passed to
+    /// `ContextBuilder` are `mappingCandidates()` and nothing else.
+    public var contextBinding: ContextEligibilityBinding {
+        ContextEligibilityBinding(policyID: policyID, policyVersion: policyVersion,
+                                  policyDigest: policyDigest, decisionsDigest: decisionsDigest())
     }
 
     public func entry(for sourceID: UUID) -> EligibilityEntryView? {
