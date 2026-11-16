@@ -162,6 +162,7 @@
 - **测试步骤**：合成目录 → `FormaAcceptance m11`（或按 Runbook 手工执行）→ 逐案例 PASS/FAIL/NOT_VERIFIED + 策略 digest；真实目录 → 扫描 → `probeEligibilityFacts` → dry-run → 与人工标注比对 → 复核每个 `EXCLUDE`/`REVIEW` → 记录规则命中、逐事实 provenance 与策略 digest。
 - **通过条件**：应保护业务样本零误排除（或有明确人工确认记录）；扫描身份、missing 判定与 Context 默认行为未变；**默认启用另需 Owner 再确认**。
 - **当前状态**：工程侧 = **Implemented, default off**；现场侧 = **NOT_VERIFIED（无 macOS 主机）**；默认启用 = **未授权**。
+- **本轮报告**：`docs/M11-SYNTHETIC-ACCEPTANCE-REPORT.md`——CI 合成自检 **30/30 PASS**（macos-15 runner），现场 **NOT_VERIFIED**（无可用 macOS 主机）。报告不构成该项关闭依据。
 
 ## 3. 维护规则
 
