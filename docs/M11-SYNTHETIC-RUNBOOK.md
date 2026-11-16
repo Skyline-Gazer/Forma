@@ -39,11 +39,11 @@ swift run FormaAcceptance m11 --output ~/m11-synthetic-report.json
 | A3 | Git untracked 文件置于 `dist/` | `REVIEW`（`generated-directory-review`），不得 EXCLUDE |
 | A4 | 嵌套 Git 仓库内的文件 | `REVIEW`（`nested-repository-review`），探测 `nestedRepository=confirmed` |
 | A5 | `.git` 为文件（`gitdir:`）指向授权根内 | `nestedRepository` = confirmed；指向根外 = `unknown`，不跟随 |
-| A6 | `.git` 为符号链接 | `unknown`，不跟随 |
+| A6 | `.git` 为符号链接 | `nestedRepository=unknown`，不跟随；无规则命中 → 默认 `INCLUDE` |
 | A7 | 有效 `CACHEDIR.TAG`（43 字节签名） | 其下文件 `EXCLUDE`（`verified-cache-directory`），且 `cacheMarker=verified` |
 | A8 | 无签名 / 超大 / 符号链接 `CACHEDIR.TAG` | 分别为 `present_unverified` / 不读入内存 / `unreadable`；均不得产生 EXCLUDE |
 | A9 | 业务样本（PDF/DOCX/XLSX 命名）置于 `build/`、`dist/`、`vendor/` | 一律不是 `EXCLUDE`（False Exclusion 反例） |
-| A10 | 权限不足的子目录（`chmod 000`） | 扫描产生 issue；相关记录 `DEFER`，不得当成"不存在" |
+| A10 | 权限不足的子目录（`chmod 000`） | 扫描 issue `unreadable`，不得当成"不存在"（该目录内文件不产生条目） |
 | A11 | 扫描期间改变的文件 | 状态为 `source_changed`/`DEFER`，不静默沿用旧快照 |
 | A12 | `CACHEDIR.TAG` 有效但同目录有 Git tracked 文件 | `REVIEW`（保护事实优先于缓存排除） |
 

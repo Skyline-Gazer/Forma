@@ -140,8 +140,11 @@ public enum M11SyntheticAcceptance {
                             decided("vendor/nested/notes.pdf"), expect: { $0.decision == .review }))
         cases.append(result("A5", "`.git` 文件指向授权根内 → 嵌套仓库确认",
                             decided("gitfile-inside/plan.pdf"), expect: { $0.decision == .review }))
-        cases.append(result("A6", "`.git` 符号链接不被跟随",
-                            decided("symlinked/link.pdf"), expect: { $0.decision == .review }))
+        // A symlinked `.git` is never followed, so the fact stays unknown and
+        // no rule fires: the record keeps the default decision rather than
+        // being misread as "not a repository" or "definitely nested".
+        cases.append(result("A6", "`.git` 符号链接不被跟随（事实 unknown → 默认 INCLUDE）",
+                            decided("symlinked/link.pdf"), expect: { $0.decision == .include }))
         cases.append(result("A7", "有效 CACHEDIR.TAG 排除其下文件",
                             decided("cache-valid/artifact.pdf"), expect: { $0.decision == .exclude }))
         cases.append(result("A8", "无签名 CACHEDIR.TAG 不产生排除",
