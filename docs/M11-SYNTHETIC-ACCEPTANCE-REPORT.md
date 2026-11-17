@@ -102,3 +102,28 @@ swift run FormaAcceptance m11 --output ~/m11-synthetic-report.json
 - 不得将本报告的 CI 合成自检写成"macOS 现场通过"。
 - 不得将合成 fixture 的 False Exclusion 结果写成"真实业务误排除率达标"。
 - 不得以 CI 绿灯关闭 `MACOS-VALIDATION-BACKLOG` M11，也不得据此开启默认过滤。
+
+## 8. 2026-11-17 交接核对（Mac 执行声明）
+
+收到的交接说明称"Mac 端 M11 Synthetic Acceptance 已执行"，但**本轮未收到任何报告原件或可核对的摘要**。为核实，按下列位置逐一查找，均无 M11 现场证据：
+
+| 查找位置 | 结果 |
+| --- | --- |
+| 仓库 `docs/`、提交历史（`git log --since 2026-11-16 12:00`） | 无新增 M11 现场报告 |
+| 远程分支与 open PR | 无新分支、无 open PR |
+| Issue #51 评论与全部 Issue 状态 | 最后更新 2026-11-16，无现场记录 |
+| 本机 `~/m11-synthetic-report.json`、`/tmp`、`~/Downloads`、`~/Desktop` | 不存在 |
+| `~/.forma/evidence/`（此前现场证据存放处） | 只有 `r1-batch2a/`，无 `m11` |
+
+因此判定：**Mac 合成执行 = CLAIMED BUT UNVERIFIED（UNKNOWN）**。按交接规则，不凭文字陈述推定 PASS；`MACOS-VALIDATION-BACKLOG` M11、默认过滤与切片 5 的状态**一律不变**。
+
+要在下一次交接中升级为 `macOS Synthetic Field Verified`，报告必须包含：
+
+1. 主机信息：`sw_vers -productVersion`、`uname -m`、根卷是否 APFS；
+2. 实际命令与**退出码**（`swift run FormaAcceptance m11 --output <path>`，期望 `0`）；
+3. `m11-synthetic-report.json` 原件（含 `policy_digest`、`decisions_digest`、逐案例 `status`/`detail`）；
+4. 逐案例结果：若存在 `FAIL` 或 `NOT_VERIFIED`，给出案例 ID、条件与输出；
+5. 声明未产生外部副作用（未写 DEVONthink、未调 Provider、未扫描真实业务目录）；
+6. 默认过滤仍关闭的确认（`FormaApp` 未改、生产调用不传 `eligibility`）。
+
+缺任一项即保持 `UNKNOWN`；有 `FAIL` 则按缺陷处理，另行开 Issue 并给出可复现条件。
