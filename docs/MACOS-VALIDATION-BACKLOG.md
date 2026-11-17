@@ -161,15 +161,15 @@
 - **需要（现场）**：可用的 macOS 主机；只读合成目录先跑合成验收（夹具与 Runbook 见 `docs/M11-SYNTHETIC-RUNBOOK.md`）；随后由 Owner 提供授权真实目录（不得使用生产 991 条记录）并做人工复核。
 - **测试步骤**：合成目录 → `FormaAcceptance m11`（或按 Runbook 手工执行）→ 逐案例 PASS/FAIL/NOT_VERIFIED + 策略 digest；真实目录 → 扫描 → `probeEligibilityFacts` → dry-run → 与人工标注比对 → 复核每个 `EXCLUDE`/`REVIEW` → 记录规则命中、逐事实 provenance 与策略 digest。
 - **通过条件**：应保护业务样本零误排除（或有明确人工确认记录）；扫描身份、missing 判定与 Context 默认行为未变；**默认启用另需 Owner 再确认**。
-- **五级状态（本项）**：
+- **五级状态（本项）**：见下表（只有第 1、2 级有证据；第 3 级本轮为 UNKNOWN）。
 
-  | 级别 | 状态 | 证据 |
-  | --- | --- | --- |
-  | 1. DevBox Development Complete | **达成** | #116–#121 代码、单测与契约修订；`EligibilityReport`/Manifest 1.1 等 |
-  | 2. macOS CI Verified | **达成** | `macos-15` runner：build / tests / package / launch smoke 全绿（run `43858058846` 等） |
-  | 3. macOS Synthetic Field Verified | **未达成（UNKNOWN）** | 2026-11-17 收到"Mac 已执行"的交接声明，但**无报告原件或可核对摘要**；详见 `docs/M11-SYNTHETIC-ACCEPTANCE-REPORT.md` §8 证据清单 |
-  | 4. Real Directory Acceptance Pending | **未开始** | 无授权真实目录、无人工复核记录 |
-  | 5. Production Default Activation Pending | **未授权** | Owner 条件 3；`FormaApp` 未改，生产调用不传 `eligibility` |
+| 级别 | 状态 | 证据 |
+| --- | --- | --- |
+| 1. DevBox Development Complete | **达成** | #116–#121 代码、单测与契约修订；`EligibilityReport` / Manifest 1.1 等 |
+| 2. macOS CI Verified | **达成** | `macos-15` runner：build / tests / package / launch smoke 全绿（run `43858058846` 等） |
+| 3. macOS Synthetic Field Verified | **未达成（UNKNOWN）** | 2026-11-17 收到"Mac 已执行"的交接声明，但**无报告原件或可核对摘要**；证据清单见 `docs/M11-SYNTHETIC-ACCEPTANCE-REPORT.md` §8 |
+| 4. Real Directory Acceptance Pending | **未开始** | 无授权真实目录、无人工复核记录 |
+| 5. Production Default Activation Pending | **未授权** | Owner 条件 3；`FormaApp` 未改，生产调用不传 `eligibility` |
 
 - **本轮报告**：`docs/M11-SYNTHETIC-ACCEPTANCE-REPORT.md`——CI 合成自检 **30/30 PASS**（macos-15 runner），现场 **NOT_VERIFIED**；2026-11-17 交接核对仍无现场证据。报告不构成该项关闭依据。
 
