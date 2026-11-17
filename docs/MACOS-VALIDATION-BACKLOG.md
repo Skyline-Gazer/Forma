@@ -31,7 +31,7 @@
 | M8 | Mac App Store 沙盒兼容性 | #52 / R1 | Deferred（渠道未定） | 重新选择该渠道 |
 | M9 | 10,000 文件真实扫描性能验收 | #20 / P3-A | Deferred | 真实目录 + 硬件记录 |
 | M10 | 真实 Provider 外发授权、Keychain 与日志脱敏现场核验 | #20 / P3-A + P3-B | Deferred（部分未授权） | Provider 凭据、外发授权、真实 macOS 会话 |
-| M11 | Import Eligibility 生产接入与真实目录误排除复核 | #51 / P3-A | **Implemented, default off**（#116–#121 已合并）；现场 **UNKNOWN**（2026-11-17 交接声明无报告原件/摘要） | macOS 现场合成+真实目录；默认启用需 Owner 再确认；切片 5 未授权 |
+| M11 | Import Eligibility 生产接入与真实目录误排除复核 | #51 / P3-A | **Implemented, default off**；现场 = **`MACOS_SYNTHETIC_PARTIAL`**（2026-11-17 Mac 执行 30/30 PASS，Owner 提供证据；B3 本地未验证/CI PASS、A8b 内存未测量） | 真实目录与人工复核；默认启用需 Owner 再确认；切片 5 未授权 |
 
 ## 2. 各项明细
 
@@ -161,17 +161,21 @@
 - **需要（现场）**：可用的 macOS 主机；只读合成目录先跑合成验收（夹具与 Runbook 见 `docs/M11-SYNTHETIC-RUNBOOK.md`）；随后由 Owner 提供授权真实目录（不得使用生产 991 条记录）并做人工复核。
 - **测试步骤**：合成目录 → `FormaAcceptance m11`（或按 Runbook 手工执行）→ 逐案例 PASS/FAIL/NOT_VERIFIED + 策略 digest；真实目录 → 扫描 → `probeEligibilityFacts` → dry-run → 与人工标注比对 → 复核每个 `EXCLUDE`/`REVIEW` → 记录规则命中、逐事实 provenance 与策略 digest。
 - **通过条件**：应保护业务样本零误排除（或有明确人工确认记录）；扫描身份、missing 判定与 Context 默认行为未变；**默认启用另需 Owner 再确认**。
-- **五级状态（本项）**：见下表（只有第 1、2 级有证据；第 3 级本轮为 UNKNOWN）。
+- **五级状态（本项）**：见下表；第 3 级为**部分达成**，不是完全达成。
 
 | 级别 | 状态 | 证据 |
 | --- | --- | --- |
 | 1. DevBox Development Complete | **达成** | #116–#121 代码、单测与契约修订；`EligibilityReport` / Manifest 1.1 等 |
 | 2. macOS CI Verified | **达成** | `macos-15` runner：build / tests / package / launch smoke 全绿（run `43858058846` 等） |
-| 3. macOS Synthetic Field Verified | **未达成（UNKNOWN）** | 2026-11-17 收到"Mac 已执行"的交接声明，但**无报告原件或可核对摘要**；证据清单见 `docs/M11-SYNTHETIC-ACCEPTANCE-REPORT.md` §8 |
+| 3. macOS Synthetic Field Verified | **部分达成 — `MACOS_SYNTHETIC_PARTIAL`** | 2026-11-17 Mac 执行 30/30 CLI PASS（Owner 提供证据）；偏差 B3 本地 `NOT_VERIFIED` / CI PASS，A8b 安全 PASS 但内存行为未测量；详见下条与报告 §8 |
 | 4. Real Directory Acceptance Pending | **未开始** | 无授权真实目录、无人工复核记录 |
 | 5. Production Default Activation Pending | **未授权** | Owner 条件 3；`FormaApp` 未改，生产调用不传 `eligibility` |
 
-- **本轮报告**：`docs/M11-SYNTHETIC-ACCEPTANCE-REPORT.md`——CI 合成自检 **30/30 PASS**（macos-15 runner），现场 **NOT_VERIFIED**；2026-11-17 交接核对仍无现场证据。报告不构成该项关闭依据。
+- **2026-11-17 macOS 现场执行（Owner 提供证据）**：主机 macOS 27.0.1（26A434）/ arm64 / MacBookPro18,3（Apple M1 Pro）/ APFS；Swift 6.4；Git 2.54.0。仓库 `Skyline-Gazer/Forma`，分支 `dev`，HEAD `a4da6f5`（跟踪工作树干净，既有未跟踪 `tmp/` 未触碰）。命令 `swift run FormaAcceptance m11 --output <path>`，**退出码 `0`**；**30 案例 PASS / 0 FAIL / 0 NOT_VERIFIED**（CLI case-summary 级）。策略 `eligibility.v2`；**policy digest `aa7796df…d2a57` 与仓库钉扎值一致（已独立核对）**；decisions digest `f5203037…3df7e` 为**主机相关值，本会话未重算**。
+- **证据文件与哈希**：`~/.forma/evidence/m11/report.json`（SHA-256 `339e2116…823586`）、`~/.forma/evidence/m11/run.log`（SHA-256 `bad4ce80…14af1ff`）——均为 **Owner 声明的哈希**；原始文件不在本会话可访问范围，**独立完整性复核 = PENDING**（不宣称已验证）。
+- **两处偏差（结论分开保留）**：**B3（Owner 编号）**——1.1 资格块缺必需字段应被拒：本地 `NOT_VERIFIED`，CI 通过（`ManifestEligibilityBlockTests.incompleteEligibilityBlockIsRefused`，run `43859870793`，head `a4da6f5`）；注意它与 CLI 案例 `B3`（1.0 工件不含 `eligibility` 键）不是同一检查。**A8b**——超大 `CACHEDIR.TAG`：安全性 **PASS**（不得 EXCLUDE），**运行时内存行为未测量**；源码检查确认 `readFile` 在 `fstat` 之后、分配缓冲区之前以 `sizeBytes > limit` 直接返回 `unreadable("oversized")`（marker 上限 1,024 字节），并有确定性边界测试 `oversizedMarker`（8 KB 标记 → `unreadable`/`oversized`），故"有界读取"由源码与测试成立，内存剖析未做、不宣称，**无需为此新开 Issue**。
+- **安全声明（Owner）**：未访问真实业务目录、未做 DEVONthink 操作、未调用 Provider、未外发文件、未修改仓库、临时夹具已清理、资格默认仍关闭。
+- **本轮报告**：`docs/M11-SYNTHETIC-ACCEPTANCE-REPORT.md` §8。合成验收**不构成**真实目录验收，也不构成关闭本项或开启默认过滤的依据。
 
 ## 3. 维护规则
 

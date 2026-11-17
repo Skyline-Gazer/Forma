@@ -1,6 +1,6 @@
 # M11 Import Eligibility — 合成验收报告（2026-11-16）
 
-状态：**现场 = NOT_VERIFIED（本轮无可用 macOS 主机）**；**CI 合成自检 = PASS（30/30）**；**默认过滤未启用**；**切片 5 未授权**。
+状态：**macOS 合成 = `MACOS_SYNTHETIC_PARTIAL`（2026-11-17 Mac 执行 30/30 PASS，Owner 提供证据；两处偏差见 §8）**；**CI 合成自检 = PASS（30/30）**；**真实目录验收 = NOT_STARTED**；**默认过滤未启用**；**切片 5 未授权**。
 
 本报告区分三种证据，三者不得互相替代：
 
@@ -8,12 +8,12 @@
 | --- | --- | --- |
 | CI 编译/单测 | GitHub Actions macOS runner 上的自动验证 | **PASS** |
 | CI 合成自检 | 同一 runner 上运行 M11 合成夹具（临时目录、真实代码路径） | **PASS（30/30）** |
-| macOS 现场 | 在可用 macOS 主机上按 Runbook 执行并留存主机信息 | **NOT_VERIFIED** |
+| macOS 现场 | Mac 主机按 Runbook 执行（2026-11-17，Owner 提供证据） | **`MACOS_SYNTHETIC_PARTIAL`**（30/30 PASS；B3 本地未验证/CI PASS；A8b 内存未测量） |
 
 ## 1. 执行环境
 
-- 执行会话主机：Linux DevBox（工作目录 `/home/ian/workspace/Forma`）。
-- macOS 现场主机：**不可用**——两台已配置的 SSH 主机（`ssh://.host`、`ssh://machine/.host`）均返回 `Permission denied (publickey,…)`，与 `docs/R1-BATCH2A-REPORT.md` 记录一致。未尝试绕过认证。
+- 执行会话主机：Linux DevBox（仓库工作目录，路径不在此记录）。
+- macOS 现场主机：**本会话不可直接访问**——两台已配置的 SSH 主机（`ssh://.host`、`ssh://machine/.host`）均返回 `Permission denied (publickey,…)`，与 `docs/R1-BATCH2A-REPORT.md` 记录一致；未尝试绕过认证。2026-11-17 的现场合成由 Owner 在其 Mac 上执行（见 §8）。
 - CI 权威：`.github/workflows/ci.yml`，`runs-on: macos-15`，固定 Xcode 26.3 / Swift 6。
 - 基线：`dev` @ `4a44ee0`（含 #122 Runbook、#123 夹具）。合并后 dev CI run `43858058846` success。
 
@@ -31,9 +31,9 @@ swift run FormaAcceptance m11 --output ~/m11-synthetic-report.json
 
 ## 3. 逐案例结果
 
-`CI 自检` 列来自 run `43857368729`（PR #123）与 `43858058846`（合并后 dev）；`现场` 列一律 `NOT_VERIFIED`。
+`CI 自检` 列来自 run `43857368729`（PR #123）与 `43858058846`（合并后 dev）。`现场` 列记录 **2026-11-17 Mac 执行之前**的状态（当时本会话没有 Mac 主机）；Mac 执行后的总体结果为 **30/30 PASS**（Owner 提供的 CLI case-summary 级，逐案例 `detail` 原件待复核），两处偏差见 §8.4，因此不逐行回填该列。
 
-| # | 案例 | 期望 | CI 自检 | 现场 |
+| # | 案例 | 期望 | CI 自检 | 现场（Mac 前） |
 | --- | --- | --- | --- | --- |
 | A1 | 两次扫描的身份与快照 | `source_id` 集合与 `snapshot_fingerprint` 稳定 | PASS | NOT_VERIFIED |
 | A2 | Git tracked 文件在 `build/` | `REVIEW`（`git-tracked-review`） | PASS | NOT_VERIFIED |
@@ -83,7 +83,7 @@ swift run FormaAcceptance m11 --output ~/m11-synthetic-report.json
 
 ## 5. 真实目录测试仍缺的条件
 
-1. 一台可用的 macOS 14+ 主机（本轮两台 SSH 主机认证失败）。
+1. 一台可由**本执行会话**直接访问的 macOS 14+ 主机（2026-11-17 的合成执行由 Owner 在其 Mac 上完成；本会话的两台 SSH 主机仍认证失败）。
 2. Owner 授权的只读目录（不得使用生产 `Project_Archive` 991 条记录）。
 3. 人工复核工作流与复核人（对每条 `EXCLUDE`/`REVIEW` 给出业务结论）。
 4. 真实 OneDrive 目录以覆盖 dataless / hydration / 权限失败场景。
@@ -92,7 +92,7 @@ swift run FormaAcceptance m11 --output ~/m11-synthetic-report.json
 ## 6. 默认过滤启用前的剩余 Gate
 
 1. **全链路实现** — 已完成（#116–#123）。
-2. **macOS 现场验证** — 合成（本报告 §3 待现场复跑）+ 真实授权目录人工复核；**两者都未完成**。
+2. **macOS 现场验证** — 合成：**部分完成**（2026-11-17，`MACOS_SYNTHETIC_PARTIAL`，见 §8）；B3/A8b 两处偏差需分别收口；真实授权目录人工复核：**未开始**。
 3. **Owner 再确认** — 未发生。
 
 另：切片 5（I1 Executor 写入前资格重判）仍未授权；P3-B、DEVONthink 真实写入、Provider 外发、R1 Batch 2B GUI 同样未授权。
@@ -103,27 +103,62 @@ swift run FormaAcceptance m11 --output ~/m11-synthetic-report.json
 - 不得将合成 fixture 的 False Exclusion 结果写成"真实业务误排除率达标"。
 - 不得以 CI 绿灯关闭 `MACOS-VALIDATION-BACKLOG` M11，也不得据此开启默认过滤。
 
-## 8. 2026-11-17 交接核对（Mac 执行声明）
+## 8. 2026-11-17 macOS 现场执行（Owner 提供证据）
 
-收到的交接说明称"Mac 端 M11 Synthetic Acceptance 已执行"，但**本轮未收到任何报告原件或可核对的摘要**。为核实，按下列位置逐一查找，均无 M11 现场证据：
+本节取代 2026-11-17 早些时候的"CLAIMED BUT UNVERIFIED"核对结论：当时无法从本会话访问 Mac，Owner 随后提供了下述执行摘要。**仍未被独立验证的是原始证据文件，而不是"执行是否存在"。**
 
-| 查找位置 | 结果 |
+### 8.1 主机与基线
+
+| 项 | 值 |
 | --- | --- |
-| 仓库 `docs/`、提交历史（`git log --since 2026-11-16 12:00`） | 无新增 M11 现场报告 |
-| 远程分支与 open PR | 无新分支、无 open PR |
-| Issue #51 评论与全部 Issue 状态 | 最后更新 2026-11-16，无现场记录 |
-| 本机 `~/m11-synthetic-report.json`、`/tmp`、`~/Downloads`、`~/Desktop` | 不存在 |
-| `~/.forma/evidence/`（此前现场证据存放处） | 只有 `r1-batch2a/`，无 `m11` |
+| 操作系统 | macOS 27.0.1（26A434） |
+| 架构 / 机型 | arm64 / MacBookPro18,3（Apple M1 Pro） |
+| 文件系统 | APFS |
+| 工具链 | Swift 6.4；Git 2.54.0 |
+| 仓库 / 分支 | `Skyline-Gazer/Forma` / `dev` |
+| HEAD | `a4da6f5`（跟踪工作树干净；既有未跟踪 `tmp/` 未触碰） |
 
-因此判定：**Mac 合成执行 = CLAIMED BUT UNVERIFIED（UNKNOWN）**。按交接规则，不凭文字陈述推定 PASS；`MACOS-VALIDATION-BACKLOG` M11、默认过滤与切片 5 的状态**一律不变**。
+### 8.2 命令与结果
 
-要在下一次交接中升级为 `macOS Synthetic Field Verified`，报告必须包含：
+| 项 | 值 |
+| --- | --- |
+| 命令 | `swift run FormaAcceptance m11 --output ~/m11-synthetic-report.json` |
+| 退出码 | **`0`** |
+| CLI 案例 | **30 PASS / 0 FAIL / 0 NOT_VERIFIED**（CLI case-summary 级） |
+| 策略 | `eligibility.v2` |
+| policy digest | `aa7796df…d2a57` — **与仓库钉扎值一致（本会话独立核对）** |
+| decisions digest | `f5203037…3df7e` — 主机相关值，**本会话未重算** |
 
-1. 主机信息：`sw_vers -productVersion`、`uname -m`、根卷是否 APFS；
-2. 实际命令与**退出码**（`swift run FormaAcceptance m11 --output <path>`，期望 `0`）；
-3. `m11-synthetic-report.json` 原件（含 `policy_digest`、`decisions_digest`、逐案例 `status`/`detail`）；
-4. 逐案例结果：若存在 `FAIL` 或 `NOT_VERIFIED`，给出案例 ID、条件与输出；
-5. 声明未产生外部副作用（未写 DEVONthink、未调 Provider、未扫描真实业务目录）；
-6. 默认过滤仍关闭的确认（`FormaApp` 未改、生产调用不传 `eligibility`）。
+### 8.3 证据文件与完整性
 
-缺任一项即保持 `UNKNOWN`；有 `FAIL` 则按缺陷处理，另行开 Issue 并给出可复现条件。
+| 文件 | SHA-256（Owner 声明） |
+| --- | --- |
+| `~/.forma/evidence/m11/report.json` | `339e2116…823586` |
+| `~/.forma/evidence/m11/run.log` | `bad4ce80…14af1ff` |
+
+**独立完整性复核 = PENDING**：原始文件不在本会话可访问范围，未重新计算哈希，不宣称已验证。
+
+### 8.4 两处偏差（分别保留结论）
+
+| 案例 | 本地执行 | CI | 处置 |
+| --- | --- | --- | --- |
+| **B3（Owner 编号）** — schema 1.1 资格块缺必需字段应被拒 | `NOT_VERIFIED`（该夹具未在本地运行） | **PASS**（`ManifestEligibilityBlockTests.incompleteEligibilityBlockIsRefused`，run `43859870793`，head `a4da6f5`） | 本地与 CI 结论分开保留，不合并成"已验证"；**与 CLI 案例 B3 不是同一检查**（后者验证 1.0 工件不含 `eligibility` 键，已 PASS） |
+| **A8b** — 超大 `CACHEDIR.TAG` | 安全性 **PASS**（未产生 EXCLUDE）；**内存行为未测量** | 边界测试 `oversizedMarker` PASS | 源码检查：`readFile` 在 `fstat` 后、分配缓冲区之前以 `sizeBytes > limit` 返回 `unreadable("oversized")`（marker 上限 1,024 字节）→ 有界读取成立；**不做内存剖析宣称** |
+
+编号说明：Owner 报告中的 "B3" 指"畸形 1.1 资格块应被拒绝"，而 CLI 夹具里的 `B3` 指"1.0 工件不携带资格块"。两者名称相似、检查不同，本文以"B3（Owner 编号）"区分。
+
+### 8.5 安全声明（Owner）
+
+未访问真实业务目录；未做 DEVONthink 操作；未调用 Provider；未外发文件；未修改仓库；临时夹具已清理；资格默认仍关闭。
+
+### 8.6 分类
+
+| 证据 | 分类 |
+| --- | --- |
+| Mac 合成执行 | 已执行；**Owner 提供证据**（原始文件独立复核 PENDING） |
+| CLI 案例 | 30/30 PASS |
+| B3 畸形 1.1 块 | 本地 `NOT_VERIFIED`；CI PASS |
+| A8b 超大标记内存行为 | 未测量（安全性 PASS） |
+| **M11 合成现场验收（总体）** | **`MACOS_SYNTHETIC_PARTIAL`** |
+| 真实目录验收 | **`NOT_STARTED`** |
+| 生产默认启用 | **`NOT_AUTHORIZED`** |
