@@ -31,7 +31,7 @@
 | M8 | Mac App Store 沙盒兼容性 | #52 / R1 | Deferred（渠道未定） | 重新选择该渠道 |
 | M9 | 10,000 文件真实扫描性能验收 | #20 / P3-A | Deferred | 真实目录 + 硬件记录 |
 | M10 | 真实 Provider 外发授权、Keychain 与日志脱敏现场核验 | #20 / P3-A + P3-B | Deferred（部分未授权） | Provider 凭据、外发授权、真实 macOS 会话 |
-| M11 | Import Eligibility 生产接入与真实目录误排除复核 | #51 / P3-A | **Implemented, default off**（#116–#121 已合并）；现场 **NOT_VERIFIED**（本轮无可用 macOS 主机） | macOS 现场合成+真实目录；默认启用需 Owner 再确认；切片 5 未授权 |
+| M11 | Import Eligibility 生产接入与真实目录误排除复核 | #51 / P3-A | **Implemented, default off**（#116–#121 已合并）；现场 **UNKNOWN**（2026-11-17 交接声明无报告原件/摘要） | macOS 现场合成+真实目录；默认启用需 Owner 再确认；切片 5 未授权 |
 
 ## 2. 各项明细
 
@@ -161,8 +161,17 @@
 - **需要（现场）**：可用的 macOS 主机；只读合成目录先跑合成验收（夹具与 Runbook 见 `docs/M11-SYNTHETIC-RUNBOOK.md`）；随后由 Owner 提供授权真实目录（不得使用生产 991 条记录）并做人工复核。
 - **测试步骤**：合成目录 → `FormaAcceptance m11`（或按 Runbook 手工执行）→ 逐案例 PASS/FAIL/NOT_VERIFIED + 策略 digest；真实目录 → 扫描 → `probeEligibilityFacts` → dry-run → 与人工标注比对 → 复核每个 `EXCLUDE`/`REVIEW` → 记录规则命中、逐事实 provenance 与策略 digest。
 - **通过条件**：应保护业务样本零误排除（或有明确人工确认记录）；扫描身份、missing 判定与 Context 默认行为未变；**默认启用另需 Owner 再确认**。
-- **当前状态**：工程侧 = **Implemented, default off**；现场侧 = **NOT_VERIFIED（无 macOS 主机）**；默认启用 = **未授权**。
-- **本轮报告**：`docs/M11-SYNTHETIC-ACCEPTANCE-REPORT.md`——CI 合成自检 **30/30 PASS**（macos-15 runner），现场 **NOT_VERIFIED**（无可用 macOS 主机）。报告不构成该项关闭依据。
+- **五级状态（本项）**：
+
+  | 级别 | 状态 | 证据 |
+  | --- | --- | --- |
+  | 1. DevBox Development Complete | **达成** | #116–#121 代码、单测与契约修订；`EligibilityReport`/Manifest 1.1 等 |
+  | 2. macOS CI Verified | **达成** | `macos-15` runner：build / tests / package / launch smoke 全绿（run `43858058846` 等） |
+  | 3. macOS Synthetic Field Verified | **未达成（UNKNOWN）** | 2026-11-17 收到"Mac 已执行"的交接声明，但**无报告原件或可核对摘要**；详见 `docs/M11-SYNTHETIC-ACCEPTANCE-REPORT.md` §8 证据清单 |
+  | 4. Real Directory Acceptance Pending | **未开始** | 无授权真实目录、无人工复核记录 |
+  | 5. Production Default Activation Pending | **未授权** | Owner 条件 3；`FormaApp` 未改，生产调用不传 `eligibility` |
+
+- **本轮报告**：`docs/M11-SYNTHETIC-ACCEPTANCE-REPORT.md`——CI 合成自检 **30/30 PASS**（macos-15 runner），现场 **NOT_VERIFIED**；2026-11-17 交接核对仍无现场证据。报告不构成该项关闭依据。
 
 ## 3. 维护规则
 
