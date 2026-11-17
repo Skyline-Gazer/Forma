@@ -83,3 +83,23 @@ swift run FormaAcceptance m11 --output ~/m11-synthetic-report.json
 3. Owner 再确认。
 
 未满足全部三道前，`FormaApp` 保持完整清单模式，任何"临时打开看看"的调试都必须在本机分支完成且不合并。
+
+## 8. 现场执行记录
+
+### 2026-11-17（Owner 提供证据）
+
+| 项 | 值 |
+| --- | --- |
+| 主机 | macOS 27.0.1（26A434）/ arm64 / MacBookPro18,3（Apple M1 Pro）/ APFS |
+| 工具链 | Swift 6.4；Git 2.54.0 |
+| 仓库 / HEAD | `Skyline-Gazer/Forma` / `dev` @ `a4da6f5`（跟踪工作树干净） |
+| 命令 | `swift run FormaAcceptance m11 --output ~/m11-synthetic-report.json` |
+| 退出码 | `0` |
+| 结果 | 30 PASS / 0 FAIL / 0 NOT_VERIFIED（CLI case-summary 级） |
+| 策略 | `eligibility.v2`；policy digest `aa7796df…d2a57`（与仓库钉扎值一致） |
+| decisions digest | `f5203037…3df7e`（主机相关，未跨机重算） |
+| 证据 | `~/.forma/evidence/m11/report.json`、`run.log`（Owner 声明 SHA-256；独立复核 PENDING） |
+
+**总体分类：`MACOS_SYNTHETIC_PARTIAL`**（偏差 B3：本地 `NOT_VERIFIED` / CI PASS；A8b：安全 PASS、内存行为未测量）。真实目录验收仍 `NOT_STARTED`，默认启用仍 `NOT_AUTHORIZED`。
+
+下次复跑时请保留同一组证据项，并在本节追加新行而不是覆盖历史。
