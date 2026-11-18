@@ -109,6 +109,7 @@ struct M11RealDirectoryAcceptanceTests {
         defer { fixture.cleanUp() }
         try fixture.write("not a cache tag\n", at: "cache/CACHEDIR.TAG")
         try fixture.write("artifact", at: "cache/artifact.pdf")
+        try fixture.makeDirectory("linked")
         try FileManager.default.createSymbolicLink(
             at: fixture.source.appendingPathComponent("linked/.git"),
             withDestinationURL: fixture.source.appendingPathComponent(".git"))
@@ -207,9 +208,13 @@ struct M11RealDirectoryAcceptanceTests {
                 source: fixture.source, evidenceDirectory: fixture.base, dryRun: true)
         }
         #expect(throws: M11RealDirectoryAcceptance.Failure.relativeSourcePath) {
-            try M11RealDirectoryAcceptance.validate(
-                source: URL(fileURLWithPath: "relative/source"),
-                evidenceDirectory: fixture.evidence, dryRun: true)
+            try M11RealDirectoryAcceptance.absoluteURL(from: "relative/source", kind: .source)
+        }
+        #expect(throws: M11RealDirectoryAcceptance.Failure.relativeEvidencePath) {
+            try M11RealDirectoryAcceptance.absoluteURL(from: "relative/evidence", kind: .evidenceDirectory)
+        }
+        #expect(throws: M11RealDirectoryAcceptance.Failure.relativeLabelPath) {
+            try M11RealDirectoryAcceptance.absoluteURL(from: "relative/labels.json", kind: .labels)
         }
         #expect(throws: M11RealDirectoryAcceptance.Failure.missingSource) {
             try M11RealDirectoryAcceptance.validate(

@@ -366,6 +366,7 @@ public enum M11RealDirectoryAcceptance {
         case unknownArgument(String)
         case relativeSourcePath
         case relativeEvidencePath
+        case relativeLabelPath
         case missingSource
         case sourceNotDirectory
         case sourceIsEvidence
@@ -388,6 +389,7 @@ public enum M11RealDirectoryAcceptance {
             case .unknownArgument(let names): return "unknown argument(s): \(names)"
             case .relativeSourcePath: return "source path must be absolute"
             case .relativeEvidencePath: return "evidence directory must be absolute"
+            case .relativeLabelPath: return "label file path must be absolute"
             case .missingSource: return "source directory does not exist"
             case .sourceNotDirectory: return "source path is not a directory"
             case .sourceIsEvidence: return "the evidence directory must not be the source directory"
@@ -405,6 +407,28 @@ public enum M11RealDirectoryAcceptance {
             case .sourceMismatch: return "the source directory is not the one this review sheet was made for"
             }
         }
+    }
+
+    /// Which argument a path belongs to, so a refusal names the argument.
+    public enum PathKind: String, Sendable {
+        case source
+        case evidenceDirectory
+        case labels
+    }
+
+    /// Turns a user-supplied path into a URL, refusing a relative one.
+    ///
+    /// The check happens on the string, before `URL` can resolve it against the
+    /// current directory: "the current directory" is not an authorization.
+    public static func absoluteURL(from path: String, kind: PathKind) throws -> URL {
+        guard path.hasPrefix("/") else {
+            switch kind {
+            case .source: throw Failure.relativeSourcePath
+            case .evidenceDirectory: throw Failure.relativeEvidencePath
+            case .labels: throw Failure.relativeLabelPath
+            }
+        }
+        return URL(fileURLWithPath: path)
     }
 
     // MARK: - Path validation

@@ -74,12 +74,21 @@ struct FormaAcceptanceCLI {
         let options = Options(arguments: Array(arguments.dropFirst(2)))
         do {
             try options.validate()
-            guard let source = options.source, let evidenceDirectory = options.evidenceDirectory else {
+            guard let sourcePath = options.sourcePath,
+                  let evidencePath = options.evidenceDirectoryPath else {
                 throw M11RealDirectoryAcceptance.Failure.missingArgument("--source, --evidence-dir")
             }
+            // The strings are checked before they become URLs: a relative path
+            // must be refused, not resolved against the current directory.
+            let source = try M11RealDirectoryAcceptance.absoluteURL(
+                from: sourcePath, kind: .source)
+            let evidenceDirectory = try M11RealDirectoryAcceptance.absoluteURL(
+                from: evidencePath, kind: .evidenceDirectory)
             let outcome: M11RealDirectoryAcceptance.Outcome
-            if let labelPath = options.labels {
-                let labels = try M11RealDirectoryAcceptance.loadLabels(from: labelPath)
+            if let labelPath = options.labelPath {
+                let labelURL = try M11RealDirectoryAcceptance.absoluteURL(
+                    from: labelPath, kind: .labels)
+                let labels = try M11RealDirectoryAcceptance.loadLabels(from: labelURL)
                 outcome = try M11RealDirectoryAcceptance.importLabels(
                     source: source, evidenceDirectory: evidenceDirectory,
                     labels: labels, dryRun: true)
@@ -130,9 +139,9 @@ struct FormaAcceptanceCLI {
     // MARK: - Options
 
     private struct Options {
-        var source: URL?
-        var evidenceDirectory: URL?
-        var labels: URL?
+        var sourcePath: String?
+        var evidenceDirectoryPath: String?
+        var labelPath: String?
         var profile = "project-archive"
         var maxEntries = 5_000
         var deadlineSeconds = 120
@@ -146,13 +155,13 @@ struct FormaAcceptanceCLI {
                 let value: String? = index + 1 < arguments.count ? arguments[index + 1] : nil
                 switch flag {
                 case "--source":
-                    if let value { source = URL(fileURLWithPath: value) }
+                    if let value { sourcePath = value }
                     index += 2
                 case "--evidence-dir":
-                    if let value { evidenceDirectory = URL(fileURLWithPath: value) }
+                    if let value { evidenceDirectoryPath = value }
                     index += 2
                 case "--labels":
-                    if let value { labels = URL(fileURLWithPath: value) }
+                    if let value { labelPath = value }
                     index += 2
                 case "--profile":
                     if let value { profile = value }
@@ -177,10 +186,10 @@ struct FormaAcceptanceCLI {
             guard unknownFlags.isEmpty else {
                 throw M11RealDirectoryAcceptance.Failure.unknownArgument(unknownFlags.joined(separator: ", "))
             }
-            guard source != nil else {
+            guard sourcePath != nil else {
                 throw M11RealDirectoryAcceptance.Failure.missingArgument("--source")
             }
-            guard evidenceDirectory != nil else {
+            guard evidenceDirectoryPath != nil else {
                 throw M11RealDirectoryAcceptance.Failure.missingArgument("--evidence-dir")
             }
             guard dryRun else { throw M11RealDirectoryAcceptance.Failure.dryRunRequired }
