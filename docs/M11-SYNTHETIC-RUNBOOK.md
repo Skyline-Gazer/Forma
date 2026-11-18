@@ -98,7 +98,7 @@ swift run FormaAcceptance m11 --output ~/m11-synthetic-report.json
 | 结果 | 30 PASS / 0 FAIL / 0 NOT_VERIFIED（CLI case-summary 级） |
 | 策略 | `eligibility.v2`；policy digest `aa7796df…d2a57`（与仓库钉扎值一致） |
 | decisions digest | `f5203037…3df7e`（主机相关，未跨机重算） |
-| 证据 | `~/.forma/evidence/m11/report.json`、`run.log`（Owner 声明 SHA-256；独立复核 PENDING） |
+| 证据 | `~/.forma/evidence/m11/report.json`（6,078 B，`339e2116…823586`）、`run.log`（3,331 B，`bad4ce80…14af1ff`）；2026-11-17 **独立复核 `VERIFIED`**（哈希逐字节一致；原始文件不入库） |
 
 **总体分类：`MACOS_SYNTHETIC_PARTIAL`**（偏差 B3：本地 `NOT_VERIFIED` / CI PASS；A8b：安全 PASS、内存行为未测量）。真实目录验收仍 `NOT_STARTED`，默认启用仍 `NOT_AUTHORIZED`。
 

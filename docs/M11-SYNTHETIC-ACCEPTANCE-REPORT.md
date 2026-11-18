@@ -1,6 +1,6 @@
 # M11 Import Eligibility — 合成验收报告（2026-11-16）
 
-状态：**macOS 合成 = `MACOS_SYNTHETIC_PARTIAL`（2026-11-17 Mac 执行 30/30 PASS，Owner 提供证据；两处偏差见 §8）**；**CI 合成自检 = PASS（30/30）**；**真实目录验收 = NOT_STARTED**；**默认过滤未启用**；**切片 5 未授权**。
+状态：**macOS 合成 = `MACOS_SYNTHETIC_PARTIAL`**（2026-11-17 Mac 执行 30/30 PASS；原始证据独立完整性复核 = `VERIFIED`；两处偏差见 §8）；**CI 合成自检 = PASS（30/30）**；**真实目录验收 = NOT_STARTED**；**默认过滤未启用**；**切片 5 未授权**。
 
 本报告区分三种证据，三者不得互相替代：
 
@@ -129,14 +129,26 @@ swift run FormaAcceptance m11 --output ~/m11-synthetic-report.json
 | policy digest | `aa7796df…d2a57` — **与仓库钉扎值一致（本会话独立核对）** |
 | decisions digest | `f5203037…3df7e` — 主机相关值，**本会话未重算** |
 
-### 8.3 证据文件与完整性
+### 8.3 证据文件与完整性（已独立复核 = VERIFIED）
 
-| 文件 | SHA-256（Owner 声明） |
-| --- | --- |
-| `~/.forma/evidence/m11/report.json` | `339e2116…823586` |
-| `~/.forma/evidence/m11/run.log` | `bad4ce80…14af1ff` |
+| 文件 | 字节 | SHA-256（本会话复算） |
+| --- | --- | --- |
+| `~/.forma/evidence/m11/report.json` | 6,078 | `339e211622ef12f19da0d37d14ddc5f9c73051c4b40e4432eb6725da8f823586` |
+| `~/.forma/evidence/m11/run.log` | 3,331 | `bad4ce801570ed442848cfa078efc10a4923ad3edae81977b2613f55714af1ff` |
 
-**独立完整性复核 = PENDING**：原始文件不在本会话可访问范围，未重新计算哈希，不宣称已验证。
+复核方式（DevBox，只读，2026-11-17）：
+
+1. 两文件存在，`sha256sum` 复算值与 Owner 声明**逐字节一致**（见上表完整值）。
+2. `jq` 解析 `report.json`：`schema_version 1.0`、`policy_id forma-import-eligibility`、`policy_version eligibility.v2`、`generated_at 2026-11-17T01:18:04.934Z`、`host "Version 27.0.1 (Build 26A434)"`；`policy_digest` 与仓库钉扎值**逐字符一致**（`EligibilityLicenseAuditTests` 同值）；`decisions_digest` 与声明一致。
+3. `cases` 长度 30、ID 唯一、状态全部 `PASS`（无 `FAIL`/`NOT_VERIFIED`）；ID 集合与本报告 §3 表**完全一致**。
+4. `run.log` 的 30 行 `PASS` 与 `report.json` 的 `(status, id)` 序列**逐行一致**，末行摘要 `30 PASS · 0 FAIL · 0 NOT_VERIFIED`。
+5. 敏感信息扫描：`report.json` 无路径、无凭据、无业务资料；`run.log` 仅一处执行主机主目录路径（末行 `report written to`），已脱敏处理，**原始文件不入库**。
+
+仍不随复核升级的项（证据本身不含）：
+
+- 退出码 `0`、架构 `arm64`、机型 `MacBookPro18,3` 为 Owner 声明——`report.json` 的 `host` 只含系统版本串，无架构字段。
+- `decisions_digest` 与主机相关，跨机不可重算，未复算。
+- `A1` 的 `scan_state=incomplete` 是夹具 `locked/`（权限 `000`）产生 `unreadable` issue 的**预期结果**（`SourceReconciliation.swift:78`：`issues.isEmpty ? .complete : .incomplete`），不是缺陷。
 
 ### 8.4 两处偏差（分别保留结论）
 
@@ -155,7 +167,7 @@ swift run FormaAcceptance m11 --output ~/m11-synthetic-report.json
 
 | 证据 | 分类 |
 | --- | --- |
-| Mac 合成执行 | 已执行；**Owner 提供证据**（原始文件独立复核 PENDING） |
+| Mac 合成执行 | 已执行；**原始证据已独立完整性复核（VERIFIED）** |
 | CLI 案例 | 30/30 PASS |
 | B3 畸形 1.1 块 | 本地 `NOT_VERIFIED`；CI PASS |
 | A8b 超大标记内存行为 | 未测量（安全性 PASS） |
