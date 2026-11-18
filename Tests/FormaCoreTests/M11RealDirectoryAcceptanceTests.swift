@@ -377,8 +377,14 @@ struct M11RealDirectoryAcceptanceTests {
             source: fixture.source, evidenceDirectory: fixture.evidence,
             labels: [M11RealDirectoryAcceptance.Label(sourceID: excluded.sourceID, label: .keep)],
             dryRun: true)
-        let sheetURL = try #require(first.files[M11RealDirectoryAcceptance.Artifact.privateReviewSheet])
-        let labelsURL = try #require(first.files[M11RealDirectoryAcceptance.Artifact.humanLabels])
+        // The scan itself had no labels, so read the run directory the sheet was
+        // written into rather than trusting the first outcome's file list.
+        let runDirectory = try #require(
+            first.files[M11RealDirectoryAcceptance.Artifact.privateReviewSheet]).deletingLastPathComponent()
+        let sheetURL = runDirectory.appendingPathComponent(
+            M11RealDirectoryAcceptance.Artifact.privateReviewSheet)
+        let labelsURL = runDirectory.appendingPathComponent(
+            M11RealDirectoryAcceptance.Artifact.humanLabels)
         let sheetBefore = try Data(contentsOf: sheetURL)
         let labelsBefore = try Data(contentsOf: labelsURL)
 
