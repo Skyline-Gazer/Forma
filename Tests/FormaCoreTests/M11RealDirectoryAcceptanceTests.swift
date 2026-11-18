@@ -382,7 +382,7 @@ struct M11RealDirectoryAcceptanceTests {
         let sheetBefore = try Data(contentsOf: sheetURL)
         let labelsBefore = try Data(contentsOf: labelsURL)
 
-        #expect(throws: M11RealDirectoryAcceptance.Failure.evidenceDirectoryNotEmpty) {
+        await #expect(throws: M11RealDirectoryAcceptance.Failure.evidenceDirectoryNotEmpty) {
             try await fixture.run()
         }
 
