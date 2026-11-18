@@ -359,10 +359,10 @@ struct M11RealDirectoryAcceptanceTests {
         #expect(sheetText.contains("secret-project-name"))
     }
 
-    // MARK: - 12. Repeated runs
+    // MARK: - 12. Repeated runs and evidence ownership
 
-    @Test("a repeated run reproduces the sheet and overwrites the evidence safely")
-    func repeatedRunIsConsistent() async throws {
+    @Test("a second scan cannot overwrite an evidence set that already holds a review")
+    func repeatedScanIsRefused() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
         try fixture.write("notes", at: "notes.txt")
@@ -370,22 +370,190 @@ struct M11RealDirectoryAcceptanceTests {
         let before = try fixture.sourceListing()
 
         let first = try await fixture.run()
-        let firstURL = try #require(first.files[M11RealDirectoryAcceptance.Artifact.privateReviewSheet])
-        let firstSheet = try Data(contentsOf: firstURL)
-        let second = try await fixture.run()
-        let secondURL = try #require(second.files[M11RealDirectoryAcceptance.Artifact.privateReviewSheet])
-        let secondSheet = try Data(contentsOf: secondURL)
+        let excluded = try #require(first.sheet.rows.first {
+            $0.decision == EligibilityDecision.exclude.rawValue
+        })
+        _ = try M11RealDirectoryAcceptance.importLabels(
+            source: fixture.source, evidenceDirectory: fixture.evidence,
+            labels: [M11RealDirectoryAcceptance.Label(sourceID: excluded.sourceID, label: .keep)],
+            dryRun: true)
+        let sheetURL = try #require(first.files[M11RealDirectoryAcceptance.Artifact.privateReviewSheet])
+        let labelsURL = try #require(first.files[M11RealDirectoryAcceptance.Artifact.humanLabels])
+        let sheetBefore = try Data(contentsOf: sheetURL)
+        let labelsBefore = try Data(contentsOf: labelsURL)
 
-        #expect(firstSheet == secondSheet)
-        #expect(first.summary.evidenceSHA256 == second.summary.evidenceSHA256)
+        #expect(throws: M11RealDirectoryAcceptance.Failure.evidenceDirectoryNotEmpty) {
+            try await fixture.run()
+        }
+
+        let sheetAfter = try Data(contentsOf: sheetURL)
+        let labelsAfter = try Data(contentsOf: labelsURL)
+        #expect(sheetAfter == sheetBefore)
+        #expect(labelsAfter == labelsBefore)
         let after = try fixture.sourceListing()
         #expect(after == before)
+    }
 
-        let sumsURL = try #require(second.files[M11RealDirectoryAcceptance.Artifact.sha256Sums])
+    @Test("a scan into a new evidence directory produces the same decisions")
+    func secondRunDirectoryIsIndependent() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("notes", at: "notes.txt")
+        try fixture.write("noise", at: "noise/.DS_Store")
+
+        let first = try await fixture.run()
+        let second = try await fixture.run(evidenceDirectory: fixture.base.appendingPathComponent("evidence-2"))
+
+        #expect(second.summary.discovered == first.summary.discovered)
+        #expect(second.summary.exclude == first.summary.exclude)
+        #expect(second.summary.review == first.summary.review)
+        #expect(second.summary.include == first.summary.include)
+    }
+
+    @Test("an evidence directory that holds a symlink is refused")
+    func symlinkedArtifactIsRefused() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("notes", at: "notes.txt")
+        try FileManager.default.createDirectory(at: fixture.evidence, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        let target = fixture.base.appendingPathComponent("outside.json")
+        try Data("{}".utf8).write(to: target)
+        try FileManager.default.createSymbolicLink(
+            at: fixture.evidence.appendingPathComponent(M11RealDirectoryAcceptance.Artifact.sanitizedSummary),
+            withDestinationURL: target)
+
+        await #expect(throws: M11RealDirectoryAcceptance.Failure.unsafeEvidenceSymlink(
+            M11RealDirectoryAcceptance.Artifact.sanitizedSummary)) {
+            try await fixture.run()
+        }
+    }
+
+    @Test("a workspace database that is a symlink is refused")
+    func symlinkedDatabaseIsRefused() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("notes", at: "notes.txt")
+        try FileManager.default.createDirectory(at: fixture.evidence, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        let target = fixture.base.appendingPathComponent("outside.sqlite")
+        try Data().write(to: target)
+        try FileManager.default.createSymbolicLink(
+            at: fixture.evidence.appendingPathComponent(M11RealDirectoryAcceptance.Artifact.workspaceDatabase),
+            withDestinationURL: target)
+
+        await #expect(throws: M11RealDirectoryAcceptance.Failure.unsafeEvidenceSymlink(
+            M11RealDirectoryAcceptance.Artifact.workspaceDatabase)) {
+            try await fixture.run()
+        }
+    }
+
+    @Test("an evidence directory other users can reach is refused")
+    func unsafeEvidencePermissionsAreRefused() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("notes", at: "notes.txt")
+        try FileManager.default.createDirectory(at: fixture.evidence, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o755])
+
+        await #expect(throws: M11RealDirectoryAcceptance.Failure.unsafeEvidencePermissions) {
+            try await fixture.run()
+        }
+    }
+
+    @Test("the private evidence is readable by its owner only")
+    func privateEvidenceIsOwnerOnly() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("notes", at: "notes.txt")
+
+        let outcome = try await fixture.run()
+
+        let directory = try #require(outcome.files.values.first?.deletingLastPathComponent())
+        let directoryAttributes = try FileManager.default.attributesOfItem(atPath: directory.path)
+        let directoryMode = try #require(directoryAttributes[.posixPermissions] as? NSNumber)
+        #expect(directoryMode.intValue & 0o077 == 0)
+        var privateFiles: [URL] = [directory.appendingPathComponent(
+            M11RealDirectoryAcceptance.Artifact.workspaceDatabase)]
+        for name in [M11RealDirectoryAcceptance.Artifact.privateReviewSheet,
+                     M11RealDirectoryAcceptance.Artifact.sanitizedSummary,
+                     M11RealDirectoryAcceptance.Artifact.sha256Sums] {
+            privateFiles.append(try #require(outcome.files[name]))
+        }
+        for url in privateFiles {
+            let mode = try #require(
+                try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber)
+            #expect(mode.intValue & 0o077 == 0)
+        }
+    }
+
+    @Test("SHA256SUMS matches the artifacts on disk")
+    func sumsMatchArtifacts() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("notes", at: "notes.txt")
+
+        let outcome = try await fixture.run()
+        let sumsURL = try #require(outcome.files[M11RealDirectoryAcceptance.Artifact.sha256Sums])
         let sums = try String(contentsOf: sumsURL, encoding: .utf8)
-        let sheetHash = M11RealDirectoryAcceptance.sha256Hex(secondSheet)
-        #expect(sums.contains(sheetHash))
-        #expect(sums.contains(M11RealDirectoryAcceptance.Artifact.privateReviewSheet))
+
+        var listed = 0
+        for line in sums.split(separator: "\n") {
+            let parts = line.split(separator: "  ", maxSplits: 1)
+            guard parts.count == 2 else { continue }
+            let expected = String(parts[0])
+            let name = String(parts[1])
+            let url = fixture.evidence.appendingPathComponent(name)
+            #expect(FileManager.default.fileExists(atPath: url.path))
+            let data = try Data(contentsOf: url)
+            #expect(M11RealDirectoryAcceptance.sha256Hex(data) == expected)
+            listed += 1
+        }
+        #expect(listed == outcome.artifactHashes.count)
+    }
+
+    @Test("a label import does not rescan the source directory")
+    func labelImportDoesNotScan() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("notes", at: "notes.txt")
+        try fixture.write("noise", at: "noise/.DS_Store")
+
+        let first = try await fixture.run()
+        let excluded = try #require(first.sheet.rows.first {
+            $0.decision == EligibilityDecision.exclude.rawValue
+        })
+        let imported = try M11RealDirectoryAcceptance.importLabels(
+            source: fixture.source, evidenceDirectory: fixture.evidence,
+            labels: [M11RealDirectoryAcceptance.Label(sourceID: excluded.sourceID, label: .keep)],
+            dryRun: true)
+
+        #expect(imported.sheet.scanState == first.sheet.scanState)
+        #expect(imported.sheet.scanComplete == first.sheet.scanComplete)
+        #expect(imported.sheet.probeCoverage == first.sheet.probeCoverage)
+        #expect(imported.sheet.rows.map(\.decision) == first.sheet.rows.map(\.decision))
+        #expect(imported.sheet.rows.map(\.snapshotFingerprint)
+            == first.sheet.rows.map(\.snapshotFingerprint))
+    }
+
+    @Test("a label that names another snapshot is refused")
+    func labelSnapshotMismatchIsRefused() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("noise", at: "noise/.DS_Store")
+        let first = try await fixture.run()
+        let excluded = try #require(first.sheet.rows.first {
+            $0.decision == EligibilityDecision.exclude.rawValue
+        })
+
+        #expect(throws: M11RealDirectoryAcceptance.Failure.labelSnapshotMismatch) {
+            try M11RealDirectoryAcceptance.importLabels(
+                source: fixture.source, evidenceDirectory: fixture.evidence,
+                labels: [M11RealDirectoryAcceptance.Label(
+                    sourceID: excluded.sourceID, label: .keep,
+                    snapshotFingerprint: String(repeating: "0", count: 64))],
+                dryRun: true)
+        }
     }
 }
 
@@ -422,10 +590,11 @@ private struct Fixture {
         return url
     }
 
-    func run(maxEntries: Int = 5_000) async throws -> M11RealDirectoryAcceptance.Outcome {
+    func run(maxEntries: Int = 5_000,
+             evidenceDirectory: URL? = nil) async throws -> M11RealDirectoryAcceptance.Outcome {
         try await M11RealDirectoryAcceptance.run(M11RealDirectoryAcceptance.Request(
-            source: source, evidenceDirectory: evidence, maxEntries: maxEntries,
-            deadlineSeconds: 60, dryRun: true))
+            source: source, evidenceDirectory: evidenceDirectory ?? evidence,
+            maxEntries: maxEntries, deadlineSeconds: 60, dryRun: true))
     }
 
     func sourceListing() throws -> [String] {

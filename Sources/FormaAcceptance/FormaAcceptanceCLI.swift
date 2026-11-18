@@ -22,20 +22,24 @@ struct FormaAcceptanceCLI {
     static func main() async {
         let arguments = CommandLine.arguments
         guard arguments.count >= 2 else {
-            write("usage: FormaAcceptance m11 [--output <path>]\n")
-            write("       FormaAcceptance m11-real --source <abs> --evidence-dir <abs> --dry-run "
-                + "[--labels <abs>] [--profile <id>] [--max-entries <n>] [--deadline-seconds <n>]\n")
+            write(usage)
             exit(2)
         }
         switch arguments[1] {
         case "m11": await runSynthetic(arguments)
         case "m11-real": await runReal(arguments)
         default:
-            write("usage: FormaAcceptance m11 [--output <path>]\n")
-            write("       FormaAcceptance m11-real --source <abs> --evidence-dir <abs> --dry-run "
-                + "[--labels <abs>] [--profile <id>] [--max-entries <n>] [--deadline-seconds <n>]\n")
+            write(usage)
             exit(2)
         }
+    }
+
+    private static var usage: String {
+        "usage: FormaAcceptance m11 [--output <path>]\n"
+            + "       FormaAcceptance m11-real --source <abs> --evidence-dir <abs> --dry-run "
+            + "[--labels <abs>] [--profile <id>] [--max-entries <n>] [--deadline-seconds <n>]\n"
+            + "       (a scan needs a new, empty evidence directory; a label import reuses the "
+            + "run directory that holds the review sheet)\n"
     }
 
     // MARK: - Synthetic acceptance

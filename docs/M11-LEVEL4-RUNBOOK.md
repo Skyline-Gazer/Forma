@@ -7,6 +7,9 @@
 - 工具**只读**：它扫描一个被明确授权的目录，把产物写进另一个独立目录。它不写源目录、不触发 Import、不写 DEVONthink、不调用 Provider、不触发 OneDrive hydration、不启用默认过滤。
 - **必须显式给出目录**。工具没有默认目录，也不会去 `Documents`、`Home` 或 OneDrive 里找目标。相对路径一律拒绝。
 - **证据目录必须在源目录之外**，也不能反过来包住源目录；软链接解析后同样成立。
+- **一次扫描 = 一个新的证据运行目录**。证据目录必须不存在或为空；已有内容一律拒绝（`.evidenceDirectoryNotEmpty`）。这样新的扫描永远不会覆盖旧的人工标签与审核结论。
+- **证据目录必须只属于当前用户**（mode `0700`）；私人产物写为 `0600`。目录对其他用户可读时拒绝执行（`.unsafeEvidencePermissions`）。
+- **固定产物名与 SQLite 文件不得是符号链接**。写之前逐个检查，发现链接即拒绝（`.unsafeEvidenceSymlink`），报告不会经链接写到别处。
 - `--dry-run` 是**唯一模式**。没有"真的导入"这个开关。
 - 私人审核表**默认留在本机**。只有脱敏产物可以离开这台机器。
 
@@ -16,7 +19,12 @@
 2. Swift 6 工具链（`swift --version`），仓库位于 `dev` 且包含 `Sources/FormaAcceptance`。
 3. `git` 可用时，Git 事实（tracked / 嵌套仓库）才会被建立；缺失时相关事实在报告里是 `unknown`，**不会**产生排除。
 4. Owner 授权的绝对目录路径，以及一个独立的证据输出目录。
-5. 确认该目录不包含生产 DEVONthink 数据（`Project_Archive` 的 991 条记录不可触碰）。
+5. 证据运行目录必须是**新的**且**只属于当前用户**。建议整条路径预先建成 0700：
+   ```bash
+   mkdir -m 700 -p "$HOME/.forma/evidence/m11-real/run-2026-11-18"
+   ```
+   工具会把产物写为 0600；目录权限不安全时它会拒绝执行，而不是先写再说。
+6. 确认该目录不包含生产 DEVONthink 数据（`Project_Archive` 的 991 条记录不可触碰）。
 
 ## 3. 执行
 
@@ -26,9 +34,11 @@
 cd <repo>
 swift run FormaAcceptance m11-real \
   --source "/absolute/path/to/authorized/dir" \
-  --evidence-dir "$HOME/.forma/evidence/m11-real" \
+  --evidence-dir "$HOME/.forma/evidence/m11-real/run-2026-11-18" \
   --dry-run
 ```
+
+`--evidence-dir` 必须指向**新的**目录：不存在或为空都可以，已有内容会被拒绝。想做第二次扫描，就换一个运行目录。
 
 可选参数：
 
@@ -46,6 +56,18 @@ swift run FormaAcceptance m11-real \
 | `3` | 运行完成但覆盖不完整（`coverage_state = PARTIAL`：不可读子树、探测上限、超时或取消） |
 | `2` | 参数或路径校验失败，工具拒绝执行 |
 
+退出码 `2` 的具体原因（消息会打印在 stderr）：
+
+| 原因 | 含义 | 该怎么做 |
+| --- | --- | --- |
+| `evidenceDirectoryNotEmpty` | 证据目录已有内容，扫描会覆盖旧证据 | 换一个新的运行目录 |
+| `unsafeEvidencePermissions` | 证据目录对其他用户可达，或产物无法证明只属主可读 | `chmod 700` 该目录后重试 |
+| `unsafeEvidenceSymlink '<name>'` | 固定产物名或 SQLite 文件是符号链接 | 删掉该链接；不要经链接收集证据 |
+| `sourceIsEvidence` / `evidenceInsideSource` / `sourceInsideEvidence` | 两个目录互相包含 | 证据目录必须完全独立 |
+| `sourceMismatch` | `--source` 与审核表记录的授权目录不同 | 用产生该审核表的那个目录导入 |
+| `policyChanged` | 发布的 Policy digest 与审核表记录的不同 | 旧结论不可复用，按新 Policy 重新扫描 |
+| `labelSnapshotMismatch` | 标签绑定的是另一份内容快照 | 只导入针对本次快照内容的标签 |
+
 ### 3.2 人工标注导入（不重新扫描）
 
 复核人填完标签文件后：
@@ -58,7 +80,15 @@ swift run FormaAcceptance m11-real \
   --dry-run
 ```
 
-这条命令**不扫描源目录**：它读取已有的私人审核表，合并标签，重算指标并重写产物。`--source` 必须与生成该审核表时的目录一致，否则拒绝。
+这条命令**不扫描源目录**：它读取已有的私人审核表，合并标签，重算指标并重写产物。导入被绑定在产生该审核表的那一次运行上，三项都必须对上，否则拒绝：
+
+| 绑定 | 不匹配时 |
+| --- | --- |
+| `--source` 必须与审核表记录的授权目录一致 | `.sourceMismatch` |
+| 当前发布的 Policy digest 必须与审核表记录的一致 | `.policyChanged`（旧结论不可复用） |
+| 标签引用的 `source_id` 必须在审核表里；标签若带 `snapshot_fingerprint`，必须与该记录一致 | `.unknownLabelSourceID` / `.labelSnapshotMismatch` |
+
+导入只操作**该运行目录**，不会把上一次运行的标签文件留成"看起来属于本次执行"的样子：`human-labels.json` 每次导入都被重写。
 
 ## 4. 产物
 
@@ -92,6 +122,7 @@ swift run FormaAcceptance m11-real \
     {
       "source_id": "…",
       "relative_path": "cache/artifact.pdf",
+      "snapshot_fingerprint": "…",
       "decision": "REVIEW",
       "rule_id": "verified-cache-directory",
       "explanation_code": "protection_fact_unknown",
@@ -115,7 +146,7 @@ swift run FormaAcceptance m11-real \
 {
   "schema_version": "1.0",
   "labels": [
-    { "source_id": "…", "label": "KEEP", "note": "招标文件，必须保留" },
+    { "source_id": "…", "label": "KEEP", "note": "招标文件，必须保留", "snapshot_fingerprint": "…" },
     { "source_id": "…", "label": "TECHNICAL_NOISE", "note": "编译产物" },
     { "source_id": "…", "label": "UNCERTAIN", "note": "用途不明" }
   ]
@@ -125,6 +156,7 @@ swift run FormaAcceptance m11-real \
 - `KEEP`：业务资料。它是**唯一**能形成误排除的标签：`KEEP` 记录被 `EXCLUDE` 就是误排除。
 - `TECHNICAL_NOISE`、`UNCERTAIN` 不进入误排除分母。
 - 标签必须引用审核表里存在的 `source_id`，否则拒绝导入。
+- `snapshot_fingerprint` 可选：写了就必须与审核表里该记录的快照一致，避免把旧内容的结论套到新内容上。
 
 ### 4.3 脱敏摘要字段
 
@@ -171,6 +203,8 @@ swift run FormaAcceptance m11-real \
 3. **保护事实未建立时，缓存目录排除会降级为 `REVIEW`**（`protection_fact_unknown`），而不是被当成已验证的排除。这是保守方向，但也意味着非 Git 的业务目录里 `EXCLUDE` 会很少。
 4. **OneDrive 覆盖恒为 `NOT_VERIFIED`**。本工具不探测 dataless / hydration / 权限失败场景；需要单独授权的 OneDrive 目录和另一次运行。
 5. **默认过滤始终关闭**。本工具只读，不改 `FormaApp`，不改变生产行为。
+6. **一次扫描只对应一个运行目录**，没有历史运行管理系统。想保留多次结果，就用不同的 `--evidence-dir`。
+7. **安全检查是"证明不了就不写"**：证据目录的权限、固定产物名的链接、目录与源目录的重叠，都在写入前复核；任何一项无法确认即拒绝执行。
 
 ## 7. 与默认启用门的关系
 

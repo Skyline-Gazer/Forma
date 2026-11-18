@@ -53,19 +53,27 @@ public enum M11RealDirectoryAcceptance {
     }
 
     /// One reviewer's verdict on one record.
+    ///
+    /// The optional snapshot fingerprint binds a verdict to the exact content
+    /// the reviewer looked at. When it is present it must match the review
+    /// sheet, so a verdict cannot be reused for different bytes.
     public struct Label: Codable, Sendable, Equatable {
         public let sourceID: UUID
         public let label: HumanLabel
         public let note: String?
+        public let snapshotFingerprint: String?
 
-        public init(sourceID: UUID, label: HumanLabel, note: String? = nil) {
+        public init(sourceID: UUID, label: HumanLabel, note: String? = nil,
+                    snapshotFingerprint: String? = nil) {
             self.sourceID = sourceID
             self.label = label
             self.note = note
+            self.snapshotFingerprint = snapshotFingerprint
         }
 
         enum CodingKeys: String, CodingKey {
             case sourceID = "source_id", label, note
+            case snapshotFingerprint = "snapshot_fingerprint"
         }
     }
 
@@ -109,6 +117,8 @@ public enum M11RealDirectoryAcceptance {
     public struct ReviewRow: Codable, Sendable, Equatable {
         public let sourceID: UUID
         public let relativePath: String
+        /// The fingerprint of the content this decision was made against.
+        public let snapshotFingerprint: String
         public let decision: String
         public let ruleID: String?
         public let explanationCode: String
@@ -120,7 +130,8 @@ public enum M11RealDirectoryAcceptance {
         public let reviewerNote: String?
 
         enum CodingKeys: String, CodingKey {
-            case sourceID = "source_id", relativePath = "relative_path", decision
+            case sourceID = "source_id", relativePath = "relative_path"
+            case snapshotFingerprint = "snapshot_fingerprint", decision
             case ruleID = "rule_id", explanationCode = "explanation_code", followUp = "follow_up"
             case overrideState = "override_state", hydrationPending = "hydration_pending"
             case facts, humanLabel = "human_label", reviewerNote = "reviewer_note"
@@ -382,6 +393,11 @@ public enum M11RealDirectoryAcceptance {
         case unknownLabelSourceID
         case duplicateLabelSourceID
         case sourceMismatch
+        case evidenceDirectoryNotEmpty
+        case unsafeEvidencePermissions
+        case unsafeEvidenceSymlink(String)
+        case policyChanged
+        case labelSnapshotMismatch
 
         public var description: String {
             switch self {
@@ -405,6 +421,11 @@ public enum M11RealDirectoryAcceptance {
             case .unknownLabelSourceID: return "a label refers to a source id that is not in the review sheet"
             case .duplicateLabelSourceID: return "two labels refer to the same source id"
             case .sourceMismatch: return "the source directory is not the one this review sheet was made for"
+            case .evidenceDirectoryNotEmpty: return "the evidence directory already holds an evidence set; a new scan needs a new evidence run directory"
+            case .unsafeEvidencePermissions: return "the evidence directory must be readable and writable by its owner only"
+            case .unsafeEvidenceSymlink(let name): return "refusing to write through the symlink '\(name)'"
+            case .policyChanged: return "the shipped policy changed since this review sheet was made; the old verdicts cannot be reused"
+            case .labelSnapshotMismatch: return "a label refers to a snapshot that is not the one in the review sheet"
             }
         }
     }
@@ -482,6 +503,10 @@ public enum M11RealDirectoryAcceptance {
 
     /// Scans the authorized directory, classifies every discovered record and
     /// writes the artifacts into the evidence directory.
+    ///
+    /// A scan always creates a **new** evidence run directory: an evidence
+    /// directory that already holds something is refused, so a fresh scan can
+    /// never overwrite an earlier review, its labels or its verdicts.
     public static func run(_ request: Request) async throws -> Outcome {
         let paths = try validate(source: request.source,
                                  evidenceDirectory: request.evidenceDirectory,
@@ -489,18 +514,13 @@ public enum M11RealDirectoryAcceptance {
         guard request.maxEntries > 0 else { throw Failure.invalidMaxEntries }
         guard request.deadlineSeconds > 0 else { throw Failure.invalidDeadline }
 
-        try FileManager.default.createDirectory(at: paths.evidenceDirectory,
-                                                withIntermediateDirectories: true,
-                                                attributes: [.posixPermissions: 0o700])
-        // The directory may have been a symlink when it was named; re-check the
-        // separation once it exists.
-        let settledEvidence = paths.evidenceDirectory.resolvingSymlinksInPath().standardizedFileURL
-        try checkSeparation(source: paths.source, evidence: settledEvidence)
+        let evidence = try prepareEvidenceDirectory(paths.evidenceDirectory, source: paths.source)
 
         let profile = try mappingProfile(for: request.profileID)
         let policy = try EligibilityPolicy.shipped()
 
-        let database = settledEvidence.appendingPathComponent(Artifact.workspaceDatabase)
+        let database = evidence.appendingPathComponent(Artifact.workspaceDatabase)
+        try assertNotSymlink(database, name: Artifact.workspaceDatabase)
         let workspace = try SourceWorkspace(databaseURL: database)
         let scope = try await workspace.register(paths.source)
         let listing = try await workspace.scan(scope)
@@ -516,7 +536,8 @@ public enum M11RealDirectoryAcceptance {
                               sourcePath: paths.source.path,
                               policyID: view.policyID, policyVersion: view.policyVersion,
                               policyDigest: view.policyDigest, labels: request.labels)
-        return try makeOutcome(sheet: sheet, labels: request.labels, evidenceDirectory: settledEvidence)
+        return try makeOutcome(sheet: sheet, labels: request.labels,
+                               evidenceDirectory: evidence, source: paths.source)
     }
 
     /// Imports a reviewer's labels into an existing review sheet.
@@ -525,15 +546,105 @@ public enum M11RealDirectoryAcceptance {
     /// already holds the decisions, and the labels only add a verdict per
     /// record. The metrics are recomputed from the sheet, so a reviewer can
     /// hand the labels back days later.
+    ///
+    /// The import is bound to the run that produced the sheet: the source path,
+    /// the policy digest and the snapshot fingerprints all have to match, or the
+    /// labels are refused instead of merged into a different run.
     public static func importLabels(source: URL, evidenceDirectory: URL,
                                      labels: [Label], dryRun: Bool) throws -> Outcome {
         let paths = try validate(source: source, evidenceDirectory: evidenceDirectory,
                                  dryRun: dryRun, requireExistingSource: false)
-        let sheet = try loadSheet(from: paths.evidenceDirectory)
+        let evidence = paths.evidenceDirectory.resolvingSymlinksInPath().standardizedFileURL
+        guard FileManager.default.fileExists(atPath: evidence.path) else {
+            throw Failure.sheetMissing
+        }
+        try checkSeparation(source: paths.source, evidence: evidence)
+        try assertOwnerOnly(evidence)
+        let sheet = try loadSheet(from: evidence)
         guard sheet.sourcePath == paths.source.path else { throw Failure.sourceMismatch }
+        let policy = try EligibilityPolicy.shipped()
+        guard policy.policyDigest == sheet.policyDigest else { throw Failure.policyChanged }
         let updated = try applyLabels(labels, to: sheet)
         return try makeOutcome(sheet: updated, labels: labels,
-                               evidenceDirectory: paths.evidenceDirectory)
+                               evidenceDirectory: evidence, source: paths.source)
+    }
+
+    // MARK: - Evidence directory safety
+
+    /// Every file this tool writes, with the name it is refused under when it
+    /// turns out to be a symlink.
+    private static let fixedArtifactNames = [
+        Artifact.privateReviewSheet, Artifact.sanitizedSummary, Artifact.scanCompleteness,
+        Artifact.falseExclusion, Artifact.oneDriveCoverage, Artifact.humanLabels,
+        Artifact.sha256Sums, Artifact.workspaceDatabase,
+        Artifact.workspaceDatabase + "-wal", Artifact.workspaceDatabase + "-shm",
+    ]
+
+    /// Creates or checks the evidence run directory.
+    ///
+    /// The directory must be the owner's alone, must not be a symlink into the
+    /// source, must not already hold an evidence set, and none of the fixed
+    /// artifact names may be a symlink: writing through one would put the
+    /// report outside the directory the reviewer was told about.
+    private static func prepareEvidenceDirectory(_ evidence: URL, source: URL) throws -> URL {
+        if !FileManager.default.fileExists(atPath: evidence.path) {
+            try FileManager.default.createDirectory(at: evidence, withIntermediateDirectories: true,
+                                                    attributes: [.posixPermissions: 0o700])
+        }
+        let settled = evidence.resolvingSymlinksInPath().standardizedFileURL
+        try checkSeparation(source: source, evidence: settled)
+        try assertOwnerOnly(settled)
+        for name in fixedArtifactNames {
+            try assertNotSymlink(settled.appendingPathComponent(name), name: name)
+        }
+        let contents = try FileManager.default.contentsOfDirectory(atPath: settled.path)
+        guard contents.isEmpty else { throw Failure.evidenceDirectoryNotEmpty }
+        return settled
+    }
+
+    /// Refuses a path that is a symlink. A symlink at a fixed artifact name is
+    /// the cheapest way to make a report land somewhere else.
+    private static func assertNotSymlink(_ url: URL, name: String) throws {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else {
+            return
+        }
+        if (attributes[.type] as? FileAttributeType) == .typeSymbolicLink {
+            throw Failure.unsafeEvidenceSymlink(name)
+        }
+    }
+
+    /// Refuses an evidence directory that other users can reach.
+    private static func assertOwnerOnly(_ url: URL) throws {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        let permissions = (attributes?[.posixPermissions] as? NSNumber)?.intValue ?? 0o777
+        guard permissions & 0o077 == 0 else { throw Failure.unsafeEvidencePermissions }
+    }
+
+    /// Restricts a private artifact to its owner, and refuses when that cannot
+    /// be read back. Proving the write stayed private is part of the contract.
+    private static func restrictToOwner(_ url: URL) throws {
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        guard let permissions = (attributes[.posixPermissions] as? NSNumber)?.intValue,
+              permissions & 0o077 == 0 else {
+            throw Failure.unsafeEvidencePermissions
+        }
+    }
+
+    /// Same, for files that may legitimately be absent (SQLite sidecars).
+    private static func restrictToOwnerIfExists(_ url: URL) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try restrictToOwner(url)
+    }
+
+    /// Locks down the workspace database and whichever sidecars SQLite created.
+    private static func secureWorkspaceFiles(in evidence: URL) throws {
+        for suffix in ["", "-wal", "-shm"] {
+            let name = Artifact.workspaceDatabase + suffix
+            let url = evidence.appendingPathComponent(name)
+            try assertNotSymlink(url, name: name)
+            try restrictToOwnerIfExists(url)
+        }
     }
 
     // MARK: - Label import
@@ -541,6 +652,7 @@ public enum M11RealDirectoryAcceptance {
     /// Reads the private review sheet an earlier run wrote.
     public static func loadSheet(from evidenceDirectory: URL) throws -> PrivateReviewSheet {
         let url = evidenceDirectory.appendingPathComponent(Artifact.privateReviewSheet)
+        try assertNotSymlink(url, name: Artifact.privateReviewSheet)
         guard let data = try? Data(contentsOf: url) else { throw Failure.sheetMissing }
         guard let sheet = try? FormaJSON.decode(PrivateReviewSheet.self, from: data) else {
             throw Failure.sheetMissing
@@ -572,7 +684,13 @@ public enum M11RealDirectoryAcceptance {
 
         let rows = sheet.rows.map { row -> ReviewRow in
             guard let label = bySource[row.sourceID] else { return row }
+            // A verdict that names a snapshot must name this one.
+            if let fingerprint = label.snapshotFingerprint,
+               fingerprint != row.snapshotFingerprint {
+                throw Failure.labelSnapshotMismatch
+            }
             return ReviewRow(sourceID: row.sourceID, relativePath: row.relativePath,
+                             snapshotFingerprint: row.snapshotFingerprint,
                              decision: row.decision, ruleID: row.ruleID,
                              explanationCode: row.explanationCode, followUp: row.followUp,
                              overrideState: row.overrideState,
@@ -603,6 +721,7 @@ public enum M11RealDirectoryAcceptance {
         let rows = view.entries.map { item -> ReviewRow in
             let label = bySource[item.sourceID]
             return ReviewRow(sourceID: item.sourceID, relativePath: item.entry.relativePath,
+                             snapshotFingerprint: item.entry.snapshotFingerprint,
                              decision: item.decision.rawValue, ruleID: item.decidedByRuleID,
                              explanationCode: item.explanationCode,
                              followUp: item.followUp?.rawValue,
@@ -636,7 +755,19 @@ public enum M11RealDirectoryAcceptance {
     // MARK: - Reports and artifacts
 
     private static func makeOutcome(sheet: PrivateReviewSheet, labels: [Label],
-                                    evidenceDirectory: URL) throws -> Outcome {
+                                    evidenceDirectory: URL, source: URL) throws -> Outcome {
+        // The directory may have been swapped between the scan and the write.
+        // Re-check before anything is written, and fail closed if it moved.
+        let settled = evidenceDirectory.resolvingSymlinksInPath().standardizedFileURL
+        try checkSeparation(source: source, evidence: settled)
+        try assertOwnerOnly(settled)
+        for name in fixedArtifactNames {
+            try assertNotSymlink(settled.appendingPathComponent(name), name: name)
+        }
+        // The workspace database and its sidecars hold relative paths, so they
+        // are private evidence too and get the same owner-only mode.
+        try secureWorkspaceFiles(in: settled)
+
         let sheetData = try FormaJSON.encode(sheet, pretty: true)
         let sheetHash = sha256Hex(sheetData)
         let summary = summarize(sheet: sheet, evidenceHash: sheetHash)
@@ -646,47 +777,49 @@ public enum M11RealDirectoryAcceptance {
 
         var hashes: [String: String] = [Artifact.privateReviewSheet: sheetHash]
         var files: [String: URL] = [:]
-        try write(sheetData, to: evidenceDirectory, name: Artifact.privateReviewSheet, files: &files)
+        try write(sheetData, to: settled, name: Artifact.privateReviewSheet, files: &files)
 
         let summaryData = try FormaJSON.encode(summary, pretty: true)
         hashes[Artifact.sanitizedSummary] = sha256Hex(summaryData)
-        try write(summaryData, to: evidenceDirectory, name: Artifact.sanitizedSummary, files: &files)
+        try write(summaryData, to: settled, name: Artifact.sanitizedSummary, files: &files)
 
         let completenessData = try FormaJSON.encode(completeness, pretty: true)
         hashes[Artifact.scanCompleteness] = sha256Hex(completenessData)
-        try write(completenessData, to: evidenceDirectory, name: Artifact.scanCompleteness, files: &files)
+        try write(completenessData, to: settled, name: Artifact.scanCompleteness, files: &files)
 
         let falseExclusionData = try FormaJSON.encode(falseExclusion, pretty: true)
         hashes[Artifact.falseExclusion] = sha256Hex(falseExclusionData)
-        try write(falseExclusionData, to: evidenceDirectory, name: Artifact.falseExclusion, files: &files)
+        try write(falseExclusionData, to: settled, name: Artifact.falseExclusion, files: &files)
 
         let oneDriveData = try FormaJSON.encode(oneDrive, pretty: true)
         hashes[Artifact.oneDriveCoverage] = sha256Hex(oneDriveData)
-        try write(oneDriveData, to: evidenceDirectory, name: Artifact.oneDriveCoverage, files: &files)
+        try write(oneDriveData, to: settled, name: Artifact.oneDriveCoverage, files: &files)
 
         if !labels.isEmpty {
             let labelFile = LabelFile(labels: labels.sorted { $0.sourceID.uuidString < $1.sourceID.uuidString })
             let labelData = try FormaJSON.encode(labelFile, pretty: true)
             hashes[Artifact.humanLabels] = sha256Hex(labelData)
-            try write(labelData, to: evidenceDirectory, name: Artifact.humanLabels, files: &files)
+            try write(labelData, to: settled, name: Artifact.humanLabels, files: &files)
         }
 
         let sums = hashes.keys.sorted().compactMap { key in
             hashes[key].map { "\($0)  \(key)" }
         }.joined(separator: "\n") + "\n"
-        let sumsURL = evidenceDirectory.appendingPathComponent(Artifact.sha256Sums)
-        try Data(sums.utf8).write(to: sumsURL, options: .atomic)
-        files[Artifact.sha256Sums] = sumsURL
+        try write(Data(sums.utf8), to: settled, name: Artifact.sha256Sums, files: &files)
 
         return Outcome(sheet: sheet, summary: summary, completeness: completeness,
                        falseExclusion: falseExclusion, oneDrive: oneDrive, labels: labels,
                        artifactHashes: hashes, files: files)
     }
 
+    /// Writes one artifact: never through a symlink, never readable by anyone
+    /// but its owner.
     private static func write(_ data: Data, to directory: URL, name: String,
                               files: inout [String: URL]) throws {
         let url = directory.appendingPathComponent(name)
+        try assertNotSymlink(url, name: name)
         try data.write(to: url, options: .atomic)
+        try restrictToOwner(url)
         files[name] = url
     }
 
