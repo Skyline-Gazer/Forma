@@ -1,0 +1,177 @@
+# M11 Level 4 Runbook（真实目录只读验收）
+
+状态：**工具已就绪，真实目录验收尚未开始**。本文件描述 `swift run FormaAcceptance m11-real` 的用法与产物格式。运行本工具**不等于** Level 4 通过：只有当一次真实目录运行完成、人工复核完成、误排除指标有证据时，`MACOS-VALIDATION-BACKLOG` M11 的第 4 级才可以被讨论。
+
+## 1. 边界（执行前必须确认）
+
+- 工具**只读**：它扫描一个被明确授权的目录，把产物写进另一个独立目录。它不写源目录、不触发 Import、不写 DEVONthink、不调用 Provider、不触发 OneDrive hydration、不启用默认过滤。
+- **必须显式给出目录**。工具没有默认目录，也不会去 `Documents`、`Home` 或 OneDrive 里找目标。相对路径一律拒绝。
+- **证据目录必须在源目录之外**，也不能反过来包住源目录；软链接解析后同样成立。
+- `--dry-run` 是**唯一模式**。没有"真的导入"这个开关。
+- 私人审核表**默认留在本机**。只有脱敏产物可以离开这台机器。
+
+## 2. 前置条件
+
+1. macOS 14+（记录 `sw_vers -productVersion`、`uname -m`、APFS 卷）。
+2. Swift 6 工具链（`swift --version`），仓库位于 `dev` 且包含 `Sources/FormaAcceptance`。
+3. `git` 可用时，Git 事实（tracked / 嵌套仓库）才会被建立；缺失时相关事实在报告里是 `unknown`，**不会**产生排除。
+4. Owner 授权的绝对目录路径，以及一个独立的证据输出目录。
+5. 确认该目录不包含生产 DEVONthink 数据（`Project_Archive` 的 991 条记录不可触碰）。
+
+## 3. 执行
+
+### 3.1 扫描与分类
+
+```bash
+cd <repo>
+swift run FormaAcceptance m11-real \
+  --source "/absolute/path/to/authorized/dir" \
+  --evidence-dir "$HOME/.forma/evidence/m11-real" \
+  --dry-run
+```
+
+可选参数：
+
+| 参数 | 默认 | 说明 |
+| --- | --- | --- |
+| `--profile` | `project-archive` | 映射档案；另一个可选值是 `vendor-library` |
+| `--max-entries` | `5000` | 单次探测的记录上限；超出部分计入 `skipped`，**不会被当作已验证** |
+| `--deadline-seconds` | `120` | 探测批次的时间预算 |
+
+退出码：
+
+| 码 | 含义 |
+| --- | --- |
+| `0` | 运行完成且覆盖完整（`coverage_state = COMPLETE`） |
+| `3` | 运行完成但覆盖不完整（`coverage_state = PARTIAL`：不可读子树、探测上限、超时或取消） |
+| `2` | 参数或路径校验失败，工具拒绝执行 |
+
+### 3.2 人工标注导入（不重新扫描）
+
+复核人填完标签文件后：
+
+```bash
+swift run FormaAcceptance m11-real \
+  --source "/absolute/path/to/authorized/dir" \
+  --evidence-dir "$HOME/.forma/evidence/m11-real" \
+  --labels "$HOME/.forma/evidence/m11-real/human-labels.json" \
+  --dry-run
+```
+
+这条命令**不扫描源目录**：它读取已有的私人审核表，合并标签，重算指标并重写产物。`--source` 必须与生成该审核表时的目录一致，否则拒绝。
+
+## 4. 产物
+
+| 文件 | 受众 | 内容 |
+| --- | --- | --- |
+| `private-review-sheet.json` | 仅本机 | 每条发现的记录：相对路径、决策、规则、解释码、事实 provenance、人工标签、复核备注 |
+| `sanitized-summary.json` | 可外发 | 计数、覆盖率、复核进度、误排除算术、policy digest、审核表 SHA-256。**不含路径、文件名、客户名或正文** |
+| `scan-completeness.json` | 可外发 | 扫描状态、issue 数、未配对路径数、探测覆盖 |
+| `false-exclusion.json` | 可外发 | 误排除分子/分母/比率及其状态 |
+| `onedrive-coverage.json` | 可外发 | OneDrive 覆盖状态（本工具固定为 `NOT_VERIFIED`） |
+| `human-labels.json` | 仅本机 | 导入的标签副本 |
+| `SHA256SUMS` | 可外发 | 上述产物的 SHA-256（不含 `SHA256SUMS` 自身） |
+| `acceptance-workspace.sqlite` | 仅本机 | 扫描用工作库，不是证据产物 |
+
+### 4.1 私人审核表字段
+
+```json
+{
+  "schema_version": "1.0",
+  "policy_id": "forma-import-eligibility",
+  "policy_version": "eligibility.v2",
+  "policy_digest": "…",
+  "source_scope_id": "…",
+  "source_root_id": "…",
+  "source_path": "/absolute/path",
+  "scan_state": "complete",
+  "scan_complete": true,
+  "scan_issue_count": 0,
+  "probe_coverage": { "discovered": 12, "probed": 12, "skipped": 0, "timed_out": false, "cancelled": false },
+  "rows": [
+    {
+      "source_id": "…",
+      "relative_path": "cache/artifact.pdf",
+      "decision": "REVIEW",
+      "rule_id": "verified-cache-directory",
+      "explanation_code": "protection_fact_unknown",
+      "follow_up": "probe_facts",
+      "override_state": "none",
+      "hydration_pending": false,
+      "facts": [ { "fact": "cacheMarker", "status": "confirmed", "reason": "marker_signature", "evidence": "…" } ],
+      "human_label": null,
+      "reviewer_note": null
+    }
+  ],
+  "unaccounted_paths": []
+}
+```
+
+四种决策：`INCLUDE`、`EXCLUDE`、`REVIEW`、`DEFER`。**每一条 `EXCLUDE` 和 `REVIEW` 都需要人工判定**。
+
+### 4.2 标签文件格式
+
+```json
+{
+  "schema_version": "1.0",
+  "labels": [
+    { "source_id": "…", "label": "KEEP", "note": "招标文件，必须保留" },
+    { "source_id": "…", "label": "TECHNICAL_NOISE", "note": "编译产物" },
+    { "source_id": "…", "label": "UNCERTAIN", "note": "用途不明" }
+  ]
+}
+```
+
+- `KEEP`：业务资料。它是**唯一**能形成误排除的标签：`KEEP` 记录被 `EXCLUDE` 就是误排除。
+- `TECHNICAL_NOISE`、`UNCERTAIN` 不进入误排除分母。
+- 标签必须引用审核表里存在的 `source_id`，否则拒绝导入。
+
+### 4.3 脱敏摘要字段
+
+```json
+{
+  "schema_version": "1.0",
+  "coverage_state": "COMPLETE",
+  "discovered": 12, "include": 7, "exclude": 1, "review": 4, "defer": 0,
+  "unaccounted": 0, "scan_issue_count": 0,
+  "scan_state": "complete", "scan_complete": true,
+  "probe_coverage": { "discovered": 12, "probed": 12, "skipped": 0, "timed_out": false, "cancelled": false },
+  "per_rule": { "verified-cache-directory": 1 },
+  "review_progress": { "state": "in_progress", "required": 5, "reviewed": 2, "unreviewed": 3, "keep_samples": 1, "technical_noise_samples": 1, "uncertain_samples": 0 },
+  "false_exclusion": { "state": "MEASURED", "numerator": 0, "denominator": 1, "rate": 0.0, "unit": "records", "population": "human-labelled KEEP records" },
+  "policy_digest": "…",
+  "evidence_sha256": "…",
+  "artifacts": { "private-review-sheet.json": "…" }
+}
+```
+
+状态含义必须分开读：
+
+| 字段 | 含义 |
+| --- | --- |
+| `coverage_state` | `COMPLETE` = 扫描与探测覆盖了全部发现记录；`PARTIAL` = 有不可读子树、探测上限、超时或取消 |
+| `review_progress.state` | `not_required`（没有待判定记录）/ `unreviewed`（一条都没标）/ `in_progress`（标了一部分）/ `complete`（全部 `EXCLUDE`/`REVIEW` 已判定） |
+| `false_exclusion.state` | `N/A` = 没有任何 `KEEP` 标注，此时**不能**报告"零误排除"；`MEASURED` = 分子/分母/比率有值 |
+
+## 5. 判定
+
+| 判定 | 条件 |
+| --- | --- |
+| `PASS` | 覆盖完整、人工复核完成、误排除指标有证据且无不接受的误排除 |
+| `FAIL` | 出现误排除（`KEEP` 记录被 `EXCLUDE`）。记录 `source_id`、规则、复现条件，**不擅自修改 Policy** |
+| `PARTIAL` | 覆盖不完整或复核未完成 |
+| `NOT_VERIFIED` | 工具没有执行（环境缺失、参数被拒） |
+
+发现误排除时的最小记录：`source_id`、`relative_path`、`rule_id`、`explanation_code`、对应的标签与复核备注、复现条件。
+
+## 6. 本工具的已知边界
+
+1. **未实现分页探测**。超过 `--max-entries` 的记录计入 `skipped`，覆盖状态变成 `PARTIAL`；它们不会被当作已验证。
+2. **Git 事实需要授权根本身是仓库顶层**。否则 `gitTracked` 为 `unknown`。
+3. **保护事实未建立时，缓存目录排除会降级为 `REVIEW`**（`protection_fact_unknown`），而不是被当成已验证的排除。这是保守方向，但也意味着非 Git 的业务目录里 `EXCLUDE` 会很少。
+4. **OneDrive 覆盖恒为 `NOT_VERIFIED`**。本工具不探测 dataless / hydration / 权限失败场景；需要单独授权的 OneDrive 目录和另一次运行。
+5. **默认过滤始终关闭**。本工具只读，不改 `FormaApp`，不改变生产行为。
+
+## 7. 与默认启用门的关系
+
+第 4 级通过只是第 5 级（生产默认启用）三道前置之一。合成验收（`MACOS_SYNTHETIC_PARTIAL`）、真实目录验收和 Owner 再确认，三者都不可互相替代。
