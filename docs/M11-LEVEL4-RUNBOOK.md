@@ -140,6 +140,8 @@ swift run FormaAcceptance m11-real \
 
 四种决策：`INCLUDE`、`EXCLUDE`、`REVIEW`、`DEFER`。**每一条 `EXCLUDE` 和 `REVIEW` 都需要人工判定**。
 
+`snapshot_fingerprint` 是这条决策所依据的内容快照：标签导入时可以带上它，带上就必须一致，这样旧结论不会被套用到已经变化的文件上。
+
 ### 4.2 标签文件格式
 
 ```json
