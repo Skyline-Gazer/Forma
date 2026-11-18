@@ -555,6 +555,38 @@ struct M11RealDirectoryAcceptanceTests {
                 dryRun: true)
         }
     }
+
+    @Test("an evidence directory without a review sheet is refused")
+    func missingSheetIsRefused() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try FileManager.default.createDirectory(at: fixture.evidence, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+
+        #expect(throws: M11RealDirectoryAcceptance.Failure.sheetMissing) {
+            try M11RealDirectoryAcceptance.importLabels(
+                source: fixture.source, evidenceDirectory: fixture.evidence,
+                labels: [M11RealDirectoryAcceptance.Label(sourceID: UUID(), label: .keep)],
+                dryRun: true)
+        }
+    }
+
+    @Test("a review sheet that cannot be decoded is refused, not treated as absent")
+    func corruptSheetIsRefused() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("notes", at: "notes.txt")
+        let outcome = try await fixture.run()
+        let sheetURL = try #require(outcome.files[M11RealDirectoryAcceptance.Artifact.privateReviewSheet])
+        try Data("not a sheet".utf8).write(to: sheetURL)
+
+        #expect(throws: M11RealDirectoryAcceptance.Failure.sheetInvalid) {
+            try M11RealDirectoryAcceptance.importLabels(
+                source: fixture.source, evidenceDirectory: fixture.evidence,
+                labels: [M11RealDirectoryAcceptance.Label(sourceID: UUID(), label: .keep)],
+                dryRun: true)
+        }
+    }
 }
 
 // MARK: - Fixture

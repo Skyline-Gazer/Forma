@@ -390,6 +390,8 @@ public enum M11RealDirectoryAcceptance {
         case labelFileUnreadable
         case labelFileInvalid
         case sheetMissing
+        case sheetUnreadable
+        case sheetInvalid
         case unknownLabelSourceID
         case duplicateLabelSourceID
         case sourceMismatch
@@ -418,6 +420,8 @@ public enum M11RealDirectoryAcceptance {
             case .labelFileUnreadable: return "the label file could not be read"
             case .labelFileInvalid: return "the label file is not a valid label document"
             case .sheetMissing: return "no private review sheet was found in the evidence directory"
+            case .sheetUnreadable: return "the private review sheet exists but could not be read"
+            case .sheetInvalid: return "the private review sheet is not a sheet this build can read; rescan into a new evidence run directory"
             case .unknownLabelSourceID: return "a label refers to a source id that is not in the review sheet"
             case .duplicateLabelSourceID: return "two labels refer to the same source id"
             case .sourceMismatch: return "the source directory is not the one this review sheet was made for"
@@ -653,9 +657,10 @@ public enum M11RealDirectoryAcceptance {
     public static func loadSheet(from evidenceDirectory: URL) throws -> PrivateReviewSheet {
         let url = evidenceDirectory.appendingPathComponent(Artifact.privateReviewSheet)
         try assertNotSymlink(url, name: Artifact.privateReviewSheet)
-        guard let data = try? Data(contentsOf: url) else { throw Failure.sheetMissing }
+        guard FileManager.default.fileExists(atPath: url.path) else { throw Failure.sheetMissing }
+        guard let data = try? Data(contentsOf: url) else { throw Failure.sheetUnreadable }
         guard let sheet = try? FormaJSON.decode(PrivateReviewSheet.self, from: data) else {
-            throw Failure.sheetMissing
+            throw Failure.sheetInvalid
         }
         return sheet
     }

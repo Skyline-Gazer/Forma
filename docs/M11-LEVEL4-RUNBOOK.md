@@ -67,6 +67,9 @@ swift run FormaAcceptance m11-real \
 | `sourceMismatch` | `--source` 与审核表记录的授权目录不同 | 用产生该审核表的那个目录导入 |
 | `policyChanged` | 发布的 Policy digest 与审核表记录的不同 | 旧结论不可复用，按新 Policy 重新扫描 |
 | `labelSnapshotMismatch` | 标签绑定的是另一份内容快照 | 只导入针对本次快照内容的标签 |
+| `sheetMissing` / `sheetUnreadable` | 该运行目录里没有审核表，或审核表读不出来 | 确认 `--evidence-dir` 指向产生审核表的那一次运行 |
+| `sheetInvalid` | 审核表存在但本构建无法解析（例如来自旧版本工具） | 旧结论不可复用：重新扫描到一个新的运行目录 |
+| `unknownLabelSourceID` | 标签引用的 `source_id` 不在这份审核表里 | 标签必须来自本次运行，不能跨运行搬运 |
 
 ### 3.2 人工标注导入（不重新扫描）
 
@@ -102,6 +105,8 @@ swift run FormaAcceptance m11-real \
 | `human-labels.json` | 仅本机 | 导入的标签副本 |
 | `SHA256SUMS` | 可外发 | 上述产物的 SHA-256（不含 `SHA256SUMS` 自身） |
 | `acceptance-workspace.sqlite` | 仅本机 | 扫描用工作库，不是证据产物 |
+
+所有产物都写为 `0600` 并读回校验；证据运行目录是 `0700`。工作库及其 `-wal`/`-shm` 同样收紧为 `0600`，但不列入 `SHA256SUMS`（它们是本地工作文件，不是证据）。`SHA256SUMS` 每行是 `哈希  文件名`，可以逐条重算复核。
 
 ### 4.1 私人审核表字段
 
