@@ -563,7 +563,7 @@ public enum M11RealDirectoryAcceptance {
         let sheet = try loadSheet(from: evidence)
         guard sheet.sourcePath == paths.source.path else { throw Failure.sourceMismatch }
         let policy = try EligibilityPolicy.shipped()
-        guard policy.policyDigest == sheet.policyDigest else { throw Failure.policyChanged }
+        guard policy.digest == sheet.policyDigest else { throw Failure.policyChanged }
         let updated = try applyLabels(labels, to: sheet)
         return try makeOutcome(sheet: updated, labels: labels,
                                evidenceDirectory: evidence, source: paths.source)
@@ -682,13 +682,18 @@ public enum M11RealDirectoryAcceptance {
         let known = Set(sheet.rows.map(\.sourceID))
         for id in bySource.keys where !known.contains(id) { throw Failure.unknownLabelSourceID }
 
-        let rows = sheet.rows.map { row -> ReviewRow in
-            guard let label = bySource[row.sourceID] else { return row }
-            // A verdict that names a snapshot must name this one.
+        // A verdict that names a snapshot must name this one. Checked before any
+        // merge, so a refused import never leaves a half-updated sheet.
+        for row in sheet.rows {
+            guard let label = bySource[row.sourceID] else { continue }
             if let fingerprint = label.snapshotFingerprint,
                fingerprint != row.snapshotFingerprint {
                 throw Failure.labelSnapshotMismatch
             }
+        }
+
+        let rows = sheet.rows.map { row -> ReviewRow in
+            guard let label = bySource[row.sourceID] else { return row }
             return ReviewRow(sourceID: row.sourceID, relativePath: row.relativePath,
                              snapshotFingerprint: row.snapshotFingerprint,
                              decision: row.decision, ruleID: row.ruleID,
