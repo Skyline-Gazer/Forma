@@ -76,6 +76,24 @@
 - 打开的文件：扫描进程存活期间 `lsof -p <pid>`；`brctl` 与 Finder"取消本地保留"用于构造与复核状态；
 - 网络：`nettop -p <pid>` 观察 Forma 进程；`nettop -p <onedrive pid>` 观察 OneDrive 进程。**归因规则**：`m11-real` 运行期间 Forma 自身无出网（§2），OneDrive agent 的流量属于云同步自身行为，不得记为"Forma 产生了网络请求"。禁止 MITM 代理、抓包载荷、上传任何真实内容。
 
+### 5.1 hydration 观测判据（可证伪）
+
+"没有触发物化"必须是一个能失败的主张，因此观测定义为：
+
+| 观测 | 命令（只读） | 判据 |
+| --- | --- | --- |
+| dataless 标志 | `stat -f '%f %Sf' <path>`，扫描前后各一次 | 任何**业务文件**在扫描后从 `dataless` 变为实体，即 `FAIL`（内容被拉取） |
+| 标记文件 | 同上，对象为祖先链上的 `CACHEDIR.TAG` 与 `.git` | 只允许这两个文件出现翻转；翻转必须记录，并归入 Issue #129 的"接受风险"决定 |
+| 进程打开 | 扫描存活期间 `lsof -p <pid>` | 只应看到目录句柄与上述标记文件；出现业务文件即 `FAIL` |
+| FileProvider 事件 | `log stream --predicate '…FileProvider…'` | 窗口内若出现由扫描 PID 触发的 `materialize` 类事件，记录为"发生了拉取" |
+| 网络归因 | `nettop -p <pid>` | Forma 进程零出网；OneDrive agent 的流量不得记作 Forma 请求 |
+
+**负对照**：对同一目录做一次不含标记文件的空跑时，任何 dataless 标志都不应变化；负对照失败说明观测手段本身不可信，先修手段再谈结论。
+
+**中止条件**：任一业务文件出现 dataless → 实体翻转，立即停止该场景、保留日志、报告 `FAIL`，不得继续叠加样本，也不得为了"跑完矩阵"而忽略该结果。
+
+以上观测都只用 `stat`/`lsof`/`log`/`nettop`，不需要打开业务正文，也不能在 DevBox 上执行。
+
 ## 6. 允许与禁止的主张
 
 允许：
