@@ -12,6 +12,9 @@ extension ProbeProvider {
         switch self {
         case .openAI: "gpt-4o"
         case .anthropic: "claude-sonnet-4-5"
+        // Unreachable from the suites: they run `networkCases`. Stated rather
+        // than defaulted so a future case cannot inherit a fake model name.
+        case .offline: "offline-planner.v1"
         }
     }
 
@@ -19,6 +22,7 @@ extension ProbeProvider {
         switch self {
         case .openAI: "gpt-4o-2024-08-06"
         case .anthropic: "claude-sonnet-4-5-20250929"
+        case .offline: "offline-planner.v1"
         }
     }
 
@@ -43,6 +47,7 @@ extension ProbeProvider {
                 "content": [["type": "text", "text": text]],
                 "usage": ["input_tokens": 31, "output_tokens": 12, "cache_read_input_tokens": 7, "cache_creation_input_tokens": 3],
             ]
+        case .offline: [:]
         }
     }
 }

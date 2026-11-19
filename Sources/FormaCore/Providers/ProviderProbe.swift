@@ -4,11 +4,23 @@ import Foundation
 public enum ProbeProvider: String, Codable, CaseIterable, Sendable {
     case openAI = "openai"
     case anthropic
+    /// Not a provider: the deterministic planner that answers from the batch's
+    /// own metadata. It exists as a case so a manifest built with it records
+    /// `offline` instead of borrowing a model's name, and so no egress path can
+    /// mistake it for something to call.
+    case offline
+
+    /// The providers a request may actually be sent to. The offline planner is
+    /// excluded here by construction rather than filtered at each call site.
+    public static let networkCases: [ProbeProvider] = [.openAI, .anthropic]
+
+    public var isNetworkProvider: Bool { self != .offline }
 
     public var displayName: String {
         switch self {
         case .openAI: "OpenAI"
         case .anthropic: "Anthropic"
+        case .offline: "Offline planner (not AI)"
         }
     }
 
@@ -16,6 +28,7 @@ public enum ProbeProvider: String, Codable, CaseIterable, Sendable {
         switch self {
         case .openAI: "gpt-4o-mini"
         case .anthropic: "claude-haiku-4-5-20251001"
+        case .offline: OfflinePlannerAnswerer.modelID
         }
     }
 }

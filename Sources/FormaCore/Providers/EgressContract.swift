@@ -50,6 +50,9 @@ public enum EgressEndpoint: Codable, Sendable, Equatable {
         switch self {
         case .provider(.openAI): return URL(string: "https://api.openai.com/v1/responses")!
         case .provider(.anthropic): return URL(string: "https://api.anthropic.com/v1/messages")!
+        // A stable, non-routable identity for the offline planner: it never
+        // appears in a request, and `ProviderTransport` refuses to build one.
+        case .provider(.offline): return URL(string: "forma://offline-planner")!
         case .local(let url): return url
         }
     }

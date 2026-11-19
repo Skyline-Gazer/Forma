@@ -74,6 +74,10 @@ struct ProviderTransport: Sendable {
     }
 
     func makeRequest(_ request: StructuredRequest, key: String) throws -> URLRequest {
+        // The hard boundary: the offline planner has no wire format, so a request
+        // carrying it is refused here rather than being translated into something
+        // that could be sent. Hiding the UI entry point is not the guarantee.
+        guard request.provider.isNetworkProvider else { throw FormaError.unavailable }
         let schema = try JSONSerialization.jsonObject(with: request.schema)
         // Strict mode is what makes `additionalProperties: false` binding on the
         // provider side as well: a permissive format lets a model add identity
@@ -83,6 +87,8 @@ struct ProviderTransport: Sendable {
         let body: [String: Any]
         let text = request.system.map { "\($0)\n\n" + request.payload } ?? request.payload
         switch request.provider {
+        case .offline:
+            throw FormaError.unavailable
         case .openAI:
             format["name"] = request.name
             body = [
@@ -109,6 +115,8 @@ struct ProviderTransport: Sendable {
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         switch request.provider {
+        case .offline:
+            throw FormaError.unavailable
         case .openAI:
             urlRequest.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         case .anthropic:
@@ -153,6 +161,8 @@ struct ProviderTransport: Sendable {
     /// recovery rules, so they must not collapse into one error.
     func outputText(from envelope: [String: Any], provider: ProbeProvider) throws -> String {
         switch provider {
+        case .offline:
+            throw FormaError.invalidResponse
         case .openAI:
             switch envelope["status"] as? String {
             case "completed": break
@@ -204,6 +214,8 @@ struct ProviderTransport: Sendable {
     func usage(from envelope: [String: Any], provider: ProbeProvider) -> Usage {
         guard let values = envelope["usage"] as? [String: Any] else { return Usage() }
         switch provider {
+        case .offline:
+            return Usage()
         case .openAI:
             let details = values["input_tokens_details"] as? [String: Any]
             return Usage(input: Self.count(values["input_tokens"]), output: Self.count(values["output_tokens"]),

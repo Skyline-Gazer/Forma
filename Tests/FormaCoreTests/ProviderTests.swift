@@ -3,7 +3,7 @@ import Testing
 @testable import FormaCore
 
 struct ProviderTests {
-    @Test(arguments: ProbeProvider.allCases)
+    @Test(arguments: ProbeProvider.networkCases)
     func nativeStructuredRequestAndUsage(provider: ProbeProvider) async throws {
         let fixture = ProviderFixture(provider: provider, hasKey: false) { _ in
             .response(body: provider.successBody())
@@ -31,6 +31,11 @@ struct ProviderTests {
 
         let format: [String: Any]
         switch provider {
+        // Unreachable: this suite runs `networkCases`. Recorded rather than
+        // ignored, so widening the parameter list cannot pass silently.
+        case .offline:
+            Issue.record("the offline planner must never be dispatched as a provider")
+            format = [:]
         case .openAI:
             #expect(observed.request.url?.absoluteString == "https://api.openai.com/v1/responses")
             #expect(observed.request.value(forHTTPHeaderField: "Authorization") == "Bearer \(fixture.key)")
@@ -59,7 +64,7 @@ struct ProviderTests {
         #expect(properties["has_project"]?["type"] as? String == "boolean")
     }
 
-    @Test(arguments: ProbeProvider.allCases)
+    @Test(arguments: ProbeProvider.networkCases)
     func requiresExplicitConsentAndKey(provider: ProbeProvider) async {
         let fixture = ProviderFixture(provider: provider, hasKey: false) { _ in
             .response(body: provider.successBody())
@@ -73,7 +78,7 @@ struct ProviderTests {
         #expect(fixture.requests.isEmpty)
     }
 
-    @Test(arguments: ProbeProvider.allCases, [
+    @Test(arguments: ProbeProvider.networkCases, [
         #"{"classification":"vendor_library","has_project":false,"unrecognized":"value"}"#,
         #"{"classification":"unrecognized","has_project":false}"#,
         #"{"classification":"vendor_library","has_project":0}"#,
@@ -91,11 +96,13 @@ struct ProviderTests {
         #expect(result.inputTokens == 31)
     }
 
-    @Test(arguments: ProbeProvider.allCases)
+    @Test(arguments: ProbeProvider.networkCases)
     func distinguishesRefusalAndTruncation(provider: ProbeProvider) async {
         let refusal = ProviderFixture(provider: provider) { key in
             var response = provider.successEnvelope()
             switch provider {
+            case .offline:
+                Issue.record("the offline planner must never be dispatched as a provider")
             case .openAI:
                 response["output"] = [["type": "message", "content": [["type": "refusal", "refusal": key]]]]
             case .anthropic:
@@ -113,6 +120,8 @@ struct ProviderTests {
         let truncation = ProviderFixture(provider: provider) { _ in
             var response = provider.successEnvelope()
             switch provider {
+            case .offline:
+                Issue.record("the offline planner must never be dispatched as a provider")
             case .openAI:
                 response["status"] = "incomplete"
                 response["incomplete_details"] = ["reason": "max_output_tokens"]

@@ -41,7 +41,7 @@ struct SettingsView: View {
     private var providerSection: some View {
         Section("Provider") {
             Picker("Provider", selection: Binding(get: { model.provider }, set: { model.selectProvider($0) })) {
-                ForEach(ProbeProvider.allCases, id: \.self) { provider in
+                ForEach(ProbeProvider.networkCases, id: \.self) { provider in
                     Text(provider.displayName).tag(provider)
                 }
             }
