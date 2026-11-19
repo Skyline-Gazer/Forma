@@ -100,9 +100,36 @@ final class WorkspaceModel: ObservableObject {
         static let profile = "selectedMappingProfile"
         static let provider = "mappingProvider"
         static let model = "mappingModel"
+        static let plannerMode = "mappingPlannerMode"
         static let entryLimit = "mappingEntryLimit"
         static let salt = "mappingRedactionSalt"
         static let terms = "mappingRedactionTerms"
+    }
+
+    /// Which answerer a mapping run uses. `offline` is a deterministic draft, not
+    /// a model: the manifest records `modelProvider = "offline"` and the run
+    /// consumes no tokens. Switching modes never touches the stored provider,
+    /// model or key of the other mode.
+    enum PlannerMode: String {
+        case offline
+        case ai
+
+        var label: String {
+            switch self {
+            case .offline: "Offline Planner — Not AI"
+            case .ai: "AI Mapping"
+            }
+        }
+    }
+
+    @Published var plannerMode: PlannerMode {
+        didSet {
+            guard oldValue != plannerMode else { return }
+            Self.store.set(plannerMode.rawValue, forKey: Keys.plannerMode)
+            // The engine is built around the answerer, so a mode change must not
+            // reuse the cached one.
+            engineCache = nil
+        }
     }
 
     /// Salt FormaCore itself uses for its identity plan, kept as the default so
@@ -128,6 +155,9 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var evidenceFailures: [UUID: FormaError] = [:]
     @Published private(set) var fileEvidence: SourceEvidence?
     @Published private(set) var exportSummary: ManifestExport.Summary?
+    /// The Alpha dry run. Rebuilt on demand and dropped whenever the manifest
+    /// changes, so a plan can never outlive the revision it describes.
+    @Published private(set) var importPlan: ImportPlan?
     @Published private(set) var revalidation: ManifestExport.Revalidation?
     @Published private(set) var bundleURL: URL?
     @Published private(set) var casePack: CasePack?
@@ -269,7 +299,7 @@ final class WorkspaceModel: ObservableObject {
         // `defaults` property: Swift forbids touching `self` - and a property
         // read is a `self` use - until every stored property has a value, and
         // the assignments below are exactly what gives them one.
-        let storedProvider = ProbeProvider.allCases.first { $0.rawValue == Self.store.string(forKey: Keys.provider) }
+        let storedProvider = ProbeProvider.networkCases.first { $0.rawValue == Self.store.string(forKey: Keys.provider) }
             ?? .openAI
         provider = storedProvider
         modelID = Self.store.string(forKey: Keys.model) ?? storedProvider.defaultModel
@@ -281,6 +311,9 @@ final class WorkspaceModel: ObservableObject {
         redactionTerms = Self.store.loadTerms(forKey: Keys.terms)
         selectedProfileID = Self.store.string(forKey: Keys.profile)
         selectedScopeID = UUID(uuidString: Self.store.string(forKey: Keys.scope) ?? "")
+        // Offline is the default because it is the only mode that works without
+        // credentials; an existing choice is preserved verbatim.
+        plannerMode = PlannerMode(rawValue: Self.store.string(forKey: Keys.plannerMode) ?? "") ?? .offline
     }
 
     // MARK: - Derived values
@@ -763,9 +796,13 @@ final class WorkspaceModel: ObservableObject {
         } else {
             targets = listing.entries
         }
-        let provider = self.provider
-        let model = modelID
-        let consent = egress
+        // The mode decides both the answerer and the identity the run records:
+        // an offline draft must never be written as a model's work.
+        let offline = plannerMode == .offline
+        let provider: ProbeProvider = offline ? .offline : self.provider
+        let model = offline ? OfflinePlannerAnswerer.modelID : modelID
+        // Nothing is sent in offline mode, so there is nothing to consent to.
+        let consent = offline ? false : egress
         let limit = entryLimit
         let plan = redaction
         // Consent alone is not an authorization. Build one grant from the
@@ -906,6 +943,48 @@ final class WorkspaceModel: ObservableObject {
     }
 
     // MARK: - Export, load and revalidate
+
+    // MARK: - Alpha dry run
+
+    /// Builds the import plan for the current manifest.
+    ///
+    /// No write path exists in this build: the plan is built with
+    /// `writeToolsAvailable == false`, no import authorization and unobserved
+    /// target facts, so every row is `blocked` or `deferred` for a reason the
+    /// view can explain. That is the honest state of the product, not a UI
+    /// failure state.
+    func buildImportPlan() {
+        guard phase == .idle else { return }
+        guard let manifest, let profile = selectedProfile else {
+            importPlan = nil
+            notice = "An import plan needs a manifest and a profile."
+            return
+        }
+        importPlan = ImportPlanner.plan(
+            manifest: manifest,
+            profile: profile,
+            observations: ImportPlanner.Observations(sourceRoot: nil, listing: listing),
+            authorization: nil,
+            capability: ImportCapabilityFacts(writeToolsAvailable: false, readbackAvailable: false),
+            targetObserved: false)
+    }
+
+    /// Writes the plan as JSON so it can be attached to a review without the app.
+    func writeImportPlan(to directory: URL) {
+        guard let plan = importPlan else {
+            notice = "Build the import plan first."
+            return
+        }
+        do {
+            let data = try FormaJSON.encoder(pretty: true).encode(plan)
+            let url = directory.appendingPathComponent("import-plan-r\(plan.manifestRevision).json")
+            try data.write(to: url, options: .atomic)
+            notice = "Wrote \(url.lastPathComponent): a dry-run plan that lists local file names, "
+                + "so treat it as private data rather than a sanitized artifact."
+        } catch {
+            show(error as? FormaError ?? .storage, operation: .readEvidence, fallback: .storage)
+        }
+    }
 
     func export(to directory: URL) {
         guard phase == .idle, let manifest else {
@@ -1299,7 +1378,7 @@ final class WorkspaceModel: ObservableObject {
     /// the old one.
     private func engine(for profile: MappingProfile,
                         authorization: EgressAuthorization?) -> MappingEngine? {
-        let key = "\(profile.versionKey)|\(casePack?.versionKey ?? "no-case-pack")"
+        let key = "\(plannerMode.rawValue)|\(profile.versionKey)|\(casePack?.versionKey ?? "no-case-pack")"
             + "|\(authorization?.id ?? "no-egress")"
         if let engineCache, engineCache.key == key { return engineCache.engine }
         guard let casePack else {
@@ -1307,16 +1386,25 @@ final class WorkspaceModel: ObservableObject {
             notice = "The shipped CasePack could not be loaded, so no engine can be built."
             return nil
         }
-        let client: ProviderMappingClient
-        if let authorization { client = ProviderMappingClient(authorization: authorization) }
-        else { client = ProviderMappingClient() }
+        let answerer: any MappingAnswering
+        switch plannerMode {
+        case .offline:
+            // Deterministic, no socket, no key: the manifest records `offline`.
+            answerer = OfflinePlannerAnswerer()
+        case .ai:
+            answerer = authorization.map { ProviderMappingClient(authorization: $0) } ?? ProviderMappingClient()
+        }
         let built = MappingEngine(profile: profile, casePack: casePack,
-                                  answerer: client, workspace: workspace)
+                                  answerer: answerer, workspace: workspace)
         engineCache = (key, built)
         return built
     }
 
     private func refreshRows() {
+        // A plan describes one manifest revision. Any change to the manifest
+        // invalidates it, and a stale plan is worse than none: it would show a
+        // target and a verdict for records that no longer exist in this shape.
+        importPlan = nil
         guard let manifest else {
             rows = []
             exceptions = []
