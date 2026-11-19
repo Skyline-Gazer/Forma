@@ -41,8 +41,9 @@ struct AlphaIntegrationTests {
         #expect(outcome.manifest.envelope.grantsExecution == false)
         // Every record got an answer: the planner may not drop a record silently.
         #expect(outcome.manifest.entries.count == listing.entries.count)
-        let unclassified = try #require(profile.categories.first { $0.identifier.hasSuffix("待分类") })
-        #expect(outcome.manifest.entries.allSatisfy { $0.metadata[.documentcategory] == unclassified.identifier })
+        // Nothing is claimed without evidence, so the category stays unknown for
+        // every record until a person fills it from the registered rows.
+        #expect(outcome.manifest.entries.allSatisfy { $0.metadata[.documentcategory] == nil })
         // Nothing is validated by being mapped: the required Project Archive
         // fields are unknown until a person confirms them.
         #expect(outcome.manifest.envelope.state != .validated)
@@ -55,9 +56,13 @@ struct AlphaIntegrationTests {
         #expect(plan.writesInThisBuild == false)
         #expect(plan.manifestRevision == outcome.manifest.envelope.revision)
         #expect(plan.rows.count == outcome.manifest.entries.count)
-        // No authorization exists in this build, so that is the only reason a row
-        // can carry, and it is reported once per record.
-        #expect(plan.rows.allSatisfy { $0.codes == [.authorizationMissing] })
+        // Every row is blocked, and the reason that matters is the missing
+        // authorization; a manifest that was never validated is reported with it
+        // rather than instead of it.
+        #expect(plan.rows.allSatisfy { $0.codes.contains(.authorizationMissing) })
+        #expect(plan.rows.allSatisfy { row in
+            !row.codes.contains(.targetMissing) && !row.codes.contains(.targetNotWritable)
+        })
         #expect(plan.passes == 0)
         #expect(plan.blocked == plan.rows.count)
     }
