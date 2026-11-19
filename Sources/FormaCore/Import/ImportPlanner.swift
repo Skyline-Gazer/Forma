@@ -102,8 +102,12 @@ public struct ImportPlan: Codable, Sendable, Equatable {
         // A file that claims an execution or an authorization is not this
         // artifact, whatever else it contains: refusing to decode it is the only
         // safe answer for a reader that might act on it.
-        if try container.decodeIfPresent(Bool.self, forKey: .writesExecuted) == true
-            || try container.decodeIfPresent(Bool.self, forKey: .authorizationGranted) == true {
+        // Decoded into locals first: `try` may not sit to the right of `||`, and
+        // a claim is easier to read as a named boolean anyway.
+        let claimsExecution = try container.decodeIfPresent(Bool.self, forKey: .writesExecuted) ?? false
+        let claimsAuthorization = try container.decodeIfPresent(Bool.self,
+                                                                forKey: .authorizationGranted) ?? false
+        if claimsExecution || claimsAuthorization {
             throw FormaError.invalidOutput
         }
         manifestRevision = try container.decode(Int.self, forKey: .manifestRevision)
