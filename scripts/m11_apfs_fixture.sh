@@ -154,14 +154,38 @@ assert_local_volume() {
     printf '%s\n' "$info" | grep -q 'File System Personality: *APFS' \
         || die "$path ($device) is not on an APFS volume"
     # Writability is proven by an actual write, not by a banner line: a sealed
-    # snapshot mount reports differently from the volume beneath it. The probe
-    # file is created beside the tree (never inside it) and removed immediately.
-    probe=$(dirname "$path")/.forma-m11-probe.$$
+    # snapshot mount reports differently from the volume beneath it.
+    #
+    # The probe goes *inside* `$path`, not beside it: requiring the parent of the
+    # parent to be writable would refuse a perfectly usable directory, and the
+    # fingerprint deliberately excludes the root entry (`find -mindepth 1`), so a
+    # transient file at the root cannot move a stamp.
+    probe=$path/.forma-m11-probe.$$
     if ! ( : >"$probe" ) 2>/dev/null; then
         rm -f "$probe"
         die "$path is not writable"
     fi
     rm -f "$probe"
+}
+
+# Refuse to build a fixture inside another fixture or inside a tool-state
+# directory: the outer run would then fingerprint (and later delete) a tree it
+# did not create.
+assert_not_inside_tool_tree() {
+    local rest=$1 component
+    while [ -n "$rest" ]; do
+        case "$rest" in
+            */*) component=${rest%%/*}
+                 rest=${rest#*/} ;;
+            *)   component=$rest
+                 rest= ;;
+        esac
+        case "$component" in
+            "$FIXTURE_DIRNAME"|"$STATE_DIRNAME"|"$OUTSIDE_DIRNAME")
+                die "$1 is inside a $component directory; refusing to nest fixtures"
+                ;;
+        esac
+    done
 }
 
 # Canonical path of an existing directory, with every symlink resolved. `pwd -P`
@@ -321,6 +345,9 @@ case "$ACTION" in
         # path and a symlink alias all resolve to the same directory, and a
         # cloud-sync alias only becomes recognizable after resolution.
         parent=$(canonical_dir "$parent") || die "cannot resolve $parent"
+        # Cheapest refusal first: nesting is a pure path question and must not
+        # touch the tree (the volume guard writes a probe file).
+        assert_not_inside_tool_tree "$parent"
         assert_local_volume "$parent"
         fixture=$parent/$FIXTURE_DIRNAME
         outside=$parent/$OUTSIDE_DIRNAME

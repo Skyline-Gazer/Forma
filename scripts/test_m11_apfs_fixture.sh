@@ -193,6 +193,12 @@ ln -s "$GUARD/Library/CloudStorage/deep" "$GUARD/cloud-alias"
 expect_exit 1 "build refuses a symlink alias into CloudStorage" \
     bash "$TOOL" build "$GUARD/cloud-alias"
 rm -f "$GUARD/cloud-alias"
+# A second fixture inside the first one would be fingerprinted (and later
+# deleted) by the outer run, so nesting is refused.
+expect_exit 1 "build refuses to nest inside an existing fixture" \
+    bash "$TOOL" build "$FIXTURE/01-项目"
+expect_exit 1 "build refuses to nest inside the tool state directory" \
+    bash "$TOOL" build "$STATE"
 expect_exit 0 "build accepts a local directory whose name merely contains OneDrive" \
     bash "$TOOL" build "$GUARD/local/MyOneDriveDocs"
 expect_exit 0 "clean accepts the same local directory" \

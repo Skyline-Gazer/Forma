@@ -20,6 +20,7 @@
 | 读 `.git` | 同上，有界 4096 B | `EligibilityFactProbe.swift:465` 附近 | 仅在上溯过程中遇到 `.git` 项时 | **可能**：`.git` 本身若为 dataless 占位符（OneDrive 上常见） |
 | 符号链接条目 | `lstat`（不 `open`、不解析目标） | `SourceFilesystem.swift:205-232`（`state` 为 `.symlink`） | 链接条目不进入 `entry_states: ["present"]` 规则，落为 `REVIEW`（`no_rule_matched`） | 否 |
 | 目录名 / 扩展名 / 隐藏 / `contentHash` | 无额外调用 | 谓词见 `EligibilityPolicy.swift:126-172` | `contentHash` 在 Level 4 视图里固定 `nil` | 否 |
+| `NSFileCoordinator` | `coordinate(readingItemAt:)` | `SourceEvidenceReader.swift:54`；仅经 `SourceWorkspace.captureEvidence` 从映射/证据路径可达 | 验收路径 `m11-real` 只调用 `workspace.scan` 与 `probeEligibilityFacts`（`M11RealDirectoryAcceptance.swift:530-531`），不经过该协调器；该读取器在协调前先判 `isHydrationPending` 并返回 `.hydrationPending` | 否（验收路径不可达） |
 | 网络 | Level 4 验收路径**无任何网络调用**：Forma 的出网只存在于显式 Provider 请求路径（`ProviderTransport.swift:26` `URLSessionConfiguration.ephemeral`，用于报价/映射），验收 CLI 不调用；DEVONthink 走 stdio | `ProviderTransport.swift:26`、`MCPStdio.swift` | — | 不适用 |
 
 结论：扫描与判定本身不读业务文件内容、不请求哈希、不下载；唯一的内容读取是上面两行标记文件，且**只沿祖先目录**发生——这正是 §3 风险的来源，也是它不能被笼统写成"Forma 不下载文件"的原因。
