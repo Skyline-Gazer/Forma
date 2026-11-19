@@ -199,9 +199,16 @@ public enum M11RealDirectoryAcceptance {
     /// carry a verdict, so `keep_labelled` is the *observed* number of false
     /// exclusions inside the excluded set. It says nothing about records the
     /// policy chose to include.
+    /// The excluded population, which is adjudicated as a census: every excluded
+    /// record can be looked at, so `state` reports *coverage of the review*, and
+    /// `verdict` reports *what the review established*. They are deliberately two
+    /// fields: `CENSUS_COMPLETE` with a `NEEDS_REVIEW` verdict means every
+    /// exclusion has a human verdict and some of those verdicts are UNCERTAIN —
+    /// the review is finished, the safety question is not.
     public struct ExcludeAdjudication: Codable, Sendable, Equatable {
         /// `N/A` when nothing was excluded, `CENSUS_COMPLETE` when every
         /// excluded record has a verdict, `CENSUS_INCOMPLETE` otherwise.
+        /// This says nothing about whether the exclusions are *safe*.
         public let state: String
         public let excludedRecords: Int
         public let adjudicated: Int
@@ -209,11 +216,21 @@ public enum M11RealDirectoryAcceptance {
         /// Excluded records a reviewer called business material: the observed
         /// false exclusions. Non-zero means `FAIL`, whatever the sampled rate says.
         public let keepLabelled: Int
+        /// Excluded records a reviewer could not resolve. They are adjudicated
+        /// (they carry a verdict) but they are neither KEEP nor confirmed noise,
+        /// so they block a `SAFE_TO_CLEAR` conclusion without being counted as a
+        /// false exclusion.
+        public let uncertainLabelled: Int?
+        /// `FALSE_EXCLUSION_FOUND` > `INCOMPLETE` > `NEEDS_REVIEW` >
+        /// `SAFE_TO_CLEAR`; `N/A` when nothing was excluded. `keep_labelled == 0`
+        /// on its own is *not* a safety conclusion.
+        public let verdict: String?
         public let unit: String
 
         enum CodingKeys: String, CodingKey {
             case state, excludedRecords = "excluded_records", adjudicated, unadjudicated
-            case keepLabelled = "keep_labelled", unit
+            case keepLabelled = "keep_labelled"
+            case uncertainLabelled = "uncertain_labelled", verdict, unit
         }
     }
 
@@ -965,27 +982,53 @@ public enum M11RealDirectoryAcceptance {
     /// Every excluded record is supposed to carry a verdict, so this is a census:
     /// `keep_labelled` is the observed count of false exclusions inside the
     /// excluded set, and an incomplete census means the evidence is not finished.
+    ///
+    /// `state` and `verdict` answer two different questions on purpose. Coverage
+    /// (`state`) is about the review having happened; `verdict` is about what it
+    /// established. A finished review that still contains UNCERTAIN verdicts is
+    /// `CENSUS_COMPLETE` + `NEEDS_REVIEW`, never "safe": counting an UNCERTAIN as
+    /// adjudicated must not be read as clearing the exclusion.
     private static func excludeAdjudication(sheet: PrivateReviewSheet) -> ExcludeAdjudication {
         let excluded = sheet.rows.filter { $0.decision == EligibilityDecision.exclude.rawValue }
         let adjudicated = excluded.filter { $0.humanLabel != nil }.count
         let keepLabelled = excluded.filter { $0.humanLabel == .keep }.count
+        let uncertainLabelled = excluded.filter { $0.humanLabel == .uncertain }.count
         let state: String
         if excluded.isEmpty { state = "N/A" }
         else if adjudicated == excluded.count { state = "CENSUS_COMPLETE" }
         else { state = "CENSUS_INCOMPLETE" }
+        // Ordered by how much the observation decides: a KEEP is a confirmed
+        // false exclusion, an unlabelled record leaves the census open, and an
+        // UNCERTAIN verdict leaves the safety question open.
+        let verdict: String
+        if excluded.isEmpty { verdict = "N/A" }
+        else if keepLabelled > 0 { verdict = "FALSE_EXCLUSION_FOUND" }
+        else if adjudicated < excluded.count { verdict = "INCOMPLETE" }
+        else if uncertainLabelled > 0 { verdict = "NEEDS_REVIEW" }
+        else { verdict = "SAFE_TO_CLEAR" }
         return ExcludeAdjudication(state: state, excludedRecords: excluded.count,
                                    adjudicated: adjudicated,
                                    unadjudicated: excluded.count - adjudicated,
-                                   keepLabelled: keepLabelled, unit: "records")
+                                   keepLabelled: keepLabelled,
+                                   uncertainLabelled: uncertainLabelled,
+                                   verdict: verdict, unit: "records")
     }
 
     /// The included set can only be sampled, so it is reported as counts and
     /// never as a rate that could be quoted as a population figure.
+    ///
+    /// `N/A` means there was nothing to sample. `NOT_SAMPLED` means there were
+    /// included records and none carries a verdict — a sampling gap, not an
+    /// absence of population.
     private static func includeSample(sheet: PrivateReviewSheet) -> IncludeSample {
         let included = sheet.rows.filter { $0.decision == EligibilityDecision.include.rawValue }
         let labelled = included.filter { $0.humanLabel != nil }
         func count(_ label: HumanLabel) -> Int { labelled.filter { $0.humanLabel == label }.count }
-        return IncludeSample(state: labelled.isEmpty ? "NOT_SAMPLED" : "SAMPLED",
+        let state: String
+        if included.isEmpty { state = "N/A" }
+        else if labelled.isEmpty { state = "NOT_SAMPLED" }
+        else { state = "SAMPLED" }
+        return IncludeSample(state: state,
                              includedRecords: included.count, labelled: labelled.count,
                              keepLabelled: count(.keep),
                              technicalNoiseLabelled: count(.technicalNoise),
@@ -998,21 +1041,35 @@ public enum M11RealDirectoryAcceptance {
         + "it does not measure the false-exclusion rate of the whole run"
 
     /// One sentence that states what the two populations do and do not support.
+    /// It quotes the *verdict*, not `keep_labelled == 0`, because a census can be
+    /// complete while the excluded set is still unresolved.
     private static func claimBoundary(census: ExcludeAdjudication,
                                       sample: IncludeSample) -> String {
         let censusPart: String
-        switch census.state {
+        switch census.verdict ?? "" {
         case "N/A":
             censusPart = "nothing was excluded, so the excluded set carries no evidence either way"
-        case "CENSUS_COMPLETE":
-            censusPart = "every excluded record was adjudicated: \(census.keepLabelled) of "
-                + "\(census.excludedRecords) were labelled business material"
-        default:
+        case "FALSE_EXCLUSION_FOUND":
+            censusPart = "\(census.keepLabelled) of \(census.excludedRecords) excluded records were "
+                + "labelled business material, so the exclusion set contains confirmed false exclusions"
+        case "INCOMPLETE":
             censusPart = "only \(census.adjudicated) of \(census.excludedRecords) excluded records "
                 + "were adjudicated, so the excluded set is not fully evidenced"
+        case "NEEDS_REVIEW":
+            censusPart = "every excluded record was adjudicated, but \(census.uncertainLabelled ?? 0) "
+                + "carry an UNCERTAIN verdict, so the excluded set is not cleared"
+        default:
+            censusPart = "every excluded record was adjudicated as technical noise and none was "
+                + "labelled business material"
         }
-        return censusPart + "; " + includeClaimBoundary
-            + " (\(sample.labelled) of \(sample.includedRecords) included records carry a verdict)"
+        let samplePart: String
+        switch sample.state {
+        case "N/A":
+            samplePart = "there were no included records to sample"
+        default:
+            samplePart = "(\(sample.labelled) of \(sample.includedRecords) included records carry a verdict)"
+        }
+        return censusPart + "; " + includeClaimBoundary + " " + samplePart
     }
 
     private static func falseExclusionMetric(sheet: PrivateReviewSheet) -> FalseExclusionMetric {

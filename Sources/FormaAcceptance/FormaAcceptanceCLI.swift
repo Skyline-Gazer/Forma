@@ -139,7 +139,11 @@ struct FormaAcceptanceCLI {
         if let census = summary.falseExclusion.excludeAdjudication {
             print("exclude-adjudication\t\(census.state)\texcluded=\(census.excludedRecords)"
                 + "\tadjudicated=\(census.adjudicated)\tunadjudicated=\(census.unadjudicated)"
-                + "\tkeep_labelled=\(census.keepLabelled)")
+                + "\tkeep_labelled=\(census.keepLabelled)"
+                + "\tuncertain_labelled=\(census.uncertainLabelled.map { String($0) } ?? "n/a")")
+            // Coverage and safety are separate lines on purpose: a complete
+            // census with UNCERTAIN verdicts is not a cleared exclusion set.
+            print("exclude-verdict\t\(census.verdict ?? "n/a")")
         }
         if let sample = summary.falseExclusion.includeSample {
             print("include-sample\t\(sample.state)\tincluded=\(sample.includedRecords)"

@@ -631,6 +631,9 @@ struct M11RealDirectoryAcceptanceTests {
         #expect(census.adjudicated == 1)
         #expect(census.unadjudicated == 0)
         #expect(census.keepLabelled == 0)
+        // Coverage of the review and the safety conclusion are separate fields.
+        #expect(census.uncertainLabelled == 0)
+        #expect(census.verdict == "SAFE_TO_CLEAR")
 
         // Sample: two included records were looked at, one kept, one uncertain.
         let sample = try #require(metric.includeSample)
@@ -678,6 +681,8 @@ struct M11RealDirectoryAcceptanceTests {
         #expect(census.adjudicated == 1)
         #expect(census.unadjudicated == 1)
         #expect(census.keepLabelled == 0)
+        #expect(census.uncertainLabelled == 0)
+        #expect(census.verdict == "INCOMPLETE")
         // No KEEP label at all: the arithmetic stays N/A even though the census
         // has a verdict, because "zero observed" is not "measured zero".
         #expect(imported.summary.falseExclusion.state == "N/A")
@@ -703,6 +708,7 @@ struct M11RealDirectoryAcceptanceTests {
         let census = try #require(imported.summary.falseExclusion.excludeAdjudication)
         #expect(census.state == "CENSUS_COMPLETE")
         #expect(census.keepLabelled == 1)
+        #expect(census.verdict == "FALSE_EXCLUSION_FOUND")
         #expect(imported.summary.falseExclusion.numerator == 1)
         #expect(imported.summary.falseExclusion.rate == 1.0)
         // The sample side is untouched by an exclusion finding: nothing was
@@ -738,8 +744,58 @@ struct M11RealDirectoryAcceptanceTests {
         #expect(imported.summary.falseExclusion.state == "N/A")
         #expect(imported.summary.reviewProgress.uncertainSamples == 1)
         #expect(imported.summary.reviewProgress.keepSamples == 0)
+        // Judged, but unresolved: the census is complete and the exclusion set is
+        // still not cleared.
+        #expect(census.uncertainLabelled == 1)
+        #expect(census.verdict == "NEEDS_REVIEW")
+        let boundary = try #require(imported.summary.falseExclusion.claimBoundary)
+        #expect(boundary.contains("not cleared"))
         #expect(imported.sheet.rows.first { $0.sourceID == excluded.sourceID }?.humanLabel
                 == M11RealDirectoryAcceptance.HumanLabel.uncertain)
+    }
+
+    @Test("a census of confirmed noise is the only state that clears the exclusion")
+    func completeNoiseCensusIsSafeToClear() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("noise", at: "one/.DS_Store")
+        try fixture.write("noise", at: "two/._report.pdf")
+        let outcome = try await fixture.run()
+        let excluded = outcome.sheet.rows.filter {
+            $0.decision == EligibilityDecision.exclude.rawValue
+        }
+        #expect(excluded.count == 2)
+
+        let imported = try M11RealDirectoryAcceptance.importLabels(
+            source: fixture.source, evidenceDirectory: fixture.evidence,
+            labels: excluded.map {
+                M11RealDirectoryAcceptance.Label(sourceID: $0.sourceID, label: .technicalNoise)
+            },
+            dryRun: true)
+        let census = try #require(imported.summary.falseExclusion.excludeAdjudication)
+        #expect(census.state == "CENSUS_COMPLETE")
+        #expect(census.keepLabelled == 0)
+        #expect(census.uncertainLabelled == 0)
+        #expect(census.verdict == "SAFE_TO_CLEAR")
+        let boundary = try #require(imported.summary.falseExclusion.claimBoundary)
+        #expect(boundary.contains("adjudicated as technical noise"))
+    }
+
+    @Test("a run with nothing included reports an N/A sample, not an empty one")
+    func noIncludedRecordsMeansNotApplicable() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("noise", at: "noise/.DS_Store")
+
+        let outcome = try await fixture.run()
+
+        #expect(outcome.summary.include == 0)
+        let sample = try #require(outcome.summary.falseExclusion.includeSample)
+        #expect(sample.state == "N/A")
+        #expect(sample.includedRecords == 0)
+        #expect(sample.labelled == 0)
+        let boundary = try #require(outcome.summary.falseExclusion.claimBoundary)
+        #expect(boundary.contains("no included records to sample"))
     }
 
     @Test("artifacts written before the census/sample split still decode")

@@ -181,7 +181,7 @@ swift run FormaAcceptance m11-real \
   "false_exclusion": {
     "state": "MEASURED", "numerator": 0, "denominator": 1, "rate": 0.0, "unit": "records",
     "population": "human-labelled KEEP records",
-    "exclude_adjudication": { "state": "CENSUS_INCOMPLETE", "excluded_records": 1, "adjudicated": 0, "unadjudicated": 1, "keep_labelled": 0, "unit": "records" },
+    "exclude_adjudication": { "state": "CENSUS_INCOMPLETE", "excluded_records": 1, "adjudicated": 0, "unadjudicated": 1, "keep_labelled": 0, "uncertain_labelled": 0, "verdict": "INCOMPLETE", "unit": "records" },
     "include_sample": { "state": "SAMPLED", "included_records": 7, "labelled": 1, "keep_labelled": 1, "technical_noise_labelled": 0, "uncertain_labelled": 0, "unit": "records", "claim_boundary": "an INCLUDE-side sample says whether records the policy kept look like business material; it does not measure the false-exclusion rate of the whole run" },
     "claim_boundary": "only 0 of 1 excluded records were adjudicated, so the excluded set is not fully evidenced; an INCLUDE-side sample says whether records the policy kept look like business material; it does not measure the false-exclusion rate of the whole run (1 of 7 included records carry a verdict)"
   },
@@ -198,8 +198,9 @@ swift run FormaAcceptance m11-real \
 | `coverage_state` | `COMPLETE` = 扫描与探测覆盖了全部发现记录；`PARTIAL` = 有不可读子树、探测上限、超时或取消 |
 | `review_progress.state` | `not_required`（没有待判定记录）/ `unreviewed`（一条都没标）/ `in_progress`（标了一部分）/ `complete`（全部 `EXCLUDE`/`REVIEW` 已判定） |
 | `false_exclusion.state` | `N/A` = 没有任何 `KEEP` 标注，此时**不能**报告"零误排除"；`MEASURED` = 分子/分母/比率有值，但分母只是**被标注为 `KEEP` 的记录**，不是全集 |
-| `exclude_adjudication.state` | `N/A` = 本次没有 `EXCLUDE` 记录；`CENSUS_COMPLETE` = 每条 `EXCLUDE` 都有人工判定，`keep_labelled` 就是**已观察到的误排除条数**；`CENSUS_INCOMPLETE` = 还有 `EXCLUDE` 未判定，排除侧证据尚未闭合 |
-| `include_sample.state` | `NOT_SAMPLED` / `SAMPLED`：抽样只说明"被保留的记录看起来确实是业务资料"，**不能**换算成总体误排除率 |
+| `exclude_adjudication.state` | **只描述审查覆盖**：`N/A` = 本次没有 `EXCLUDE` 记录；`CENSUS_COMPLETE` = 每条 `EXCLUDE` 都有人工判定；`CENSUS_INCOMPLETE` = 还有 `EXCLUDE` 未判定。它**不**说明排除是否安全 |
+| `exclude_adjudication.verdict` | **只描述结论**，优先级 `FALSE_EXCLUSION_FOUND` > `INCOMPLETE` > `NEEDS_REVIEW` > `SAFE_TO_CLEAR`（`N/A` 表示没有排除）。`NEEDS_REVIEW` = 普查已完成但仍有 `UNCERTAIN`；`keep_labelled = 0` 单独出现**不构成**安全结论 |
+| `include_sample.state` | `SAMPLED` / `NOT_SAMPLED`（有保留记录但一条未标）/ `N/A`（本次没有任何保留记录，抽样不适用）。抽样只说明"被保留的记录看起来确实是业务资料"，**不能**换算成总体误排除率 |
 
 ### 4.4 三个人群，三种主张
 
@@ -211,18 +212,22 @@ swift run FormaAcceptance m11-real \
 | `INCLUDE` 抽样 | 被抽样并标注的保留记录 | 保留集合的一致性（抽样里有没有噪声、有多少 `UNCERTAIN`） | **不能**当作总体误排除率，也不能写成"零误排除" |
 | 标注过的记录算术（`false_exclusion`） | 全部 `KEEP` 标注记录 | `docs/IMPORT-ELIGIBILITY-POLICY.md` 规定的比率口径（分母必须是"已独立标注为应保留的业务样本"） | 分母由标注方式决定，样本多大就只能说多大 |
 
-因此：`0/14` 这类数字的含义是"14 条被标注为 `KEEP` 的记录里没有一条被排除"，它属于第 2、3 行；排除侧的证据要读 `exclude_adjudication`（例如 `37/37` 普查、`keep_labelled = 0`）。`UNCERTAIN` 既不算 `KEEP`，也不算已确认的错误：它计入普查的"已判定"，但不进入误排除分子，也不许被换算成 `KEEP`。
+因此：`0/14` 这类数字的含义是"14 条被标注为 `KEEP` 的记录里没有一条被排除"，它属于第 2、3 行；排除侧的证据要读 `exclude_adjudication`。`UNCERTAIN` 既不算 `KEEP`，也不算已确认的错误：它计入普查的"已判定"（`adjudicated`），但会单独计入 `uncertain_labelled`，并使 `verdict` 停在 `NEEDS_REVIEW`——**审查完成 ≠ 排除安全**，`keep_labelled = 0` 必须配合 `verdict = SAFE_TO_CLEAR` 才能读成"排除侧已清除"。
+
+还有一个必须并列的切分（Issue #136，本轮采用方案 C）：`INCLUDE` 人群内部还分"已探测候选"与"未探测候选"。当 `probe_coverage.skipped > 0` 时，未探测记录没有任何事实，按 `default-mapping-candidate` 落到 `INCLUDE`，因此产物里的 `include` 是两者之和。引用 `include` 的任何结论都必须同时给出 `discovered` / `probed` / `skipped`，不得把全部 `INCLUDE` 写成"已完成事实探测的候选"。机器可读区分属于 Issue #136 的方案 A（新增计数），把未探测记录改判 `DEFER` 属于方案 B（会改变 `by_decision` 的含义，需合同层评审）——两者本轮都未实施。
 
 历史产物兼容：`exclude_adjudication`、`include_sample`、`claim_boundary`、`include_sampled` 是新增可选字段，`schema_version` 仍为 `1.0`；旧运行目录里的产物不会被改写，读旧产物时这些字段缺失即为"该运行未记录普查/抽样"。**已冻结的历史证据不做回填。**
 
 ## 5. 判定
 
-| 判定 | 条件 |
+| 判定 | 条件（按优先级互斥） |
 | --- | --- |
-| `PASS` | `coverage_state = COMPLETE`、`review_progress.state = complete`、`exclude_adjudication.state` 为 `CENSUS_COMPLETE`（或本次没有排除，即 `N/A`）、且 `keep_labelled = 0` |
-| `FAIL` | `exclude_adjudication.keep_labelled > 0`，即排除侧普查里出现了 `KEEP` 记录。记录 `source_id`、规则、复现条件，**不擅自修改 Policy** |
-| `PARTIAL` | 覆盖不完整、`CENSUS_INCOMPLETE`（还有排除记录未判定），或 `include_sample.state = NOT_SAMPLED`（保留侧没有任何抽样证据） |
-| `NOT_VERIFIED` | 工具没有执行（环境缺失、参数被拒） |
+| `FAIL` | `exclude_adjudication.keep_labelled > 0`（`verdict = FALSE_EXCLUSION_FOUND`）：排除侧普查里出现了 `KEEP` 记录。记录 `source_id`、规则、复现条件，**不擅自修改 Policy**。此判定优先于其它一切条件 |
+| `PARTIAL` | 无 `FAIL`，且满足任一项：`coverage_state = PARTIAL`；`CENSUS_INCOMPLETE`／`verdict = INCOMPLETE`；`verdict = NEEDS_REVIEW`（普查已闭合但有 `UNCERTAIN` 未解决）；`include_sample.state = NOT_SAMPLED`（有保留记录却没有任何抽样证据） |
+| `PASS` | 无 `FAIL`、无 `PARTIAL` 条件：`coverage_state = COMPLETE`、`review_progress.state = complete`、`exclude_adjudication.state` 为 `CENSUS_COMPLETE` 或 `N/A`、`verdict` 为 `SAFE_TO_CLEAR` 或 `N/A`、且 `include_sample.state` 为 `SAMPLED` 或 `N/A` |
+| `NOT_VERIFIED` | 没有执行证据：工具未运行、环境缺失、参数被拒。它不能与上面三者同时成立 |
+
+判定互斥且按上表顺序判定：先看 `FAIL`，再看 `PARTIAL`，其余才可能是 `PASS`；没有任何执行证据时只能是 `NOT_VERIFIED`。本次没有 `INCLUDE` 记录时，`include_sample.state = N/A` 不阻止 `PASS`（没有东西可抽，不是"跳过抽样"）。
 
 `PASS` 只描述本次授权目录、本次 Policy digest 下的证据闭合程度，不自动扩成"该策略在任意目录都安全"。抽样抽了多少条、按什么分层抽，记录在验收报告里，产物本身不规定抽样量：产物只如实报告"抽了 `labelled` 条 / 共 `included_records` 条"。
 
@@ -230,7 +235,7 @@ swift run FormaAcceptance m11-real \
 
 ## 6. 本工具的已知边界
 
-1. **未实现分页探测**。超过 `--max-entries` 的记录计入 `skipped`，覆盖状态变成 `PARTIAL`；它们不会被当作已验证。
+1. **未实现分页探测**。超过 `--max-entries` 的记录计入 `skipped`，覆盖状态变成 `PARTIAL`；它们不会被当作已验证。**但要注意统计口径**（Issue #136，本轮采用方案 C）：这些未探测记录没有任何事实，按 `default-mapping-candidate` 落到 `INCLUDE`，因此 `by_decision.include` **混合了已探测候选与未探测候选**。任何引用 `include` 的结论必须并列写出 `discovered` / `probed` / `skipped`，不得把全部 `INCLUDE` 描述为"已完成事实探测的候选"，也不得把 `PARTIAL` 写成 `COMPLETE`。机器可读区分（新增计数或把未探测记录改判 `DEFER`）保留为 Issue #136 的方案 A/B，需独立评审，本轮未实施。
 2. **Git 事实需要授权根本身是仓库顶层**。否则 `gitTracked` 为 `unknown`。
 3. **保护事实未建立时，缓存目录排除会降级为 `REVIEW`**（`protection_fact_unknown`），而不是被当成已验证的排除。这是保守方向，但也意味着非 Git 的业务目录里 `EXCLUDE` 会很少。
 4. **OneDrive 覆盖恒为 `NOT_VERIFIED`**。本工具能读出 dataless 标志（`st_flags`，来自 `stat`，不下载内容），因此能报告"多少条是 metadata-only"；但它不验证 hydration 行为、离线状态、FileProvider 失败与权限失败，也不证明下载未被触发。这些需要单独授权的 OneDrive 目录和另一次运行。

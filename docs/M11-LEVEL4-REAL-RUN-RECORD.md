@@ -50,11 +50,13 @@
 
 | 人群 | 本次数字 | 能主张 | 不能主张 |
 | --- | --- | --- | --- |
-| 排除侧普查 `exclude_adjudication` | `CENSUS_COMPLETE`，excluded 37、adjudicated 37、`keep_labelled = 0` | 排除侧**观察到零误排除**；证据已闭合 | 不涉及被保留的记录 |
+| 排除侧普查 `exclude_adjudication` | `CENSUS_COMPLETE`，excluded 37、adjudicated 37、`keep_labelled = 0`；该次产物**不含** `verdict` 字段（字段后加） | 排除侧**观察到零误排除**；37 条均已判定且其中没有 `UNCERTAIN`，按新口径等价于 `SAFE_TO_CLEAR`——这是对旧产物的解读，不是旧产物自带的结论 | 不涉及被保留的记录 |
 | 保留侧抽样 `include_sample` | labelled 21（其中 `KEEP` 14、`UNCERTAIN` 7）of 3,320 | 抽样内的保留一致性 | **不能**换算成总体误排除率 |
 | 标注算术 `false_exclusion` | `MEASURED`，0 / 14 = 0.0，population = `human-labelled KEEP records` | 冻结口径（分母＝已独立标注为应保留的样本）下的比率 | 不是普查、不是总体率 |
 
 **修正内容**：初版现场报告把 `0/14` 写成"误排除率为零"。`14` 来自保留侧抽样，它既不是排除侧全集也不是总体样本。本次运行的排除侧证据是普查 `37/37` 且 `keep_labelled = 0`，其正确表述是"观察到零误排除"，而不是"误排除率为零"。工具与文档已改为分开输出三口径并随产物写出一句边界说明，避免同一误读再次发生。历史运行目录的产物不被改写或回填。
+
+`verdict` 与 `include_sample.state = N/A` 是本轮（PR #132）新增的字段，`schema_version` 仍为 `1.0`，本次运行目录里的产物**没有**被改写或回填。因此"等价于 `SAFE_TO_CLEAR`"只是按 Runbook §4.3 的新读法复述已有数字：`adjudicated = 37`、`keep_labelled = 0`、排除侧 `UNCERTAIN = 0`；若未来要从产物直接读出该结论，需要一次新的运行。
 
 ## 5. 证据完整性
 
