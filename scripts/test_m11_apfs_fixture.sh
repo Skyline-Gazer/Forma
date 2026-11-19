@@ -52,8 +52,12 @@ if [ "$(uname -s)" != "Darwin" ]; then
     exit 0
 fi
 
-if ! diskutil info "${RUNNER_TEMP:-/tmp}" >/dev/null 2>&1; then
-    printf 'ENVIRONMENT: diskutil cannot describe the temp volume; cannot claim an APFS run\n'
+# `diskutil info <dir>` fails on some macOS versions ("Could not find disk"), so
+# the device is resolved through `df` first, exactly as the tool itself does.
+probe_device=$(df -P "${RUNNER_TEMP:-/tmp}" 2>/dev/null | awk 'NR==2 {print $1}')
+if [ -z "${probe_device:-}" ] || ! diskutil info "$probe_device" >/dev/null 2>&1; then
+    printf 'ENVIRONMENT: cannot describe the temp volume (%s); cannot claim an APFS run\n' \
+        "${probe_device:-no-device}"
     exit 1
 fi
 
@@ -71,7 +75,8 @@ FIXTURE=$PARENT/apfs-fixture
 STATE=$PARENT/.forma-m11-apfs
 
 printf 'parent=%s\n' "$PARENT"
-diskutil info "$PARENT" | grep -E 'File System Personality|Read-Only' || true
+df -P "$PARENT"
+diskutil info "$probe_device" | grep -E 'File System Personality|Read-Only' || true
 
 # --- 1. first build ---------------------------------------------------------
 expect_exit 0 "build creates the fixture on the first run" bash "$TOOL" build "$PARENT"

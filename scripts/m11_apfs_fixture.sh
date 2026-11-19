@@ -83,23 +83,37 @@ ACTION=${1:-}
 TARGET=${2:-}
 [ -n "$ACTION" ] && [ -n "$TARGET" ] || usage
 
-# Everything this script touches must be a writable local APFS volume. A path
+# The volume behind a path, via the device `df` reports. `diskutil info <dir>`
+# is not dependable across macOS versions ("Could not find disk: /…/_temp" on a
+# runner), while `diskutil info <device>` is.
+volume_device() {
+    df -P "$1" 2>/dev/null | awk 'NR==2 {print $1}'
+}
+
+# Every path this script touches must be on a writable local APFS volume. A path
 # under a cloud sync root would measure FileProvider, which is the opposite of
 # what the fixture is for.
 assert_local_volume() {
-    local path=$1 info
+    local path=$1 device info probe
     case "$path" in
         */Library/CloudStorage/*|*/OneDrive*|*/Dropbox/*|*/Google\ Drive/*)
             die "$path is inside a cloud sync root; this fixture must sit on a local APFS volume"
             ;;
     esac
-    info=$(diskutil info "$path" 2>/dev/null) || die "diskutil could not describe $path"
+    device=$(volume_device "$path") || die "df could not describe $path"
+    [ -n "${device:-}" ] || die "df reported no device for $path"
+    info=$(diskutil info "$device" 2>/dev/null) || die "diskutil could not describe $device"
     printf '%s\n' "$info" | grep -q 'File System Personality: *APFS' \
-        || die "$path is not on an APFS volume"
-    if printf '%s\n' "$info" | grep -q 'Read-Only: *Yes'; then
-        die "$path is on a read-only APFS volume (a snapshot mount); build the fixture on a writable one"
+        || die "$path ($device) is not on an APFS volume"
+    # Writability is proven by an actual write, not by a banner line: a sealed
+    # snapshot mount reports differently from the volume beneath it. The probe
+    # file is created beside the tree (never inside it) and removed immediately.
+    probe=$(dirname "$path")/.forma-m11-probe.$$
+    if ! ( : >"$probe" ) 2>/dev/null; then
+        rm -f "$probe"
+        die "$path is not writable"
     fi
-    [ -w "$path" ] || die "$path is not writable"
+    rm -f "$probe"
 }
 
 # Canonical path of an existing directory, with every symlink resolved. `pwd -P`
@@ -170,7 +184,7 @@ stamp_tree() {
     # discarded (`|| die`), because the stderr attribution check below is what
     # decides whether the error was the expected one or a real short walk.
     set +e
-    find "$root" -print0 2>"$err" | LC_ALL=C sort -z >"$list"
+    find "$root" -mindepth 1 -print0 2>"$err" | LC_ALL=C sort -z >"$list"
     find_status=${PIPESTATUS[0]}
     set -e
 

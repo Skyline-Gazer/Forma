@@ -111,6 +111,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Volume check
-        run: diskutil info "$RUNNER_TEMP" | grep -E 'File System Personality|Read-Only'
+        # `diskutil info <dir>` can fail on a runner ("Could not find disk"), so
+        # the device is resolved through `df` first.
+        run: |
+          df -P "$RUNNER_TEMP"
+          dev=$(df -P "$RUNNER_TEMP" | awk 'NR==2 {print $1}')
+          diskutil info "$dev" | grep -E 'File System Personality|Read-Only'
       - name: Run the fixture tool harness
         run: bash scripts/test_m11_apfs_fixture.sh
