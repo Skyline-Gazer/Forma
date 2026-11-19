@@ -2,22 +2,22 @@ import Foundation
 
 /// A deterministic starting draft, produced without a model.
 ///
-/// What it is: every record is filed into the profile's own "unclassified"
-/// category, with every other field left unknown, no evidence cited and `low`
-/// confidence. That is the most conservative mapping the profile allows, and it
-/// is the correct one for a program that has read no document content: the
-/// alternative - guessing a category from an extension - is the exact mistake
-/// `ManifestValidator` exists to catch.
+/// What it is: a draft that claims nothing. Every field of every record is
+/// unknown, no evidence is cited, and confidence is `low`. That is the most
+/// conservative answer the validator accepts, and it is the honest one for a
+/// program that has read no document content: `ManifestValidator` rejects any
+/// value that cites no evidence, and guessing a category from an extension is the
+/// exact mistake it exists to catch.
 ///
 /// What it is not: a model. `isSubstitute` is `true`, so the evaluation layer
 /// refuses every quality claim about a run driven by this answerer, and the
 /// manifest records `modelProvider = "offline"`. No socket is opened, no key is
 /// read, and `ProviderTransport` refuses a request carrying `.offline`.
 ///
-/// Determinism: the output depends only on the batch's entry refs, the profile's
-/// unclassified category and its field list. Two runs over the same inputs and
-/// the same profile version produce equal proposals. Identity fields (source id,
-/// snapshot, path) come from the batch and are never rewritten here.
+/// Determinism: the output depends only on the batch's entry refs and the
+/// metadata field list. Two runs over the same inputs and the same profile version
+/// produce equal proposals. Identity fields (source id, snapshot, path) come from
+/// the batch and are never rewritten here.
 public struct OfflinePlannerAnswerer: MappingAnswering {
     public static let modelID = "offline-planner.v1"
 
@@ -39,26 +39,29 @@ public struct OfflinePlannerAnswerer: MappingAnswering {
         // Every shipped profile has its own unclassified destination; a profile
         // without one cannot be mapped conservatively, so the batch fails loudly
         // rather than being filed somewhere invented.
-        guard let unclassified = profile.categories.first(where: { $0.identifier.hasSuffix("待分类") }) else {
-            return MappingAttempt(proposal: nil, error: .incompatible, modelID: Self.modelID)
-        }
-
-        let unknown = Set(MetadataFieldID.allCases).subtracting([.documentcategory])
+        // Every field is unknown, including the category.
+        //
+        // `ManifestValidator` rejects any non-null value that cites no evidence
+        // (`evidence_missing`), and this answerer has read no document body, so
+        // it cannot cite anything. Filing records into the profile's
+        // "unclassified" category would look helpful and be a violation on every
+        // row; the truthful draft claims nothing and lets a person decide with
+        // the body evidence the app registers for them.
         let entries = batch.entries.map { item in
             ProposalEntry(
                 entryRef: item.ref,
                 // No candidate is chosen: membership is the user's decision, and
                 // guessing one would be inventing a project association.
                 projectAssociation: ProposalAssociation(candidateRef: nil, state: .unconfirmed),
-                documentCategory: unclassified.identifier,
+                documentCategory: nil,
                 documentType: nil,
                 metadata: .allUnknown,
                 evidence: [],
-                unknownFields: unknown,
+                unknownFields: Set(MetadataFieldID.allCases),
                 conflicts: [],
                 confidence: .low,
-                reasoning: "offline planner: filed as \(unclassified.identifier) from the record's name and type; "
-                    + "no document content was read, so every other field is unknown")
+                reasoning: "offline planner: no document content was read, so no field is claimed; "
+                    + "review this record against its own evidence")
         }
 
         return MappingAttempt(proposal: MappingProposal(batchID: batch.id, entries: entries),

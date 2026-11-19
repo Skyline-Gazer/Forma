@@ -30,7 +30,7 @@ struct OfflinePlannerAnswererTests {
         return try await workspace.buildContext(scope: scope, profile: profile)
     }
 
-    @Test("the proposal files every record as the profile's unclassified category")
+    @Test("the proposal claims nothing it cannot cite")
     func proposalIsTheConservativeDraft() async throws {
         let profile = try MappingProfile.projectArchive()
         let answerer = OfflinePlannerAnswerer()
@@ -44,16 +44,17 @@ struct OfflinePlannerAnswererTests {
         let proposal = try #require(attempt.proposal)
         #expect(proposal.batchID == "batch-1")
         let entry = try #require(proposal.entries.first)
-        let unclassified = try #require(profile.categories.first { $0.identifier.hasSuffix("待分类") })
-        #expect(entry.documentCategory == unclassified.identifier)
-        // No content was read, so nothing may be cited and nothing else may be
-        // asserted: an extension is not a business category.
-        #expect(entry.evidence.isEmpty)
+        // No content was read, so nothing may be claimed - not even the
+        // unclassified category, because a value without citation is rejected by
+        // the validator. An extension is not a business category either.
+        #expect(entry.documentCategory == nil)
         #expect(entry.documentType == nil)
+        #expect(entry.evidence.isEmpty)
         #expect(entry.confidence == .low)
         #expect(entry.projectAssociation?.state == .unconfirmed)
         #expect(entry.projectAssociation?.candidateRef == nil)
-        #expect(entry.unknownFields == Set(MetadataFieldID.allCases).subtracting([.documentcategory]))
+        #expect(entry.unknownFields == Set(MetadataFieldID.allCases))
+        #expect(entry.reasoning.contains("no document content was read"))
         // No tokens were consumed: reporting any would be an invented number.
         #expect(attempt.usage.input == nil)
         #expect(attempt.requests == 0)
