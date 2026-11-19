@@ -160,13 +160,15 @@ CI 的 `M11 APFS fixture tool smoke` 作业在 `macos-15` 上真实执行夹具�
 
 | 项 | 值 |
 | --- | --- |
-| CI run | `44502951728`（job `M11 APFS fixture tool smoke`，commit `70207c8`） |
-| 卷 | `/dev/disk2s5`（APFS，可写性由脚本自身的写探针验证） |
-| 结果 | **60 passed / 0 failed** |
+| CI run | `44507619443`（job `M11 APFS fixture tool smoke`，commit `eee55fc`） |
+| 卷 | `/dev/disk2s5`（APFS，可写性由脚本自身的 `mktemp` 探针验证） |
+| 结果 | **65 passed / 0 failed** |
 
 新增覆盖（相对上一版 40 项）：CloudStorage 根目录本身、逐级子目录、尾部斜杠、`..` 形式、符号链接别名；本地同名目录（`MyOneDriveDocs`）与含 `.`／尾斜杠的路径不被误拒；manifest 额外目标、重复角色、异 token、指向无关兄弟、越父目标、截断——每种拒绝后都额外断言"两棵树与无关目录仍然存在"，即不变量 2 的直接检验。
 
-**已经测试**：上述全部用例在真实 APFS 卷上执行，60/60 通过。**只有静态论证**：TOCTOU 残余窗口（§3.2）、非 APFS 卷拒绝分支（runner 上无法构造第二个非 APFS 卷）、以及"云客户端挂在无 `CloudStorage` 组件的路径"这一能力边界。**未执行**：任何真实业务目录或 OneDrive 路径的操作。
+安全复审后追加 5 项：悬空符号链接占位（`[ -e ]` 看不见、`mkdir -p` 会穿过）、iCloud Drive 的真实 POSIX 组件（`Mobile Documents` / `com~apple~CloudDocs`）、`compare` 的越界 tag、以及两处嵌套 build 拒绝。
+
+**已经测试**：上述全部用例在真实 APFS 卷上执行，**65/65 通过**。**只有静态论证**：TOCTOU 残余窗口（§3.2）、非 APFS 卷拒绝分支（runner 上无法构造第二个非 APFS 卷）、以及"云客户端挂在既无 `CloudStorage` 也无已知组件的路径"这一能力边界。**未执行**：任何真实业务目录或 OneDrive 路径的操作。
 
 ## 9. 已知限制
 
