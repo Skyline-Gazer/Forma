@@ -128,6 +128,9 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var evidenceFailures: [UUID: FormaError] = [:]
     @Published private(set) var fileEvidence: SourceEvidence?
     @Published private(set) var exportSummary: ManifestExport.Summary?
+    /// The Alpha dry run. Rebuilt on demand and dropped whenever the manifest
+    /// changes, so a plan can never outlive the revision it describes.
+    @Published private(set) var importPlan: ImportPlan?
     @Published private(set) var revalidation: ManifestExport.Revalidation?
     @Published private(set) var bundleURL: URL?
     @Published private(set) var casePack: CasePack?
@@ -907,6 +910,47 @@ final class WorkspaceModel: ObservableObject {
 
     // MARK: - Export, load and revalidate
 
+    // MARK: - Alpha dry run
+
+    /// Builds the import plan for the current manifest.
+    ///
+    /// No write path exists in this build: the plan is built with
+    /// `writeToolsAvailable == false`, no import authorization and unobserved
+    /// target facts, so every row is `blocked` or `deferred` for a reason the
+    /// view can explain. That is the honest state of the product, not a UI
+    /// failure state.
+    func buildImportPlan() {
+        guard phase == .idle else { return }
+        guard let manifest, let profile = selectedProfile else {
+            importPlan = nil
+            notice = "An import plan needs a manifest and a profile."
+            return
+        }
+        importPlan = ImportPlanner.plan(
+            manifest: manifest,
+            profile: profile,
+            observations: ImportPlanner.Observations(sourceRoot: nil, listing: listing),
+            authorization: nil,
+            capability: ImportCapabilityFacts(writeToolsAvailable: false, readbackAvailable: false),
+            targetObserved: false)
+    }
+
+    /// Writes the plan as JSON so it can be attached to a review without the app.
+    func writeImportPlan(to directory: URL) {
+        guard let plan = importPlan else {
+            notice = "Build the import plan first."
+            return
+        }
+        do {
+            let data = try FormaJSON.encoder(pretty: true).encode(plan)
+            let url = directory.appendingPathComponent("import-plan-r\(plan.manifestRevision).json")
+            try data.write(to: url, options: .atomic)
+            notice = "Wrote the import plan to \(url.lastPathComponent)."
+        } catch {
+            show(error as? FormaError ?? .storage, operation: .readEvidence, fallback: .storage)
+        }
+    }
+
     func export(to directory: URL) {
         guard phase == .idle, let manifest else {
             if manifest == nil { notice = "There is no manifest to export yet." }
@@ -1317,6 +1361,10 @@ final class WorkspaceModel: ObservableObject {
     }
 
     private func refreshRows() {
+        // A plan describes one manifest revision. Any change to the manifest
+        // invalidates it, and a stale plan is worse than none: it would show a
+        // target and a verdict for records that no longer exist in this shape.
+        importPlan = nil
         guard let manifest else {
             rows = []
             exceptions = []
