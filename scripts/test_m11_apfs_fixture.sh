@@ -125,6 +125,8 @@ expect_exit 0 "compare unchanged stamps is identical" bash "$TOOL" compare "$FIX
 expect_exit 1 "stamp refuses to replace an existing tag" bash "$TOOL" stamp "$FIXTURE" before
 expect_exit 1 "stamp refuses an unsafe tag" bash "$TOOL" stamp "$FIXTURE" '../escape'
 expect_exit 1 "compare refuses an unknown tag" bash "$TOOL" compare "$FIXTURE" before nowhere
+expect_exit 1 "compare refuses a tag that traverses out of the state directory" \
+    bash "$TOOL" compare "$FIXTURE" before "../../manifest"
 
 if [ "$(head -1 "$STATE/stamps/before.tsv")" = '#forma-m11-stamp-v2' ]; then
     pass "stamp carries a versioned header"
@@ -193,6 +195,19 @@ ln -s "$GUARD/Library/CloudStorage/deep" "$GUARD/cloud-alias"
 expect_exit 1 "build refuses a symlink alias into CloudStorage" \
     bash "$TOOL" build "$GUARD/cloud-alias"
 rm -f "$GUARD/cloud-alias"
+# A dangling symlink at the root names `[ -e ]` cannot see; `mkdir -p` and `>`
+# would follow it, so the build must refuse before writing anything.
+mkdir -p "$GUARD/dangle"
+ln -s "$GUARD/does-not-exist" "$GUARD/dangle/apfs-fixture"
+expect_exit 1 "build refuses a dangling symlink at the fixture name" \
+    bash "$TOOL" build "$GUARD/dangle"
+rm -f "$GUARD/dangle/apfs-fixture"
+
+# iCloud Drive's real path component is `Mobile Documents`; the Finder display
+# name never appears in a POSIX path.
+mkdir -p "$GUARD/Library/Mobile Documents/com~apple~CloudDocs/Forma"
+expect_exit 1 "build refuses an iCloud Mobile Documents path" \
+    bash "$TOOL" build "$GUARD/Library/Mobile Documents/com~apple~CloudDocs/Forma"
 # A second fixture inside the first one would be fingerprinted (and later
 # deleted) by the outer run, so nesting is refused.
 expect_exit 1 "build refuses to nest inside an existing fixture" \

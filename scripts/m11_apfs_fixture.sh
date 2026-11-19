@@ -115,7 +115,7 @@ is_cloud_sync_path() {
             CloudStorage)
                 [ "$previous" = "Library" ] && return 0
                 ;;
-            OneDrive|Dropbox|"Google Drive"|"iCloud Drive")
+            OneDrive|Dropbox|"Google Drive"|"iCloud Drive"|"Mobile Documents"|"com~apple~CloudDocs")
                 return 0
                 ;;
         esac
@@ -160,9 +160,11 @@ assert_local_volume() {
     # parent to be writable would refuse a perfectly usable directory, and the
     # fingerprint deliberately excludes the root entry (`find -mindepth 1`), so a
     # transient file at the root cannot move a stamp.
-    probe=$path/.forma-m11-probe.$$
-    if ! ( : >"$probe" ) 2>/dev/null; then
-        rm -f "$probe"
+    # `mktemp` rather than a predictable `$$` name: a pre-placed symlink at a
+    # guessable path would otherwise turn `: >` into a truncation of any file the
+    # invoking user can write. The probe is removed immediately either way.
+    probe=$(mktemp "$path/.forma-m11-probe.XXXXXX" 2>/dev/null) || probe=
+    if [ -z "$probe" ]; then
         die "$path is not writable"
     fi
     rm -f "$probe"
@@ -353,18 +355,21 @@ case "$ACTION" in
         outside=$parent/$OUTSIDE_DIRNAME
         state=$(state_dir_for "$fixture")
 
-        if [ -e "$fixture" ]; then
-            die "$fixture already exists; this script will not overwrite it"
-        fi
-        if [ -e "$outside" ]; then
-            die "$outside already exists; this script will not overwrite it"
-        fi
-        if [ -e "$state" ]; then
-            die "$state already exists; a previous fixture left state behind"
-        fi
+        # `[ -e ]` alone follows symlinks, so a *dangling* symlink placed at one of
+        # these names would pass the check and then have `mkdir -p` / `>` write
+        # through it — into a cloud root the volume guard never saw, since it
+        # validated only the parent. `[ -L ]` closes that, and the three roots are
+        # created with plain `mkdir`, which cannot traverse a link either.
+        for guarded in "$fixture" "$outside" "$state"; do
+            if [ -e "$guarded" ] || [ -L "$guarded" ]; then
+                die "$guarded already exists; this script will not overwrite it"
+            fi
+        done
 
         token=$(uuidgen | tr -d '-')
-        mkdir -m 700 "$state"
+        mkdir "$fixture" || die "could not create $fixture"
+        mkdir "$outside" || die "could not create $outside"
+        mkdir -m 700 "$state" || die "could not create $state"
         mkdir -m 700 "$state/stamps"
         printf '%s\n' "$token" >"$state/token"
         printf '%s\tfixture\t%s\n' "$token" "$fixture" >"$(manifest_for "$state")"
@@ -386,8 +391,7 @@ case "$ACTION" in
             "$fixture/08-empty/deeper" \
             "$fixture/.hidden" \
             "$fixture/09-locked" \
-            "$fixture/10-locked-dir" \
-            "$outside"
+            "$fixture/10-locked-dir"
         write_marker "$fixture" "$token"
         write_marker "$outside" "$token"
 
@@ -503,6 +507,10 @@ case "$ACTION" in
         left=${3:-}
         right=${4:-}
         [ -n "$left" ] && [ -n "$right" ] || usage
+        # The same tag validation `stamp` enforces: without it, `compare` would
+        # read `../../…/anything.tsv` out of the state directory.
+        assert_stamp_tag "$left"
+        assert_stamp_tag "$right"
         state=$(require_owned "$fixture")
         fixture=$(canonical_dir "$fixture") || die "cannot resolve $fixture"
         assert_local_volume "$fixture"

@@ -50,9 +50,11 @@ diskutil apfs deleteVolume disk3 FormaVerify
 ### 3.1 路径安全检查（本轮新增）
 
 - **先规范化，再判断**。`build`/`stamp`/`compare`/`clean` 都先 `pwd -P` 得到真实路径，再做任何路径判定；`..`、尾部斜杠、相对路径与符号链接别名因此都归一到同一个真实目录。
-- **云同步按整段组件判定**，不再做子串匹配：`Library/CloudStorage` 相邻组件对，或组件恰为 `OneDrive`/`Dropbox`/`Google Drive`/`iCloud Drive`。这样 `…/Library/CloudStorage` 根目录与各级子目录都被拒绝，而本地目录 `MyOneDriveDocs` 不会被误拒（两个方向都有回归用例）。
+- **云同步按整段组件判定**，不再做子串匹配：`Library/CloudStorage` 相邻组件对，或组件恰为 `OneDrive`/`Dropbox`/`Google Drive`/`iCloud Drive`/`Mobile Documents`/`com~apple~CloudDocs`。`…/Library/CloudStorage` 根目录与各级子目录都被拒绝，`…/Library/Mobile Documents/com~apple~CloudDocs/…`（iCloud Drive 的真实 POSIX 路径）同样被拒绝，而本地目录 `MyOneDriveDocs` 不会被误拒（三个方向都有回归用例）。
 - **设备层第二道防线**：`df` 报出的设备必须是 `/dev/…`，网络挂载（`//host/share`、`host:/path`）直接拒绝；随后要求 APFS personality 与实际写探针成功。
-- **能力边界（如实记录）**：本工具识别的是 FileProvider 布局 + 本地设备 + APFS 三项。若某个云客户端挂在没有 `CloudStorage` 组件的路径下、并导出一个普通 APFS 卷，本工具**无法**识别。真正的边界是 Owner 明确指定的父目录，工具不自行选择业务目录。
+- **符号链接不可能被当作空位置**：三个根（`apfs-fixture`、`apfs-outside`、`.forma-m11-apfs`）用 `[ -e ] || [ -L ]` 判定，并以 `mkdir`（非 `-p`）创建，因此预置的**悬空**符号链接既不会被判为"不存在"，也不会被 `mkdir -p`／`>` 穿过写到链接目标里。
+- **探针不可预测**：写探针位于被测目录自身，用 `mktemp` 分配随机名，避免"预置同名符号链接 → 截断任意可写文件"。
+- **能力边界（如实记录）**：本工具识别的是 FileProvider 布局 + 本地设备 + APFS 三项。若某个云客户端挂在既无 `CloudStorage`、也无已知组件的路径下，并导出一个普通 APFS 卷，本工具**无法**识别。真正的边界是 Owner 明确指定的父目录，工具不自行选择业务目录。
 
 ### 3.2 `clean` 的四条不变量
 
