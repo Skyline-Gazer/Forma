@@ -800,11 +800,16 @@ struct M11RealDirectoryAcceptanceTests {
         #expect(!text.contains(fixture.source.path))
         #expect(!text.contains(".DS_Store"))
         #expect(!text.contains("notes"))
-        // Relative paths belong to the private sheet only.
+        // Relative paths belong to the private sheet only. They are matched on
+        // the decoded row: JSON text escapes "/", so a raw substring check on
+        // the file is not a reliable way to read a path back.
         let sheetURL = try #require(
             imported.files[M11RealDirectoryAcceptance.Artifact.privateReviewSheet])
         let sheetData = try Data(contentsOf: sheetURL)
-        #expect(String(data: sheetData, encoding: .utf8)?.contains("noise/.DS_Store") == true)
+        #expect(imported.sheet.rows.contains { $0.relativePath == "noise/.DS_Store" })
+        let decoded = try FormaJSON.decode(M11RealDirectoryAcceptance.PrivateReviewSheet.self,
+                                           from: sheetData)
+        #expect(decoded.rows.map(\.relativePath) == imported.sheet.rows.map(\.relativePath))
     }
 }
 
