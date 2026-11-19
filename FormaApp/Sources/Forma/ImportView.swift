@@ -1,4 +1,5 @@
 import AppKit
+import FormaCore
 import SwiftUI
 
 /// The Alpha import surface: a dry run, and nothing else.
