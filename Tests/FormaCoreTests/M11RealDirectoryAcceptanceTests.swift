@@ -711,10 +711,11 @@ struct M11RealDirectoryAcceptanceTests {
         #expect(census.verdict == "FALSE_EXCLUSION_FOUND")
         #expect(imported.summary.falseExclusion.numerator == 1)
         #expect(imported.summary.falseExclusion.rate == 1.0)
-        // The sample side is untouched by an exclusion finding: nothing was
-        // sampled from the included set here.
+        // The sample side is untouched by an exclusion finding: this fixture has
+        // no included record at all, so the sample is `N/A` rather than
+        // `NOT_SAMPLED` — "nothing to sample" is not "sampling was skipped".
         let sample = try #require(imported.summary.falseExclusion.includeSample)
-        #expect(sample.state == "NOT_SAMPLED")
+        #expect(sample.state == "N/A")
         #expect(sample.labelled == 0)
     }
 
