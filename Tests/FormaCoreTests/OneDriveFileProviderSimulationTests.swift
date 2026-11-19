@@ -257,8 +257,8 @@ struct OneDriveFileProviderSimulationTests {
 
     private func facts(_ entry: SourceEntry,
                        gitTracked: EligibilityTriState = .unknown,
-                       cache: EligibilityCacheMarker = .absent,
                        nested: EligibilityTriState = .unknown,
+                       cache: EligibilityCacheMarker = .absent,
                        business: EligibilityBusinessEvidence = .unknown,
                        issues: [SourceScanIssue] = [],
                        scanState: SourceScanState = .complete) -> EligibilityFacts {
