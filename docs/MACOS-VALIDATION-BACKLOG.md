@@ -31,7 +31,7 @@
 | M8 | Mac App Store 沙盒兼容性 | #52 / R1 | Deferred（渠道未定） | 重新选择该渠道 |
 | M9 | 10,000 文件真实扫描性能验收 | #20 / P3-A | Deferred | 真实目录 + 硬件记录 |
 | M10 | 真实 Provider 外发授权、Keychain 与日志脱敏现场核验 | #20 / P3-A + P3-B | Deferred（部分未授权） | Provider 凭据、外发授权、真实 macOS 会话 |
-| M11 | Import Eligibility 生产接入与真实目录误排除复核 | #51 / P3-A | **Implemented, default off**；现场 = **`MACOS_SYNTHETIC_PARTIAL`**（2026-11-17 Mac 执行 30/30 PASS，Owner 提供证据；B3 本地未验证/CI PASS、A8b 内存未测量） | 真实目录与人工复核；默认启用需 Owner 再确认；切片 5 未授权 |
+| M11 | Import Eligibility 生产接入与真实目录误排除复核 | #51 / P3-A | **Implemented, default off**；合成现场 = **`MACOS_SYNTHETIC_PARTIAL`**（2026-11-17，30/30 PASS，B3 本地未验证/CI PASS、A8b 内存未测量）；第 4 级 = **`VERIFIED — SCOPE LIMITED`**（2026-11-19 授权真实样本 3,357 条，排除侧普查 37/37 观察到零误排除，Human Review `COMPLETE`、Local APFS `PARTIAL`、OneDrive `NOT_VERIFIED`） | OneDrive FileProvider 与本地 APFS 实体范围复核；默认启用需 Owner 再确认；切片 5 未授权 |
 
 ## 2. 各项明细
 
@@ -168,7 +168,7 @@
 | 1. DevBox Development Complete | **达成** | #116–#121 代码、单测与契约修订；`EligibilityReport` / Manifest 1.1 等 |
 | 2. macOS CI Verified | **达成** | `macos-15` runner：build / tests / package / launch smoke 全绿（run `43858058846` 等） |
 | 3. macOS Synthetic Field Verified | **部分达成 — `MACOS_SYNTHETIC_PARTIAL`** | 2026-11-17 Mac 执行 30/30 CLI PASS，**原始证据独立完整性复核 `VERIFIED`**（report.json / run.log 哈希逐字节一致）；偏差 B3 本地 `NOT_VERIFIED` / CI PASS，A8b 安全 PASS 但内存行为未测量；详见下条与报告 §8 |
-| 4. Real Directory Acceptance Pending | **未开始** | 无授权真实目录、无人工复核记录 |
+| 4. Real Directory Acceptance | **达成（范围限定）— `VERIFIED — SCOPE LIMITED`** | 2026-11-19 Owner 授权真实样本运行 `run-2026-11-19-134600`：discovered 3,357 / probed 3,357 / skipped 0，INCLUDE 3,320、EXCLUDE 37、REVIEW 0、DEFER 0、unaccounted 0、issues 0，覆盖 `COMPLETE`；排除侧普查 37/37 全部人工判定、`keep_labelled = 0`；INCLUDE 分层抽样 14 条（docx/pdf/xlsx/pptx/doc/xls/txt/zip/rar）另 `UNCERTAIN` 7 条；6/6 产物 SHA-256 校验一致；未打开业务正文。范围限定于该授权目录、元数据分类、`eligibility.v2` 与 digest `aa7796df…d2a57` |
 | 5. Production Default Activation Pending | **未授权** | Owner 条件 3；`FormaApp` 未改，生产调用不传 `eligibility` |
 
 - **2026-11-17 macOS 现场执行（Owner 提供证据）**：主机 macOS 27.0.1（26A434）/ arm64 / MacBookPro18,3（Apple M1 Pro）/ APFS；Swift 6.4；Git 2.54.0。仓库 `Skyline-Gazer/Forma`，分支 `dev`，HEAD `a4da6f5`（跟踪工作树干净，既有未跟踪 `tmp/` 未触碰）。命令 `swift run FormaAcceptance m11 --output <path>`，**退出码 `0`**；**30 案例 PASS / 0 FAIL / 0 NOT_VERIFIED**（CLI case-summary 级）。策略 `eligibility.v2`；**policy digest `aa7796df…d2a57` 与仓库钉扎值一致（已独立核对）**；decisions digest `f5203037…3df7e` 为**主机相关值，本会话未重算**。
@@ -176,6 +176,11 @@
 - **两处偏差（结论分开保留）**：**B3（Owner 编号）**——1.1 资格块缺必需字段应被拒：本地 `NOT_VERIFIED`，CI 通过（`ManifestEligibilityBlockTests.incompleteEligibilityBlockIsRefused`，run `43859870793`，head `a4da6f5`）；注意它与 CLI 案例 `B3`（1.0 工件不含 `eligibility` 键）不是同一检查。**A8b**——超大 `CACHEDIR.TAG`：安全性 **PASS**（不得 EXCLUDE），**运行时内存行为未测量**；源码检查确认 `readFile` 在 `fstat` 之后、分配缓冲区之前以 `sizeBytes > limit` 直接返回 `unreadable("oversized")`（marker 上限 1,024 字节），并有确定性边界测试 `oversizedMarker`（8 KB 标记 → `unreadable`/`oversized`），故"有界读取"由源码与测试成立，内存剖析未做、不宣称，**无需为此新开 Issue**。
 - **安全声明（Owner）**：未访问真实业务目录、未做 DEVONthink 操作、未调用 Provider、未外发文件、未修改仓库、临时夹具已清理、资格默认仍关闭。
 - **2026-11-18（第 4 级只读验收工具已就绪，真实目录验收仍未开始）**：新增 `swift run FormaAcceptance m11-real`（`--source`、`--evidence-dir`、`--dry-run` 均为必填；拒绝相对路径、证据目录落在源目录内、源目录与证据目录互相包含、软链接越界、非 dry-run 模式）。流程为只读扫描 → 事实探测 → 四态决策 → 私人审核表 → 脱敏摘要；产物含私人审核表、脱敏摘要、扫描完整性报告、误排除报告、OneDrive 覆盖矩阵（固定 `NOT_VERIFIED`）与 `SHA256SUMS`。人工标签可离线导入后重算指标，**无需重新扫描**；覆盖不完整显式记 `PARTIAL`（退出码 `3`），无人工标注时误排除为 `N/A`（不报零误排除）。**证据写入安全**：一次扫描必须对应一个**新的、空的**证据运行目录（已有内容拒绝，旧运行的人工标签与结论不可能被覆盖）；证据目录必须 `0700`、产物写为 `0600` 且读回校验；固定产物名与 SQLite 文件（含 `-wal`/`-shm`）为符号链接时拒绝；写入前重新解析目录并复核与源目录的分离，无法证明安全即失败关闭。**标签绑定**：导入要求 `--source`、审核表记录的授权目录、发布的 Policy digest 三者一致，标签可选携带 `snapshot_fingerprint`，与审核表不一致即拒绝，防止旧结论被套用到新内容或新策略上；审核表缺失、读不出或本构建无法解析（旧版本工具产物）分别记 `sheetMissing` / `sheetUnreadable` / `sheetInvalid`，一律拒绝而不是当作空表。用法与产物格式见 `docs/M11-LEVEL4-RUNBOOK.md`。
+- **2026-11-19（第 4 级真实样本验收：范围限定通过 + 统计口径修正）**：Owner 在 MacBookPro18,3 / macOS 27.0.1 / arm64 / Swift 6.4 上对其授权的真实业务资料目录（个人文件、售前、项目文件、笔记、应用五类；OneDrive CloudStorage / FileProvider）执行 `FormaAcceptance m11-real --dry-run`，运行目录 `run-2026-11-19-134600`，结果见上表第 4 级；原件留在 Owner 本机（`~/.forma/evidence/m11-real/run-2026-11-19-134600`），DevBox 仅收到汇总数字，故**原件逐字节独立复核 = PENDING**（Level 3 那样的哈希复算尚未对第 4 级产物做过）。
+  - **统计口径修正**：现场初版报告把 `false_exclusion = 0/14` 表述为"误排除率为零"。14 条取自 INCLUDE 侧抽样，按 `docs/IMPORT-ELIGIBILITY-POLICY.md` 的口径它只是"已独立标注为应保留样本上的算术"，**不能**代表总体误排除率，也**不能**代表排除侧证据。排除侧的证据是普查：37 条 `EXCLUDE` 全部经人工判定为技术噪声、`keep_labelled = 0`，即"观察到零误排除"，而非"误排除率为零"。
+  - **已实施**：产物与 CLI 把三个人群分开（`exclude_adjudication`、`include_sample`、`claim_boundary`、`review_progress.include_sampled`），并固定一句边界说明；`docs/M11-LEVEL4-RUNBOOK.md` §4.4 给出对照表。新增字段全部可选，`schema_version` 保持 `1.0`，**历史运行目录不被改写、不回填**。
+  - **仍未覆盖**：OneDrive dataless 的 hydration / 离线 / 权限失败行为 = `NOT_VERIFIED`（Issue #129）；本地 APFS 实体文件与权限失败路径 = `PARTIAL`（Issue #130）；标记文件（`CACHEDIR.TAG` ≤1024 B、`.git` ≤4096 B）的有界读取在 dataless 文件上可能触发**该标记自身**物化，属策略语义变更，需独立审查（Issue #129）；生成型诊断目录（示例 `onekeylog`）的分类候选与风险（Issue #131，本轮未改任何策略）。脱敏运行记录：`docs/M11-LEVEL4-REAL-RUN-RECORD.md`。
+  - **不构成**：默认过滤启用（仍 OFF）、第 5 级授权（仍未授权）、切片 5（未授权）、以及"该策略在任意目录都安全"的无限定主张。
 - **本轮报告**：`docs/M11-SYNTHETIC-ACCEPTANCE-REPORT.md` §8。合成验收**不构成**真实目录验收，也不构成关闭本项或开启默认过滤的依据。
 
 ## 3. 维护规则

@@ -593,6 +593,219 @@ struct M11RealDirectoryAcceptanceTests {
                 dryRun: true)
         }
     }
+
+    // MARK: - 13. Census over the excluded set, sample over the included set
+
+    @Test("the excluded census and the included sample stay separate populations")
+    func censusAndSampleAreSeparate() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("noise", at: "noise/.DS_Store")
+        try fixture.write("tender text", at: "notes/a.txt")
+        try fixture.write("meeting notes", at: "notes/b.txt")
+        let outcome = try await fixture.run()
+        let excluded = try #require(outcome.sheet.rows.first {
+            $0.decision == EligibilityDecision.exclude.rawValue
+        })
+        let included = outcome.sheet.rows.filter {
+            $0.decision == EligibilityDecision.include.rawValue
+        }
+        #expect(included.count == 2)
+
+        let imported = try M11RealDirectoryAcceptance.importLabels(
+            source: fixture.source, evidenceDirectory: fixture.evidence,
+            labels: [
+                M11RealDirectoryAcceptance.Label(sourceID: excluded.sourceID,
+                                                 label: .technicalNoise),
+                M11RealDirectoryAcceptance.Label(sourceID: included[0].sourceID, label: .keep),
+                M11RealDirectoryAcceptance.Label(sourceID: included[1].sourceID, label: .uncertain),
+            ],
+            dryRun: true)
+        let metric = imported.summary.falseExclusion
+
+        // Census: the excluded set was judged record by record, nothing was
+        // wrongly excluded inside it.
+        let census = try #require(metric.excludeAdjudication)
+        #expect(census.state == "CENSUS_COMPLETE")
+        #expect(census.excludedRecords == 1)
+        #expect(census.adjudicated == 1)
+        #expect(census.unadjudicated == 0)
+        #expect(census.keepLabelled == 0)
+
+        // Sample: two included records were looked at, one kept, one uncertain.
+        let sample = try #require(metric.includeSample)
+        #expect(sample.state == "SAMPLED")
+        #expect(sample.includedRecords == 2)
+        #expect(sample.labelled == 2)
+        #expect(sample.keepLabelled == 1)
+        #expect(sample.uncertainLabelled == 1)
+        #expect(sample.technicalNoiseLabelled == 0)
+
+        // The labelled arithmetic keeps its documented meaning and its own
+        // denominator; it is not the census and not the sample.
+        #expect(metric.state == "MEASURED")
+        #expect(metric.numerator == 0)
+        #expect(metric.denominator == 1)
+        #expect(metric.population == "human-labelled KEEP records")
+
+        // The artifact refuses to let the sample be read as a population rate.
+        let boundary = try #require(metric.claimBoundary)
+        #expect(boundary.contains("every excluded record was adjudicated"))
+        #expect(boundary.contains("does not measure the false-exclusion rate"))
+        #expect(imported.summary.reviewProgress.includeSampled == 2)
+    }
+
+    @Test("an excluded record without a verdict leaves the census incomplete")
+    func censusIsIncompleteUntilEveryExclusionIsAdjudicated() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("noise", at: "one/.DS_Store")
+        try fixture.write("noise", at: "two/.DS_Store")
+        let outcome = try await fixture.run()
+        let excluded = outcome.sheet.rows.filter {
+            $0.decision == EligibilityDecision.exclude.rawValue
+        }
+        #expect(excluded.count == 2)
+
+        let imported = try M11RealDirectoryAcceptance.importLabels(
+            source: fixture.source, evidenceDirectory: fixture.evidence,
+            labels: [M11RealDirectoryAcceptance.Label(sourceID: excluded[0].sourceID,
+                                                      label: .technicalNoise)],
+            dryRun: true)
+        let census = try #require(imported.summary.falseExclusion.excludeAdjudication)
+        #expect(census.state == "CENSUS_INCOMPLETE")
+        #expect(census.excludedRecords == 2)
+        #expect(census.adjudicated == 1)
+        #expect(census.unadjudicated == 1)
+        #expect(census.keepLabelled == 0)
+        // No KEEP label at all: the arithmetic stays N/A even though the census
+        // has a verdict, because "zero observed" is not "measured zero".
+        #expect(imported.summary.falseExclusion.state == "N/A")
+        #expect(imported.summary.reviewProgress.state == "in_progress")
+        let boundary = try #require(imported.summary.falseExclusion.claimBoundary)
+        #expect(boundary.contains("not fully evidenced"))
+    }
+
+    @Test("a KEEP inside the excluded set is an observed false exclusion in the census")
+    func observedFalseExclusionLandsInTheCensus() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("noise", at: "noise/.DS_Store")
+        let outcome = try await fixture.run()
+        let excluded = try #require(outcome.sheet.rows.first {
+            $0.decision == EligibilityDecision.exclude.rawValue
+        })
+
+        let imported = try M11RealDirectoryAcceptance.importLabels(
+            source: fixture.source, evidenceDirectory: fixture.evidence,
+            labels: [M11RealDirectoryAcceptance.Label(sourceID: excluded.sourceID, label: .keep)],
+            dryRun: true)
+        let census = try #require(imported.summary.falseExclusion.excludeAdjudication)
+        #expect(census.state == "CENSUS_COMPLETE")
+        #expect(census.keepLabelled == 1)
+        #expect(imported.summary.falseExclusion.numerator == 1)
+        #expect(imported.summary.falseExclusion.rate == 1.0)
+        // The sample side is untouched by an exclusion finding: nothing was
+        // sampled from the included set here.
+        let sample = try #require(imported.summary.falseExclusion.includeSample)
+        #expect(sample.state == "NOT_SAMPLED")
+        #expect(sample.labelled == 0)
+    }
+
+    @Test("an UNCERTAIN verdict is neither a KEEP nor a confirmed error")
+    func uncertainIsNeitherKeepNorError() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("noise", at: "noise/.DS_Store")
+        let outcome = try await fixture.run()
+        let excluded = try #require(outcome.sheet.rows.first {
+            $0.decision == EligibilityDecision.exclude.rawValue
+        })
+
+        let imported = try M11RealDirectoryAcceptance.importLabels(
+            source: fixture.source, evidenceDirectory: fixture.evidence,
+            labels: [M11RealDirectoryAcceptance.Label(sourceID: excluded.sourceID,
+                                                      label: .uncertain,
+                                                      note: "用途不明")],
+            dryRun: true)
+        let census = try #require(imported.summary.falseExclusion.excludeAdjudication)
+        // The reviewer did judge it, so the census is complete...
+        #expect(census.adjudicated == 1)
+        #expect(census.state == "CENSUS_COMPLETE")
+        // ...but an unresolved record is not evidence of a false exclusion,
+        // and it is never counted as a KEEP.
+        #expect(census.keepLabelled == 0)
+        #expect(imported.summary.falseExclusion.state == "N/A")
+        #expect(imported.summary.reviewProgress.uncertainSamples == 1)
+        #expect(imported.summary.reviewProgress.keepSamples == 0)
+        #expect(imported.sheet.rows.first { $0.sourceID == excluded.sourceID }?.humanLabel
+                == M11RealDirectoryAcceptance.HumanLabel.uncertain)
+    }
+
+    @Test("artifacts written before the census/sample split still decode")
+    func preSplitArtifactsStillDecode() throws {
+        let preSplit = Data("""
+        {
+          "schema_version": "1.0",
+          "coverage_state": "COMPLETE",
+          "state": "MEASURED",
+          "numerator": 0,
+          "denominator": 14,
+          "rate": 0.0,
+          "unit": "records",
+          "population": "human-labelled KEEP records",
+          "review_progress": {
+            "state": "complete", "required": 37, "reviewed": 37, "unreviewed": 0,
+            "keep_samples": 14, "technical_noise_samples": 37, "uncertain_samples": 7
+          }
+        }
+        """.utf8)
+        let report = try JSONDecoder().decode(
+            M11RealDirectoryAcceptance.FalseExclusionReport.self, from: preSplit)
+        #expect(report.denominator == 14)
+        #expect(report.excludeAdjudication == nil)
+        #expect(report.includeSample == nil)
+        #expect(report.claimBoundary == nil)
+        #expect(report.reviewProgress.includeSampled == nil)
+
+        let roundTrip = try JSONEncoder().encode(report)
+        #expect(try JSONDecoder().decode(
+            M11RealDirectoryAcceptance.FalseExclusionReport.self, from: roundTrip) == report)
+    }
+
+    @Test("the new statistics fields leak no path or file name")
+    func statisticsFieldsStaySanitized() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("noise", at: "noise/.DS_Store")
+        try fixture.write("tender text", at: "notes/a.txt")
+        let outcome = try await fixture.run()
+        let excluded = try #require(outcome.sheet.rows.first {
+            $0.decision == EligibilityDecision.exclude.rawValue
+        })
+        let included = try #require(outcome.sheet.rows.first {
+            $0.decision == EligibilityDecision.include.rawValue
+        })
+        let imported = try M11RealDirectoryAcceptance.importLabels(
+            source: fixture.source, evidenceDirectory: fixture.evidence,
+            labels: [
+                M11RealDirectoryAcceptance.Label(sourceID: excluded.sourceID, label: .technicalNoise),
+                M11RealDirectoryAcceptance.Label(sourceID: included.sourceID, label: .keep),
+            ],
+            dryRun: true)
+
+        let data = try JSONEncoder().encode(imported.summary)
+        let text = try #require(String(data: data, encoding: .utf8))
+        #expect(!text.contains(fixture.base.path))
+        #expect(!text.contains(fixture.source.path))
+        #expect(!text.contains(".DS_Store"))
+        #expect(!text.contains("notes"))
+        // Relative paths belong to the private sheet only.
+        let sheetURL = try #require(
+            imported.files[M11RealDirectoryAcceptance.Artifact.privateReviewSheet])
+        let sheetData = try Data(contentsOf: sheetURL)
+        #expect(String(data: sheetData, encoding: .utf8)?.contains("noise/.DS_Store") == true)
+    }
 }
 
 // MARK: - Fixture

@@ -193,8 +193,63 @@ public enum M11RealDirectoryAcceptance {
 
     // MARK: - Sanitized artifacts
 
+    /// The excluded population, judged record by record.
+    ///
+    /// This is a census, not a sample: every `EXCLUDE` record is supposed to
+    /// carry a verdict, so `keep_labelled` is the *observed* number of false
+    /// exclusions inside the excluded set. It says nothing about records the
+    /// policy chose to include.
+    public struct ExcludeAdjudication: Codable, Sendable, Equatable {
+        /// `N/A` when nothing was excluded, `CENSUS_COMPLETE` when every
+        /// excluded record has a verdict, `CENSUS_INCOMPLETE` otherwise.
+        public let state: String
+        public let excludedRecords: Int
+        public let adjudicated: Int
+        public let unadjudicated: Int
+        /// Excluded records a reviewer called business material: the observed
+        /// false exclusions. Non-zero means `FAIL`, whatever the sampled rate says.
+        public let keepLabelled: Int
+        public let unit: String
+
+        enum CodingKeys: String, CodingKey {
+            case state, excludedRecords = "excluded_records", adjudicated, unadjudicated
+            case keepLabelled = "keep_labelled", unit
+        }
+    }
+
+    /// The included population, which can only ever be sampled.
+    ///
+    /// A sample checks that the records the policy kept look like business
+    /// material. It cannot bound the false-exclusion rate of the whole run, and
+    /// the artifact says so in its own words so a reader cannot misquote it.
+    public struct IncludeSample: Codable, Sendable, Equatable {
+        /// `NOT_SAMPLED` when no included record has a verdict, `SAMPLED` otherwise.
+        public let state: String
+        public let includedRecords: Int
+        public let labelled: Int
+        public let keepLabelled: Int
+        public let technicalNoiseLabelled: Int
+        public let uncertainLabelled: Int
+        public let unit: String
+        public let claimBoundary: String
+
+        enum CodingKeys: String, CodingKey {
+            case state, includedRecords = "included_records", labelled
+            case keepLabelled = "keep_labelled"
+            case technicalNoiseLabelled = "technical_noise_labelled"
+            case uncertainLabelled = "uncertain_labelled", unit
+            case claimBoundary = "claim_boundary"
+        }
+    }
+
     /// The false-exclusion arithmetic, with the state that says whether it
     /// means anything yet.
+    ///
+    /// `numerator`/`denominator`/`rate` are arithmetic over the *labelled*
+    /// records only, exactly as `docs/IMPORT-ELIGIBILITY-POLICY.md` requires.
+    /// The two sub-populations beside them separate the census over what was
+    /// excluded from the sample over what was included, because the Level 4
+    /// evidence supports different claims in each.
     public struct FalseExclusionMetric: Codable, Sendable, Equatable {
         /// `N/A` when no record was labelled `KEEP`, `MEASURED` otherwise.
         public let state: String
@@ -203,9 +258,16 @@ public enum M11RealDirectoryAcceptance {
         public let rate: Double?
         public let unit: String
         public let population: String
+        /// Absent in artifacts written before the census/sample split.
+        public let excludeAdjudication: ExcludeAdjudication?
+        public let includeSample: IncludeSample?
+        /// What this run may and may not claim about false exclusions.
+        public let claimBoundary: String?
 
         enum CodingKeys: String, CodingKey {
             case state, numerator, denominator, rate, unit, population
+            case excludeAdjudication = "exclude_adjudication"
+            case includeSample = "include_sample", claimBoundary = "claim_boundary"
         }
     }
 
@@ -220,12 +282,17 @@ public enum M11RealDirectoryAcceptance {
         public let keepSamples: Int
         public let technicalNoiseSamples: Int
         public let uncertainSamples: Int
+        /// Included records carrying a verdict, i.e. the size of the INCLUDE-side
+        /// sample. Optional because artifacts written before the census/sample
+        /// split do not carry it.
+        public let includeSampled: Int?
 
         enum CodingKeys: String, CodingKey {
             case state, required, reviewed, unreviewed
             case keepSamples = "keep_samples"
             case technicalNoiseSamples = "technical_noise_samples"
             case uncertainSamples = "uncertain_samples"
+            case includeSampled = "include_sampled"
         }
     }
 
@@ -300,11 +367,16 @@ public enum M11RealDirectoryAcceptance {
         public let rate: Double?
         public let unit: String
         public let population: String
+        public let excludeAdjudication: ExcludeAdjudication?
+        public let includeSample: IncludeSample?
+        public let claimBoundary: String?
         public let reviewProgress: ReviewProgress
 
         enum CodingKeys: String, CodingKey {
             case schemaVersion = "schema_version", coverageState = "coverage_state"
             case state, numerator, denominator, rate, unit, population
+            case excludeAdjudication = "exclude_adjudication"
+            case includeSample = "include_sample", claimBoundary = "claim_boundary"
             case reviewProgress = "review_progress"
         }
     }
@@ -876,6 +948,9 @@ public enum M11RealDirectoryAcceptance {
         let keep = sheet.rows.filter { $0.humanLabel == .keep }.count
         let noise = sheet.rows.filter { $0.humanLabel == .technicalNoise }.count
         let uncertain = sheet.rows.filter { $0.humanLabel == .uncertain }.count
+        let includeSampled = sheet.rows.filter {
+            $0.decision == EligibilityDecision.include.rawValue && $0.humanLabel != nil
+        }.count
         let state: String
         if required.isEmpty { state = "not_required" }
         else if reviewed == 0 { state = "unreviewed" }
@@ -883,20 +958,80 @@ public enum M11RealDirectoryAcceptance {
         else { state = "complete" }
         return ReviewProgress(state: state, required: required.count, reviewed: reviewed,
                               unreviewed: required.count - reviewed, keepSamples: keep,
-                              technicalNoiseSamples: noise, uncertainSamples: uncertain)
+                              technicalNoiseSamples: noise, uncertainSamples: uncertain,
+                              includeSampled: includeSampled)
+    }
+
+    /// Every excluded record is supposed to carry a verdict, so this is a census:
+    /// `keep_labelled` is the observed count of false exclusions inside the
+    /// excluded set, and an incomplete census means the evidence is not finished.
+    private static func excludeAdjudication(sheet: PrivateReviewSheet) -> ExcludeAdjudication {
+        let excluded = sheet.rows.filter { $0.decision == EligibilityDecision.exclude.rawValue }
+        let adjudicated = excluded.filter { $0.humanLabel != nil }.count
+        let keepLabelled = excluded.filter { $0.humanLabel == .keep }.count
+        let state: String
+        if excluded.isEmpty { state = "N/A" }
+        else if adjudicated == excluded.count { state = "CENSUS_COMPLETE" }
+        else { state = "CENSUS_INCOMPLETE" }
+        return ExcludeAdjudication(state: state, excludedRecords: excluded.count,
+                                   adjudicated: adjudicated,
+                                   unadjudicated: excluded.count - adjudicated,
+                                   keepLabelled: keepLabelled, unit: "records")
+    }
+
+    /// The included set can only be sampled, so it is reported as counts and
+    /// never as a rate that could be quoted as a population figure.
+    private static func includeSample(sheet: PrivateReviewSheet) -> IncludeSample {
+        let included = sheet.rows.filter { $0.decision == EligibilityDecision.include.rawValue }
+        let labelled = included.filter { $0.humanLabel != nil }
+        func count(_ label: HumanLabel) -> Int { labelled.filter { $0.humanLabel == label }.count }
+        return IncludeSample(state: labelled.isEmpty ? "NOT_SAMPLED" : "SAMPLED",
+                             includedRecords: included.count, labelled: labelled.count,
+                             keepLabelled: count(.keep),
+                             technicalNoiseLabelled: count(.technicalNoise),
+                             uncertainLabelled: count(.uncertain), unit: "records",
+                             claimBoundary: includeClaimBoundary)
+    }
+
+    private static let includeClaimBoundary =
+        "an INCLUDE-side sample says whether records the policy kept look like business material; "
+        + "it does not measure the false-exclusion rate of the whole run"
+
+    /// One sentence that states what the two populations do and do not support.
+    private static func claimBoundary(census: ExcludeAdjudication,
+                                      sample: IncludeSample) -> String {
+        let censusPart: String
+        switch census.state {
+        case "N/A":
+            censusPart = "nothing was excluded, so the excluded set carries no evidence either way"
+        case "CENSUS_COMPLETE":
+            censusPart = "every excluded record was adjudicated: \(census.keepLabelled) of "
+                + "\(census.excludedRecords) were labelled business material"
+        default:
+            censusPart = "only \(census.adjudicated) of \(census.excludedRecords) excluded records "
+                + "were adjudicated, so the excluded set is not fully evidenced"
+        }
+        return censusPart + "; " + includeClaimBoundary
+            + " (\(sample.labelled) of \(sample.includedRecords) included records carry a verdict)"
     }
 
     private static func falseExclusionMetric(sheet: PrivateReviewSheet) -> FalseExclusionMetric {
         let keep = sheet.rows.filter { $0.humanLabel == .keep }
         let excluded = keep.filter { $0.decision == EligibilityDecision.exclude.rawValue }.count
+        let census = excludeAdjudication(sheet: sheet)
+        let sample = includeSample(sheet: sheet)
+        let boundary = claimBoundary(census: census, sample: sample)
         let population = "human-labelled KEEP records"
         guard !keep.isEmpty else {
             return FalseExclusionMetric(state: "N/A", numerator: nil, denominator: nil, rate: nil,
-                                        unit: "records", population: population)
+                                        unit: "records", population: population,
+                                        excludeAdjudication: census, includeSample: sample,
+                                        claimBoundary: boundary)
         }
         return FalseExclusionMetric(state: "MEASURED", numerator: excluded, denominator: keep.count,
                                     rate: Double(excluded) / Double(keep.count), unit: "records",
-                                    population: population)
+                                    population: population, excludeAdjudication: census,
+                                    includeSample: sample, claimBoundary: boundary)
     }
 
     private static func completenessReport(sheet: PrivateReviewSheet) -> ScanCompletenessReport {
@@ -915,6 +1050,9 @@ public enum M11RealDirectoryAcceptance {
                                     state: metric.state, numerator: metric.numerator,
                                     denominator: metric.denominator, rate: metric.rate,
                                     unit: metric.unit, population: metric.population,
+                                    excludeAdjudication: metric.excludeAdjudication,
+                                    includeSample: metric.includeSample,
+                                    claimBoundary: metric.claimBoundary,
                                     reviewProgress: reviewProgress(sheet: sheet))
     }
 
