@@ -178,15 +178,37 @@ else
     fail "unreadable file and unreadable directory are recorded explicitly"
 fi
 
-# --- 6. ownership and path refusals ---------------------------------------
+# --- 6. Path guards: cloud sync roots, aliases, normalization --------------
+GUARD=$PARENT/guard
+mkdir -p "$GUARD/Library/CloudStorage/deep" "$GUARD/local/MyOneDriveDocs" "$GUARD/norm"
+expect_exit 1 "build refuses the CloudStorage root itself" \
+    bash "$TOOL" build "$GUARD/Library/CloudStorage"
+expect_exit 1 "build refuses a nested CloudStorage directory" \
+    bash "$TOOL" build "$GUARD/Library/CloudStorage/deep"
+expect_exit 1 "build refuses CloudStorage spelled with a trailing slash" \
+    bash "$TOOL" build "$GUARD/Library/CloudStorage/"
+expect_exit 1 "build refuses CloudStorage reached through .." \
+    bash "$TOOL" build "$GUARD/Library/../Library/CloudStorage"
+ln -s "$GUARD/Library/CloudStorage/deep" "$GUARD/cloud-alias"
+expect_exit 1 "build refuses a symlink alias into CloudStorage" \
+    bash "$TOOL" build "$GUARD/cloud-alias"
+rm -f "$GUARD/cloud-alias"
+expect_exit 0 "build accepts a local directory whose name merely contains OneDrive" \
+    bash "$TOOL" build "$GUARD/local/MyOneDriveDocs"
+expect_exit 0 "clean accepts the same local directory" \
+    bash "$TOOL" clean "$GUARD/local/MyOneDriveDocs/apfs-fixture"
+expect_exit 0 "build accepts a path with . and a trailing slash" \
+    bash "$TOOL" build "$GUARD/./norm//"
+expect_exit 0 "clean accepts a path with . and a trailing slash" \
+    bash "$TOOL" clean "$GUARD/norm/apfs-fixture"
+
+# --- 7. Ownership refusals -------------------------------------------------
 mkdir -p "$PARENT/foreign"
 expect_exit 1 "stamp refuses a tree with no ownership state" bash "$TOOL" stamp "$PARENT/foreign" before
 expect_exit 1 "clean refuses a tree with no ownership state" bash "$TOOL" clean "$PARENT/foreign"
 
-mkdir -p "$PARENT/Library/CloudStorage/fake"
-expect_exit 1 "build refuses a CloudStorage path" bash "$TOOL" build "$PARENT/Library/CloudStorage/fake"
 mkdir -p "$PARENT/OneDrive/fake"
-expect_exit 1 "build refuses an OneDrive path" bash "$TOOL" build "$PARENT/OneDrive/fake"
+expect_exit 1 "build refuses an exact OneDrive component" bash "$TOOL" build "$PARENT/OneDrive/fake"
 
 cp "$FIXTURE/$MARKER" "$PARENT/marker.bak"
 printf 'forged\n' >"$FIXTURE/$MARKER"
@@ -202,8 +224,56 @@ expect_exit 1 "stamp refuses a symlinked fixture path" bash "$TOOL" stamp "$PARE
 expect_exit 1 "clean refuses a symlinked fixture path" bash "$TOOL" clean "$PARENT/fixture-link"
 rm -f "$PARENT/fixture-link"
 
-# --- 7. clean ---------------------------------------------------------------
-mkdir -p "$PARENT/unrelated-data"
+# --- 8. The manifest is data, not authority --------------------------------
+# Each case tampers with the manifest, requires a refusal, and then proves that
+# *nothing* was deleted: a partial cleanup caused by a bad second entry would be
+# worse than no cleanup at all.
+OUTSIDE=$PARENT/apfs-outside
+TOK=$(cat "$STATE/token")
+cp "$STATE/manifest" "$PARENT/manifest.bak"
+mkdir -p "$PARENT/unrelated-data" "$PARENT/a/b" "$PARENT/apfs-outside-foreign"
+
+assert_intact() {
+    local label=$1
+    if [ -d "$FIXTURE" ] && [ -d "$OUTSIDE" ] && [ -d "$PARENT/unrelated-data" ] \
+        && [ -d "$STATE" ]; then
+        pass "$label"
+    else
+        fail "$label" "a refusal still removed something"
+    fi
+}
+
+printf '%s\textra\t%s\n' "$TOK" "$PARENT/unrelated-data" >>"$STATE/manifest"
+expect_exit 1 "clean refuses a manifest with an extra target" bash "$TOOL" clean "$FIXTURE"
+assert_intact "an extra manifest target deletes nothing"
+cp "$PARENT/manifest.bak" "$STATE/manifest"
+
+printf '%s\tfixture\t%s\n%s\tfixture\t%s\n' "$TOK" "$FIXTURE" "$TOK" "$OUTSIDE" >"$STATE/manifest"
+expect_exit 1 "clean refuses a manifest with a duplicated role" bash "$TOOL" clean "$FIXTURE"
+assert_intact "a duplicated role deletes nothing"
+cp "$PARENT/manifest.bak" "$STATE/manifest"
+
+printf '%s\tfixture\t%s\n%s\toutside\t%s\n' "deadbeef" "$FIXTURE" "$TOK" "$OUTSIDE" >"$STATE/manifest"
+expect_exit 1 "clean refuses a manifest carrying a foreign token" bash "$TOOL" clean "$FIXTURE"
+assert_intact "a foreign token deletes nothing"
+cp "$PARENT/manifest.bak" "$STATE/manifest"
+
+printf '%s\tfixture\t%s\n%s\toutside\t%s\n' "$TOK" "$FIXTURE" "$TOK" "$PARENT/apfs-outside-foreign" >"$STATE/manifest"
+expect_exit 1 "clean refuses a manifest pointing at a foreign sibling" bash "$TOOL" clean "$FIXTURE"
+assert_intact "a foreign sibling deletes nothing"
+cp "$PARENT/manifest.bak" "$STATE/manifest"
+
+printf '%s\tfixture\t%s\n%s\toutside\t%s\n' "$TOK" "$FIXTURE" "$TOK" "$PARENT/a/b/apfs-outside" >"$STATE/manifest"
+expect_exit 1 "clean refuses a manifest target outside the state directory" bash "$TOOL" clean "$FIXTURE"
+assert_intact "an out-of-parent target deletes nothing"
+cp "$PARENT/manifest.bak" "$STATE/manifest"
+
+printf '%s\tfixture\t%s\n' "$TOK" "$FIXTURE" >"$STATE/manifest"
+expect_exit 1 "clean refuses a truncated manifest" bash "$TOOL" clean "$FIXTURE"
+assert_intact "a truncated manifest deletes nothing"
+cp "$PARENT/manifest.bak" "$STATE/manifest"
+
+# --- 9. Clean ---------------------------------------------------------------
 expect_exit 0 "clean removes the owned trees" bash "$TOOL" clean "$FIXTURE"
 if [ ! -e "$FIXTURE" ] && [ ! -e "$PARENT/apfs-outside" ] && [ ! -e "$STATE" ]; then
     pass "clean removed the fixture, the outside directory and the tool state"
