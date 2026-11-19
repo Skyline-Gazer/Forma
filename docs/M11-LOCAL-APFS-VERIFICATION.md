@@ -125,9 +125,9 @@ bash scripts/m11_apfs_fixture.sh clean "/Volumes/FormaVerify/apfs-fixture"
 
 | 结论 | 条件 |
 | --- | --- |
-| `PASS` | 第 5 节全部命中预期；守恒成立（`include + exclude + review + defer = discovered`，`probed + skipped = discovered`，`unaccounted = 0`）；`compare before after` 输出 `identical`；无根外记录；`include_sample.state = SAMPLED` 或 `N/A`（无 `INCLUDE` 记录时） |
-| `FAIL` | 出现任何一条"预期非 `EXCLUDE` 却被排除"；或 `compare` 报告差异（源树被改动）；或 `escape/secret.pdf` 出现在记录里 |
-| `PARTIAL` | 覆盖不完整（`skipped > 0` 或存在扫描 issue）、排除侧裁决未闭合、存在未解决的 `UNCERTAIN`，或必要抽样未完成——且无 `FAIL` 项 |
+| `PASS` | 第 5 节全部命中预期；守恒成立（`include + exclude + review + defer = discovered`，`probed + skipped = discovered`，`unaccounted = 0`）；`compare before after` 输出 `identical`；无根外记录；排除侧 `verdict = SAFE_TO_CLEAR` 或 `N/A`；`include_sample.state = SAMPLED` 或 `N/A`（无 `INCLUDE` 记录时） |
+| `FAIL` | 出现任何一条"预期非 `EXCLUDE` 却被排除"；或排除侧 `verdict = FALSE_EXCLUSION_FOUND`；或 `compare` 报告差异（源树被改动）；或 `escape/secret.pdf` 出现在记录里 |
+| `PARTIAL` | 覆盖不完整（`skipped > 0` 或存在扫描 issue）、`verdict = INCOMPLETE`/`NEEDS_REVIEW`、或 `include_sample.state = NOT_SAMPLED`——且无 `FAIL` 项 |
 | `NOT_VERIFIED` | 未执行；或执行环境不满足第 2 节（例如夹具落在云同步根内被拒绝） |
 
 四个结论互斥，优先级 `FAIL > PARTIAL > PASS`，`NOT_VERIFIED` 只用于"没有执行证据"的情形。任何一项不得写 `PASS`：本地 APFS 夹具**不能**证明 OneDrive dataless / hydration 行为（那是 Issue #129 的范围），也**不能**证明默认过滤可以启用。
