@@ -240,7 +240,10 @@ public enum M11RealDirectoryAcceptance {
     /// material. It cannot bound the false-exclusion rate of the whole run, and
     /// the artifact says so in its own words so a reader cannot misquote it.
     public struct IncludeSample: Codable, Sendable, Equatable {
-        /// `NOT_SAMPLED` when no included record has a verdict, `SAMPLED` otherwise.
+        /// `N/A` when the run had no included record at all (there is nothing to
+        /// sample, which is not the same as skipping the sample), `NOT_SAMPLED`
+        /// when included records exist but none carries a verdict, `SAMPLED`
+        /// otherwise.
         public let state: String
         public let includedRecords: Int
         public let labelled: Int

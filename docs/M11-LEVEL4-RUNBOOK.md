@@ -223,8 +223,8 @@ swift run FormaAcceptance m11-real \
 | 判定 | 条件（按优先级互斥） |
 | --- | --- |
 | `FAIL` | `exclude_adjudication.keep_labelled > 0`（`verdict = FALSE_EXCLUSION_FOUND`）：排除侧普查里出现了 `KEEP` 记录。记录 `source_id`、规则、复现条件，**不擅自修改 Policy**。此判定优先于其它一切条件 |
-| `PARTIAL` | 无 `FAIL`，且满足任一项：`coverage_state = PARTIAL`；`CENSUS_INCOMPLETE`／`verdict = INCOMPLETE`；`verdict = NEEDS_REVIEW`（普查已闭合但有 `UNCERTAIN` 未解决）；`include_sample.state = NOT_SAMPLED`（有保留记录却没有任何抽样证据） |
-| `PASS` | 无 `FAIL`、无 `PARTIAL` 条件：`coverage_state = COMPLETE`、`review_progress.state = complete`、`exclude_adjudication.state` 为 `CENSUS_COMPLETE` 或 `N/A`、`verdict` 为 `SAFE_TO_CLEAR` 或 `N/A`、且 `include_sample.state` 为 `SAMPLED` 或 `N/A` |
+| `PARTIAL` | 无 `FAIL`，且满足任一项：`coverage_state = PARTIAL`；`review_progress.state` 为 `unreviewed` 或 `in_progress`（仍有 `EXCLUDE`/`REVIEW` 未判定——普查只覆盖 `EXCLUDE`，未判定的 `REVIEW` 记录不会体现在 `exclude_adjudication` 里）；`CENSUS_INCOMPLETE`／`verdict = INCOMPLETE`；`verdict = NEEDS_REVIEW`（普查已闭合但有 `UNCERTAIN` 未解决）；`include_sample.state = NOT_SAMPLED`（有保留记录却没有任何抽样证据） |
+| `PASS` | 无 `FAIL`、无 `PARTIAL` 条件：`coverage_state = COMPLETE`、`review_progress.state` 为 `complete` 或 `not_required`（没有待判定记录，例如空目录运行）、`exclude_adjudication.state` 为 `CENSUS_COMPLETE` 或 `N/A`、`verdict` 为 `SAFE_TO_CLEAR` 或 `N/A`、且 `include_sample.state` 为 `SAMPLED` 或 `N/A` |
 | `NOT_VERIFIED` | 没有执行证据：工具未运行、环境缺失、参数被拒。它不能与上面三者同时成立 |
 
 判定互斥且按上表顺序判定：先看 `FAIL`，再看 `PARTIAL`，其余才可能是 `PASS`；没有任何执行证据时只能是 `NOT_VERIFIED`。本次没有 `INCLUDE` 记录时，`include_sample.state = N/A` 不阻止 `PASS`（没有东西可抽，不是"跳过抽样"）。

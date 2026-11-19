@@ -799,6 +799,41 @@ struct M11RealDirectoryAcceptanceTests {
         #expect(boundary.contains("no included records to sample"))
     }
 
+    @Test("a complete census with an unjudged REVIEW record is not a finished review")
+    func unjudgedReviewRecordKeepsTheRunOpen() async throws {
+        // The census only ever covers EXCLUDE. A run whose exclusions are all
+        // adjudicated still has an unjudged REVIEW record here, so the review
+        // progress is `in_progress` while `CENSUS_COMPLETE` holds. Runbook §5
+        // classifies that combination as PARTIAL; this test pins the inputs that
+        // make the distinction necessary.
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        try fixture.write("noise", at: "noise/.DS_Store")
+        try fixture.write("artifact", at: "build/output.bin")
+
+        let outcome = try await fixture.run()
+        let excluded = outcome.sheet.rows.filter {
+            $0.decision == EligibilityDecision.exclude.rawValue
+        }
+        let reviewed = outcome.sheet.rows.filter {
+            $0.decision == EligibilityDecision.review.rawValue
+        }
+        #expect(excluded.count == 1)
+        #expect(reviewed.count == 1)
+
+        let imported = try M11RealDirectoryAcceptance.importLabels(
+            source: fixture.source, evidenceDirectory: fixture.evidence,
+            labels: [M11RealDirectoryAcceptance.Label(sourceID: excluded[0].sourceID,
+                                                      label: .technicalNoise)],
+            dryRun: true)
+        let census = try #require(imported.summary.falseExclusion.excludeAdjudication)
+        #expect(census.state == "CENSUS_COMPLETE")
+        #expect(census.verdict == "SAFE_TO_CLEAR")
+        #expect(imported.summary.reviewProgress.state == "in_progress")
+        #expect(imported.summary.reviewProgress.required == 2)
+        #expect(imported.summary.reviewProgress.reviewed == 1)
+    }
+
     @Test("artifacts written before the census/sample split still decode")
     func preSplitArtifactsStillDecode() throws {
         let preSplit = Data("""

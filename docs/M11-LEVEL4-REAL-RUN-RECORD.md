@@ -78,17 +78,19 @@
 
 | 产物 | 受众 | Owner 侧校验 | DevBox 独立复核 |
 | --- | --- | --- | --- |
-| `sanitized-summary.json`、`scan-completeness.json`、`false-exclusion.json`、`onedrive-coverage.json`、`human-labels`(仅本机)、`SHA256SUMS` | 脱敏件可外发 | 6/6 SHA-256 一致（Owner 报告） | **PENDING**：脱敏原件尚未送达 DevBox，未逐字节复算 |
-| `private-review-sheet.json`、`human-labels.json`、`acceptance-workspace.sqlite` | 仅本机 | mode `0600` / 目录 `0700` | 不适用（不外发） |
+| `sanitized-summary.json`、`scan-completeness.json`、`false-exclusion.json`、`onedrive-coverage.json`、`SHA256SUMS` | 脱敏件可外发 | 4 项与清单一致（Owner 报告） | **`NOT_VERIFIED`**：原件尚未送达 DevBox |
+| `private-review-sheet.json`、`human-labels.json` | 仅本机（含路径/文件名/正文线索） | mode `0600` / 目录 `0700` | 不可外发；只能在 Owner 本机按 `SHA256SUMS` 复算 |
+| `acceptance-workspace.sqlite` | 仅本机（工作库，非证据） | 不列入 `SHA256SUMS` | 不适用 |
 
-`SHA256SUMS` 每行 `哈希  文件名`，任何拿到脱敏件的人都能离线重算比对；工作库不列入清单（本地工作文件，非证据）。**本记录中的数字来自 Owner 汇总，不等价于原始证据的独立复核结论。**
+清单共 **6 行**（`private-review-sheet`、`sanitized-summary`、`scan-completeness`、`false-exclusion`、`onedrive-coverage`、`human-labels`，见 `M11RealDirectoryAcceptance.swift:876-899`）。其中 **4 项可外部复算**（送达 DevBox 后），**2 项只能在 Owner 本机复算**（私人审核表与标签文件不外发）。因此"6/6 一致"若要被独立验证，需要 Owner 分别在本机（2 项）与 DevBox（4 项）各做一次；任何只交付 4 个脱敏 JSON 的移送都**不可能**达到 6/6。
 
 ### 5.1 独立复算的当前状态（2026-11-19 审计）
 
 - DevBox 上**不存在**该次运行的任何产物：`~/.forma/evidence/` 下只有合成验收（`m11/`）与另一批次的 `r1-batch2a/`，全盘搜索无 `sanitized-summary.json`、无本批次的 `SHA256SUMS`。
 - 因此 6 项 SHA-256 的独立复算状态为 **`NOT_VERIFIED`**：既不是"一致"，也不是"不一致"，而是**没有原件可算**。
-- 复算所需：Owner 授权后把 5 个脱敏产物 + `SHA256SUMS` 原样（不编辑、不重命名）送到 DevBox；复算命令为 `shasum -a 256 <每个文件>` 并与清单逐行比对，连同文件字节数与复算时间一起记录。
-- 在复算完成之前，本记录里"6/6 一致"只能表述为 **Owner 报告值**，不得写成已独立验证。
+- 复算所需（外部 4 项）：Owner 授权后把 `sanitized-summary.json`、`scan-completeness.json`、`false-exclusion.json`、`onedrive-coverage.json` 与 `SHA256SUMS` 原样（不编辑、不重命名）送到 DevBox，`shasum -a 256 <每个文件>` 逐行比对，连同字节数与复算时间记录。
+- 本机 2 项（`private-review-sheet.json`、`human-labels.json`）由 Owner 在运行目录执行同一条命令并与清单比对；DevBox 不接收这两个文件。
+- 在复算完成之前，"6/6 一致"只能表述为 **Owner 报告值**，不得写成已独立验证。
 
 ## 6. 范围限定
 
@@ -107,5 +109,5 @@
 ## 7. 本次运行暴露的后续工程项
 
 1. **标记文件的有界读取可能物化 dataless 标记自身**：`CACHEDIR.TAG`（≤1,024 B）与 `.git`（≤4,096 B）读取走 `openat(O_RDONLY|O_NOFOLLOW)` + `read`，在 FileProvider 上这是可触发下载的调用序列。业务正文不在读取范围内，但"绝不触发下载"这句不能承诺。已提出的最小修复（dataless 标记跳过内容读取）会改变排除侧事实可用性，属策略语义变更 → 独立审查，不在本轮采纳。
-2. **诊断型目录（如项目内 `onekeylog`）中的 log / ini / csv 仍走 `default-mapping-candidate` 保留**：本轮未新增任何按扩展名的排除规则。候选方案与风险见 `docs/M11-DIAGNOSTIC-LOG-CLASSIFICATION.md`。
-3. **原件独立复核 PENDING**：与第 3 级同样流程（Owner 送达脱敏件 → DevBox 只读复算哈希 → 逐条比对），完成前第 4 级的完整性结论限于 Owner 侧声明。
+2. **诊断型目录（如项目内 `onekeylog`）中的 log / ini / csv 仍走 `default-mapping-candidate` 保留**：本轮未新增任何按扩展名的排除规则。候选方案与风险见 Issue #131（研究文档随 PR #135 提交，尚未合并）。
+3. **原件独立复核 `NOT_VERIFIED`**：与第 3 级同样流程（Owner 送达 4 个脱敏件 → DevBox 只读复算哈希 → 逐条比对；另 2 项私人审核表与标签文件只能在 Owner 本机复算），完成前第 4 级的完整性结论限于 Owner 侧声明。
