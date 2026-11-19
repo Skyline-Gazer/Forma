@@ -47,6 +47,22 @@ diskutil apfs deleteVolume disk3 FormaVerify
 2. **所有权是被证明的，不是被假设的**。`build` 生成随机 token，写入 `token` 与 `manifest`（`<token>\t<fixture|outside>\t<canonical path>`），并在两棵树的 `.forma-m11-owner` 里写入同一 token。`stamp`/`compare`/`clean` 都要求 canonical path 出现在 manifest 且 marker token 一致；`clean` 只删除 manifest 中逐项验证通过的路径，**从不按目录名猜兄弟目录**，并拒绝 `/`、`$HOME`、层级过浅的路径、符号链接路径与 token 不符的标记。
 3. **失败要报出来**。不可读文件写 `UNREADABLE` 摘要（不写空字段，避免被后续比较读成"内容变更"）；不可读目录记为 `unreadable-dir`；`find` 的枚举错误只有在能归因到本脚本自己造的不可读目录时才容忍，否则中止。stamp 含 `size / mode / flags / mtime / ctime / sha256 / 链接目标`，因此新增、删除、内容修改、权限修改与 mtime 修改都可检出；符号链接始终不被跟随。
 
+### 3.1 路径安全检查（本轮新增）
+
+- **先规范化，再判断**。`build`/`stamp`/`compare`/`clean` 都先 `pwd -P` 得到真实路径，再做任何路径判定；`..`、尾部斜杠、相对路径与符号链接别名因此都归一到同一个真实目录。
+- **云同步按整段组件判定**，不再做子串匹配：`Library/CloudStorage` 相邻组件对，或组件恰为 `OneDrive`/`Dropbox`/`Google Drive`/`iCloud Drive`。这样 `…/Library/CloudStorage` 根目录与各级子目录都被拒绝，而本地目录 `MyOneDriveDocs` 不会被误拒（两个方向都有回归用例）。
+- **设备层第二道防线**：`df` 报出的设备必须是 `/dev/…`，网络挂载（`//host/share`、`host:/path`）直接拒绝；随后要求 APFS personality 与实际写探针成功。
+- **能力边界（如实记录）**：本工具识别的是 FileProvider 布局 + 本地设备 + APFS 三项。若某个云客户端挂在没有 `CloudStorage` 组件的路径下、并导出一个普通 APFS 卷，本工具**无法**识别。真正的边界是 Owner 明确指定的父目录，工具不自行选择业务目录。
+
+### 3.2 `clean` 的四条不变量
+
+1. **目标必须精确**：只删 manifest 记录、且逐项验证通过的目标；不按目录名、marker 存在性或单条 manifest 声明推断所有权。
+2. **先全量校验，再删除**：Pass 1 校验全部目标后 Pass 2 才动手，任一目标不合法即整体拒绝——不会出现"删掉第一棵后才发现第二棵非法"。
+3. **manifest 不可信**：行数必须恰为 2、角色恰为 `fixture` + `outside`（不得重复）、不得有第四个字段、路径必须直接位于状态目录的父目录下、目录名必须是 `apfs-fixture` / `apfs-outside`、token 必须等于状态 token、marker 必须存在且一致、canonical 必须等于给定路径、不得是符号链接、不得是 `/`、`$HOME` 或层级过浅的路径。
+4. **fail closed**：任一环节无法证明即拒绝，并保留现场（不删除任何东西）。
+
+**TOCTOU 限制（不声称原子化）**：Pass 2 在每次 `rm -rf` 之前会重新校验符号链接、目录类型、marker 与 token，但"校验"与"删除"之间仍有竞态窗口；shell 脚本无法把二者变成原子操作。该窗口只有在攻击者能在本机同一时间修改被删除目录时才可利用，且本工具只操作自己刚刚校验过的临时夹具。
+
 ## 4. 执行步骤
 
 ```bash
@@ -137,6 +153,18 @@ bash scripts/m11_apfs_fixture.sh clean "/Volumes/FormaVerify/apfs-fixture"
 CI 的 `M11 APFS fixture tool smoke` 作业在 `macos-15` 上真实执行夹具工具，覆盖：首次 `build` 成功且全部父目录存在、重复 `build` 拒绝、`before/after` 一致时 `compare` 成功、内容/删除/新增/权限/mtime 五种变更均被检出、标签重复与非法标签被拒、符号链接与循环链接不被跟随、不可读文件与目录被显式记录、无所有权状态/伪造 marker/缺失 marker/符号链接路径的 `clean` 全部拒绝、`clean` 只删归属目录并保留无关兄弟目录、重复 `clean` 拒绝。
 
 环境声明：只有 `uname` 为 Darwin 时才跑用例，否则打印 `SKIPPED` 并以 0 退出（GitHub macOS 作业会真实执行，不会走到这条）。若临时卷不是 APFS，脚本打印 `ENVIRONMENT:` 并以 1 退出——**不会**把"没跑"写成"通过"。真实"非 APFS 卷"场景无法在 runner 上构造，因此该分支只由路径护栏测试与文档覆盖。
+
+### 8.1 本轮实测（macOS runner）
+
+| 项 | 值 |
+| --- | --- |
+| CI run | `44502951728`（job `M11 APFS fixture tool smoke`，commit `70207c8`） |
+| 卷 | `/dev/disk2s5`（APFS，可写性由脚本自身的写探针验证） |
+| 结果 | **60 passed / 0 failed** |
+
+新增覆盖（相对上一版 40 项）：CloudStorage 根目录本身、逐级子目录、尾部斜杠、`..` 形式、符号链接别名；本地同名目录（`MyOneDriveDocs`）与含 `.`／尾斜杠的路径不被误拒；manifest 额外目标、重复角色、异 token、指向无关兄弟、越父目标、截断——每种拒绝后都额外断言"两棵树与无关目录仍然存在"，即不变量 2 的直接检验。
+
+**已经测试**：上述全部用例在真实 APFS 卷上执行，60/60 通过。**只有静态论证**：TOCTOU 残余窗口（§3.2）、非 APFS 卷拒绝分支（runner 上无法构造第二个非 APFS 卷）、以及"云客户端挂在无 `CloudStorage` 组件的路径"这一能力边界。**未执行**：任何真实业务目录或 OneDrive 路径的操作。
 
 ## 9. 已知限制
 
