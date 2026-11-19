@@ -65,3 +65,21 @@
 | 真实 DEVONthink 导入 | `NOT_AUTHORIZED` | 本构建无写路径 |
 | 正式签名/公证 | 未开始 | 内部构建仅 ad-hoc 签名 |
 | Level 5 默认过滤 | `NOT_AUTHORIZED` | 保持 `OFF` |
+
+## 4. Import Plan 导出合同（PR #137）
+
+导出的 `import-plan-rN.json` 是**机器可读的干跑声明**，不是脱敏产物、不是执行授权：
+
+| 字段 | 值 | 含义 |
+| --- | --- | --- |
+| `dry_run` | `true` | 本次没有执行导入 |
+| `writes_executed` | `false` | 程序没有任何写入路径 |
+| `authorization_granted` | `false` | 文件本身不构成授权 |
+| `purpose` | `review-only plan; not an execution authorization` | 用途 |
+| `target_observed` | `false` | 目标组从未被观测，报告中为 `target_unresolved` |
+| `source_observation` | `scan` / `manifest only` | 来源事实的观测范围 |
+| `manifest_revision` | 整数 | 对应的 Manifest 修订；修订变化后旧计划失效 |
+
+读取方规则：任何 `writes_executed: true` 或 `authorization_granted: true` 的文件都不是本产物，解码器会拒绝它。
+
+**隐私**：计划逐行包含 `relative_path`，可能含客户名、项目名与敏感文件名。它不是脱敏件；不要上传 GitHub、远程日志或任何外部服务。公开评审只提供单独脱敏的汇总（计数与原因码）。

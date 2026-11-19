@@ -112,4 +112,42 @@ struct ImportPlannerTests {
         // per-row list.
         #expect(result.codeCounts.first { $0.code == .capabilityMissing }?.count == 2)
     }
+
+    @Test("the exported plan says it is a dry run and not an authorization")
+    func exportCarriesDryRunContract() throws {
+        let entry = ImportFixtures.entry(sourceID: UUID())
+        let result = try plan(entries: [entry])
+
+        let data = try FormaJSON.encoder(pretty: true).encode(result)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        // A constant computed property is not evidence in a file: these keys must
+        // physically be in the JSON someone reviews.
+        #expect(object["dry_run"] as? Bool == true)
+        #expect(object["writes_executed"] as? Bool == false)
+        #expect(object["authorization_granted"] as? Bool == false)
+        #expect((object["purpose"] as? String)?.contains("not an execution authorization") == true)
+        #expect(object["schema_version"] as? String == ImportPlan.artifactSchemaVersion)
+        #expect(object["manifest_revision"] as? Int == 1)
+        #expect(object["target_observed"] as? Bool == false)
+        #expect(object["source_observation"] as? String == "manifest only")
+
+        // And it round-trips: the reader on the other machine can decode it.
+        let decoded = try FormaJSON.decoder().decode(ImportPlan.self, from: data)
+        #expect(decoded.rows.count == result.rows.count)
+        #expect(decoded.manifestRevision == result.manifestRevision)
+    }
+
+    @Test("a plan that claims an execution is refused instead of trusted")
+    func refusesPlanClaimingExecution() throws {
+        let forged = Data("""
+        {"schema_version":"1.0","dry_run":false,"writes_executed":true,
+         "authorization_granted":false,"purpose":"x","manifest_revision":1,
+         "manifest_schema_version":"1.0","profile_id":"p","source_observation":"scan",
+         "target_observed":false,"generated_at":"2027-01-01T00:00:00Z","rows":[]}
+        """.utf8)
+        #expect(throws: FormaError.self) {
+            _ = try FormaJSON.decoder().decode(ImportPlan.self, from: forged)
+        }
+    }
 }

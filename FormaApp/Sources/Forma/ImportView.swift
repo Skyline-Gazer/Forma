@@ -43,6 +43,11 @@ struct ImportView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .accessibilityIdentifier("import-dry-run-notice")
+            Label("The plan lists local file names; treat an export as private data, not as a sanitized artifact.",
+                  systemImage: "lock.doc")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("import-plan-privacy-notice")
         }
         .padding(16)
     }

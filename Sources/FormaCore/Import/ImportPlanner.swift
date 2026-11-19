@@ -73,6 +73,63 @@ public struct ImportPlan: Codable, Sendable, Equatable {
         self.rows = rows
         self.generatedAt = generatedAt
     }
+
+    /// The format of the plan artifact itself, not of the manifest it describes.
+    public static let artifactSchemaVersion = "1.0"
+
+    /// Written into the file rather than left to a computed property: a plan
+    /// reviewed on another machine has to say what it is without the reader
+    /// having the source. `writes_executed` and `authorization_granted` are
+    /// constants because this build has no write path - they are statements about
+    /// the program that produced the file, not about a run.
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case dryRun = "dry_run"
+        case writesExecuted = "writes_executed"
+        case authorizationGranted = "authorization_granted"
+        case purpose
+        case manifestRevision = "manifest_revision"
+        case manifestSchemaVersion = "manifest_schema_version"
+        case profileID = "profile_id"
+        case sourceObservation = "source_observation"
+        case targetObserved = "target_observed"
+        case generatedAt = "generated_at"
+        case rows
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // A file that claims an execution or an authorization is not this
+        // artifact, whatever else it contains: refusing to decode it is the only
+        // safe answer for a reader that might act on it.
+        if try container.decodeIfPresent(Bool.self, forKey: .writesExecuted) == true
+            || try container.decodeIfPresent(Bool.self, forKey: .authorizationGranted) == true {
+            throw FormaError.invalidOutput
+        }
+        manifestRevision = try container.decode(Int.self, forKey: .manifestRevision)
+        profileID = try container.decode(String.self, forKey: .profileID)
+        schemaVersion = try container.decode(String.self, forKey: .manifestSchemaVersion)
+        observation = try container.decode(String.self, forKey: .sourceObservation)
+        targetObserved = try container.decode(Bool.self, forKey: .targetObserved)
+        rows = try container.decode([ImportPlanRow].self, forKey: .rows)
+        generatedAt = try container.decode(Date.self, forKey: .generatedAt)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(Self.artifactSchemaVersion, forKey: .schemaVersion)
+        try container.encode(true, forKey: .dryRun)
+        try container.encode(false, forKey: .writesExecuted)
+        try container.encode(false, forKey: .authorizationGranted)
+        try container.encode("review-only plan; not an execution authorization", forKey: .purpose)
+        try container.encode(manifestRevision, forKey: .manifestRevision)
+        try container.encode(schemaVersion, forKey: .manifestSchemaVersion)
+        try container.encode(profileID, forKey: .profileID)
+        try container.encode(observation, forKey: .sourceObservation)
+        try container.encode(targetObserved, forKey: .targetObserved)
+        try container.encode(generatedAt, forKey: .generatedAt)
+        try container.encode(rows, forKey: .rows)
+    }
 }
 
 /// Builds the Alpha dry run from a manifest. Pure apart from reading file

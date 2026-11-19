@@ -945,7 +945,8 @@ final class WorkspaceModel: ObservableObject {
             let data = try FormaJSON.encoder(pretty: true).encode(plan)
             let url = directory.appendingPathComponent("import-plan-r\(plan.manifestRevision).json")
             try data.write(to: url, options: .atomic)
-            notice = "Wrote the import plan to \(url.lastPathComponent)."
+            notice = "Wrote \(url.lastPathComponent): a dry-run plan that lists local file names, "
+                + "so treat it as private data rather than a sanitized artifact."
         } catch {
             show(error as? FormaError ?? .storage, operation: .readEvidence, fallback: .storage)
         }
