@@ -127,11 +127,33 @@ struct FormaAcceptanceCLI {
             + "\treview=\(summary.review)\tdefer=\(summary.deferred)\tunaccounted=\(summary.unaccounted)")
         print("review\t\(summary.reviewProgress.state)\trequired=\(summary.reviewProgress.required)"
             + "\treviewed=\(summary.reviewProgress.reviewed)\tunreviewed=\(summary.reviewProgress.unreviewed)"
-            + "\tkeep=\(summary.reviewProgress.keepSamples)")
+            + "\tkeep=\(summary.reviewProgress.keepSamples)"
+            + "\tinclude_sampled=\(summary.reviewProgress.includeSampled.map { String($0) } ?? "n/a")")
+        // The labelled arithmetic, the census over the excluded set and the
+        // sample over the included set are three different claims. Print all
+        // three so nobody reads one as the other.
         print("false-exclusion\t\(summary.falseExclusion.state)"
             + "\tnumerator=\(summary.falseExclusion.numerator.map { String($0) } ?? "n/a")"
             + "\tdenominator=\(summary.falseExclusion.denominator.map { String($0) } ?? "n/a")"
             + "\trate=\(summary.falseExclusion.rate.map { String(format: "%.4f", $0) } ?? "n/a")")
+        if let census = summary.falseExclusion.excludeAdjudication {
+            print("exclude-adjudication\t\(census.state)\texcluded=\(census.excludedRecords)"
+                + "\tadjudicated=\(census.adjudicated)\tunadjudicated=\(census.unadjudicated)"
+                + "\tkeep_labelled=\(census.keepLabelled)"
+                + "\tuncertain_labelled=\(census.uncertainLabelled.map { String($0) } ?? "n/a")")
+            // Coverage and safety are separate lines on purpose: a complete
+            // census with UNCERTAIN verdicts is not a cleared exclusion set.
+            print("exclude-verdict\t\(census.verdict ?? "n/a")")
+        }
+        if let sample = summary.falseExclusion.includeSample {
+            print("include-sample\t\(sample.state)\tincluded=\(sample.includedRecords)"
+                + "\tlabelled=\(sample.labelled)\tkeep=\(sample.keepLabelled)"
+                + "\ttechnical_noise=\(sample.technicalNoiseLabelled)"
+                + "\tuncertain=\(sample.uncertainLabelled)")
+        }
+        if let boundary = summary.falseExclusion.claimBoundary {
+            print("claim-boundary\t\(boundary)")
+        }
         print("onedrive\t\(outcome.oneDrive.state)")
         for name in outcome.artifactHashes.keys.sorted() {
             guard let hash = outcome.artifactHashes[name] else { continue }
