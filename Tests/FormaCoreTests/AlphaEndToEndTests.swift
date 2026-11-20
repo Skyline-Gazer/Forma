@@ -67,10 +67,13 @@ struct AlphaEndToEndTests {
             .identifier
         let engine = CorrectionEngine(profile: profile)
         var manifest = stored
+        // The category is corrected last: it is the field whose decision the
+        // profile treats as the classification, and applying it after the project
+        // fields keeps each step's revalidation about one change.
         let corrections: [(MetadataFieldID, String, String)] = [
-            (MetadataFieldID.documentcategory, category, categoryRow.id),
             (MetadataFieldID.projectname, "示例项目_2026", projectRow.id),
             (MetadataFieldID.completionyear, "2027", yearRow.id),
+            (MetadataFieldID.documentcategory, category, categoryRow.id),
         ]
         let evidenceBySource = [prepared.sourceID: prepared.rows]
         for (field, value, citation) in corrections {
