@@ -134,7 +134,8 @@
             "openai",
             "anthropic",
             "local",
-            "none"
+            "none",
+            "offline"
           ]
         },
         "model_id": {

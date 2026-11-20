@@ -120,3 +120,23 @@ struct OfflinePlannerAnswererTests {
         #expect(ProbeProvider.offline.isNetworkProvider == false)
     }
 }
+
+@Suite("Offline planner artifact")
+struct OfflinePlannerArtifactTests {
+    @Test("a manifest produced offline validates against the shipped artifact schema")
+    func offlineProviderIsAcceptedByTheSchema() throws {
+        // The artifact schema enumerates the provider values a manifest may carry.
+        // The offline planner produces a new one, so the schema has to know it:
+        // otherwise an offline manifest would export and then fail its own
+        // revalidation, which is the opposite of useful.
+        let schema = try ArtifactSchema.manifest
+        let envelope = #"{"schema_version":"1.0","manifest_id":"m","revision":1,"scope_id":"s",
+            "source_root_id":"r","profile_id":"project-archive","profile_version":"1.0",
+            "case_pack_id":"c","case_pack_version":"1.0","model_provider":"offline",
+            "model_id":"offline-planner.v1","context_revision":1,"prompt_version":"p",
+            "extractor_version":"e","input_digest":"i","context_digest":"c","created_at":
+            "2026-01-01T00:00:00Z","state":"draft","grants_execution":false}"#
+        let violations = try schema.violations(Data(envelope.utf8))
+        #expect(violations.isEmpty, "the offline provider is not accepted: \(violations)")
+    }
+}
