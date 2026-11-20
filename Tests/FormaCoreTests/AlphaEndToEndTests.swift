@@ -48,6 +48,9 @@ struct AlphaEndToEndTests {
         #expect(outcome.manifest.envelope.modelProvider == "offline")
         #expect(outcome.manifest.envelope.modelID == OfflinePlannerAnswerer.modelID)
         #expect(outcome.manifest.envelope.grantsExecution == false)
+        // The offline planner is a program, not a model: no provider request is
+        // made, so nothing leaves the machine on the way to a mapping.
+        #expect(outcome.requests == 0)
         let drafted = try #require(outcome.manifest.entries.first)
         #expect(drafted.metadata[.documentcategory] == nil)
         #expect(drafted.metadata[.projectname] == nil)
@@ -61,7 +64,11 @@ struct AlphaEndToEndTests {
         // 3. Human correction with real citations, through the same engine the
         //    app calls. Each value must be backed by a row for this snapshot.
         let projectRow = try #require(prepared.rows.first { ($0.excerpt ?? "").contains("示例项目_2026") })
-        let categoryRow = try #require(prepared.rows.first { ($0.excerpt ?? "").contains("招标") })
+        // The category is cited to the body row that carries the business
+        // words. The profile allows a path row for the field but never treats
+        // one as conclusive on its own, so a path row could not carry the
+        // classification - that is the profile working, not a defect.
+        let categoryRow = try #require(prepared.rows.first { ($0.excerpt ?? "").contains("招标公告") })
         let yearRow = try #require(prepared.rows.first { $0.id == prepared.yearRow })
         let category = try #require(profile.categories.first { !$0.identifier.hasSuffix("待分类") })
             .identifier
@@ -86,23 +93,21 @@ struct AlphaEndToEndTests {
             manifest = applied.manifest
         }
 
-        // 4. The corrections that land are cited and persisted; the manifest is
-        //    not validated yet.
-        //
-        //    Known gap (recorded 2026-11-20): a *category* correction carrying a
-        //    body citation does not reach the entry when the offline draft left
-        //    that field unknown — the field stays nil and the entry stays `hold`,
-        //    while `projectname` and `completionyear` corrections land normally.
-        //    This assertion is the characterisation of that behaviour, not a
-        //    claim that the loop is complete; the Alpha report lists it as the
-        //    next defect to fix. It is asserted so a silent change is visible.
+        // 4. Every correction lands, and the entry reaches `validated`: the
+        //    required fields are filled, the file is bound to its snapshot, the
+        //    project association holds, and the classification rests on a
+        //    reviewer's decision backed by a body row.
         let corrected = try #require(manifest.entries.first)
         #expect(corrected.metadata[.projectname] == "示例项目_2026")
         #expect(corrected.metadata[.completionyear] == "2027")
         #expect(corrected.outcome(for: .projectname)?.evidenceIDs.isEmpty == false)
-        #expect(corrected.metadata[.documentcategory] == nil,
-                "category correction unexpectedly landed: update the recorded gap and the Alpha report")
-        #expect(corrected.state == .hold)
+        #expect(corrected.metadata[.documentcategory] == category,
+                "the reviewer's classification lands")
+        #expect(corrected.outcome(for: .documentcategory)?.status == .confirmedByReviewer)
+        #expect(corrected.outcome(for: .documentcategory)?.evidenceIDs == [categoryRow.id])
+        #expect(corrected.state == .validated,
+                "required fields, association and snapshot binding are all satisfied")
+        #expect(corrected.eligibleForAutoExecution)
 
         // 5. Persist the corrected revision and reopen it: what a later session
         //    reads is the corrected manifest, not the draft.
@@ -111,6 +116,11 @@ struct AlphaEndToEndTests {
         let reopenedEntry = try #require(reopened.entries.first)
         #expect(reopenedEntry.metadata[.projectname] == "示例项目_2026")
         #expect(reopenedEntry.metadata[.completionyear] == "2027")
+        #expect(reopenedEntry.metadata[.documentcategory] == category,
+                "the classification survives the round trip through the store")
+        #expect(reopenedEntry.state == .validated)
+        #expect(reopenedEntry.metadata == corrected.metadata,
+                "what the store holds is what the correction produced")
         // The store rebased the corrected manifest onto its own revision chain:
         // the draft was revision 1, so the persisted revision is 2.
         #expect(reopened.envelope.revision == 2)
@@ -136,6 +146,11 @@ struct AlphaEndToEndTests {
         #expect(plan.rows.allSatisfy { $0.codes.contains(.authorizationMissing) })
         #expect(plan.rows.allSatisfy { !$0.codes.contains(.targetMissing) })
         #expect(plan.rows.allSatisfy { !$0.codes.contains(.sourceChanged) })
+        // The Group the dry run would write into is the corrected one: the
+        // classification is part of the target path, not a field that sits
+        // beside it.
+        #expect(plan.rows.first?.groupPath == ["2027", "示例项目_2026", category])
+        #expect(plan.rows.first?.targetResolved == true)
         let data = try FormaJSON.encoder(pretty: true).encode(plan)
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(object["dry_run"] as? Bool == true)
