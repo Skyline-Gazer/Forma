@@ -123,26 +123,19 @@ struct OfflinePlannerAnswererTests {
 
 @Suite("Offline planner artifact")
 struct OfflinePlannerArtifactTests {
-    @Test("a manifest produced offline validates against the shipped artifact schema")
-    func offlineProviderIsAcceptedByTheSchema() throws {
+    @Test("the shipped manifest schema accepts the offline provider")
+    func offlineProviderIsInTheSchema() throws {
         // The artifact schema enumerates the provider values a manifest may carry.
-        // The offline planner produces a new one, so the schema has to know it:
-        // otherwise an offline manifest would export and then fail its own
-        // revalidation, which is the opposite of useful.
-        let schema = try ArtifactSchemaValidator.manifest
-        let envelope: [String: Any] = [
-            "schema_version": "1.0", "manifest_id": "m", "revision": 1,
-            "scope_id": "s", "source_root_id": "r",
-            "profile_id": "project-archive", "profile_version": "1.0",
-            "case_pack_id": "c", "case_pack_version": "1.0",
-            "model_provider": "offline", "model_id": OfflinePlannerAnswerer.modelID,
-            "context_revision": 1, "prompt_version": "p", "extractor_version": "e",
-            "input_digest": "i", "context_digest": "c",
-            "created_at": "2026-01-01T00:00:00Z", "state": "draft",
-            "grants_execution": false,
-        ]
-        let data = try JSONSerialization.data(withJSONObject: envelope)
-        let violations = try schema.violations(data)
-        #expect(violations.isEmpty, "the offline provider is not accepted: \(violations)")
+        // The offline planner produces a new one, so the schema has to list it:
+        // otherwise an offline manifest exports and then fails its own
+        // revalidation. The full artifact check lives in the end-to-end suite,
+        // which revalidates a real exported bundle; this guard keeps the enum from
+        // being reverted.
+        let url = try #require(FormaResourceBundle.url(forResource: "manifest-1.0.schema",
+                                                       withExtension: "json"))
+        let text = try String(contentsOf: url, encoding: .utf8)
+        #expect(text.contains("\"offline\""),
+                "the manifest schema no longer lists the offline provider")
+        #expect(text.contains("\"model_provider\""))
     }
 }
