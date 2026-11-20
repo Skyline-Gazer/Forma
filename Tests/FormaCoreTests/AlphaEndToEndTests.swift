@@ -53,13 +53,18 @@ struct AlphaEndToEndTests {
         #expect(drafted.metadata[.projectname] == nil)
         #expect(drafted.state != .validated)
 
-        // 2. Human correction with real citations: the row has to exist for this
+        // 2. Store the draft first: a correction produces the next revision, so
+        //    the revision it expects has to exist.
+        let stored = try await workspace.saveManifest(outcome.manifest, scopeID: scope.id)
+        #expect(stored.envelope.revision == outcome.manifest.envelope.revision)
+
+        // 3. Human correction with real citations: the row has to exist for this
         //    source and this snapshot.
         let projectRow = try #require(prepared.rows.first { ($0.excerpt ?? "").contains("示例项目_2026") })
         let categoryRow = try #require(prepared.rows.first { ($0.excerpt ?? "").contains("招标") })
         let category = try #require(profile.categories.first { !$0.identifier.hasSuffix("待分类") })
             .identifier
-        var manifest = outcome.manifest
+        var manifest = stored
         let corrections: [(MetadataFieldID, String, String)] = [
             (MetadataFieldID.documentcategory, category, categoryRow.id),
             (MetadataFieldID.projectname, "示例项目_2026", projectRow.id),
@@ -74,7 +79,7 @@ struct AlphaEndToEndTests {
             manifest = applied.manifest
         }
 
-        // 3. The corrections are real: cited values, and a validated manifest for
+        // 4. The corrections are real: cited values, and a validated manifest for
         //    a profile that demands both project fields.
         let corrected = try #require(manifest.entries.first)
         #expect(corrected.metadata[.documentcategory] == category)
@@ -83,14 +88,14 @@ struct AlphaEndToEndTests {
         #expect(corrected.outcome(for: .documentcategory)?.evidenceIDs.isEmpty == false)
         #expect(corrected.state == .validated)
 
-        // 4. Reopen: the stored revision carries the corrections, not the draft.
+        // 5. Reopen: the stored revision carries the corrections, not the draft.
         let reopened = try #require(try await workspace.currentManifest(scope: scope, profile: profile))
         let reopenedEntry = try #require(reopened.entries.first)
         #expect(reopenedEntry.metadata[.documentcategory] == category)
         #expect(reopenedEntry.metadata[.projectname] == "示例项目_2026")
         #expect(reopened.envelope.revision >= manifest.envelope.revision)
 
-        // 5. Export the bundle and revalidate it offline.
+        // 6. Export the bundle and revalidate it offline.
         let exportDirectory = prepared.fixture.base.appendingPathComponent("export", isDirectory: true)
         let summary = try ManifestExport.export(manifest: manifest, evidence: prepared.rows,
                                                 to: exportDirectory)
@@ -99,7 +104,7 @@ struct AlphaEndToEndTests {
         #expect(revalidation.artifactConsistent)
         #expect(revalidation.violations.isEmpty)
 
-        // 6. The import planner consumes the corrected manifest and produces a
+        // 7. The import planner consumes the corrected manifest and produces a
         //    dry run: nothing is authorized, nothing was written.
         let listing = try await workspace.scan(scope)
         let plan = ImportPlanner.plan(manifest: manifest, profile: profile,
@@ -164,33 +169,39 @@ struct AlphaEndToEndTests {
         let workspace = prepared.workspace
         let scope = prepared.scope
         let profile = prepared.profile
-        let storedContext = try await workspace.storedContext(
+        let context = try await workspace.storedContext(
             scope: scope, profile: profile, revision: prepared.manifest.envelope.contextRevision)
-        let context = try #require(storedContext)
         let before = try await workspace.scan(scope)
         let outcome = try await offlineMapping(workspace: workspace, scope: scope, profile: profile,
                                                context: context, entries: [prepared.entry])
+        let stored = try await workspace.saveManifest(outcome.manifest, scopeID: scope.id)
 
         // A plan built on the listing the mapping was made from is consistent.
-        let current = ImportPlanner.plan(manifest: outcome.manifest, profile: profile,
+        let current = ImportPlanner.plan(manifest: stored, profile: profile,
                                          observations: ImportPlanner.Observations(sourceRoot: nil,
                                                                                  listing: before),
                                          authorization: nil, targetObserved: false)
         #expect(current.rows.allSatisfy { !$0.codes.contains(.sourceChanged) })
 
-        // Change the file and scan again: the same manifest no longer describes
-        // the bytes on disk, and the plan says so instead of pretending the old
-        // decision still applies.
-        let url = prepared.entry.relativePath
-        let file = prepared.fixture.root.appendingPathComponent(url)
+        // Change the file, rescan and reconcile: the product invalidates the
+        // decision that was made about the old bytes.
+        let file = prepared.fixture.root.appendingPathComponent(prepared.entry.relativePath)
         try Data("changed content".utf8).write(to: file)
-        let after = try await workspace.scan(scope)
+        _ = try await workspace.scan(scope)
+        let decision = try #require(try await workspace.reconcile(scope: scope, profile: profile))
+        #expect(!decision.invalidatedSourceIDs.isEmpty,
+                "a changed source must invalidate the old mapping")
 
-        let stale = ImportPlanner.plan(manifest: outcome.manifest, profile: profile,
+        // The stored manifest now says so, and a plan built on it refuses to
+        // treat the record as current.
+        let invalidated = try #require(try await workspace.currentManifest(scope: scope, profile: profile))
+        #expect(invalidated.entries.first?.state == .invalidated)
+        let listing = try await workspace.scan(scope)
+        let stale = ImportPlanner.plan(manifest: invalidated, profile: profile,
                                        observations: ImportPlanner.Observations(sourceRoot: nil,
-                                                                                listing: after),
+                                                                                listing: listing),
                                        authorization: nil, targetObserved: false)
-        #expect(stale.rows.contains { $0.codes.contains(.sourceChanged) })
+        #expect(stale.rows.contains { $0.codes.contains(.entryInvalidated) })
         #expect(stale.rows.allSatisfy { !$0.codes.contains(.sourceMissing) })
     }
 }
