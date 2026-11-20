@@ -178,7 +178,11 @@ public struct CorrectionEngine: Sendable {
             let target = manifest.entries[position]
             let rowsByID = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             let verified = evidenceIDs.filter { id in
-                guard let record = rowsByID[id], record.isUsable else { return false }
+                guard let record = rowsByID[id], record.isUsable,
+                      // The map is keyed by source, but the row itself carries a
+                      // source id: a caller that mixed rows would otherwise let a
+                      // correction cite another file's text.
+                      record.sourceID == sourceID else { return false }
                 // The same binding the validator insists on: a row from an older
                 // snapshot describes a file that is no longer the one in front of
                 // the reviewer, and accepting it would let a correction cite
@@ -237,11 +241,15 @@ public struct CorrectionEngine: Sendable {
         // Only a category correction carries the reviewer's classification into
         // the policy pass; every other field keeps the strict quote rule, and a
         // model-driven run never sets this map at all.
-        let confirmedCategories: [UUID: String]
+        var confirmedCategories: [UUID: String] = [:]
+        for entry in manifest.entries {
+            guard let outcome = entry.outcome(for: .documentcategory),
+                  outcome.status == .confirmedByReviewer,
+                  let value = outcome.value else { continue }
+            confirmedCategories[entry.sourceID] = value
+        }
         if field == .documentcategory, let value = correctedValue {
-            confirmedCategories = [sourceID: value]
-        } else {
-            confirmedCategories = [:]
+            confirmedCategories[sourceID] = value
         }
         let result = ManifestValidator(ValidationInput(profile: profile, context: context,
                                                        entries: currentEntries, evidence: evidence,

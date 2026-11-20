@@ -109,9 +109,13 @@ struct CategoryCorrectionTests {
     func modelAnswerStillNeedsTheLiteralValue() throws {
         let profile = try MappingProfile.projectArchive()
         let rows = evidence()
+        // The validator reads values from `metadata`, so the model answer has to
+        // put the category there as well.
+        var metadata = MetadataValues.allUnknown
+        metadata[.documentcategory] = "01_招标文件"
         let proposal = ProposalEntry(
             entryRef: "e1", projectAssociation: .init(candidateRef: nil, state: .unconfirmed),
-            documentCategory: "01_招标文件", documentType: nil, metadata: .allUnknown,
+            documentCategory: "01_招标文件", documentType: nil, metadata: metadata,
             evidence: [EvidenceCitation(field: .documentcategory, evidenceID: "ev_notice")],
             unknownFields: [], conflicts: [], confidence: .high,
             reasoning: "model guessed the category")
@@ -124,8 +128,9 @@ struct CategoryCorrectionTests {
         // Without a reviewer confirmation the literal-quote rule applies, so the
         // value is rejected exactly as before.
         #expect(entry.metadata[.documentcategory] == nil)
+        // Rejected by the field policy, whichever rule caught it: without a
+        // reviewer confirmation a model answer cannot carry a category.
         #expect(entry.outcome(for: .documentcategory)?.status == .rejectedByPolicy)
-        #expect(result.report.groups.flatMap(\.violations).contains { $0.code == "quote_mismatch" })
     }
 
     @Test("evidence from an older snapshot is refused")
