@@ -23,7 +23,7 @@ struct AlphaEndToEndTests {
     private func makeSource(_ fixture: SourceFixture, name: String, folder: String) throws -> URL {
         let body = try makePDF(["示例项目_2026 招标公告 归档完成 2027 年"])
         let url = fixture.root.appendingPathComponent(folder).appendingPathComponent(name)
-        try FileManager.default.createDirectory(at: url.deletingPathComponent(),
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
         try body.write(to: url)
         return url
@@ -80,7 +80,9 @@ struct AlphaEndToEndTests {
         // 2. Human correction with real citations: the row has to exist for this
         //    source and this snapshot.
         let sourceID = entry.sourceID
-        let rows = try #require(captured[sourceID]?.filter { $0.isUsable && $0.snapshotRevision == Int(listing.entries.first?.snapshotRevision ?? 0) })
+        let revision = Int(listing.entries.first?.snapshotRevision ?? 0)
+        let usable = try #require(captured[sourceID])
+        let rows = usable.filter { $0.isUsable && $0.snapshotRevision == revision }
         let categoryRow = try #require(rows.first { ($0.excerpt ?? "").contains("招标") })
         let projectRow = try #require(rows.first { ($0.excerpt ?? "").contains("示例项目_2026") })
         let yearRow = try #require(rows.first { ($0.excerpt ?? "").contains("2027") })
@@ -88,11 +90,12 @@ struct AlphaEndToEndTests {
             .identifier
 
         var manifest = outcome.manifest
-        for (field, value, row) in [
+        let corrections: [(MetadataFieldID, String, EvidenceRecord)] = [
             (MetadataFieldID.documentcategory, category, categoryRow),
             (MetadataFieldID.projectname, "示例项目_2026", projectRow),
             (MetadataFieldID.completionyear, "2027", yearRow),
-        ] {
+        ]
+        for (field, value, row) in corrections {
             let applied = try await workspace.applyCorrection(
                 to: manifest, sourceID: sourceID, field: field, correctedValue: value,
                 evidenceIDs: [row.id], origin: .manual, scope: scope, profile: profile)
@@ -167,9 +170,10 @@ struct AlphaEndToEndTests {
         let rows = try #require(captured[entry.sourceID]?.filter(\.isUsable))
         let category = try #require(profile.categories.first { !$0.identifier.hasSuffix("待分类") })
             .identifier
+        let citation = try #require(rows.first)
         let applied = try await workspace.applyCorrection(
             to: outcome.manifest, sourceID: entry.sourceID, field: .documentcategory,
-            correctedValue: category, evidenceIDs: [try #require(rows.first).id],
+            correctedValue: category, evidenceIDs: [citation.id],
             origin: .manual, scope: scope, profile: profile)
         #expect(applied.violations.isEmpty)
         #expect(applied.manifest.entries.first?.metadata[.documentcategory] == category)
