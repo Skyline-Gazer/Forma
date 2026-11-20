@@ -23,14 +23,25 @@ public struct ValidationInput: Sendable {
     public let entries: [SourceEntry]
     public let evidence: [UUID: [EvidenceRecord]]
     public let proposals: [ProposalForEntry]
+    /// Categories a reviewer confirmed for this source, in this revision.
+    ///
+    /// Empty for every model-driven run. `CorrectionEngine` populates it from the
+    /// correction in flight, which is what lets a classification rest on a
+    /// human judgement supported by evidence instead of on the category
+    /// identifier appearing verbatim in the text. It grants nothing else: the
+    /// citation still has to resolve to this source and this snapshot, and the
+    /// value still has to belong to the profile.
+    public let reviewerConfirmedCategories: [UUID: String]
 
     public init(profile: MappingProfile, context: ProjectContext, entries: [SourceEntry],
-                evidence: [UUID: [EvidenceRecord]], proposals: [ProposalForEntry]) {
+                evidence: [UUID: [EvidenceRecord]], proposals: [ProposalForEntry],
+                reviewerConfirmedCategories: [UUID: String] = [:]) {
         self.profile = profile
         self.context = context
         self.entries = entries
         self.evidence = evidence
         self.proposals = proposals
+        self.reviewerConfirmedCategories = reviewerConfirmedCategories
     }
 }
 
@@ -337,7 +348,16 @@ public struct ManifestValidator: Sendable {
                                              conflicts: ["multiple cited excerpts"]))
                 continue
             }
-            if !quoteSupportsValue(value, conclusive.map(\.record)) {
+            // A reviewer's classification is a business judgement carried by
+            // the cited evidence, not a string match against Forma's internal
+            // vocabulary: real documents say "招标公告", never "01_招标文件".
+            // Everything above still applied (the value belongs to the profile,
+            // the citations resolve to this source and snapshot, at least one is
+            // conclusive); what is skipped is only the literal-quote test, and
+            // only for the category of a source the reviewer confirmed.
+            let reviewerConfirmed = field == .documentcategory
+                && input.reviewerConfirmedCategories[entry.id] == value
+            if !reviewerConfirmed, !quoteSupportsValue(value, conclusive.map(\.record)) {
                 violations.append(ValidationViolation(code: "quote_mismatch",
                                                       instancePath: "\(entry.relativePath)#\(field.rawValue)",
                                                       detail: "The cited excerpt does not contain the proposed value."))
@@ -366,7 +386,9 @@ public struct ManifestValidator: Sendable {
                                              evidenceIDs: conclusive.map(\.record.id)))
                 continue
             }
-            outcomes.append(FieldOutcome(field: field, value: value, status: inherited ? .inherited : .evidenced,
+            let status: FieldOutcome.Status = reviewerConfirmed ? .confirmedByReviewer
+                : (inherited ? .inherited : .evidenced)
+            outcomes.append(FieldOutcome(field: field, value: value, status: status,
                                          evidenceIDs: conclusive.map(\.record.id)))
         }
         return outcomes

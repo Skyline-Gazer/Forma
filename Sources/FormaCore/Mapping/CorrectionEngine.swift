@@ -234,9 +234,54 @@ public struct CorrectionEngine: Sendable {
         let proposals = entries.map { entry in
             ProposalForEntry(sourceID: entry.sourceID, proposal: Self.proposal(from: entry, context: context))
         }
+        // Only a category correction carries the reviewer's classification into
+        // the policy pass; every other field keeps the strict quote rule, and a
+        // model-driven run never sets this map at all.
+        let confirmedCategories: [UUID: String]
+        if field == .documentcategory, let value = correctedValue {
+            confirmedCategories = [sourceID: value]
+        } else {
+            confirmedCategories = [:]
+        }
         let result = ManifestValidator(ValidationInput(profile: profile, context: context,
                                                        entries: currentEntries, evidence: evidence,
-                                                       proposals: proposals)).validate()
+                                                       proposals: proposals,
+                                                       reviewerConfirmedCategories: confirmedCategories))
+            .validate()
+
+        // The receipt must describe what the new revision actually contains. A
+        // validator that clears the corrected field (for any reason) means the
+        // correction did not land, and publishing a revision that claims it did
+        // is exactly the kind of false success this engine must not report.
+        let revalidated = result.entries.first { $0.sourceID == sourceID }
+        let outcome = revalidated?.outcome(for: field)
+        let survived: Bool
+        if let correctedValue {
+            survived = outcome?.value == correctedValue
+                && outcome?.status != .rejectedByPolicy
+                && outcome?.status != .conflict
+        } else {
+            survived = (outcome?.value ?? nil) == nil
+        }
+        guard survived else {
+            // The report groups violations by rule group; a violation for this
+            // field is identified by the same instance path the policy used.
+            let instancePath = "\(manifest.entries[position].relativePath)#\(field.rawValue)"
+            let fieldViolations = result.report.groups
+                .flatMap(\.violations)
+                .filter { $0.instancePath == instancePath }
+            return Applied(manifest: manifest, correction: CorrectionRecord(
+                manifestID: manifest.envelope.manifestID, manifestRevision: manifest.envelope.revision,
+                producedRevision: nil, sourceID: sourceID, field: field, previousValue: previous,
+                correctedValue: correctedValue, evidenceIDs: evidenceIDs,
+                snapshotFingerprint: manifest.entries[position].snapshotFingerprint,
+                contextRevision: context.revision, origin: origin, reviewState: .rejected
+            ), violations: fieldViolations.isEmpty
+                ? [ValidationViolation(code: "correction_not_applied", instancePath: field.rawValue,
+                                       detail: "Validation did not keep the corrected value.")]
+                : fieldViolations)
+        }
+
         candidate.entries = result.entries
         candidate.report = result.report
         let state: ManifestEnvelope.ManifestState
