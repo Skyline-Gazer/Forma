@@ -150,4 +150,29 @@ struct ImportPlannerTests {
             _ = try FormaJSON.decoder().decode(ImportPlan.self, from: forged)
         }
     }
+
+    @Test("a plan that is not this artifact is refused")
+    func refusesPlansThatAreNotDryRunArtifacts() throws {
+        // A file that claims it executed, is not a dry run, uses another schema
+        // or states another purpose is not something this reader understands.
+        // Each case is refused rather than repaired.
+        let base = """
+        {"schema_version":"1.0","dry_run":true,"writes_executed":false,
+         "authorization_granted":false,"purpose":"review-only plan; not an execution authorization",
+         "manifest_revision":1,"manifest_schema_version":"1.0","profile_id":"p",
+         "source_observation":"scan","target_observed":false,
+         "generated_at":"2027-01-01T00:00:00Z","rows":[]}
+        """
+        let variants: [String] = [
+            base.replacingOccurrences(of: "\"dry_run\":true", with: "\"dry_run\":false"),
+            base.replacingOccurrences(of: "\"schema_version\":\"1.0\"", with: "\"schema_version\":\"2.0\""),
+            base.replacingOccurrences(of: "not an execution authorization", with: "authorized to import"),
+            base.replacingOccurrences(of: "\"dry_run\":true,", with: ""),
+        ]
+        for variant in variants {
+            #expect(throws: FormaError.self) {
+                _ = try FormaJSON.decoder().decode(ImportPlan.self, from: Data(variant.utf8))
+            }
+        }
+    }
 }

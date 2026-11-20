@@ -99,15 +99,26 @@ public struct ImportPlan: Codable, Sendable, Equatable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        // A file that claims an execution or an authorization is not this
-        // artifact, whatever else it contains: refusing to decode it is the only
-        // safe answer for a reader that might act on it.
+        // This decoder accepts exactly one thing: the dry-run artifact this
+        // build writes. A file that is not that artifact is refused outright,
+        // because the only safe answer for a reader that might act on it is
+        // "this is not a plan I understand".
+        //
+        // Refused: a missing or false `dry_run`; a schema this build does not
+        // write; an execution or authorization claim; a purpose that says
+        // something other than what this build writes.
+        //
         // Decoded into locals first: `try` may not sit to the right of `||`, and
         // a claim is easier to read as a named boolean anyway.
+        let dryRun = try container.decodeIfPresent(Bool.self, forKey: .dryRun) ?? false
         let claimsExecution = try container.decodeIfPresent(Bool.self, forKey: .writesExecuted) ?? false
         let claimsAuthorization = try container.decodeIfPresent(Bool.self,
                                                                 forKey: .authorizationGranted) ?? false
-        if claimsExecution || claimsAuthorization {
+        let artifactSchema = try container.decodeIfPresent(String.self, forKey: .schemaVersion) ?? ""
+        let purpose = try container.decodeIfPresent(String.self, forKey: .purpose) ?? ""
+        if !dryRun || claimsExecution || claimsAuthorization
+            || artifactSchema != Self.artifactSchemaVersion
+            || !purpose.contains("not an execution authorization") {
             throw FormaError.invalidOutput
         }
         manifestRevision = try container.decode(Int.self, forKey: .manifestRevision)
