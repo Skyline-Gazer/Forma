@@ -130,13 +130,19 @@ struct OfflinePlannerArtifactTests {
         // otherwise an offline manifest would export and then fail its own
         // revalidation, which is the opposite of useful.
         let schema = try ArtifactSchemaValidator.manifest
-        let envelope = #"{"schema_version":"1.0","manifest_id":"m","revision":1,"scope_id":"s",
-            "source_root_id":"r","profile_id":"project-archive","profile_version":"1.0",
-            "case_pack_id":"c","case_pack_version":"1.0","model_provider":"offline",
-            "model_id":"offline-planner.v1","context_revision":1,"prompt_version":"p",
-            "extractor_version":"e","input_digest":"i","context_digest":"c","created_at":
-            "2026-01-01T00:00:00Z","state":"draft","grants_execution":false}"#
-        let violations = try schema.violations(Data(envelope.utf8))
+        let envelope: [String: Any] = [
+            "schema_version": "1.0", "manifest_id": "m", "revision": 1,
+            "scope_id": "s", "source_root_id": "r",
+            "profile_id": "project-archive", "profile_version": "1.0",
+            "case_pack_id": "c", "case_pack_version": "1.0",
+            "model_provider": "offline", "model_id": OfflinePlannerAnswerer.modelID,
+            "context_revision": 1, "prompt_version": "p", "extractor_version": "e",
+            "input_digest": "i", "context_digest": "c",
+            "created_at": "2026-01-01T00:00:00Z", "state": "draft",
+            "grants_execution": false,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: envelope)
+        let violations = try schema.violations(data)
         #expect(violations.isEmpty, "the offline provider is not accepted: \(violations)")
     }
 }
