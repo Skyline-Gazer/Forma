@@ -57,7 +57,7 @@ struct AlphaEndToEndTests {
     func projectArchiveChain() async throws {
         let fixture = try SourceFixture()
         defer { fixture.cleanUp() }
-        try makeSource(fixture, name: "公告.pdf", folder: "2026_示例项目/01_招标")
+        _ = try makeSource(fixture, name: "公告.pdf", folder: "2026_示例项目/01_招标")
 
         let workspace = try SourceWorkspace(databaseURL: fixture.database)
         let scope = try await workspace.register(fixture.root)
@@ -151,7 +151,7 @@ struct AlphaEndToEndTests {
     func vendorLibraryChain() async throws {
         let fixture = try SourceFixture()
         defer { fixture.cleanUp() }
-        try makeSource(fixture, name: "厂商说明.pdf", folder: "厂商资料/说明")
+        _ = try makeSource(fixture, name: "厂商说明.pdf", folder: "厂商资料/说明")
 
         let workspace = try SourceWorkspace(databaseURL: fixture.database)
         let scope = try await workspace.register(fixture.root)
@@ -167,10 +167,11 @@ struct AlphaEndToEndTests {
         #expect(entry.metadata[.projectname] == nil)
         #expect(entry.associations.isEmpty)
 
-        let rows = try #require(captured[entry.sourceID]?.filter(\.isUsable))
+        let usableRows = captured[entry.sourceID]?.filter { $0.isUsable } ?? []
+        let rows = try #require(usableRows.first)
         let category = try #require(profile.categories.first { !$0.identifier.hasSuffix("待分类") })
             .identifier
-        let citation = try #require(rows.first)
+        let citation = rows
         let applied = try await workspace.applyCorrection(
             to: outcome.manifest, sourceID: entry.sourceID, field: .documentcategory,
             correctedValue: category, evidenceIDs: [citation.id],
@@ -223,7 +224,7 @@ struct AlphaEndToEndTests {
         // describes the bytes on disk.
         try Data("changed content".utf8).write(to: url)
         let rescan = try await workspace.scan(scope)
-        try await workspace.reconcile(scope: scope, profile: profile)
+        _ = try await workspace.reconcile(scope: scope, profile: profile)
 
         let after = ImportPlanner.plan(manifest: outcome.manifest, profile: profile,
                                         observations: ImportPlanner.Observations(sourceRoot: nil,
