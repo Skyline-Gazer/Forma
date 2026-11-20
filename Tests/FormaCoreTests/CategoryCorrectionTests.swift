@@ -26,7 +26,7 @@ struct CategoryCorrectionTests {
 
     /// The excerpt a real tender notice carries: the business words, not the
     /// category identifier.
-    private func record(id: String, excerpt: String, revision: Int64 = 2,
+    private func record(id: String, excerpt: String, revision: Int = 2,
                         fingerprint: String? = nil, sourceID: UUID? = nil,
                         kind: EvidenceSource = .content) -> EvidenceRecord {
         EvidenceRecord(id: id, sourceID: sourceID ?? self.sourceID, snapshotRevision: revision,
@@ -69,7 +69,7 @@ struct CategoryCorrectionTests {
         return Manifest(envelope: envelope, entries: [entry])
     }
 
-    private func evidence(revision: Int64 = 2, fingerprint: String? = nil) -> [UUID: [EvidenceRecord]] {
+    private func evidence(revision: Int = 2, fingerprint: String? = nil) -> [UUID: [EvidenceRecord]] {
         [sourceID: [
             record(id: "ev_notice", excerpt: "示例项目_2026 招标公告 归档完成 2026 年",
                    revision: revision, fingerprint: fingerprint),
