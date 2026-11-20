@@ -58,24 +58,28 @@ struct AlphaEndToEndTests {
         let stored = try await workspace.saveManifest(outcome.manifest, scopeID: scope.id)
         #expect(stored.envelope.revision == outcome.manifest.envelope.revision)
 
-        // 3. Human correction with real citations: the row has to exist for this
-        //    source and this snapshot.
+        // 3. Human correction with real citations, through the same engine the
+        //    app calls. Each value must be backed by a row for this snapshot.
         let projectRow = try #require(prepared.rows.first { ($0.excerpt ?? "").contains("示例项目_2026") })
         let categoryRow = try #require(prepared.rows.first { ($0.excerpt ?? "").contains("招标") })
+        let yearRow = try #require(prepared.rows.first { $0.id == prepared.yearRow })
         let category = try #require(profile.categories.first { !$0.identifier.hasSuffix("待分类") })
             .identifier
+        let engine = CorrectionEngine(profile: profile)
         var manifest = stored
         let corrections: [(MetadataFieldID, String, String)] = [
             (MetadataFieldID.documentcategory, category, categoryRow.id),
             (MetadataFieldID.projectname, "示例项目_2026", projectRow.id),
-            (MetadataFieldID.completionyear, "2027", prepared.yearRow),
+            (MetadataFieldID.completionyear, "2027", yearRow.id),
         ]
+        let evidenceBySource = [prepared.sourceID: prepared.rows]
         for (field, value, citation) in corrections {
-            let applied = try await workspace.applyCorrection(
-                to: manifest, sourceID: prepared.sourceID, field: field, correctedValue: value,
-                evidenceIDs: [citation], origin: .manual, scope: scope, profile: profile)
+            let applied = engine.apply(to: manifest, sourceID: prepared.sourceID, field: field,
+                                       correctedValue: value, evidenceIDs: [citation], origin: .manual,
+                                       context: context, evidence: evidenceBySource,
+                                       currentEntries: [prepared.entry])
             #expect(applied.violations.isEmpty,
-                    "correction of \(field.rawValue) was rejected: \(applied.violations)")
+                    "correction of \(field.rawValue) was rejected: \(applied.violations.map(\.code))")
             manifest = applied.manifest
         }
 
@@ -88,7 +92,9 @@ struct AlphaEndToEndTests {
         #expect(corrected.outcome(for: .documentcategory)?.evidenceIDs.isEmpty == false)
         #expect(corrected.state == .validated)
 
-        // 5. Reopen: the stored revision carries the corrections, not the draft.
+        // 5. Persist the corrected revision and reopen it: what a later session
+        //    reads is the corrected manifest, not the draft.
+        _ = try await workspace.saveManifest(manifest, scopeID: scope.id)
         let reopened = try #require(try await workspace.currentManifest(scope: scope, profile: profile))
         let reopenedEntry = try #require(reopened.entries.first)
         #expect(reopenedEntry.metadata[.documentcategory] == category)
