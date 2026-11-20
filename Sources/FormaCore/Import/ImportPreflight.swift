@@ -98,13 +98,20 @@ public struct ImportTargetFacts: Sendable, Equatable {
     public let writable: Bool
     public let availableBytes: Int64?
     public let requiredBytes: Int64?
+    /// Whether anyone actually looked at the target. A dry run with no
+    /// DEVONthink access must not answer "missing" or "not writable": those are
+    /// observations it did not make. With `observed == false` the preflight
+    /// reports `target_unresolved` instead, and the other target checks are
+    /// skipped because their inputs are placeholders.
+    public let observed: Bool
 
     public init(exists: Bool, writable: Bool, availableBytes: Int64? = nil,
-                requiredBytes: Int64? = nil) {
+                requiredBytes: Int64? = nil, observed: Bool = true) {
         self.exists = exists
         self.writable = writable
         self.availableBytes = availableBytes
         self.requiredBytes = requiredBytes
+        self.observed = observed
     }
 }
 
@@ -344,15 +351,25 @@ public enum ImportPreflight {
         if !entry.target.resolved {
             failures.append(.init(.targetUnresolved, detail: "target group path is unresolved"))
         }
-        if !input.target.exists {
-            failures.append(.init(.targetMissing, detail: "target group does not exist"))
-        }
-        if !input.target.writable {
-            failures.append(.init(.targetNotWritable, detail: "target group is not writable"))
-        }
-        if let available = input.target.availableBytes, let required = input.target.requiredBytes,
-           required > available {
-            failures.append(.init(.insufficientSpace, detail: "insufficient free space"))
+        if !input.target.observed {
+            // Dry run against a target nobody looked at. Reporting `missing` or
+            // `not writable` here would invent an observation; `unresolved` is
+            // the truthful code, and the placeholder fields must not be judged.
+            if entry.target.resolved {
+                failures.append(.init(.targetUnresolved,
+                                      detail: "the target group was not observed; this run cannot resolve it"))
+            }
+        } else {
+            if !input.target.exists {
+                failures.append(.init(.targetMissing, detail: "target group does not exist"))
+            }
+            if !input.target.writable {
+                failures.append(.init(.targetNotWritable, detail: "target group is not writable"))
+            }
+            if let available = input.target.availableBytes, let required = input.target.requiredBytes,
+               required > available {
+                failures.append(.init(.insufficientSpace, detail: "insufficient free space"))
+            }
         }
 
         // 6. Capability: both directions are required. A writer without an
