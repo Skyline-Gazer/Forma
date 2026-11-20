@@ -38,6 +38,10 @@ struct CorrectionPersistenceTests {
         #expect(history.count == 1)
         #expect(history[0].reviewState == .evidenceVerified)
         #expect(history[0].previousValue == "2026", "the value it replaced is part of the record")
+        #expect(history[0].producedRevision == stored.envelope.revision,
+                "the history must name the revision the store actually wrote")
+        #expect(history[0].manifestRevision == context.manifest.envelope.revision,
+                "the history must name the revision the decision was made against")
     }
 
     @Test("a refused correction stores the attempt and changes no revision")
@@ -356,5 +360,41 @@ struct CorrectionPersistenceTests {
         let history = try await context.workspace.corrections(manifestID: current.envelope.manifestID)
         #expect(history.compactMap(\.producedRevision).allSatisfy { $0 <= 2 },
                 "nothing may claim a revision that was never written")
+        #expect(history.count == 1,
+                "the stale attempt is refused, not recorded as a decision: \(history.map(\.reviewState))")
+    }
+
+    @Test("a correction against a manifest the store never saw is refused")
+    func unknownManifestIsRefused() async throws {
+        let context = try await prepared()
+        defer { context.fixture.cleanUp() }
+        // A manifest this store has never held - a bundle another workspace
+        // exported, for instance. There is no revision of it here to decide
+        // against, which is a different failure from a revision that has been
+        // superseded, and the two must not be reported as one.
+        let envelope = context.manifest.envelope
+        let foreign = ManifestEnvelope(
+            manifestID: UUID(), revision: envelope.revision,
+            supersedesRevision: envelope.supersedesRevision, scopeID: envelope.scopeID,
+            sourceRootID: envelope.sourceRootID, profile: context.profile,
+            casePack: (envelope.casePackID, envelope.casePackVersion),
+            modelProvider: envelope.modelProvider, modelID: envelope.modelID,
+            contextRevision: envelope.contextRevision, promptVersion: envelope.promptVersion,
+            extractorVersion: envelope.extractorVersion, redactionVersion: envelope.redactionVersion,
+            inputDigest: envelope.inputDigest, contextDigest: envelope.contextDigest,
+            createdAt: envelope.createdAt, state: envelope.state, eligibility: envelope.eligibility)
+        await #expect(throws: FormaError.unavailable) {
+            _ = try await context.workspace.applyCorrection(
+                to: Manifest(envelope: foreign, entries: context.manifest.entries),
+                sourceID: context.sourceID, field: .completionyear,
+                correctedValue: "2027", evidenceIDs: [context.yearRow], origin: .manual,
+                scope: context.scope, profile: context.profile)
+        }
+        // Nothing was published, and the manifest this store does hold is
+        // untouched.
+        let stored = try #require(await context.workspace.currentManifest(scope: context.scope,
+                                                                         profile: context.profile))
+        #expect(stored.envelope.revision == context.manifest.envelope.revision)
+        #expect(stored.entries[0].metadata[.completionyear] == "2026")
     }
 }

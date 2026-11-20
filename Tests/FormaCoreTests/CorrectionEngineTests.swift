@@ -160,6 +160,8 @@ struct CorrectionEngineTests {
         #expect(applied.violations.contains { $0.code == "value_type" },
                 "violations: \(applied.violations.map(\.code))")
         #expect(applied.correction.reviewState == .rejected)
+        #expect(applied.correction.producedRevision == nil,
+                "a refused correction must not report a revision it did not produce")
         #expect(applied.manifest.entries[0].metadata[.completionyear] == "2026",
                 "a refused correction changes nothing")
         #expect(applied.manifest.envelope.revision == 1,
@@ -179,8 +181,28 @@ struct CorrectionEngineTests {
                                    currentEntries: [source()])
         #expect(applied.violations.contains { $0.code == "evidence_not_found" })
         #expect(applied.correction.reviewState == .rejected)
+        #expect(applied.correction.producedRevision == nil,
+                "a refused attempt must not report a revision it did not produce")
         #expect(applied.manifest.envelope.revision == original.envelope.revision)
         #expect(applied.manifest.entries == original.entries)
+    }
+
+    @Test("a correction keeps the evidence of the fields it does not touch")
+    func untouchedFieldsKeepTheirEvidence() throws {
+        let profile = try MappingProfile.projectArchive()
+        let engine = CorrectionEngine(profile: profile)
+        let applied = engine.apply(to: manifest(profile, state: .hold), sourceID: sourceID, field: .completionyear,
+                                   correctedValue: "2026", evidenceIDs: ["ev_year"], origin: .manual,
+                                   context: context(profile: profile), evidence: evidence(),
+                                   currentEntries: [source()])
+        #expect(applied.violations.isEmpty, "violations: \(applied.violations.map(\.code))")
+        let entry = try #require(applied.manifest.entries.first)
+        // The correction answered one field. The row the classification was
+        // decided from is still the row it is decided from, and the value it
+        // carries is still there.
+        #expect(entry.metadata[.documentcategory] == "01_招标文件")
+        #expect(entry.outcome(for: .documentcategory)?.evidenceIDs == ["ev_cat"])
+        #expect(entry.outcome(for: .completionyear)?.evidenceIDs == ["ev_year"])
     }
 
     @Test("a citation from another snapshot is not evidence for this one")

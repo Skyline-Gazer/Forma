@@ -186,6 +186,14 @@ public struct ManifestValidator: Sendable {
         let record: EvidenceRecord
     }
 
+    /// A citation is identified by the field it supports and the record it
+    /// points at. The pair, not the record alone, is what may be repeated: one
+    /// body row is often the evidence for two different fields.
+    private struct CitationKey: Hashable {
+        let field: MetadataFieldID
+        let evidenceID: String
+    }
+
     /// Checks that a citation exists, belongs to this source and snapshot, is
     /// locatable, and is of a kind the field may use. Semantic agreement between
     /// the quoted text and the proposed value is checked here only where it is
@@ -196,7 +204,13 @@ public struct ManifestValidator: Sendable {
         guard let proposal else { return [] }
         let byID = Dictionary(uniqueKeysWithValues: registry.map { ($0.id, $0) })
         var resolved: [ResolvedCitation] = []
-        var seen: Set<String> = []
+        // De-duplication is per field, not per record. A single body row is
+        // routinely the evidence for two fields - the project name and the
+        // completion year come out of the same line - and keying on the record
+        // alone dropped the second citation, so which field lost its evidence
+        // depended on the order the fields were visited. Each field keeps its
+        // own decision and runs the policy below on its own.
+        var seen: Set<CitationKey> = []
         for citation in proposal.evidence {
             guard let record = byID[citation.evidenceID] else {
                 violations.append(ValidationViolation(code: "evidence_not_found",
@@ -204,7 +218,7 @@ public struct ManifestValidator: Sendable {
                                                       detail: "Cited evidence is not in the registry for this source."))
                 continue
             }
-            guard seen.insert(record.id).inserted else { continue }
+            guard seen.insert(CitationKey(field: citation.field, evidenceID: record.id)).inserted else { continue }
             if record.sourceID != entry.id {
                 violations.append(ValidationViolation(code: "evidence_foreign_source",
                                                       instancePath: citation.evidenceID,
@@ -263,7 +277,13 @@ public struct ManifestValidator: Sendable {
                                 citations: [ResolvedCitation], registry: [EvidenceRecord],
                                 violations: inout [ValidationViolation]) -> [FieldOutcome] {
         var outcomes: [FieldOutcome] = []
-        let byField = Dictionary(grouping: citations, by: \.field)
+        // Grouped in citation order rather than by dictionary grouping: the
+        // evidence ids an outcome carries have to be the same on every run, not
+        // whatever order a hash table happened to hand back.
+        var byField: [MetadataFieldID: [ResolvedCitation]] = [:]
+        for citation in citations {
+            byField[citation.field, default: []].append(citation)
+        }
         let declaredUnknown = proposal?.unknownFields ?? []
 
         for field in MetadataFieldID.allCases {

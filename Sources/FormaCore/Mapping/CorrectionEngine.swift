@@ -130,9 +130,16 @@ public struct CorrectionEngine: Sendable {
     /// The corrected value still has to pass the profile's type, vocabulary and
     /// evidence rules; a correction that violates policy is recorded as a
     /// rejected attempt rather than silently stored as truth.
+    ///
+    /// `reviewerConfirmations` are the decisions a trusted party has already
+    /// verified - the store's own audit trail. They are what lets a category a
+    /// person classified survive a later correction, because the exemption from
+    /// the literal-quote rule belongs to the decision and not to the manifest
+    /// that carries it. See `confirmedCategories` below.
     public func apply(to manifest: Manifest, sourceID: UUID, field: MetadataFieldID, correctedValue: String?,
                       evidenceIDs: [String], origin: CorrectionRecord.Origin, context: ProjectContext,
-                      evidence: [UUID: [EvidenceRecord]], currentEntries: [SourceEntry]) -> Applied {
+                      evidence: [UUID: [EvidenceRecord]], currentEntries: [SourceEntry],
+                      reviewerConfirmations: [CorrectionRecord] = []) -> Applied {
         guard let position = manifest.entries.firstIndex(where: { $0.sourceID == sourceID }) else {
             return Applied(manifest: manifest, correction: CorrectionRecord(
                 manifestID: manifest.envelope.manifestID, manifestRevision: manifest.envelope.revision,
@@ -241,13 +248,29 @@ public struct CorrectionEngine: Sendable {
         // Only a category correction carries the reviewer's classification into
         // the policy pass; every other field keeps the strict quote rule, and a
         // model-driven run never sets this map at all.
+        //
+        // A classification is carried by a decision, not by a status. The
+        // manifest says what the last revision concluded; it is not the proof
+        // that a person ever looked at the evidence and said so, and a
+        // manifest that arrived from elsewhere - an export, another machine -
+        // could claim that status for itself. The audit trail is the proof, so
+        // the exemption is read from the decisions the store has verified. A
+        // status in the manifest is what those decisions leave behind, not what
+        // they are read from.
         var confirmedCategories: [UUID: String] = [:]
-        for entry in manifest.entries {
-            guard let outcome = entry.outcome(for: .documentcategory),
-                  outcome.status == .confirmedByReviewer,
-                  let value = outcome.value else { continue }
-            confirmedCategories[entry.sourceID] = value
+        for decision in reviewerConfirmations {
+            guard decision.reviewState == .evidenceVerified,
+                  decision.field == .documentcategory,
+                  !decision.evidenceIDs.isEmpty,
+                  let produced = decision.producedRevision,
+                  produced <= manifest.envelope.revision,
+                  let value = decision.correctedValue,
+                  let entry = manifest.entries.first(where: { $0.sourceID == decision.sourceID }),
+                  entry.metadata[.documentcategory] == value else { continue }
+            confirmedCategories[decision.sourceID] = value
         }
+        // The correction in flight is a reviewer's decision by definition: the
+        // person making it is the one classifying the document.
         if field == .documentcategory, let value = correctedValue {
             confirmedCategories[sourceID] = value
         }

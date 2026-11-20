@@ -80,10 +80,12 @@ struct CategoryCorrectionTests {
 
     private func apply(_ engine: CorrectionEngine, to manifest: Manifest, field: MetadataFieldID,
                        value: String?, citations: [String], profile: MappingProfile,
-                       evidence rows: [UUID: [EvidenceRecord]]) -> CorrectionEngine.Applied {
+                       evidence rows: [UUID: [EvidenceRecord]],
+                       confirmations: [CorrectionRecord] = []) -> CorrectionEngine.Applied {
         engine.apply(to: manifest, sourceID: sourceID, field: field, correctedValue: value,
                      evidenceIDs: citations, origin: .manual, context: context(profile),
-                     evidence: rows, currentEntries: [source()])
+                     evidence: rows, currentEntries: [source()],
+                     reviewerConfirmations: confirmations)
     }
 
     @Test("a reviewer can confirm a category from a quote that does not contain its identifier")
@@ -200,8 +202,12 @@ struct CategoryCorrectionTests {
         let first = apply(engine, to: draft(profile), field: .documentcategory,
                           value: "01_招标文件", citations: ["ev_notice"], profile: profile,
                           evidence: evidence())
+        #expect(first.violations.isEmpty, "violations: \(first.violations.map(\.code))")
+        // The later correction is made against the decision the store verified,
+        // not against a status in the manifest.
         let second = apply(engine, to: first.manifest, field: .completionyear,
-                           value: "2026", citations: ["ev_notice"], profile: profile, evidence: evidence())
+                           value: "2026", citations: ["ev_notice"], profile: profile, evidence: evidence(),
+                           confirmations: [first.correction])
 
         #expect(second.violations.isEmpty)
         let entry = try #require(second.manifest.entries.first)
@@ -210,5 +216,72 @@ struct CategoryCorrectionTests {
         #expect(entry.metadata[.completionyear] == "2026")
         // The project name is still unknown, so the entry is not validated yet.
         #expect(entry.state != .validated)
+    }
+
+    @Test("a classification does not follow the file into a new snapshot")
+    func confirmationDoesNotSurviveANewSnapshot() throws {
+        let profile = try MappingProfile.projectArchive()
+        let engine = CorrectionEngine(profile: profile)
+        let first = apply(engine, to: draft(profile), field: .documentcategory,
+                          value: "01_招标文件", citations: ["ev_notice"], profile: profile,
+                          evidence: evidence())
+        #expect(first.violations.isEmpty, "violations: \(first.violations.map(\.code))")
+        // The file moved. The entry now describes revision 3, while the
+        // classification still rests on the row of revision 2 - the decision
+        // was made against bytes that are no longer the file.
+        let rows: [UUID: [EvidenceRecord]] = [sourceID: [
+            record(id: "ev_notice", excerpt: "示例项目_2026 招标公告 归档完成 2026 年", revision: 2),
+            record(id: "ev_new", excerpt: "示例项目_2026 招标公告 归档完成 2027 年", revision: 3),
+        ]]
+        var moved = first.manifest
+        let original = try #require(moved.entries.first)
+        moved.entries[0] = ManifestEntry(sourceID: original.sourceID,
+                                         snapshotFingerprint: original.snapshotFingerprint,
+                                         snapshotRevision: 3, sourceVersion: original.sourceVersion,
+                                         relativePath: original.relativePath, state: original.state,
+                                         target: original.target, metadata: original.metadata,
+                                         fields: original.fields, associations: original.associations,
+                                         eligibleForAutoExecution: original.eligibleForAutoExecution)
+        let applied = engine.apply(to: moved, sourceID: sourceID, field: .completionyear,
+                                   correctedValue: "2027", evidenceIDs: ["ev_new"], origin: .manual,
+                                   context: context(profile), evidence: rows,
+                                   currentEntries: [source(revision: 3)],
+                                   reviewerConfirmations: [first.correction])
+
+        #expect(applied.violations.isEmpty, "the correction itself is sound: \(applied.violations.map(\.code))")
+        let entry = try #require(applied.manifest.entries.first)
+        #expect(entry.metadata[.completionyear] == "2027")
+        // The confirmation was real, and it was made against revision 2. The
+        // exemption it buys is from the literal-quote rule, not from the
+        // requirement that the evidence still describes this file.
+        #expect(entry.metadata[.documentcategory] == nil,
+                "a classification belongs to the snapshot it was made against")
+        #expect(entry.outcome(for: .documentcategory)?.status == .rejectedByPolicy)
+    }
+
+    @Test("a manifest that only claims the status gets no exemption")
+    func claimedStatusIsNotAConfirmation() throws {
+        let profile = try MappingProfile.projectArchive()
+        let engine = CorrectionEngine(profile: profile)
+        // A manifest that says the classification was reviewed, without the
+        // decision that says so. The status is what a review leaves behind, not
+        // the proof of one, and a manifest that arrived from elsewhere could
+        // claim it for itself.
+        var manifest = draft(profile)
+        var metadata = manifest.entries[0].metadata
+        metadata[.documentcategory] = "01_招标文件"
+        manifest.entries[0].metadata = metadata
+        manifest.entries[0].setOutcome(FieldOutcome(field: .documentcategory, value: "01_招标文件",
+                                                     status: .confirmedByReviewer,
+                                                     evidenceIDs: ["ev_notice"]))
+        let applied = apply(engine, to: manifest, field: .completionyear,
+                            value: "2026", citations: ["ev_notice"], profile: profile, evidence: evidence())
+
+        #expect(applied.violations.isEmpty, "the correction itself is sound: \(applied.violations.map(\.code))")
+        let entry = try #require(applied.manifest.entries.first)
+        #expect(entry.metadata[.completionyear] == "2026")
+        #expect(entry.metadata[.documentcategory] == nil,
+                "a claimed status is not a review: the category still needs its decision")
+        #expect(entry.outcome(for: .documentcategory)?.status == .rejectedByPolicy)
     }
 }
