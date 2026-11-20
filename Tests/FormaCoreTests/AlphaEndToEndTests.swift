@@ -169,8 +169,9 @@ struct AlphaEndToEndTests {
         let workspace = prepared.workspace
         let scope = prepared.scope
         let profile = prepared.profile
-        let context = try await workspace.storedContext(
+        let storedContext = try await workspace.storedContext(
             scope: scope, profile: profile, revision: prepared.manifest.envelope.contextRevision)
+        let context = try #require(storedContext)
         let before = try await workspace.scan(scope)
         let outcome = try await offlineMapping(workspace: workspace, scope: scope, profile: profile,
                                                context: context, entries: [prepared.entry])
