@@ -51,17 +51,22 @@ struct MappingView: View {
                     }
                     .disabled(!model.canMap || (model.plannerMode == .ai && !model.allowCloud))
                     .help(model.plannerMode == .offline
-                          ? "Draft every file into the profile's unclassified category; nothing is sent"
+                          ? "Draft every record with no field claimed; nothing is sent and no field is guessed"
                           : model.allowCloud
                             ? "Register evidence, then send one mapping request per batch"
                             : "Cloud egress is off, so nothing may be sent: enable it in Settings")
                     .accessibilityIdentifier("run-mapping")
-                    Button("Assess Without Egress", systemImage: "desktopcomputer") {
-                        model.runMapping(egress: false)
+                    // Only meaningful with a Provider: the offline planner never
+                    // sends, so a second "without egress" button would offer the
+                    // same run twice under a misleading name.
+                    if model.plannerMode == .ai {
+                        Button("Assess Without Egress", systemImage: "desktopcomputer") {
+                            model.runMapping(egress: false)
+                        }
+                        .disabled(!model.canMap)
+                        .help("FormaCore refuses every provider request; each file keeps the reason it recorded")
+                        .accessibilityIdentifier("assess-local")
                     }
-                    .disabled(!model.canMap)
-                    .help("FormaCore refuses every provider request; each file keeps the reason it recorded")
-                    .accessibilityIdentifier("assess-local")
                 }
                 Button("Export…", systemImage: "square.and.arrow.up", action: chooseExportDirectory)
                     .disabled(model.manifest == nil || model.phase.isBusy)
@@ -112,9 +117,11 @@ struct MappingView: View {
                 }
                 .accessibilityIdentifier("mapping-mode")
                 if model.plannerMode == .offline {
-                    Label("Offline planner: files are filed as the profile's unclassified category "
-                          + "from their name and type. No document content is read, nothing leaves the "
-                          + "Mac, and the manifest records the provider as `offline`.",
+                    Label("Offline planner: no Provider is called and nothing leaves the Mac. The app "
+                          + "still registers local evidence rows for each file so you can confirm a field by "
+                          + "quoting its own text; a placeholder that is not downloaded stays unknown instead of "
+                          + "being fetched. The planner itself claims no field, and the manifest records the "
+                          + "provider as `offline`.",
                           systemImage: "iphone.slash")
                         .font(.caption)
                         .foregroundStyle(.secondary)

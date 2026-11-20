@@ -36,9 +36,6 @@ public struct OfflinePlannerAnswerer: MappingAnswering {
         guard !Task.isCancelled else {
             return MappingAttempt(proposal: nil, error: .cancelled, modelID: Self.modelID)
         }
-        // Every shipped profile has its own unclassified destination; a profile
-        // without one cannot be mapped conservatively, so the batch fails loudly
-        // rather than being filed somewhere invented.
         // Every field is unknown, including the category.
         //
         // `ManifestValidator` rejects any non-null value that cites no evidence

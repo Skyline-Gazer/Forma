@@ -4,11 +4,21 @@
 
 ## 1. 它是什么
 
-- **确定性草稿**：不调用任何 Provider、不读文件正文、不使用 API Key。
+- **确定性草稿**：不调用任何 Provider、不使用 API Key、不向任何外部发送数据。
 - 产物如实记录 `modelProvider = "offline"`、`modelID = "offline-planner.v1"`；运行报告里 token 用量为空。
-- **不声明任何字段**：每条记录的 12 个字段都进入 `unknown_fields`，`documentCategory` 为空，`confidence = low`。
+- **不声明任何字段**：每条记录的字段都进入 `unknown_fields`，`documentCategory` 为空，`confidence = low`（字段保持未知，等待人工确认）。
   原因：`ManifestValidator` 拒绝任何"非空但没有引用证据"的值，而离线模式不读正文，无法引用证据。
   把记录硬塞进"待分类"会产生逐条违规，所以正确的做法是**不猜**。
+
+## 1.1 离线模式仍然会读什么（重要）
+
+| 行为 | 事实 | 依据 |
+| --- | --- | --- |
+| 正文读取 | **会**为每个文件注册本地证据行（提取文本片段），以便人工修正时引用真实内容 | `WorkspaceModel.runMapping` → `workspace.captureEvidence` |
+| 规划器本身 | 不使用这些证据，**不声明任何字段** | `OfflinePlannerAnswerer`（全部 `unknown_fields`） |
+| 网络 | 无任何外发；离线请求在 `ProviderTransport` 被拒绝 | `ProviderTransport.makeRequest` guard |
+| FileProvider 占位符 | 证据读取在打开正文前检查 dataless 标志并直接返回 `hydrationPending`，因此**不会**因注册证据而物化占位符 | `SourceEvidenceReader.swift:48`、`SourceFilesystem.swift:31`（`ubiquitousPending` 或 `SF_DATALESS`） |
+| 零物化 | **未证明**。上面是代码路径上的保证，不是现场观测；OneDrive 行为仍是 `NOT_VERIFIED`（Issue #129） | M11 轨道 |
 
 ## 2. Owner Mac 上的最短操作
 
