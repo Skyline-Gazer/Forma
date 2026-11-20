@@ -259,6 +259,21 @@ struct CategoryCorrectionTests {
         #expect(entry.outcome(for: .documentcategory)?.status == .rejectedByPolicy)
     }
 
+    @Test("the shipped schemas declare the status this code writes")
+    func schemaDeclaresTheReviewerStatus() throws {
+        // The status is written into the artifact, so the schemas that read it
+        // back have to list it. A schema that did not would call the
+        // program's own product invalid on the way out and on the way back in.
+        for name in ["manifest-1.0.schema", "manifest-1.1.schema"] {
+            let url = try #require(FormaResourceBundle.url(forResource: name, withExtension: "json"))
+            let text = try String(contentsOf: url, encoding: .utf8)
+            #expect(text.contains("\"confirmed_by_reviewer\""),
+                    "\(name) does not declare the reviewer-confirmed status")
+        }
+        #expect(FieldOutcome.Status.confirmedByReviewer.rawValue == "confirmed_by_reviewer",
+                "the encoded value and the declared one must be the same string")
+    }
+
     @Test("a manifest that only claims the status gets no exemption")
     func claimedStatusIsNotAConfirmation() throws {
         let profile = try MappingProfile.projectArchive()
