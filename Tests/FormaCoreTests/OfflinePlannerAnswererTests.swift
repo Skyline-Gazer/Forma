@@ -129,7 +129,7 @@ struct OfflinePlannerArtifactTests {
         // The offline planner produces a new one, so the schema has to know it:
         // otherwise an offline manifest would export and then fail its own
         // revalidation, which is the opposite of useful.
-        let schema = try ArtifactSchema.manifest
+        let schema = try ArtifactSchemaValidator.manifest
         let envelope = #"{"schema_version":"1.0","manifest_id":"m","revision":1,"scope_id":"s",
             "source_root_id":"r","profile_id":"project-archive","profile_version":"1.0",
             "case_pack_id":"c","case_pack_version":"1.0","model_provider":"offline",
