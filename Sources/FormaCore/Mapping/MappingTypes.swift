@@ -618,6 +618,11 @@ public struct FieldOutcome: Codable, Sendable, Equatable {
     public enum Status: String, Codable, Sendable {
         case evidenced, inherited, unknown, conflict
         case rejectedByPolicy = "rejected_by_policy", notApplicable = "not_applicable"
+        /// A person classified this record and cited evidence for the decision.
+        /// The cited text supports the *business* judgement, not the literal
+        /// category identifier: no document says "01_招标文件". Only a correction
+        /// can produce this status; a model answer never can.
+        case confirmedByReviewer = "confirmed_by_reviewer"
     }
 
     public let field: MetadataFieldID
