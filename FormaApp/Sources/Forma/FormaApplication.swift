@@ -202,6 +202,9 @@ private struct WorkspaceAreas: View {
                 MappingView(model: model)
                     .tabItem { Label("Mapping", systemImage: "tablecells") }
                     .accessibilityIdentifier("area-mapping")
+                ImportView(model: model)
+                    .tabItem { Label("Import", systemImage: "tray.and.arrow.down") }
+                    .accessibilityIdentifier("area-import")
                 ExceptionsView(model: model)
                     .tabItem { Label("Exceptions", systemImage: "exclamationmark.triangle") }
                     .accessibilityIdentifier("area-exceptions")
