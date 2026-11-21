@@ -64,7 +64,7 @@ struct ProbesView: View {
             }
             Section("AI Provider Probe") {
                 Picker("Provider", selection: $provider) {
-                    ForEach(ProbeProvider.allCases, id: \.self) { provider in Text(provider.displayName).tag(provider) }
+                    ForEach(ProbeProvider.networkCases, id: \.self) { provider in Text(provider.displayName).tag(provider) }
                 }
                 .disabled(providerTask != nil)
                 TextField("Model ID", text: model)

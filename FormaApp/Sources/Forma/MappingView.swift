@@ -45,19 +45,28 @@ struct MappingView: View {
                         .accessibilityIdentifier("cancel-mapping")
                 } else {
                     Button("Map Files", systemImage: "square.text.square") {
-                        model.runMapping(egress: model.allowCloud)
+                        // Offline mode never sends anything, so the egress switch
+                        // is irrelevant to it; AI mode still needs consent.
+                        model.runMapping(egress: model.plannerMode == .ai && model.allowCloud)
                     }
-                    .disabled(!model.canMap || !model.allowCloud)
-                    .help(model.allowCloud
-                          ? "Register evidence, then send one mapping request per batch"
-                          : "Cloud egress is off, so nothing may be sent: enable it in Settings")
+                    .disabled(!model.canMap || (model.plannerMode == .ai && !model.allowCloud))
+                    .help(model.plannerMode == .offline
+                          ? "Draft every record with no field claimed; nothing is sent and no field is guessed"
+                          : model.allowCloud
+                            ? "Register evidence, then send one mapping request per batch"
+                            : "Cloud egress is off, so nothing may be sent: enable it in Settings")
                     .accessibilityIdentifier("run-mapping")
-                    Button("Assess Without Egress", systemImage: "desktopcomputer") {
-                        model.runMapping(egress: false)
+                    // Only meaningful with a Provider: the offline planner never
+                    // sends, so a second "without egress" button would offer the
+                    // same run twice under a misleading name.
+                    if model.plannerMode == .ai {
+                        Button("Assess Without Egress", systemImage: "desktopcomputer") {
+                            model.runMapping(egress: false)
+                        }
+                        .disabled(!model.canMap)
+                        .help("FormaCore refuses every provider request; each file keeps the reason it recorded")
+                        .accessibilityIdentifier("assess-local")
                     }
-                    .disabled(!model.canMap)
-                    .help("FormaCore refuses every provider request; each file keeps the reason it recorded")
-                    .accessibilityIdentifier("assess-local")
                 }
                 Button("Export…", systemImage: "square.and.arrow.up", action: chooseExportDirectory)
                     .disabled(model.manifest == nil || model.phase.isBusy)
@@ -100,6 +109,24 @@ struct MappingView: View {
     private var runPanel: some View {
         List {
             Section("Run") {
+                Picker("Mode", selection: Binding(get: { model.plannerMode },
+                                                  set: { model.plannerMode = $0 })) {
+                    ForEach([WorkspaceModel.PlannerMode.offline, .ai], id: \.self) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .accessibilityIdentifier("mapping-mode")
+                if model.plannerMode == .offline {
+                    Label("Offline planner: no Provider is called and nothing leaves the Mac. The app "
+                          + "still registers local evidence rows for each file so you can confirm a field by "
+                          + "quoting its own text; a placeholder that is not downloaded stays unknown instead of "
+                          + "being fetched. The planner itself claims no field, and the manifest records the "
+                          + "provider as `offline`.",
+                          systemImage: "iphone.slash")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("offline-mode-notice")
+                }
                 LabeledContent("Phase", value: model.phase.label)
                 if let notice = model.notice {
                     Text(notice).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)

@@ -100,9 +100,36 @@ final class WorkspaceModel: ObservableObject {
         static let profile = "selectedMappingProfile"
         static let provider = "mappingProvider"
         static let model = "mappingModel"
+        static let plannerMode = "mappingPlannerMode"
         static let entryLimit = "mappingEntryLimit"
         static let salt = "mappingRedactionSalt"
         static let terms = "mappingRedactionTerms"
+    }
+
+    /// Which answerer a mapping run uses. `offline` is a deterministic draft, not
+    /// a model: the manifest records `modelProvider = "offline"` and the run
+    /// consumes no tokens. Switching modes never touches the stored provider,
+    /// model or key of the other mode.
+    enum PlannerMode: String {
+        case offline
+        case ai
+
+        var label: String {
+            switch self {
+            case .offline: "Offline Planner — Not AI"
+            case .ai: "AI Mapping"
+            }
+        }
+    }
+
+    @Published var plannerMode: PlannerMode {
+        didSet {
+            guard oldValue != plannerMode else { return }
+            Self.store.set(plannerMode.rawValue, forKey: Keys.plannerMode)
+            // The engine is built around the answerer, so a mode change must not
+            // reuse the cached one.
+            engineCache = nil
+        }
     }
 
     /// Salt FormaCore itself uses for its identity plan, kept as the default so
@@ -272,7 +299,7 @@ final class WorkspaceModel: ObservableObject {
         // `defaults` property: Swift forbids touching `self` - and a property
         // read is a `self` use - until every stored property has a value, and
         // the assignments below are exactly what gives them one.
-        let storedProvider = ProbeProvider.allCases.first { $0.rawValue == Self.store.string(forKey: Keys.provider) }
+        let storedProvider = ProbeProvider.networkCases.first { $0.rawValue == Self.store.string(forKey: Keys.provider) }
             ?? .openAI
         provider = storedProvider
         modelID = Self.store.string(forKey: Keys.model) ?? storedProvider.defaultModel
@@ -284,6 +311,9 @@ final class WorkspaceModel: ObservableObject {
         redactionTerms = Self.store.loadTerms(forKey: Keys.terms)
         selectedProfileID = Self.store.string(forKey: Keys.profile)
         selectedScopeID = UUID(uuidString: Self.store.string(forKey: Keys.scope) ?? "")
+        // Offline is the default because it is the only mode that works without
+        // credentials; an existing choice is preserved verbatim.
+        plannerMode = PlannerMode(rawValue: Self.store.string(forKey: Keys.plannerMode) ?? "") ?? .offline
     }
 
     // MARK: - Derived values
@@ -766,9 +796,13 @@ final class WorkspaceModel: ObservableObject {
         } else {
             targets = listing.entries
         }
-        let provider = self.provider
-        let model = modelID
-        let consent = egress
+        // The mode decides both the answerer and the identity the run records:
+        // an offline draft must never be written as a model's work.
+        let offline = plannerMode == .offline
+        let provider: ProbeProvider = offline ? .offline : self.provider
+        let model = offline ? OfflinePlannerAnswerer.modelID : modelID
+        // Nothing is sent in offline mode, so there is nothing to consent to.
+        let consent = offline ? false : egress
         let limit = entryLimit
         let plan = redaction
         // Consent alone is not an authorization. Build one grant from the
@@ -1344,7 +1378,7 @@ final class WorkspaceModel: ObservableObject {
     /// the old one.
     private func engine(for profile: MappingProfile,
                         authorization: EgressAuthorization?) -> MappingEngine? {
-        let key = "\(profile.versionKey)|\(casePack?.versionKey ?? "no-case-pack")"
+        let key = "\(plannerMode.rawValue)|\(profile.versionKey)|\(casePack?.versionKey ?? "no-case-pack")"
             + "|\(authorization?.id ?? "no-egress")"
         if let engineCache, engineCache.key == key { return engineCache.engine }
         guard let casePack else {
@@ -1352,11 +1386,16 @@ final class WorkspaceModel: ObservableObject {
             notice = "The shipped CasePack could not be loaded, so no engine can be built."
             return nil
         }
-        let client: ProviderMappingClient
-        if let authorization { client = ProviderMappingClient(authorization: authorization) }
-        else { client = ProviderMappingClient() }
+        let answerer: any MappingAnswering
+        switch plannerMode {
+        case .offline:
+            // Deterministic, no socket, no key: the manifest records `offline`.
+            answerer = OfflinePlannerAnswerer()
+        case .ai:
+            answerer = authorization.map { ProviderMappingClient(authorization: $0) } ?? ProviderMappingClient()
+        }
         let built = MappingEngine(profile: profile, casePack: casePack,
-                                  answerer: client, workspace: workspace)
+                                  answerer: answerer, workspace: workspace)
         engineCache = (key, built)
         return built
     }
