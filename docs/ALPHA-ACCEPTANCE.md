@@ -83,3 +83,22 @@
 读取方规则：任何 `writes_executed: true` 或 `authorization_granted: true` 的文件都不是本产物，解码器会拒绝它。
 
 **隐私**：计划逐行包含 `relative_path`，可能含客户名、项目名与敏感文件名。它不是脱敏件；不要上传 GitHub、远程日志或任何外部服务。公开评审只提供单独脱敏的汇总（计数与原因码）。
+
+## 5. Manifest Schema 1.0/1.1 兼容性（#142，需 Owner 批准）
+
+字段状态枚举新增 `confirmed_by_reviewer`（`FieldOutcome.Status`）。编码值与 `manifest-1.0.schema.json`、`manifest-1.1.schema.json` 中声明的枚举一致：两处声明都覆盖该值，因此新产物声明的 schema 与实际编码相符。
+
+| 方向 | 结论 |
+| --- | --- |
+| 新应用读历史 Manifest | 兼容。枚举只增不减，历史 Manifest 只含旧取值，解码与 schema 校验都不受影响。 |
+| 新应用读新产物 | 兼容。声明与编码一致，`ManifestExport.revalidate` 通过。 |
+| 旧应用读新产物 | **不兼容，且只限于带人工确认状态的产物。** |
+
+旧应用一侧有两种表现，都不是"显示为未知"这样温和的降级：
+
+1. 旧版 `manifest-1.0/1.1.schema.json` 的枚举不含该值 → schema 校验判定产物非法。
+2. 旧版 `FieldOutcome.Status` 不含该 case → `Codable` 解码直接失败，Manifest 读不进来。
+
+因此只有**含人工确认字段状态**的新产物对旧应用不兼容；纯模型驱动的 Manifest 不含该状态，旧应用照常可读。含人工确认分类的 Manifest 是新构建产生的交接物，交接时须随附本节。
+
+**待 Owner 批准的兼容性差异**：1.0 schema 文件被就地扩展（文件版本号未变，接受取值变多）。另一条路是发布新的 schema 版本（例如 1.2）并让产物声明新版本，那会改变正式产物合同；本次未做，保留给 Owner 决定。`docs/SPEC.md` 与 `docs/PLAN.md` 未被修改。
