@@ -503,4 +503,74 @@ struct ManifestValidatorTests {
         #expect(valued.allSatisfy { FieldJudgement.publishableStatuses.contains($0.status) })
         #expect(Set(valued.map(\.field)).isSubset(of: Set(publishable.map(\.field))))
     }
+
+    @Test("one body row may support two fields")
+    func sharedEvidenceSupportsTwoFields() throws {
+        // A real document states the project name and the completion year in the
+        // same sentence, so the same row is the evidence for both fields. The
+        // validator used to count a record once for the whole answer, which
+        // dropped the second field's citation and made the result depend on the
+        // order the fields were visited in.
+        let harness = try archive()
+        let file = harness.entries[0]
+        let shared = try evidence("ev_shared", source: .content,
+                                  value: "示例项目_2026 归档完成 2026 年", file: file,
+                                  locator: .pdf(page: 1, characterRange: 0..<40))
+        var records = harness.registry[file.id] ?? []
+        records.append(shared)
+        let answer = proposal(
+            metadata: [.projectname: "示例项目_2026", .completionyear: "2026"],
+            citations: citations([(.projectname, "ev_shared"), (.completionyear, "ev_shared"),
+                                  (.documentcategory, "ev_category"), (.documenttype, "ev_type")]))
+        let result = validate(harness, answer: answer, evidenceOverride: [file.id: records])
+        let item = try #require(result.entries.first)
+        #expect(item.metadata[.projectname] == "示例项目_2026")
+        #expect(item.metadata[.completionyear] == "2026")
+        #expect(item.outcome(for: .projectname)?.evidenceIDs == ["ev_shared"])
+        #expect(item.outcome(for: .completionyear)?.evidenceIDs == ["ev_shared"])
+        #expect(item.state == .validated)
+        #expect(!result.report.allViolations.contains { $0.code == "evidence_missing" },
+                "a shared row must not leave one of its fields without evidence")
+    }
+
+    @Test("a field may not count the same row twice")
+    func duplicateCitationForOneFieldIsCountedOnce() throws {
+        let harness = try archive()
+        let answer = proposal(
+            metadata: [.projectname: "示例项目_2026", .completionyear: "2026"],
+            citations: citations([(.projectname, "ev_name"), (.completionyear, "ev_year"),
+                                  (.completionyear, "ev_year"),
+                                  (.documentcategory, "ev_category"), (.documenttype, "ev_type")]))
+        let result = validate(harness, answer: answer)
+        let item = try #require(result.entries.first)
+        #expect(item.outcome(for: .completionyear)?.evidenceIDs == ["ev_year"],
+                "the same row cited twice for one field is still one piece of evidence")
+        #expect(item.state == .validated)
+    }
+
+    @Test("a shared row is judged by each field's own policy")
+    func sharedEvidenceRunsEachFieldsPolicy() throws {
+        // A path row is conclusive for the project name and merely allowed -
+        // never conclusive - for the category. Each field has to reach its own
+        // verdict on it; the category must be refused for what it is, not
+        // because the row was already spent on another field.
+        let harness = try archive()
+        let file = harness.entries[0]
+        let path = try evidence("ev_path", source: .path, value: "示例项目_2026/02_投标", file: file)
+        var records = harness.registry[file.id] ?? []
+        records.append(path)
+        let answer = proposal(
+            metadata: [.projectname: "示例项目_2026", .completionyear: "2026"],
+            citations: citations([(.projectname, "ev_path"), (.documentcategory, "ev_path"),
+                                  (.completionyear, "ev_year"), (.documenttype, "ev_type")]))
+        let result = validate(harness, answer: answer, evidenceOverride: [file.id: records])
+        let item = try #require(result.entries.first)
+        #expect(item.metadata[.projectname] == "示例项目_2026",
+                "the field the row may carry keeps its value")
+        #expect(item.metadata[.documentcategory] == nil)
+        #expect(result.report.allViolations.contains { $0.code == "insufficient_evidence" },
+                "the category must be refused on its own policy: \(result.report.allViolations.map(\.code))")
+        #expect(!result.report.allViolations.contains { $0.code == "evidence_missing" },
+                "the citation was made and resolved; it was the evidence kind that was refused")
+    }
 }

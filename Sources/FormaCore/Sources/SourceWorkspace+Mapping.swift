@@ -242,12 +242,35 @@ extension SourceWorkspace {
     /// that a citation is registered: the manifest is written by `persist`
     /// inside the same transaction, so the foreign key into `evidence_items` is
     /// the database's own rejection and arrives as `.storage`, not as a refusal
-    /// with a violation code. A manifest the store has already moved past is
-    /// refused with `sourceChanged`, also from inside that transaction.
+    /// with a violation code.
+    ///
+    /// A manifest the store has already moved past is refused with
+    /// `sourceChanged`. The base is checked twice, and both checks are needed:
+    /// once before the engine runs, so a stale decision is not even judged
+    /// against a document state that is gone, and once inside the transaction
+    /// that writes the revision, so a manifest that moved while the decision
+    /// was being made cannot be published under a number it never had.
     public func applyCorrection(to manifest: Manifest, sourceID: UUID, field: MetadataFieldID,
                                 correctedValue: String?, evidenceIDs: [String],
                                 origin: CorrectionRecord.Origin, scope: SourceScope,
                                 profile: MappingProfile) async throws -> CorrectionEngine.Applied {
+        // The base has to be checked before anything is decided. The revision
+        // on the reviewer's screen is only a base while it is still the newest
+        // revision of this manifest; a decision taken against a superseded one
+        // would be numbered as the successor of a revision that already
+        // decided something else, and the correction engine would answer about
+        // a document state that is no longer on the table.
+        //
+        // Two failures wear different faces here and must not be merged: a
+        // manifest the store has never heard of is missing, and a manifest the
+        // store has moved past is stale. The first is `unavailable`, the second
+        // is `sourceChanged` - the same answer the in-transaction guard below
+        // gives, so a caller sees one refusal and not two kinds of it.
+        let storedRevision = try await store.database.read { db in
+            try MappingStore.latestManifestRevision(manifestID: manifest.envelope.manifestID, in: db)
+        }
+        guard let storedRevision else { throw FormaError.unavailable }
+        guard storedRevision == manifest.envelope.revision else { throw FormaError.sourceChanged }
         let listing = try listing(scope)
         // Decided against the context the manifest cites. Rebuilding here would
         // bump a context revision as a side effect of a human edit, and would
@@ -261,10 +284,17 @@ extension SourceWorkspace {
         let evidence = try await store.database.read { db in
             try MappingStore.evidence(for: Set(manifest.entries.map(\.sourceID)), in: db)
         }
+        // The decisions this store has already verified. They are the proof
+        // that a classification was reviewed, and they are read from the audit
+        // trail rather than from the manifest in hand: a manifest that claims a
+        // review that never happened must not buy the exemption.
+        let history = try await store.database.read { db in
+            try MappingStore.corrections(manifestID: manifest.envelope.manifestID, in: db)
+        }
         let applied = CorrectionEngine(profile: profile).apply(
             to: manifest, sourceID: sourceID, field: field, correctedValue: correctedValue,
             evidenceIDs: evidenceIDs, origin: origin, context: context, evidence: evidence,
-            currentEntries: listing.entries)
+            currentEntries: listing.entries, reviewerConfirmations: history)
         if applied.violations.isEmpty {
             // Publish and record together: a row claiming a revision that was
             // never stored would occupy the index and refuse the retry.

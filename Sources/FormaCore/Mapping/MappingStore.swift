@@ -411,6 +411,21 @@ enum MappingStore {
         return (stored ?? 0) + 1
     }
 
+    /// The newest revision stored for one manifest, or `nil` when the store
+    /// holds no revision of it at all.
+    ///
+    /// The question is asked about one manifest identity and answered from that
+    /// manifest's own revisions. Ordering manifests by `created_at` would
+    /// answer a different question - which manifest was written last - and two
+    /// manifests of the same scope are not in a reviewer's race with each
+    /// other.
+    static func latestManifestRevision(manifestID: UUID, in db: Database) throws -> Int? {
+        let row = try Row.fetchOne(db, sql: "SELECT MAX(revision) AS revision FROM manifests WHERE manifest_id = ?",
+                                   arguments: [manifestID.sourceKey])
+        let stored: Int? = row?["revision"]
+        return stored
+    }
+
     /// Marks entries unusable in one revision.
     ///
     /// A non-nil, non-empty set touches exactly those entries and leaves every

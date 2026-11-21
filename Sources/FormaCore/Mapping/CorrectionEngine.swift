@@ -130,9 +130,16 @@ public struct CorrectionEngine: Sendable {
     /// The corrected value still has to pass the profile's type, vocabulary and
     /// evidence rules; a correction that violates policy is recorded as a
     /// rejected attempt rather than silently stored as truth.
+    ///
+    /// `reviewerConfirmations` are the decisions a trusted party has already
+    /// verified - the store's own audit trail. They are what lets a category a
+    /// person classified survive a later correction, because the exemption from
+    /// the literal-quote rule belongs to the decision and not to the manifest
+    /// that carries it. See `confirmedCategories` below.
     public func apply(to manifest: Manifest, sourceID: UUID, field: MetadataFieldID, correctedValue: String?,
                       evidenceIDs: [String], origin: CorrectionRecord.Origin, context: ProjectContext,
-                      evidence: [UUID: [EvidenceRecord]], currentEntries: [SourceEntry]) -> Applied {
+                      evidence: [UUID: [EvidenceRecord]], currentEntries: [SourceEntry],
+                      reviewerConfirmations: [CorrectionRecord] = []) -> Applied {
         guard let position = manifest.entries.firstIndex(where: { $0.sourceID == sourceID }) else {
             return Applied(manifest: manifest, correction: CorrectionRecord(
                 manifestID: manifest.envelope.manifestID, manifestRevision: manifest.envelope.revision,
@@ -178,7 +185,11 @@ public struct CorrectionEngine: Sendable {
             let target = manifest.entries[position]
             let rowsByID = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             let verified = evidenceIDs.filter { id in
-                guard let record = rowsByID[id], record.isUsable else { return false }
+                guard let record = rowsByID[id], record.isUsable,
+                      // The map is keyed by source, but the row itself carries a
+                      // source id: a caller that mixed rows would otherwise let a
+                      // correction cite another file's text.
+                      record.sourceID == sourceID else { return false }
                 // The same binding the validator insists on: a row from an older
                 // snapshot describes a file that is no longer the one in front of
                 // the reviewer, and accepting it would let a correction cite
@@ -234,9 +245,74 @@ public struct CorrectionEngine: Sendable {
         let proposals = entries.map { entry in
             ProposalForEntry(sourceID: entry.sourceID, proposal: Self.proposal(from: entry, context: context))
         }
+        // Only a category correction carries the reviewer's classification into
+        // the policy pass; every other field keeps the strict quote rule, and a
+        // model-driven run never sets this map at all.
+        //
+        // A classification is carried by a decision, not by a status. The
+        // manifest says what the last revision concluded; it is not the proof
+        // that a person ever looked at the evidence and said so, and a
+        // manifest that arrived from elsewhere - an export, another machine -
+        // could claim that status for itself. The audit trail is the proof, so
+        // the exemption is read from the decisions the store has verified. A
+        // status in the manifest is what those decisions leave behind, not what
+        // they are read from.
+        var confirmedCategories: [UUID: String] = [:]
+        for decision in reviewerConfirmations {
+            guard decision.reviewState == .evidenceVerified,
+                  decision.field == .documentcategory,
+                  !decision.evidenceIDs.isEmpty,
+                  let produced = decision.producedRevision,
+                  produced <= manifest.envelope.revision,
+                  let value = decision.correctedValue,
+                  let entry = manifest.entries.first(where: { $0.sourceID == decision.sourceID }),
+                  entry.metadata[.documentcategory] == value else { continue }
+            confirmedCategories[decision.sourceID] = value
+        }
+        // The correction in flight is a reviewer's decision by definition: the
+        // person making it is the one classifying the document.
+        if field == .documentcategory, let value = correctedValue {
+            confirmedCategories[sourceID] = value
+        }
         let result = ManifestValidator(ValidationInput(profile: profile, context: context,
                                                        entries: currentEntries, evidence: evidence,
-                                                       proposals: proposals)).validate()
+                                                       proposals: proposals,
+                                                       reviewerConfirmedCategories: confirmedCategories))
+            .validate()
+
+        // The receipt must describe what the new revision actually contains. A
+        // validator that clears the corrected field (for any reason) means the
+        // correction did not land, and publishing a revision that claims it did
+        // is exactly the kind of false success this engine must not report.
+        let revalidated = result.entries.first { $0.sourceID == sourceID }
+        let outcome = revalidated?.outcome(for: field)
+        let survived: Bool
+        if let correctedValue {
+            survived = outcome?.value == correctedValue
+                && outcome?.status != .rejectedByPolicy
+                && outcome?.status != .conflict
+        } else {
+            survived = (outcome?.value ?? nil) == nil
+        }
+        guard survived else {
+            // The report groups violations by rule group; a violation for this
+            // field is identified by the same instance path the policy used.
+            let instancePath = "\(manifest.entries[position].relativePath)#\(field.rawValue)"
+            let fieldViolations = result.report.groups
+                .flatMap(\.violations)
+                .filter { $0.instancePath == instancePath }
+            return Applied(manifest: manifest, correction: CorrectionRecord(
+                manifestID: manifest.envelope.manifestID, manifestRevision: manifest.envelope.revision,
+                producedRevision: nil, sourceID: sourceID, field: field, previousValue: previous,
+                correctedValue: correctedValue, evidenceIDs: evidenceIDs,
+                snapshotFingerprint: manifest.entries[position].snapshotFingerprint,
+                contextRevision: context.revision, origin: origin, reviewState: .rejected
+            ), violations: fieldViolations.isEmpty
+                ? [ValidationViolation(code: "correction_not_applied", instancePath: field.rawValue,
+                                       detail: "Validation did not keep the corrected value.")]
+                : fieldViolations)
+        }
+
         candidate.entries = result.entries
         candidate.report = result.report
         let state: ManifestEnvelope.ManifestState
