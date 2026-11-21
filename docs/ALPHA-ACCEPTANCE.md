@@ -84,21 +84,26 @@
 
 **隐私**：计划逐行包含 `relative_path`，可能含客户名、项目名与敏感文件名。它不是脱敏件；不要上传 GitHub、远程日志或任何外部服务。公开评审只提供单独脱敏的汇总（计数与原因码）。
 
-## 5. Manifest Schema 1.0/1.1 兼容性（#142，需 Owner 批准）
+## 5. Manifest Schema 1.0/1.1 兼容性（Owner 已批准，范围限 Internal Alpha）
 
-字段状态枚举新增 `confirmed_by_reviewer`（`FieldOutcome.Status`）。编码值与 `manifest-1.0.schema.json`、`manifest-1.1.schema.json` 中声明的枚举一致：两处声明都覆盖该值，因此新产物声明的 schema 与实际编码相符。
+当前 Internal Alpha 产出的 Manifest 一律是 **1.0**。`schema_version` 取决于 `eligibility`：为空即 1.0，只有启用 eligibility 过滤才写 1.1；本构建默认过滤 `OFF`，App 也从不设置该选项。
 
-| 方向 | 结论 |
+两处 schema 的声明与实际编码一致：`confirmed_by_reviewer` 在 1.0 和 1.1 中都已列入；`model_provider = offline` 只列入了 1.0。
+
+### 旧应用读取新产物的两条已知不兼容
+
+| 新产物中的取值 | 旧应用（不含该取值）的表现 |
 | --- | --- |
-| 新应用读历史 Manifest | 兼容。枚举只增不减，历史 Manifest 只含旧取值，解码与 schema 校验都不受影响。 |
-| 新应用读新产物 | 兼容。声明与编码一致，`ManifestExport.revalidate` 通过。 |
-| 旧应用读新产物 | **不兼容，且只限于带人工确认状态的产物。** |
+| 字段状态 `confirmed_by_reviewer` | **不支持**。旧 schema 的枚举判定产物非法；旧 `FieldOutcome.Status` 没有该 case，`Codable` 解码直接失败。 |
+| `model_provider = offline` | **不支持**。同为旧 schema 枚举与解码器都不含该值，产物被判定非法或读不进来。 |
 
-旧应用一侧有两种表现，都不是"显示为未知"这样温和的降级：
+两者都不是"降级显示为未知"这样温和的失效。不含上述取值的 Manifest（纯模型驱动、无人工确认字段）旧应用照常可读。
 
-1. 旧版 `manifest-1.0/1.1.schema.json` 的枚举不含该值 → schema 校验判定产物非法。
-2. 旧版 `FieldOutcome.Status` 不含该 case → `Codable` 解码直接失败，Manifest 读不进来。
+### 当前 Alpha 的实际形态
 
-因此只有**含人工确认字段状态**的新产物对旧应用不兼容；纯模型驱动的 Manifest 不含该状态，旧应用照常可读。含人工确认分类的 Manifest 是新构建产生的交接物，交接时须随附本节。
+- 离线 Alpha 使用 **Manifest 1.0**；1.0 同时接受 `offline` 与 `confirmed_by_reviewer`，因此本构建的产物能被本构建完整复检（导出即 `revalidate` 通过）。
+- **Manifest 1.1 尚不接受 `offline`**：1.1 的 `model_provider` 枚举仍为 `openai / anthropic / local / none`。这是独立记录的兼容性缺口，只在"启用 eligibility 过滤（1.1）+ 离线映射"这一组合下暴露；默认过滤 `OFF` 使该组合在当前 Alpha 不可达，**不阻断当前 Alpha**。在启用该组合之前必须补齐 1.1 的 `offline` 取值。
 
-**待 Owner 批准的兼容性差异**：1.0 schema 文件被就地扩展（文件版本号未变，接受取值变多）。另一条路是发布新的 schema 版本（例如 1.2）并让产物声明新版本，那会改变正式产物合同；本次未做，保留给 Owner 决定。`docs/SPEC.md` 与 `docs/PLAN.md` 未被修改。
+### 合同差异
+
+1.0 schema 文件被就地扩展（文件版本号未变，接受取值变多），范围限定 Internal Alpha。正式发行前重估 Schema 版本策略，**不宣称双向兼容**。`docs/SPEC.md` 与 `docs/PLAN.md` 未被修改。
