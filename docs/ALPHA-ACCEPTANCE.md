@@ -83,3 +83,27 @@
 读取方规则：任何 `writes_executed: true` 或 `authorization_granted: true` 的文件都不是本产物，解码器会拒绝它。
 
 **隐私**：计划逐行包含 `relative_path`，可能含客户名、项目名与敏感文件名。它不是脱敏件；不要上传 GitHub、远程日志或任何外部服务。公开评审只提供单独脱敏的汇总（计数与原因码）。
+
+## 5. Manifest Schema 1.0/1.1 兼容性（Owner 已批准，范围限 Internal Alpha）
+
+当前 Internal Alpha 产出的 Manifest 一律是 **1.0**。`schema_version` 取决于 `eligibility`：为空即 1.0，只有启用 eligibility 过滤才写 1.1；本构建默认过滤 `OFF`，App 也从不设置该选项。
+
+两处 schema 的声明与实际编码一致：`confirmed_by_reviewer` 在 1.0 和 1.1 中都已列入；`model_provider = offline` 只列入了 1.0。
+
+### 旧应用读取新产物的两条已知不兼容
+
+| 新产物中的取值 | 旧应用（不含该取值）的表现 |
+| --- | --- |
+| 字段状态 `confirmed_by_reviewer` | **不支持**。旧 schema 的枚举判定产物非法；旧 `FieldOutcome.Status` 没有该 case，`Codable` 解码直接失败。 |
+| `model_provider = offline` | **不支持**。同为旧 schema 枚举与解码器都不含该值，产物被判定非法或读不进来。 |
+
+两者都不是"降级显示为未知"这样温和的失效。不含上述取值的 Manifest（纯模型驱动、无人工确认字段）旧应用照常可读。
+
+### 当前 Alpha 的实际形态
+
+- 离线 Alpha 使用 **Manifest 1.0**；1.0 同时接受 `offline` 与 `confirmed_by_reviewer`，因此本构建的产物能被本构建完整复检（导出即 `revalidate` 通过）。
+- **Manifest 1.1 尚不接受 `offline`**：1.1 的 `model_provider` 枚举仍为 `openai / anthropic / local / none`。这是独立记录的兼容性缺口，只在"启用 eligibility 过滤（1.1）+ 离线映射"这一组合下暴露；默认过滤 `OFF` 使该组合在当前 Alpha 不可达，**不阻断当前 Alpha**。在启用该组合之前必须补齐 1.1 的 `offline` 取值。
+
+### 合同差异
+
+1.0 schema 文件被就地扩展（文件版本号未变，接受取值变多），范围限定 Internal Alpha。正式发行前重估 Schema 版本策略，**不宣称双向兼容**。`docs/SPEC.md` 与 `docs/PLAN.md` 未被修改。
