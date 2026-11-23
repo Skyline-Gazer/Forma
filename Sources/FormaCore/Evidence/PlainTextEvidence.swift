@@ -129,6 +129,11 @@ enum PlainTextEvidence {
         /// line break: two line breaks in a row are a paragraph break.
         private var lineHasContent = false
 
+        // Explicit rather than the synthesized memberwise one: a memberwise
+        // initializer for a nested `private` type is scoped to that type, so the
+        // caller below could not reach it.
+        init(text: String) { self.text = text }
+
         mutating func run() throws {
             for character in text {
                 if truncated { return }
