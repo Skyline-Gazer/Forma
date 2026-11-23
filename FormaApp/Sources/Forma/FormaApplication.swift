@@ -40,6 +40,11 @@ final class FormaAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard !didStart else { return }
         didStart = true
+        // The trace sink goes in before any model exists, so no instrumented
+        // stage of the first window can run unhooked. With no Instruments
+        // session attached the sink writes nothing, and each stage costs one
+        // closure test.
+        FormaPerf.install()
         Task { await state.start() }
     }
 
@@ -273,6 +278,19 @@ private struct WorkspaceAreas: View {
                 areaContent
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityIdentifier("area-\(selection.rawValue)-content")
+                    // Panel appearance is instrumented as its own event because
+                    // it is the moment that used to cost a registry read: a
+                    // view-owned `.task` re-ran here on every switch. Nothing
+                    // below does work - the evidence read hangs off the *file*
+                    // selection, which is what it always described - so the
+                    // pair of events, `area-switch` then `panel-appearance`,
+                    // with no `evidence-load` between them is what a Mac trace
+                    // reads as "the switch is free". The count is how many rows
+                    // the area is about to draw, which is the only number that
+                    // tells a 6-file fixture from a 1k one.
+                    .task(id: selection) {
+                        FormaPerf.record(PerfFact(stage: .panelAppearance, count: model.rows.count))
+                    }
             }
             .navigationTitle(selection.title)
             .inspector(isPresented: $inspectorVisible) {
@@ -288,7 +306,24 @@ private struct WorkspaceAreas: View {
         // unlike the old per-tab placement, it no longer cancels work on every
         // switch between areas. Quitting still goes through the delegate, which
         // runs the same registered cancellation.
-        .onDisappear { model.cancelAll() }
+        //
+        // The call is not `model.cancelAll()` any more, and that is the point:
+        // what an unmount owes is decided by FormaCore's transition rule
+        // (`apply(.shellClosed, …)`), and `ShellNavigationTests` fails the day
+        // an area switch grows the same effect. The interpreter is in
+        // `WorkspaceModel.perform(_:)`.
+        .onDisappear { model.navigate(.shellClosed) }
+        .onChange(of: storedArea) { _, value in
+            // Where the old shell's bug lived. Five areas used to mean five
+            // views each with a `.task` that re-ran, plus an `.onDisappear`
+            // that cancelled everything; a switch was a teardown and a cold
+            // start. Here a switch reaches the rule, the rule returns no
+            // effects for any of the twenty pairs, and the only things that
+            // happen are the counter FormaCore keeps and the signpost emitted
+            // beside it - which is what the trace recipe counts to prove the
+            // stall is gone rather than merely unmentioned.
+            model.navigate(.areaChanged(to: AppArea.restored(from: value)))
+        }
         .task {
             state.registerShutdown { model.cancelAll() }
             await model.restore()
@@ -321,7 +356,11 @@ private struct WorkspaceAreas: View {
                 Text(EgressConsent.defaultOffNote).font(.caption2).foregroundStyle(.secondary)
             }
         }
-        .onChange(of: model.selectedScopeID) { _, _ in model.resetAreaSelections() }
+        // Gone: a view resetting the area selections when the scope changed.
+        // The scope's own `didSet` raises `.scopeChanged`, whose effect list
+        // (`FormaCore`'s `apply`) contains `resetAreaSelections`, so the shell
+        // no longer holds a second copy of the rule that decides what a source
+        // switch owes - and an area switch, by the same list, owes nothing.
         .onChange(of: model.workspaceFileSelection) { _, _ in model.clearFileEvidence() }
         .task(id: model.mappingFileSelection) {
             model.mappingEvidenceSelection = nil
@@ -589,7 +628,10 @@ private struct WorkspaceAreas: View {
         panel.prompt = "Write Plan Here"
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
-            model.writeImportPlan(to: url)
+            // The encode and the write are off the main actor now (#151 audit
+            // item 4), so the click hands the work to a task and the notice
+            // arrives when the file exists.
+            Task { await model.writeImportPlan(to: url) }
         }
     }
 }
