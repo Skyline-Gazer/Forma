@@ -19,6 +19,11 @@ public enum AppArea: String, CaseIterable, Codable, Sendable, Identifiable {
     case exceptions = "exceptions"
     /// The provider, redaction and versions area.
     case settings = "settings"
+    /// The business Review Desk (#144 reworked under the #148 decision): the
+    /// guided source → AI understanding → file review → archive-preview flow.
+    /// Appended last on purpose - every earlier raw value keeps its persisted
+    /// identity; only the landing default moves here.
+    case reviewDesk = "review"
 
     public var id: String { rawValue }
 
@@ -30,6 +35,7 @@ public enum AppArea: String, CaseIterable, Codable, Sendable, Identifiable {
         case .importArchive: "归档"
         case .exceptions: "诊断"
         case .settings: "设置"
+        case .reviewDesk: "资料整理"
         }
     }
 
@@ -41,14 +47,27 @@ public enum AppArea: String, CaseIterable, Codable, Sendable, Identifiable {
         case .importArchive: "tray.and.arrow.down"
         case .exceptions: "exclamationmark.triangle"
         case .settings: "slider.horizontal.3"
+        case .reviewDesk: "checklist"
         }
     }
 
+    /// Where the app lands when no real area was persisted: the business
+    /// Review Desk (#144), not an engineering area. A persisted id outliving a
+    /// rename must degrade to a place the person can navigate from, not to
+    /// nothing - that place is now the desk.
+    public static let defaultLanding: AppArea = .reviewDesk
+
+    /// The sidebar order. The desk leads as the default route; the five
+    /// engineering areas follow unchanged as 高级/诊断 routes (#148: legacy
+    /// screens stay reachable, the desk is not a parallel tab). `ForEach`
+    /// renders this, never `allCases`, so appending an area cannot reorder
+    /// what a person learned.
+    public static let navigationOrder: [AppArea] = [.reviewDesk, .workspace, .mapping, .importArchive, .exceptions, .settings]
+
     /// How a stored selection comes back: an unknown or missing value is the
-    /// workspace, never a blank window. A persisted id outliving a rename must
-    /// degrade to a place the person can navigate from, not to nothing.
+    /// default landing area, never a blank window.
     public static func restored(from stored: String?) -> AppArea {
-        guard let stored, let area = AppArea(rawValue: stored) else { return .workspace }
+        guard let stored, let area = AppArea(rawValue: stored) else { return Self.defaultLanding }
         return area
     }
 }

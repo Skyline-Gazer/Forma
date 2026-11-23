@@ -51,6 +51,11 @@ public enum ShellCommands {
         case .exceptions:
             ToolbarCommand(id: "cancel-reprocess", title: "取消", systemImage: "stop.circle",
                            isEnabled: true, help: "停止本次重新处理")
+        case .reviewDesk:
+            // The desk runs the same model work the source areas start, so it
+            // cancels through the same command id.
+            ToolbarCommand(id: "cancel-work", title: "取消", systemImage: "stop.circle",
+                           isEnabled: true, help: "停止正在进行的扫描、识别或 AI 理解")
         case .importArchive, .settings:
             nil
         }
@@ -159,6 +164,40 @@ public enum ShellCommands {
         case .settings:
             // Settings owns its actions inside the form; the shell adds nothing.
             return []
+
+        case .reviewDesk:
+            // The guided desk reuses the existing command ids: every action it
+            // offers is the same model call the engineering areas make, so a
+            // scan started here and a scan started in 工作区 are one thing.
+            // The AI/manual-draft triggers live inside the page because they
+            // carry the egress confirmation; the toolbar never starts an
+            // egress run without it.
+            var result = [
+                ToolbarCommand(id: "add-source", title: "添加来源…", systemImage: "folder.badge.plus",
+                               isEnabled: idle,
+                               help: "登记一个本地或云盘文件夹，只读取清单与元数据"),
+            ]
+            if idle {
+                result += [
+                    ToolbarCommand(id: "scan-source", title: "扫描", systemImage: "arrow.clockwise",
+                                   isEnabled: true,
+                                   help: "扫描来源文件夹，生成文件清单"),
+                    ToolbarCommand(id: "build-context", title: "识别项目", systemImage: "square.3.layers.3d",
+                                   isEnabled: true,
+                                   help: "FormaCore 依据目录结构聚类项目候选，不读取内容"),
+                ]
+            } else if let cancel = cancelCommand(for: area) {
+                result.append(cancel)
+            }
+            result += [
+                ToolbarCommand(id: "build-plan", title: "归档预览", systemImage: "list.bullet.clipboard",
+                               isEnabled: idle,
+                               help: "从当前清单生成导入计划；此构建只读，不会写入"),
+                ToolbarCommand(id: "export-manifest", title: "导出…", systemImage: "square.and.arrow.up",
+                               isEnabled: idle,
+                               help: "写出清单、报告、异常、证据行、版本与摘要"),
+            ]
+            return result
         }
     }
 }
