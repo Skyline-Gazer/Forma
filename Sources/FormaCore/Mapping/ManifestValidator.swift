@@ -242,6 +242,18 @@ public struct ManifestValidator: Sendable {
                                                       detail: "Locator is outside the addressable range."))
                 continue
             }
+            // A text locator is the one kind whose range the program can check
+            // against its own quote without re-opening the file: the extractor
+            // cuts blocks no longer than the stored excerpt, so a row whose
+            // range and text disagree is a row that was never produced by a
+            // read. Every other kind addresses more than it quotes (a PDF page
+            // is longer than its excerpt), so only ordering is decidable there.
+            if case .text(let range)? = record.locator, range.count != (record.excerpt?.utf16.count ?? 0) {
+                violations.append(ValidationViolation(code: "locator_excerpt_mismatch",
+                                                      instancePath: citation.evidenceID,
+                                                      detail: "The locator does not address the stored excerpt."))
+                continue
+            }
             guard let policy = profile.fields[citation.field] else { continue }
             if !policy.allowedEvidenceSources.contains(record.source) {
                 violations.append(ValidationViolation(code: "source_not_allowed",
@@ -268,6 +280,8 @@ public struct ManifestValidator: Sendable {
             !part.isEmpty && paragraph >= 1 && range.lowerBound >= 0 && range.upperBound >= range.lowerBound
         case .xlsx(let sheet, let cell):
             !sheet.isEmpty && cell.range(of: #"^[A-Z]{1,3}[1-9][0-9]{0,6}$"#, options: .regularExpression) != nil
+        case .text(let range):
+            range.lowerBound >= 0 && range.upperBound > range.lowerBound
         }
     }
 

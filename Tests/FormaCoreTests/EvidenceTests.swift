@@ -204,8 +204,161 @@ struct EvidenceTests {
     }
 
     @Test func unsupportedFormatIsUnavailable() throws {
-        #expect(try extract(Data("Synthetic".utf8), extension: "txt") == EvidenceExtraction(status: .unavailable, items: []))
+        // `txt` became a supported body format in `evidence.v2` (#152); these are
+        // the formats that stay hash-and-name only. A name is a clue about a file,
+        // not a claim that Forma read anything in it, so the read must answer
+        // `unavailable` with no items rather than guess from the extension.
+        #expect(try extract(Data("Synthetic".utf8), extension: "rtf") == EvidenceExtraction(status: .unavailable,
+                                                                                            items: []))
+        #expect(try extract(Data("# Synthetic".utf8), extension: "md") == EvidenceExtraction(status: .unavailable,
+                                                                                             items: []))
+        #expect(EvidenceExtractor.supportedFileExtensions == ["pdf", "docx", "xlsx", "txt"])
     }
+
+    // MARK: - Plain text (#152)
+
+    @Test("a text body is cut into blocks whose locator addresses exactly its own quote")
+    func textBlocksAddressTheirOwnQuote() throws {
+        let body = """
+        示例项目_2026 智能化改造项目
+        招标公告
+
+        项目编号: ZB2026001
+        投标截止: 2026-03-18 09:00
+
+          本项目的投标主体为示例投标单位甲。
+        """
+        let result = try extract(Data(body.utf8), extension: "txt")
+        #expect(result.status == .ok)
+        let ranges = textRanges(result)
+        #expect(ranges.count == result.items.count, "every text item carries a text locator")
+        #expect(!ranges.isEmpty)
+        for (item, range) in zip(result.items, ranges) {
+            // The whole promise of a locator: reopen the document at these
+            // offsets and the stored excerpt is what you read.
+            #expect(slice(body, range) == item.text, "\(range) does not address \(item.text ?? "nil")")
+        }
+        // Blank lines are block boundaries, not content, and indentation is not
+        // quoted: each block starts at its first non-whitespace character.
+        #expect(result.items.first?.text == "示例项目_2026 智能化改造项目\n招标公告")
+        #expect(result.items.last?.text?.hasPrefix("本项目的投标主体为示例投标单位甲。") == true)
+        #expect(result.items.allSatisfy { ($0.text ?? "").isEmpty == false })
+        // Offsets never overlap and never run backwards.
+        for (left, right) in zip(ranges, ranges.dropFirst()) {
+            #expect(right.lowerBound > left.upperBound, "blocks must not overlap")
+        }
+    }
+
+    @Test("text encoding is detected by byte-order mark and undecodable bytes are refused")
+    func textEncodings() throws {
+        let body = "项目名称 示例项目_2026\n投标截止 2026-03-18"
+        var variants: [Data] = [
+            Data(body.utf8),
+            Data([0xEF, 0xBB, 0xBF]) + Data(body.utf8),
+            Data([0xFF, 0xFE]) + body.utf16LEBytes,
+            Data([0xFE, 0xFF]) + body.utf16BEBytes,
+        ]
+        for variant in variants {
+            let result = try extract(variant, extension: "txt")
+            #expect(result.status == .ok, "byte order mark and both widths must decode")
+            #expect(result.items.first?.text?.contains("示例项目_2026") == true)
+            #expect(result.items.allSatisfy { !($0.text ?? "").contains("\u{FFFD}") })
+        }
+        // What is not text is reported as unreadable instead of quoted as if it
+        // were: mojibake in a prompt is fabricated evidence.
+        variants = [
+            Data([0x80, 0x81, 0x82, 0x83]),                       // invalid UTF-8
+            Data([0x70, 0x00, 0x00, 0x00]),                       // NUL inside: a binary file
+            Data([0xFF, 0xFE, 0x41]),                             // UTF-16 with an odd tail
+            Data([0xFF, 0xFE]) + Data([0x00, 0xD8, 0x41, 0x00]),  // unpaired high surrogate
+            Data([0xFF, 0xFE]) + Data([0x00, 0xDC, 0x41, 0x00]),  // lone low surrogate
+        ]
+        for variant in variants {
+            #expect(try extract(variant, extension: "txt") == EvidenceExtraction(status: .unavailable, items: []),
+                    "\(variant) must not produce evidence")
+        }
+    }
+
+    @Test("an empty or blank text file yields no content evidence")
+    func emptyTextIsUnavailableNotBlankEvidence() throws {
+        for body in ["", "\n", "   \n\t\n"] {
+            #expect(try extract(Data(body.utf8), extension: "txt") == EvidenceExtraction(status: .unavailable,
+                                                                                         items: []))
+        }
+        // A file whose only content is a number reads fine and says nothing: the
+        // extractor reports the bytes, it does not decide they are meaningful.
+        let result = try extract(Data("123456".utf8), extension: "txt")
+        #expect(result.status == .ok)
+        #expect(result.items.count == 1)
+        #expect(result.items.first?.text == "123456")
+    }
+
+    @Test("a long text line is sliced, and a long document stops at the shared budget")
+    func textBudgetsAndSlicing() throws {
+        let single = String(repeating: "字", count: 5_000)  // one line, 5,000 UTF-16 units
+        let sliced = try extract(Data(single.utf8), extension: "txt")
+        #expect(sliced.status == .ok, "one long line is still readable text")
+        let pieces = textRanges(sliced)
+        // The block bound is 2,000 units, so 5,000 units is 2,000 + 2,000 + 1,000.
+        #expect(pieces.count == 3)
+        #expect(pieces.allSatisfy { $0.count <= 2_000 })
+        #expect(pieces.first?.lowerBound == 0)
+        #expect(pieces.reduce(0) { $0 + $1.count } == 5_000, "slicing must not drop or overlap text")
+        for (left, right) in zip(pieces, pieces.dropFirst()) { #expect(right.lowerBound == left.upperBound) }
+        for (item, range) in zip(sliced.items, pieces) { #expect(slice(single, range) == item.text) }
+
+        // 700 lines is ~15,400 units, past the 12,000-unit document budget the
+        // PDF and DOCX reads share, so the read must say it stopped.
+        let manyLines = (1...700).map { "第 \($0) 行 项目编号 ZB2026001" }.joined(separator: "\n")
+        let truncated = try extract(Data(manyLines.utf8), extension: "txt")
+        #expect(truncated.status == .truncated)
+        let ranges = textRanges(truncated)
+        #expect(ranges.count == truncated.items.count)
+        #expect(ranges.reduce(0) { $0 + $1.count } == 12_000, "the read quotes the budget, then says it stopped")
+        #expect(ranges.allSatisfy { $0.upperBound <= manyLines.utf16.count })
+        for (item, range) in zip(truncated.items, ranges) { #expect(slice(manyLines, range) == item.text) }
+    }
+
+    @Test("a text read is reproducible for the same bytes")
+    func textReadIsReproducible() throws {
+        let body = "示例项目_2026 招标公告\n\n投标主体 示例投标单位甲\n"
+        let first = try extract(Data(body.utf8), extension: "txt")
+        let again = try extract(Data(body.utf8), extension: "txt")
+        #expect(first == again, "a citation minted from one read must resolve against the next")
+    }
+}
+
+/// The UTF-16 ranges a read addressed, in order.
+func textRanges(_ extraction: EvidenceExtraction) -> [Range<Int>] {
+    extraction.items.compactMap { item in
+        if case .text(let range) = item.locator { return range }
+        return nil
+    }
+}
+
+fileprivate extension String {
+    /// The UTF-16 code units of the string in the given byte order, so a fixture
+    /// can write a UTF-16 file without going through Foundation's encodings.
+    var utf16LEBytes: Data {
+        var data = Data()
+        for unit in utf16 { data.append(UInt8(unit & 0xFF)); data.append(UInt8(unit >> 8)) }
+        return data
+    }
+
+    var utf16BEBytes: Data {
+        var data = Data()
+        for unit in utf16 { data.append(UInt8(unit >> 8)); data.append(UInt8(unit & 0xFF)) }
+        return data
+    }
+}
+
+/// Reads the text a UTF-16 range addresses in the decoded document: the promise
+/// every locator makes, checked directly instead of by trusting the offsets.
+func slice(_ text: String, _ range: Range<Int>) -> String {
+    guard range.lowerBound >= 0, range.upperBound <= text.utf16.count, range.lowerBound <= range.upperBound else {
+        return "\u{0}OUT_OF_RANGE\u{0}"
+    }
+    return String(text.utf16[range.lowerBound..<range.upperBound])
 }
 
 private let wordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"

@@ -100,7 +100,7 @@ struct MetadataValuesTests {
             sourceRootID: UUID(uuidString: "00000000-0000-4000-8000-000000000004")!, profile: profile,
             casePack: (profile.casePack.id, profile.casePack.version), modelProvider: "anthropic",
             modelID: "claude-haiku-4-5-20251001", contextRevision: 1, promptVersion: "mapping.v1",
-            extractorVersion: "evidence.v1", redactionVersion: nil,
+            extractorVersion: EvidenceRegistry.extractorVersion, redactionVersion: nil,
             inputDigest: String(repeating: "b", count: 64), contextDigest: String(repeating: "c", count: 64),
             createdAt: Date(timeIntervalSince1970: 1_800_000_000), state: .draft
         )

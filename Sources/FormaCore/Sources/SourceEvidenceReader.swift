@@ -14,7 +14,9 @@ enum SourceEvidenceReader {
     static func capture(_ stored: StoredSourceEntry, root: StoredSourceRoot, extracting: Bool) throws -> SourceEvidenceCapture {
         try Task.checkCancellation()
         let fileExtension = (stored.entry.relativePath as NSString).pathExtension.lowercased()
-        if extracting && !["pdf", "docx", "xlsx"].contains(fileExtension) { return .init(status: .unavailable) }
+        if extracting && !EvidenceExtractor.supportedFileExtensions.contains(fileExtension) {
+            return .init(status: .unavailable)
+        }
         do {
             return try root.withAccess { access in
                 try coordinatedCapture(stored, root: access, extracting: extracting)

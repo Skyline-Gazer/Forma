@@ -26,7 +26,7 @@ struct ManifestEligibilityBlockTests {
             sourceRootID: UUID(uuidString: "00000000-0000-4000-8000-0000000000A3")!,
             profile: profile, casePack: ("forma-governance-cases", "1.0"), modelProvider: "anthropic",
             modelID: nil, contextRevision: 1, promptVersion: "mapping.v1",
-            extractorVersion: "evidence.v1", redactionVersion: nil,
+            extractorVersion: EvidenceRegistry.extractorVersion, redactionVersion: nil,
             inputDigest: String(repeating: "b", count: 64), contextDigest: String(repeating: "c", count: 64),
             createdAt: Date(timeIntervalSince1970: 1_800_000_000), state: .draft, eligibility: eligibility)
     }
