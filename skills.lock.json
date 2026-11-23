@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "purpose": "Project-scoped advisory developer guidance for native macOS SwiftUI (issue #149). Advisory only: not a product feature, not a runtime or build dependency, and never vendored into FormaCore or FormaApp.",
+  "install_dir": ".agents/skills",
+  "authority_order": [
+    "Apple HIG and Apple framework documentation",
+    "the ADS revision pinned in ads-pin.txt (.ads gitlink)",
+    "Forma project documents (docs/SPEC.md, docs/UI-DESIGN-CONTRACT-PROPOSAL.md once accepted)",
+    "third-party advisory skills recorded in this file"
+  ],
+  "non_goals": [
+    "A skill is never a runtime dependency and is never bundled into the app; no npm, no package resolution and no build step is run by scripts/install_skills.sh.",
+    "A skill never overrides Apple HIG, the pinned ADS revision, the macOS 14 deployment minimum or Swift language mode 6.",
+    "Rules that assume iOS 27, iPhone-only layouts, Swift 6.4 or a newer Xcode than CI's macOS-15/Xcode 26.3 are rejected on review; use #available only where an actual API requires it.",
+    "The secondary skill is not a permanent instruction dump: it is invoked file-by-file for independent review of key SwiftUI PRs only.",
+    "The skills' own helper scripts are never executed by the installer; anything that drives xctrace/Instruments runs only on a Mac with explicit scope."
+  ],
+  "skills": [
+    {
+      "name": "swiftui-expert-skill",
+      "role": "primary implementation assistant",
+      "upstream": "https://github.com/AvdLee/SwiftUI-Agent-Skill",
+      "commit": "62bd760f005093d1e2e4de5db156e456a5f96400",
+      "commit_subject": "Bump version to 5.3.0",
+      "commit_date": "2026-11-06T08:39:42Z",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_header": "MIT License",
+      "skill_path": "skills/swiftui-expert-skill",
+      "declared_version": "5.3.0",
+      "declared_version_source": "plugin.json at the pinned commit (also package.json `pi.skills` -> ./skills/swiftui-expert-skill)",
+      "use_scope": "Implementation assistance for macOS scenes and windows, toolbar and inspector placement, state and layout, accessibility, and reading xctrace output. Guidance, not authority.",
+      "references": [
+        "macos-scenes.md",
+        "macos-views.md",
+        "macos-window-styling.md",
+        "toolbar-patterns.md",
+        "view-structure.md",
+        "layout-best-practices.md",
+        "state-management.md",
+        "environment-patterns.md",
+        "focus-patterns.md",
+        "accessibility-patterns.md",
+        "list-patterns.md",
+        "scroll-patterns.md",
+        "localization.md",
+        "performance-patterns.md",
+        "trace-recording.md",
+        "trace-analysis.md"
+      ],
+      "cautions": [
+        "skills/swiftui-expert-skill/scripts/record_trace.py, analyze_trace.py and the instruments_parser directory drive xctrace on macOS only; never executed here.",
+        "references/latest-apis.md and liquid-glass.md may assume OS versions above the Forma baseline; treat them as future work, not as rules for this codebase.",
+        "the upstream repository also ships .agents/skills/update-swiftui-apis; that is an upstream meta-skill, not a Forma rule source."
+      ],
+      "provenance_verified": {
+        "date": "2026-11-23",
+        "where": "DevBox (Linux), GitHub REST API, unauthenticated read access",
+        "how": [
+          "gh api repos/AvdLee/SwiftUI-Agent-Skill/commits/62bd760f005093d1e2e4de5db156e456a5f96400 -> object exists, message \"Bump version to 5.3.0\"",
+          "gh api repos/AvdLee/SwiftUI-Agent-Skill/license?ref=62bd760f005093d1e2e4de5db156e456a5f96400 -> SPDX MIT, path LICENSE",
+          "gh api repos/AvdLee/SwiftUI-Agent-Skill/git/trees/62bd760f005093d1e2e4de5db156e456a5f96400 -> recorded the top-level structure in docs/SKILLS-ADOPTION.md without vendoring the repository"
+        ]
+      }
+    },
+    {
+      "name": "swiftui-pro",
+      "role": "secondary independent reviewer, selected files only",
+      "upstream": "https://github.com/twostraws/SwiftUI-Agent-Skill",
+      "commit": "f2920b63995263f57b3e198674e89a602efba6d2",
+      "commit_subject": "Merge pull request #27 from ivan-magda/flatten-plugin-layout",
+      "commit_date": "2026-10-26T16:53:18Z",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_header": "MIT License",
+      "skill_path": "swiftui-pro",
+      "declared_version": "2.0.0",
+      "declared_version_source": "SKILL.md front-matter `metadata.version` at the pinned commit",
+      "use_scope": "Independent second opinion on key SwiftUI PRs (App Shell, navigation, review desk) against the reference files listed below. Never a permanent agent instruction set, never both skills in the same prompt by default.",
+      "references": [
+        "design.md",
+        "data.md",
+        "views.md",
+        "navigation.md",
+        "performance.md",
+        "performance-plus.md",
+        "resizability.md",
+        "accessibility.md",
+        "localization.md"
+      ],
+      "cautions": [
+        "reviewer-only: adopting its advice still requires the Apple/ADS hierarchy in this file and a human reviewer.",
+        "resizability.md and design guidance may target platforms newer than macOS 14; the Forma baseline wins."
+      ],
+      "provenance_verified": {
+        "date": "2026-11-23",
+        "where": "DevBox (Linux), GitHub REST API, unauthenticated read access",
+        "how": [
+          "gh api repos/twostraws/SwiftUI-Agent-Skill/commits/f2920b63995263f57b3e198674e89a602efba6d2 -> object exists, message \"Merge pull request #27 from ivan-magda/flatten-plugin-layout\"",
+          "gh api repos/twostraws/SwiftUI-Agent-Skill/license?ref=f2920b63995263f57b3e198674e89a602efba6d2 -> SPDX MIT, path LICENSE",
+          "gh api repos/twostraws/SwiftUI-Agent-Skill/git/trees/f2920b63995263f57b3e198674e89a602efba6d2 -> recorded the top-level structure in docs/SKILLS-ADOPTION.md without vendoring the repository"
+        ]
+      }
+    }
+  ]
+}
