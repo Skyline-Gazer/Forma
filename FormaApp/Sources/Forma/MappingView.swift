@@ -1,110 +1,43 @@
-import AppKit
 import FormaCore
 import SwiftUI
-import UniformTypeIdentifiers
 
-/// The mapping area: run FormaCore's engine over the current listing, read the
-/// manifest it produced file by file, export the bundle and re-check it offline.
-///
-/// Every value here is FormaCore's: a `ManifestEntry` field outcome, a
-/// `MappingRunOutcome` counter, a `ValidationReport` group, an
+/// The mapping area inside the shell: the run/manifest diagnostics pane and the
+/// file table. The per-file detail, the metadata slots and the evidence rows
+/// moved to the shell inspector (`MappingInspector`); the toolbar commands to
+/// the shell grammar. Every value here is still FormaCore's: a `ManifestEntry`
+/// field outcome, a `MappingRunOutcome` counter, a `ValidationReport` group, an
 /// `ManifestExport.Summary` or a `Revalidation`. A slot FormaCore left unknown
 /// says so, and a request FormaCore refused reports its own error text.
 struct MappingView: View {
     @ObservedObject var model: WorkspaceModel
-    @State private var selectedFile: UUID?
-    @State private var selectedEvidence: String?
-    @State private var importing = false
-
-    private var row: WorkspaceModel.MappingRow? {
-        model.rows.first { $0.sourceID == selectedFile }
-    }
+    /// The width bounds the shell declared for this area's leading pane.
+    let leading: AreaWidth
 
     var body: some View {
-        NavigationSplitView {
+        HSplitView {
             runPanel
-                .navigationTitle("Mapping")
-                .navigationSplitViewColumnWidth(min: 250, ideal: 310)
-        } detail: {
+                .areaWidth(leading)
             if model.rows.isEmpty {
                 ContentUnavailableView("No mapping result", systemImage: "tablecells",
                                        description: Text(emptyReason))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                HSplitView {
-                    fileTable
-                        .frame(minWidth: 430)
-                    detailPane
-                        .frame(minWidth: 300, idealWidth: 390)
-                }
+                fileTable
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-        }
-        .toolbar {
-            ToolbarItemGroup {
-                if model.phase.isBusy {
-                    Button("Cancel", systemImage: "stop.circle") { model.cancelWork() }
-                        .accessibilityIdentifier("cancel-mapping")
-                } else {
-                    Button("Map Files", systemImage: "square.text.square") {
-                        // Offline mode never sends anything, so the egress switch
-                        // is irrelevant to it; AI mode still needs consent.
-                        model.runMapping(egress: model.plannerMode == .ai && model.allowCloud)
-                    }
-                    .disabled(!model.canMap || (model.plannerMode == .ai && !model.allowCloud))
-                    .help(model.plannerMode == .offline
-                          ? "Draft every record with no field claimed; nothing is sent and no field is guessed"
-                          : model.allowCloud
-                            ? "Register evidence, then send one mapping request per batch"
-                            : "Cloud egress is off, so nothing may be sent: enable it in Settings")
-                    .accessibilityIdentifier("run-mapping")
-                    // Only meaningful with a Provider: the offline planner never
-                    // sends, so a second "without egress" button would offer the
-                    // same run twice under a misleading name.
-                    if model.plannerMode == .ai {
-                        Button("Assess Without Egress", systemImage: "desktopcomputer") {
-                            model.runMapping(egress: false)
-                        }
-                        .disabled(!model.canMap)
-                        .help("FormaCore refuses every provider request; each file keeps the reason it recorded")
-                        .accessibilityIdentifier("assess-local")
-                    }
-                }
-                Button("Export…", systemImage: "square.and.arrow.up", action: chooseExportDirectory)
-                    .disabled(model.manifest == nil || model.phase.isBusy)
-                    .help("Write the manifest, report, exceptions, evidence rows, versions and digests")
-                    .accessibilityIdentifier("export-manifest")
-                Button("Open Bundle…", systemImage: "folder.badge.magnifyingglass") { importing = true }
-                    .disabled(model.phase.isBusy)
-                    .accessibilityIdentifier("open-bundle")
-                Button("Revalidate", systemImage: "checkmark.seal") { model.revalidate() }
-                    .disabled(model.bundleURL == nil || model.phase.isBusy)
-                    .accessibilityIdentifier("revalidate-bundle")
-            }
-        }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.folder, .json]) { result in
-            switch result {
-            case .success(let url): model.loadBundle(from: url)
-            case .failure(let error): model.importRejected(error)
-            }
-        }
-        .task(id: selectedFile) {
-            selectedEvidence = nil
-            if let selectedFile { await model.loadEvidence(for: selectedFile) }
-        }
-        .sheet(item: $model.draft) { draft in
-            correctionSheet(draft)
         }
     }
 
     private var emptyReason: String {
-        if model.selectedScope == nil { return "Choose a source in the Workspace area." }
+        if model.selectedScope == nil { return "先在「工作区」选择一个来源。" }
         if model.context == nil {
-            return "Build a project context in the Workspace area first: FormaCore will not map files without one."
+            return "先在「工作区」构建项目上下文：没有上下文时 FormaCore 不会映射文件。"
         }
-        if model.manifest == nil { return "Run the mapping engine, or open an exported bundle." }
-        return "FormaCore wrote no entry for this run."
+        if model.manifest == nil { return "运行映射引擎，或打开一个已导出的映射包。" }
+        return "FormaCore 本次运行没有写出任何条目。"
     }
 
-    // MARK: - Left panel
+    // MARK: - Diagnostics pane
 
     private var runPanel: some View {
         List {
@@ -112,25 +45,20 @@ struct MappingView: View {
                 Picker("Mode", selection: Binding(get: { model.plannerMode },
                                                   set: { model.plannerMode = $0 })) {
                     ForEach([WorkspaceModel.PlannerMode.offline, .ai], id: \.self) { mode in
-                        Text(mode.label).tag(mode)
+                        Text(plannerModeLabel(mode.grammar)).tag(mode)
                     }
                 }
                 .accessibilityIdentifier("mapping-mode")
                 if model.plannerMode == .offline {
-                    Label("Offline planner: no Provider is called and nothing leaves the Mac. The app "
-                          + "still registers local evidence rows for each file so you can confirm a field by "
-                          + "quoting its own text; a placeholder that is not downloaded stays unknown instead of "
-                          + "being fetched. The planner itself claims no field, and the manifest records the "
-                          + "provider as `offline`.",
-                          systemImage: "iphone.slash")
+                    // The mode switch is the reachable statement of what
+                    // offline means; the banner no longer repeats it at length
+                    // (owner decision: Offline Planner stays, not promoted).
+                    Label(offlinePlannerShortNotice, systemImage: "iphone.slash")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("offline-mode-notice")
                 }
                 LabeledContent("Phase", value: model.phase.label)
-                if let notice = model.notice {
-                    Text(notice).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                }
                 if let outcome = model.outcome {
                     LabeledContent("Batches", value: outcome.batches.formatted())
                     LabeledContent("Provider requests", value: outcome.requests.formatted())
@@ -163,10 +91,15 @@ struct MappingView: View {
                     LabeledContent("Grants execution", value: manifest.envelope.grantsExecution ? "Yes" : "No · nothing is written")
                     LabeledContent("Entries", value: manifest.entries.count.formatted())
                     LabeledContent("Eligible by policy simulation", value: "\(manifest.eligibleCount.formatted()) of \(manifest.entries.count.formatted())")
+                    let digestCopy = businessCopy(for: "digest")
                     Text("input \(manifest.envelope.inputDigest)").font(.caption2.monospaced())
                         .foregroundStyle(.secondary).textSelection(.enabled)
+                        .help(digestCopy.sentence)
+                        .accessibilityIdentifier("diagnostic-raw-input-digest")
                     Text("context \(manifest.envelope.contextDigest)").font(.caption2.monospaced())
                         .foregroundStyle(.secondary).textSelection(.enabled)
+                        .help(digestCopy.sentence)
+                        .accessibilityIdentifier("diagnostic-raw-context-digest")
                 }
                 Section("Correction attempts") {
                     // Each way this list can be empty says something different,
@@ -210,8 +143,10 @@ struct MappingView: View {
                     LabeledContent("Unknown", value: manifest.report.counts.unknown.formatted())
                     LabeledContent("Invalidated", value: manifest.report.counts.invalidated.formatted())
                     ForEach(manifest.report.groups, id: \.group) { group in
-                        LabeledContent(group.group.rawValue,
-                                       value: "\(group.status.rawValue) · \(group.violations.count.formatted()) violations")
+                        LabeledContent(businessCopy(for: group.group.rawValue).headline,
+                                       value: "\(businessCopy(for: group.status.rawValue).headline) · \(group.violations.count.formatted()) violations")
+                            .help(businessCopy(for: group.group.rawValue).sentence)
+                            .accessibilityIdentifier("diagnostic-raw-\(group.group.rawValue)")
                     }
                 }
             }
@@ -252,10 +187,21 @@ struct MappingView: View {
                     LabeledContent("Grants execution", value: revalidation.grantsExecution ? "Yes" : "No")
                     ForEach(revalidation.violations.indices, id: \.self) { index in
                         let violation = revalidation.violations[index]
+                        let copy = businessCopy(for: violation.code)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(violation.code) · \(violation.instancePath)").font(.caption.monospaced())
+                            Text("\(copy.headline) · \(violation.instancePath)")
+                                .font(.caption)
                             Text(violation.detail).font(.caption2).foregroundStyle(.secondary)
+                            // The raw code lives here and nowhere else the
+                            // person reads as prose (owner failure #8).
+                            DisclosureGroup("诊断详情") {
+                                Text("\(copy.rawCode) · \(violation.instancePath)")
+                                    .font(.caption2.monospaced())
+                                    .textSelection(.enabled)
+                            }
+                            .font(.caption2)
                         }
+                        .accessibilityIdentifier("diagnostic-raw-\(violation.code)-\(index)")
                     }
                 }
             }
@@ -263,8 +209,9 @@ struct MappingView: View {
                 LabeledContent("Provider", value: model.provider.displayName)
                 LabeledContent("Model", value: model.modelID)
                 LabeledContent("Files per batch", value: model.entryLimit.formatted())
-                LabeledContent("Cloud egress", value: model.allowCloud ? "Consented for one run" : "Off")
-                Text("Provider, model and egress consent are set in the Settings area.")
+                LabeledContent(EgressConsent.shortLabel,
+                               value: model.allowCloud ? "本次运行已获同意" : "关闭")
+                Text("Provider、模型与外发许可在「设置」区域调整。")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -273,7 +220,7 @@ struct MappingView: View {
     // MARK: - Table
 
     private var fileTable: some View {
-        Table(model.rows, selection: $selectedFile) {
+        Table(model.rows, selection: $model.mappingFileSelection) {
             TableColumn("Relative path") { row in
                 Text(row.entry.relativePath).lineLimit(1).help(row.entry.relativePath)
             }
@@ -286,7 +233,10 @@ struct MappingView: View {
             }
             .width(min: 100, ideal: 130)
             TableColumn("State") { row in
-                Text(row.entry.state.rawValue)
+                let copy = businessCopy(for: row.entry.state.rawValue)
+                Text(copy.headline)
+                    .help(copy.sentence)
+                    .accessibilityIdentifier("diagnostic-raw-\(row.entry.state.rawValue)")
             }
             .width(min: 80, ideal: 95)
             TableColumn("Confidence (model-reported)") { row in
@@ -307,16 +257,57 @@ struct MappingView: View {
         }
     }
 
-    // MARK: - Detail
+    /// One attempt, described by what it did to the version history: a stored
+    /// decision names the revision it wrote, a refusal names the one it read
+    /// and wrote nothing. A verified row with no revision is the later of two
+    /// accepted attempts that both recorded the same revision they read - the
+    /// version 1 migration credits the successor to the earlier one and leaves
+    /// this one unattributed rather than guessing. Anything else came from
+    /// outside a review.
+    private static func outcomeLine(_ record: CorrectionRecord) -> (text: String, color: Color) {
+        switch (record.reviewState, record.producedRevision) {
+        case (.evidenceVerified, let produced?):
+            ("Recorded at revision \(produced.formatted()), superseding "
+                + "\(record.manifestRevision.formatted()) · replaced \(record.previousValue ?? "nothing")",
+             .secondary)
+        case (.rejected, _):
+            ("Refused by FormaCore · attempted against revision "
+                + "\(record.manifestRevision.formatted()) · published nothing", .orange)
+        case (.evidenceVerified, nil):
+            ("Verified decision against revision \(record.manifestRevision.formatted()) - a second "
+                + "attempt named the same revision, so the version 1 migration left this one without "
+                + "a version it wrote", .orange)
+        default:
+            ("Row \(record.id) is neither shape a review produces - verified with the revision it "
+                + "wrote, or refused with none: it carries \(record.reviewState.rawValue) with "
+                + (record.producedRevision.map { "revision \($0.formatted())" } ?? "no produced revision"),
+             .red)
+        }
+    }
+}
 
-    @ViewBuilder private var detailPane: some View {
+/// The mapping inspector: the selected file's manifest entry, its metadata
+/// slots with evidence chips, and the evidence rows behind those chips. This is
+/// the detail pane the area used to own; the corrections it launches are still
+/// decided by FormaCore alone.
+@MainActor
+struct MappingInspector: View {
+    @ObservedObject var model: WorkspaceModel
+
+    private var row: WorkspaceModel.MappingRow? {
+        model.rows.first { $0.sourceID == model.mappingFileSelection }
+    }
+
+    var body: some View {
         if let row {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(row.entry.relativePath)
                         .font(.headline)
                         .textSelection(.enabled)
-                    LabeledContent("Decision state", value: row.entry.state.rawValue)
+                    let stateCopy = businessCopy(for: row.entry.state.rawValue)
+                    LabeledContent("Decision state", value: stateCopy.headline)
+                        .help(stateCopy.sentence)
                     LabeledContent("Model-reported confidence", value: row.entry.confidence?.rawValue ?? "Not reported")
                     LabeledContent("Eligible for auto-execution",
                                    value: row.entry.eligibleForAutoExecution
@@ -329,7 +320,10 @@ struct MappingView: View {
                     LabeledContent("Source version", value: row.entry.sourceVersion.formatted())
                     LabeledContent("File state", value: sourceText(row.source))
                     if let reason = row.entry.invalidatedReason {
-                        LabeledContent("Invalidated by FormaCore", value: reason)
+                        let copy = businessCopy(for: reason)
+                        LabeledContent("Invalidated by FormaCore", value: copy.headline)
+                            .help(copy.sentence)
+                            .accessibilityIdentifier("diagnostic-raw-\(reason)")
                     }
                     if let failure = row.failure {
                         Divider()
@@ -353,7 +347,8 @@ struct MappingView: View {
                 .padding(15)
             }
         } else {
-            ContentUnavailableView("Select a file", systemImage: "tablecells")
+            ContentUnavailableView("Select a file", systemImage: "tablecells",
+                                   description: Text("在「映射」的文件表中选择一行。"))
         }
     }
 
@@ -383,7 +378,7 @@ struct MappingView: View {
             if let outcome, !outcome.evidenceIDs.isEmpty {
                 HStack(spacing: 6) {
                     ForEach(outcome.evidenceIDs, id: \.self) { id in
-                        Button(chipTitle(id)) { selectedEvidence = id }
+                        Button(chipTitle(id)) { model.mappingEvidenceSelection = id }
                             .buttonStyle(.borderless)
                             .font(.caption)
                             .accessibilityIdentifier("evidence-\(id)")
@@ -404,73 +399,8 @@ struct MappingView: View {
         }
     }
 
-    @ViewBuilder private func correctionSheet(_ draft: WorkspaceModel.CorrectionDraft) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Correct \(draft.field.rawValue)").font(.headline)
-            if let policy = model.selectedProfile?.fields[draft.field] {
-                Text(policy.rule).font(.caption).foregroundStyle(.secondary)
-            }
-            TextField("New value", text: Binding(
-                get: { draft.value },
-                set: { model.draft?.value = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-            .accessibilityIdentifier("correction-value")
-            Text("An empty value clears the slot and needs no citation.")
-                .font(.caption2).foregroundStyle(.secondary)
-            Divider()
-            Text("Cite the rows this decision rests on").font(.subheadline)
-            let rows = model.evidenceBySource[draft.sourceID] ?? []
-            if rows.isEmpty {
-                Text("No registered evidence for this file, so a value here will be refused as an opinion.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(rows, id: \.id) { record in
-                        Toggle(isOn: Binding(
-                            get: { draft.citations.contains(record.id) },
-                            set: { turning in
-                                if turning { model.draft?.citations.insert(record.id) }
-                                else { model.draft?.citations.remove(record.id) }
-                            }
-                        )) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("\(record.source.rawValue) · \(record.id)").font(.caption.monospaced())
-                                Text(record.excerpt ?? "No excerpt").font(.caption2).lineLimit(2)
-                            }
-                        }
-                        .toggleStyle(.checkbox)
-                        .accessibilityIdentifier("cite-\(record.id)")
-                    }
-                }
-            }
-            Divider()
-            HStack {
-                Button("Cancel") { model.cancelCorrection() }
-                    .accessibilityIdentifier("cancel-correction")
-                if model.recordingDraftID == draft.id {
-                    // A disabled button alone says nothing about a click that
-                    // was accepted: the press looks ignored, so the reviewer
-                    // presses again. Keyed on this draft rather than on the
-                    // model's phase, which another operation can hold.
-                    ProgressView().controlSize(.small)
-                    Text("Recording…").font(.caption).foregroundStyle(.secondary)
-                        .accessibilityIdentifier("correction-progress")
-                } else {
-                    Button("Record Correction") { model.applyCorrection() }
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(model.phase.isBusy)
-                        .accessibilityIdentifier("record-correction")
-                }
-            }
-        }
-        .padding(15)
-        .frame(width: 540, height: 480)
-    }
-
     @ViewBuilder private var evidencePane: some View {
-        if let id = selectedEvidence {
+        if let id = model.mappingEvidenceSelection {
             if let record = model.record(for: id) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Evidence \(record.id)").font(.caption.monospaced()).textSelection(.enabled)
@@ -541,44 +471,78 @@ struct MappingView: View {
         case nil: "No content locator"
         }
     }
+}
 
-    private func chooseExportDirectory() {
-        let panel = NSOpenPanel()
-        panel.title = "Choose a folder for the export bundle"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.prompt = "Export Here"
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            Task { @MainActor in model.export(to: url) }
-        }
-    }
+/// The correction sheet, presented by the shell for whichever area launched
+/// it. Its bindings write only into the model's draft; FormaCore alone decides
+/// whether the citations recorded are enough for a new revision.
+@MainActor
+struct CorrectionSheet: View {
+    @ObservedObject var model: WorkspaceModel
+    let draft: WorkspaceModel.CorrectionDraft
 
-    /// One attempt, described by what it did to the version history: a stored
-    /// decision names the revision it wrote, a refusal names the one it read
-    /// and wrote nothing. A verified row with no revision is the later of two
-    /// accepted attempts that both recorded the same revision they read - the
-    /// version 1 migration credits the successor to the earlier one and leaves
-    /// this one unattributed rather than guessing. Anything else came from
-    /// outside a review.
-    private static func outcomeLine(_ record: CorrectionRecord) -> (text: String, color: Color) {
-        switch (record.reviewState, record.producedRevision) {
-        case (.evidenceVerified, let produced?):
-            ("Recorded at revision \(produced.formatted()), superseding "
-                + "\(record.manifestRevision.formatted()) · replaced \(record.previousValue ?? "nothing")",
-             .secondary)
-        case (.rejected, _):
-            ("Refused by FormaCore · attempted against revision "
-                + "\(record.manifestRevision.formatted()) · published nothing", .orange)
-        case (.evidenceVerified, nil):
-            ("Verified decision against revision \(record.manifestRevision.formatted()) - a second "
-                + "attempt named the same revision, so the version 1 migration left this one without "
-                + "a version it wrote", .orange)
-        default:
-            ("Row \(record.id) is neither shape a review produces - verified with the revision it "
-                + "wrote, or refused with none: it carries \(record.reviewState.rawValue) with "
-                + (record.producedRevision.map { "revision \($0.formatted())" } ?? "no produced revision"),
-             .red)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Correct \(draft.field.rawValue)").font(.headline)
+            if let policy = model.selectedProfile?.fields[draft.field] {
+                Text(policy.rule).font(.caption).foregroundStyle(.secondary)
+            }
+            TextField("New value", text: Binding(
+                get: { draft.value },
+                set: { model.draft?.value = $0 }
+            ))
+            .textFieldStyle(.roundedBorder)
+            .accessibilityIdentifier("correction-value")
+            Text("An empty value clears the slot and needs no citation.")
+                .font(.caption2).foregroundStyle(.secondary)
+            Divider()
+            Text("Cite the rows this decision rests on").font(.subheadline)
+            let rows = model.evidenceBySource[draft.sourceID] ?? []
+            if rows.isEmpty {
+                Text("No registered evidence for this file, so a value here will be refused as an opinion.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 4) {
+                    ForEach(rows, id: \.id) { record in
+                        Toggle(isOn: Binding(
+                            get: { draft.citations.contains(record.id) },
+                            set: { turning in
+                                if turning { model.draft?.citations.insert(record.id) }
+                                else { model.draft?.citations.remove(record.id) }
+                            }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(record.source.rawValue) · \(record.id)").font(.caption.monospaced())
+                                Text(record.excerpt ?? "No excerpt").font(.caption2).lineLimit(2)
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                        .accessibilityIdentifier("cite-\(record.id)")
+                    }
+                }
+            }
+            Divider()
+            HStack {
+                Button("Cancel") { model.cancelCorrection() }
+                    .accessibilityIdentifier("cancel-correction")
+                if model.recordingDraftID == draft.id {
+                    // A disabled button alone says nothing about a click that
+                    // was accepted: the press looks ignored, so the reviewer
+                    // presses again. Keyed on this draft rather than on the
+                    // model's phase, which another operation can hold.
+                    ProgressView().controlSize(.small)
+                    Text("Recording…").font(.caption).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("correction-progress")
+                } else {
+                    Button("Record Correction") { model.applyCorrection() }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(model.phase.isBusy)
+                        .accessibilityIdentifier("record-correction")
+                }
+            }
         }
+        .padding(15)
+        .frame(width: 540, height: 480)
     }
 }

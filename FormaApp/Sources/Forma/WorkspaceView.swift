@@ -2,119 +2,82 @@ import AppKit
 import FormaCore
 import SwiftUI
 
+/// The workspace area, rendered inside the shell: a sources pane, the file
+/// table with its cluster panel, and the scan summary. It owns no split view,
+/// no window title and no toolbar - the shell does; this view fills whatever
+/// detail column the shell gives it (owner failures #1, #2 and #3 came from
+/// this view owning a `NavigationSplitView` whose minimums pushed the window
+/// and whose fixed-height cluster panel collapsed the tables).
+///
+/// File and cluster selections live on the model so the shell's inspector can
+/// read them and so they survive an area switch.
 struct WorkspaceView: View {
     @ObservedObject var model: WorkspaceModel
-    @State private var selectedFile: UUID?
-    @State private var selectedCluster: String?
+    /// The width bounds the shell declared for this area's leading pane.
+    let leading: AreaWidth
 
-    private var entry: SourceEntry? {
-        guard let id = selectedFile else { return nil }
-        return model.listing?.entries.first { $0.id == id }
-    }
-
-    private var cluster: WorkspaceModel.ClusterRow? {
-        model.clusterRows.first { $0.id == selectedCluster }
-    }
+    @AppStorage("shell.workspace.clustersVisible") private var clustersVisible = true
 
     var body: some View {
-        NavigationSplitView {
-            List(model.scopes, selection: $model.selectedScopeID) { scope in
-                HStack(spacing: 6) {
-                    Label(scope.displayName, systemImage: "folder")
-                    if let status = model.sourceStatus(for: scope.id),
-                       status.needsReauthorization || status.availability == .identityChanged {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                            .help("This source needs attention.")
-                            .accessibilityLabel("Source needs attention")
-                    }
-                }
-                .tag(scope.id)
-                .help(scope.relativePath)
-            }
-            .navigationTitle("Sources")
-            .navigationSplitViewColumnWidth(min: 150, ideal: 200)
-        } detail: {
+        HSplitView {
+            sourceList
+                .areaWidth(leading)
             if let listing = model.listing {
-                VStack(spacing: 0) {
-                    if let status = selectedStatus, status.isUnreadable {
-                        sourceUnavailableBanner(status)
-                        Divider()
-                    }
-                    HSplitView {
-                        fileTable(listing)
-                            .frame(minWidth: 300)
-                        rightPane
-                            .frame(minWidth: 240, idealWidth: 310)
-                    }
-                    Divider()
-                    clusterPanel
-                        .frame(height: 168)
-                    Divider()
-                    scanSummary(listing)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                }
-                .navigationTitle(listing.scope.displayName)
+                mainPane(listing)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 ContentUnavailableView("Choose a source", systemImage: "folder",
                                        description: Text(model.notice ?? "Add a local or OneDrive folder to scan its files."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .toolbar {
-            ToolbarItemGroup {
-                Button("Add Source…", systemImage: "folder.badge.plus", action: chooseSource)
-                    .disabled(model.phase.isBusy)
-                    .accessibilityIdentifier("add-source")
-                if let scope = model.selectedScope,
-                   model.sourceStatus(for: scope.id)?.needsReauthorization == true {
-                    Button("Reauthorize…", systemImage: "lock.open", action: { chooseReauthorization(for: scope) })
-                        .disabled(model.phase.isBusy)
-                        .help("Choose the same folder again to renew macOS access")
-                        .accessibilityIdentifier("reauthorize-source")
-                }
-                if model.phase.isBusy {
-                    Button("Cancel", systemImage: "stop.circle") { model.cancelWork() }
-                        .accessibilityIdentifier("cancel-work")
-                } else {
-                    Button("Scan", systemImage: "arrow.clockwise", action: model.scan)
-                        .disabled(model.selectedScopeID == nil)
-                        .accessibilityIdentifier("scan-source")
-                    Button("Build Context", systemImage: "square.3.layers.3d") { model.buildContext() }
-                        .disabled(model.selectedScopeID == nil || model.selectedProfile == nil)
-                        .help("FormaCore clusters the listing into project candidates from structure alone")
-                        .accessibilityIdentifier("build-context")
-                    Button("Reconcile", systemImage: "arrow.triangle.2.circlepath") { model.reconcile() }
-                        .disabled(model.manifest == nil)
-                        .help("Ask FormaCore which stored entries its snapshot binding still supports")
-                        .accessibilityIdentifier("reconcile-manifest")
-                }
-                Picker("Profile", selection: $model.selectedProfileID) {
-                    ForEach(model.profiles, id: \.profileID) { profile in
-                        Text(profile.displayName).tag(Optional(profile.profileID))
-                    }
-                }
-                .fixedSize()
-                .disabled(model.phase.isBusy)
-                .accessibilityIdentifier("select-profile")
-            }
-        }
-        .task(id: model.selectedScopeID) {
-            // Only this view's own selections. The model's `didSet` for the
-            // same value already drops the listing, the manifest, the
-            // evidence and the draft; a second copy of that cleanup here would
-            // be a second owner of state this view does not hold.
-            selectedFile = nil
-            selectedCluster = nil
-        }
-        .onChange(of: selectedFile) { _, _ in model.clearFileEvidence() }
     }
 
-    // MARK: - Files
+    // MARK: - Sources
+
+    private var sourceList: some View {
+        List(model.scopes, selection: $model.selectedScopeID) { scope in
+            HStack(spacing: 6) {
+                Label(scope.displayName, systemImage: "folder")
+                if let status = model.sourceStatus(for: scope.id),
+                   status.needsReauthorization || status.availability == .identityChanged {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .help("This source needs attention.")
+                        .accessibilityLabel("Source needs attention")
+                }
+            }
+            .tag(scope.id)
+            .help(scope.relativePath)
+        }
+    }
+
+    // MARK: - Files, clusters, summary
+
+    private func mainPane(_ listing: SourceListing) -> some View {
+        VStack(spacing: 0) {
+            if let status = selectedStatus, status.isUnreadable {
+                sourceUnavailableBanner(status)
+                Divider()
+            }
+            // A resizable vertical split, not a fixed-height panel: the tables
+            // fill the viewport and the person decides how much the candidate
+            // list gets (owner failure #3).
+            VSplitView {
+                fileTable(listing)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                if clustersVisible {
+                    clusterPanel
+                        .frame(minHeight: 96, idealHeight: 176, maxHeight: 320)
+                }
+            }
+            Divider()
+            bottomBar(listing)
+        }
+    }
 
     private func fileTable(_ listing: SourceListing) -> some View {
-        Table(listing.entries, selection: $selectedFile) {
+        Table(listing.entries, selection: $model.workspaceFileSelection) {
             TableColumn("Relative path") { file in
                 Text(file.relativePath).lineLimit(1).help(file.relativePath)
             }
@@ -128,118 +91,6 @@ struct WorkspaceView: View {
                 .width(min: 90, ideal: 115)
         }
     }
-
-    @ViewBuilder private var rightPane: some View {
-        if let cluster {
-            clusterFiles(cluster)
-        } else {
-            fileDetail
-        }
-    }
-
-    private func clusterFiles(_ cluster: WorkspaceModel.ClusterRow) -> some View {
-        let files = model.files(in: cluster)
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(cluster.title).font(.headline)
-                LabeledContent("Files", value: files.count.formatted())
-                LabeledContent("Basis", value: cluster.basis)
-                LabeledContent("Confidence", value: cluster.confidence)
-                Text("Cluster membership is FormaCore's. Unassigned and conflicted files stay visible and gain no project by guessing.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Divider()
-                ForEach(files) { file in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(file.relativePath).font(.caption).textSelection(.enabled)
-                        Text(status(file)).font(.caption2).foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                if files.isEmpty {
-                    Text("FormaCore reported no file in this category for the current listing.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(15)
-        }
-    }
-
-    @ViewBuilder private var fileDetail: some View {
-        if let entry {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(entry.relativePath)
-                        .font(.headline)
-                        .textSelection(.enabled)
-                    LabeledContent("Status", value: status(entry))
-                    LabeledContent("Storage", value: providerName(entry.provider))
-                    LabeledContent("Size", value: size(entry.sizeBytes))
-                    LabeledContent("Source version", value: entry.sourceVersion.formatted())
-                    LabeledContent("Snapshot revision", value: entry.snapshotRevision.formatted())
-                    LabeledContent("Project", value: model.clusterLabel(for: entry.id))
-                    if let sha = entry.sha256 {
-                        Text("SHA-256").font(.caption).foregroundStyle(.secondary)
-                        Text(sha).font(.caption.monospaced()).textSelection(.enabled)
-                    }
-                    Text(entry.snapshotFingerprint)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                    Divider()
-                    // Driven by the read's own slot. While `phase` also
-                    // described this read, a provider run in flight made this
-                    // panel offer "Cancel evidence read" for a read that had
-                    // finished - and the run it actually named could only be
-                    // stopped from the toolbar.
-                    if model.fileReadInFlight {
-                        Button("Cancel evidence read") { model.cancelFileRead() }
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Button("Read Evidence") { model.readFileEvidence(entry, extracting: true) }
-                            .disabled(entry.state != .present
-                                      || !["pdf", "docx", "xlsx"].contains((entry.relativePath as NSString).pathExtension.lowercased()))
-                            .accessibilityIdentifier("read-evidence")
-                        Button("Compute SHA-256") { model.readFileEvidence(entry, extracting: false) }
-                            .disabled(entry.state != .present)
-                    }
-                    if let evidence = model.fileEvidence {
-                        Text(evidence.status.rawValue).font(.subheadline).foregroundStyle(.secondary)
-                        ForEach(evidence.items.indices, id: \.self) { index in
-                            evidenceRow(evidence.items[index])
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(15)
-            }
-        } else {
-            ContentUnavailableView("Select a file", systemImage: "doc.text")
-        }
-    }
-
-    private func evidenceRow(_ item: EvidenceItem) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            switch item.locator {
-            case .pdf(let page, let range):
-                Text("PDF page \(page) · UTF-16 \(range.lowerBound)–\(range.upperBound)")
-                    .font(.caption).foregroundStyle(.secondary)
-            case .docx(let part, let paragraph, _):
-                Text("\(part) · paragraph \(paragraph)")
-                    .font(.caption).foregroundStyle(.secondary)
-            case .xlsx(let sheet, let cell):
-                Text("\(sheet) · \(cell)")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            if let text = item.text { Text(text).textSelection(.enabled) }
-            if let formula = item.formula {
-                Text("Formula: \(formula)").font(.caption.monospaced()).textSelection(.enabled)
-                Text(item.cachedValue.map { "Cached: \($0)" } ?? "No cached value").font(.caption)
-            }
-        }
-    }
-
-    // MARK: - Clusters
 
     @ViewBuilder private var clusterPanel: some View {
         if let context = model.context {
@@ -258,7 +109,7 @@ struct WorkspaceView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
-                Table(model.clusterRows, selection: $selectedCluster) {
+                Table(model.clusterRows, selection: $model.workspaceClusterSelection) {
                     TableColumn("Candidate") { row in
                         Text(row.title).lineLimit(1).help(row.title)
                     }
@@ -279,10 +130,22 @@ struct WorkspaceView: View {
                 Spacer()
             }
             .padding(.horizontal, 12)
+            .padding(.vertical, 6)
         }
     }
 
-    // MARK: - Scan summary
+    private func bottomBar(_ listing: SourceListing) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            scanSummary(listing)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(clustersVisible ? "隐藏项目候选" : "显示项目候选") { clustersVisible.toggle() }
+                .buttonStyle(.link)
+                .font(.caption)
+                .accessibilityIdentifier("toggle-cluster-panel")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
 
     private func scanSummary(_ listing: SourceListing) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -327,16 +190,6 @@ struct WorkspaceView: View {
 
     // MARK: - Formatting
 
-    private func providerName(_ provider: SourceProvider) -> String {
-        switch provider {
-        case .local: "Local"
-        case .oneDrive: "OneDrive"
-        case .fileProvider: "File Provider"
-        case .iCloud: "iCloud"
-        case .unknown: "Unknown"
-        }
-    }
-
     private func scanStatus(_ state: SourceScanState) -> String {
         switch state {
         case .notScanned: "Ready to scan"
@@ -348,37 +201,16 @@ struct WorkspaceView: View {
         }
     }
 
-    private func status(_ file: SourceEntry) -> String {
-        switch file.state {
-        case .present: file.hydrationPending ? "Cloud placeholder" : "Present"
-        case .missing: "Missing"
-        case .symlink: "Symbolic link"
-        case .held: "Needs review"
-        }
-    }
+    private func status(_ file: SourceEntry) -> String { wsFileStatus(file) }
 
-    private func size(_ bytes: Int64?) -> String {
-        bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "—"
-    }
-
-    // MARK: - Source picker
-
-    private func chooseSource() {
-        let panel = NSOpenPanel()
-        panel.title = "Choose a source folder"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            Task { @MainActor in await model.register(url) }
-        }
-    }
+    private func size(_ bytes: Int64?) -> String { wsSize(bytes) }
 
     private var selectedStatus: SourceScopeStatus? {
         guard let id = model.selectedScopeID else { return nil }
         return model.sourceStatus(for: id)
     }
+
+    // MARK: - Source availability banner
 
     /// What the source needs, in the words a person can act on. The four cases
     /// stay apart because only two of them are fixed by choosing the folder again.
@@ -396,8 +228,19 @@ struct WorkspaceView: View {
             }
             Spacer()
             if status.needsReauthorization, let scope = model.selectedScope {
-                Button("Reauthorize…") { chooseReauthorization(for: scope) }
-                    .disabled(model.phase.isBusy)
+                Button("Reauthorize…") {
+                    let panel = NSOpenPanel()
+                    panel.title = "Choose the folder for \(scope.displayName) again"
+                    panel.message = "Forma renews access only when the folder is the same one."
+                    panel.canChooseFiles = false
+                    panel.canChooseDirectories = true
+                    panel.allowsMultipleSelection = false
+                    panel.begin { response in
+                        guard response == .OK, let url = panel.url else { return }
+                        Task { @MainActor in await model.reauthorize(scope, url: url) }
+                    }
+                }
+                .disabled(model.phase.isBusy)
             }
         }
         .padding(12)
@@ -435,17 +278,162 @@ struct WorkspaceView: View {
             return "Forma could not determine the state of \(status.lastKnownPath)."
         }
     }
+}
 
-    private func chooseReauthorization(for scope: SourceScope) {
-        let panel = NSOpenPanel()
-        panel.title = "Choose the folder for \(scope.displayName) again"
-        panel.message = "Forma renews access only when the folder is the same one."
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            Task { @MainActor in await model.reauthorize(scope, url: url) }
+/// The workspace inspector: the selected file's evidence actions and result, or
+/// the selected cluster's membership. The shell presents this beside any area;
+/// the content below is the file detail the area used to carry in its own
+/// split view - same buttons, same values, now contextual.
+@MainActor
+struct WorkspaceInspector: View {
+    @ObservedObject var model: WorkspaceModel
+
+    private var entry: SourceEntry? {
+        guard let id = model.workspaceFileSelection else { return nil }
+        return model.listing?.entries.first { $0.id == id }
+    }
+
+    private var cluster: WorkspaceModel.ClusterRow? {
+        model.clusterRows.first { $0.id == model.workspaceClusterSelection }
+    }
+
+    var body: some View {
+        if let cluster {
+            clusterFiles(cluster)
+        } else if let entry {
+            fileDetail(entry)
+        } else {
+            ContentUnavailableView("选择文件或候选", systemImage: "doc.text",
+                                   description: Text("在工作区的文件表或项目候选中选择一行，详情显示在这里。"))
         }
     }
+
+    private func clusterFiles(_ cluster: WorkspaceModel.ClusterRow) -> some View {
+        let files = model.files(in: cluster)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(cluster.title).font(.headline)
+                LabeledContent("Files", value: files.count.formatted())
+                LabeledContent("Basis", value: cluster.basis)
+                LabeledContent("Confidence", value: cluster.confidence)
+                Text("Cluster membership is FormaCore's. Unassigned and conflicted files stay visible and gain no project by guessing.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Divider()
+                ForEach(files) { file in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(file.relativePath).font(.caption).textSelection(.enabled)
+                        Text(status(file)).font(.caption2).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if files.isEmpty {
+                    Text("FormaCore reported no file in this category for the current listing.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(15)
+        }
+    }
+
+    private func fileDetail(_ entry: SourceEntry) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(entry.relativePath)
+                    .font(.headline)
+                    .textSelection(.enabled)
+                LabeledContent("Status", value: status(entry))
+                LabeledContent("Storage", value: providerName(entry.provider))
+                LabeledContent("Size", value: size(entry.sizeBytes))
+                LabeledContent("Source version", value: entry.sourceVersion.formatted())
+                LabeledContent("Snapshot revision", value: entry.snapshotRevision.formatted())
+                LabeledContent("Project", value: model.clusterLabel(for: entry.id))
+                if let sha = entry.sha256 {
+                    Text("SHA-256").font(.caption).foregroundStyle(.secondary)
+                    Text(sha).font(.caption.monospaced()).textSelection(.enabled)
+                }
+                Text(entry.snapshotFingerprint)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                Divider()
+                // Driven by the read's own slot. While `phase` also
+                // described this read, a provider run in flight made this
+                // panel offer "Cancel evidence read" for a read that had
+                // finished - and the run it actually named could only be
+                // stopped from the toolbar.
+                if model.fileReadInFlight {
+                    Button("Cancel evidence read") { model.cancelFileRead() }
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Read Evidence") { model.readFileEvidence(entry, extracting: true) }
+                        .disabled(entry.state != .present
+                                  || !["pdf", "docx", "xlsx"].contains((entry.relativePath as NSString).pathExtension.lowercased()))
+                        .accessibilityIdentifier("read-evidence")
+                    Button("Compute SHA-256") { model.readFileEvidence(entry, extracting: false) }
+                        .disabled(entry.state != .present)
+                }
+                if let evidence = model.fileEvidence {
+                    Text(evidence.status.rawValue).font(.subheadline).foregroundStyle(.secondary)
+                    ForEach(evidence.items.indices, id: \.self) { index in
+                        evidenceRow(evidence.items[index])
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(15)
+        }
+    }
+
+    private func evidenceRow(_ item: EvidenceItem) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            switch item.locator {
+            case .pdf(let page, let range):
+                Text("PDF page \(page) · UTF-16 \(range.lowerBound)–\(range.upperBound)")
+                    .font(.caption).foregroundStyle(.secondary)
+            case .docx(let part, let paragraph, _):
+                Text("\(part) · paragraph \(paragraph)")
+                    .font(.caption).foregroundStyle(.secondary)
+            case .xlsx(let sheet, let cell):
+                Text("\(sheet) · \(cell)")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if let text = item.text { Text(text).textSelection(.enabled) }
+            if let formula = item.formula {
+                Text("Formula: \(formula)").font(.caption.monospaced()).textSelection(.enabled)
+                Text(item.cachedValue.map { "Cached: \($0)" } ?? "No cached value").font(.caption)
+            }
+        }
+    }
+
+    private func providerName(_ provider: SourceProvider) -> String {
+        switch provider {
+        case .local: "Local"
+        case .oneDrive: "OneDrive"
+        case .fileProvider: "File Provider"
+        case .iCloud: "iCloud"
+        case .unknown: "Unknown"
+        }
+    }
+
+    private func status(_ file: SourceEntry) -> String { wsFileStatus(file) }
+
+    private func size(_ bytes: Int64?) -> String { wsSize(bytes) }
+}
+
+// MARK: - Shared readout formatters
+//
+// The area's tables and the shell's inspector describe the same entries, so
+// they share the same words.
+private func wsFileStatus(_ file: SourceEntry) -> String {
+    switch file.state {
+    case .present: file.hydrationPending ? "Cloud placeholder" : "Present"
+    case .missing: "Missing"
+    case .symlink: "Symbolic link"
+    case .held: "Needs review"
+    }
+}
+
+private func wsSize(_ bytes: Int64?) -> String {
+    bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "—"
 }

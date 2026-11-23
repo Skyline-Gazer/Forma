@@ -1,4 +1,3 @@
-import AppKit
 import FormaCore
 import SwiftUI
 
@@ -7,10 +6,11 @@ import SwiftUI
 /// Every control here is read-only by construction. `ImportPlan.writesInThisBuild`
 /// is a constant `false`, and the execute button is not merely disabled - it does
 /// not exist, so a demo cannot end with a person believing an import happened.
+/// The two actions the area owns - build and export the plan - sit in the
+/// shell's toolbar grammar like every other command (owner failure #4: the old
+/// tab owned neither a consistent leading pane nor a filling viewport).
 struct ImportView: View {
     @ObservedObject var model: WorkspaceModel
-
-    @State private var exporting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -18,25 +18,21 @@ struct ImportView: View {
             Divider()
             if let plan = model.importPlan {
                 planBody(plan)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 emptyState
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     // MARK: - Header
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Import plan")
-                    .font(.title2.weight(.semibold))
-                Spacer()
-                Button("Build plan") { model.buildImportPlan() }
-                    .disabled(model.phase != .idle || model.manifest == nil)
-                Button("Export plan…") { chooseExportFolder() }
-                    .disabled(model.importPlan == nil)
-            }
+            Text("Import plan")
+                .font(.title2.weight(.semibold))
             // The most important sentence in this pane: this build cannot write.
             Label("Dry run only. This build has no import path to DEVONthink, so no record can be written.",
                   systemImage: "hand.raised.fill")
@@ -50,6 +46,7 @@ struct ImportView: View {
                 .accessibilityIdentifier("import-plan-privacy-notice")
         }
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Body
@@ -176,27 +173,12 @@ struct ImportView: View {
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(model.manifest == nil
-                 ? "Map a source first: the plan is built from a manifest."
-                 : "No plan yet. Build it to see what an import would target and why it cannot run.")
+                 ? "先在「映射」完成映射：计划由清单生成。"
+                 : "尚未生成计划。用工具栏的「生成计划」查看导入会指向哪里、为何不能执行。")
                 .foregroundStyle(.secondary)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    // MARK: - Actions
-
-    private func chooseExportFolder() {
-        let panel = NSOpenPanel()
-        panel.title = "Choose a folder for the import plan"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.prompt = "Write Plan Here"
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            model.writeImportPlan(to: url)
-        }
     }
 }
 
