@@ -349,10 +349,15 @@ struct SemanticEvidenceScenariosTests {
         let nameAnswer = try #require(fromName.manifest.entries.first)
         #expect(codes(fromName).contains("insufficient_evidence"),
                 "a name-only category must be refused: \(codes(fromName))")
-        #expect(nameAnswer.outcome(for: .documentcategory)?.status == .rejectedByPolicy)
+        let rejected = try #require(nameAnswer.outcome(for: .documentcategory))
+        #expect(rejected.status == .rejectedByPolicy)
         #expect(nameAnswer.metadata[.documentcategory] == nil, "refused means null, not the name's guess")
-        #expect(nameAnswer.outcome(for: .documentcategory)?.evidenceIDs.isEmpty == true,
-                "a refused citation must not survive into the accepted evidence")
+        // A refused field still names the rows it was offered, so a reviewer can
+        // see what the model leaned on; what it must not do is carry a body row
+        // it was never given.
+        #expect(!rejected.evidenceIDs.isEmpty)
+        #expect(Set(rejected.evidenceIDs).isSubset(of: Set(named.map(\.id))),
+                "the retained trail is exactly the name/path rows that were cited")
         #expect(nameAnswer.state == .hold)
         #expect(!nameAnswer.eligibleForAutoExecution)
 
@@ -456,8 +461,11 @@ struct SemanticEvidenceScenariosTests {
 
     @Test("two projects of one owner stay two separate citation scopes")
     func sameOwnerDifferentProjects() async throws {
-        let a = "客户甲_智能化改造项目/公告.txt"
-        let b = "客户甲_运维服务项目/公告.txt"
+        // Distinct file names on purpose: the same name filed under two project
+        // directories is the profile's *other* conflict (`sameMaterialSourceIDs`)
+        // and would hold both files before any citation was read.
+        let a = "客户甲_智能化改造项目/智能化改造公告.txt"
+        let b = "客户甲_运维服务项目/运维服务公告.txt"
         let archive = try await prepared([
             FileSpec(a, """
             客户甲_智能化改造项目 招标公告
@@ -514,7 +522,12 @@ struct SemanticEvidenceScenariosTests {
             }, requests: 1)
         }
         let misplaced = try #require(borrowed.manifest.entries.first { $0.sourceID == entryA.id })
-        #expect(codes(borrowed).contains("evidence_foreign_source"),
+        // The engine hands the validator each source's own rows, so a citation
+        // into another file's body cannot even resolve here: `evidence_not_found`
+        // is the refusal, and the per-source registry scoping is what makes it
+        // one. (`evidence_foreign_source` is the sibling code for a merged
+        // registry, where a foreign row resolves and is then refused by source.)
+        #expect(codes(borrowed).contains("evidence_not_found"),
                 "a citation to another file's body is refused: \(codes(borrowed))")
         #expect(misplaced.metadata[.projectname] == nil)
         #expect(misplaced.state == .hold)
