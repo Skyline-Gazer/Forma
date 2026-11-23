@@ -123,7 +123,10 @@ struct ReviewDeskView: View {
             let codes = ReviewDeskFlow.refusalCodes(fromNotice: notice)
             if !codes.isEmpty, let field = model.draft?.field {
                 refusal = Refusal(field: field, codes: codes)
-            } else if notice != nil, codes.isEmpty, model.notice?.contains("refused") != true {
+            } else if notice != nil {
+                // Any other published notice supersedes the remembered
+                // refusal: the cause beside the field is a statement about
+                // the last click, not a permanent banner.
                 refusal = nil
             }
         }
@@ -253,13 +256,10 @@ struct ReviewDeskView: View {
                 .accessibilityIdentifier("desk-export")
             }
             Spacer()
-            if let notice = model.notice {
-                Text(notice)
-                    .font(.caption)
-                    .foregroundStyle(notice.contains("refused") ? .orange : .secondary)
-                    .lineLimit(2)
-                    .accessibilityIdentifier("desk-feedback")
-            }
+            // The run's own notice lives in the shell status strip; the desk
+            // shows only business framing here, so the last refusal beside
+            // the field and the stage guidance never compete with English
+            // diagnostics on a first-time page.
         }
     }
 
