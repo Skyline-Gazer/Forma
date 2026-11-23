@@ -1512,7 +1512,7 @@ final class WorkspaceModel: ObservableObject {
     /// The visible desk queue: current rows bucketed by the triage filter,
     /// in manifest order.
     var deskQueue: [MappingRow] {
-        rows.filter { deskTriage(for: $0.entry.state) == deskTriage }
+        rows.filter { FormaCore.deskTriage(for: $0.entry.state) == deskTriage }
     }
 }
 

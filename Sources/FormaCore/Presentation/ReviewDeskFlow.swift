@@ -194,14 +194,15 @@ public struct ReviewDeskFlow: Equatable, Sendable {
     }
 
     /// The queue cursor for Save & Next: the first entry after the current one
-    /// in the visible order, wrapping to the first entry when the review
-    /// reached the end of the list. An order without the current id starts at
-    /// its first entry; an empty order selects nothing.
+    /// in the visible order, wrapping to the head when the review reached the
+    /// end (a single-entry bucket wraps to itself, i.e. the cursor simply
+    /// stays). An order without the current id starts at its first entry; an
+    /// empty order selects nothing.
     public static func nextAfter(_ id: String, in order: [String]) -> String? {
         guard !order.isEmpty else { return nil }
         guard let index = order.firstIndex(of: id) else { return order.first }
         let rest = order.enumerated().filter { $0.offset > index }.map(\.element)
-        return rest.first ?? order.first(where: { $0 != id })
+        return rest.first ?? order.first
     }
 
     /// Extracts the violation codes from the model notice a refused correction
