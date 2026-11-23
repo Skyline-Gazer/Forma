@@ -540,10 +540,15 @@ struct SemanticEvidenceScenariosTests {
         // The other failure, separately: naming a real candidate that does not
         // contain this file is a wrong project, not a typo.
         let misfiled = await mapped(archive) { batch, _ in
-            MappingAttempt(proposal: proposal(for: batch, association: ("confirmed", otherCandidateID)) { _ in
+            // Every batch answers, so each one quotes its own body; what is
+            // wrong here is only the candidate the answer binds them to.
+            let intelligent = batch.entries.contains { $0.relativePath == a }
+            return MappingAttempt(proposal: proposal(for: batch, association: ("confirmed", otherCandidateID)) { _ in
                 [
-                    Cited(id: .projectname, value: intelligentName, cites: [row(in: batch, saying: intelligentName)]),
-                    Cited(id: .completionyear, value: "2026", cites: [row(in: batch, saying: "归档完成")]),
+                    Cited(id: .projectname, value: intelligent ? intelligentName : "客户甲_运维服务项目",
+                          cites: [row(in: batch, saying: intelligent ? intelligentName : "客户甲_运维服务项目")]),
+                    Cited(id: .completionyear, value: intelligent ? "2026" : "2025",
+                          cites: [row(in: batch, saying: "归档完成")]),
                     Cited(id: .documentcategory, value: "01_招标文件", cites: [row(in: batch, saying: "01_招标文件")]),
                 ]
             }, requests: 1)
