@@ -194,13 +194,16 @@ struct FirstReadSnapshotBindingTests {
         let context = try await workspace.buildContext(scope: scope, profile: profile)
 
         // A target whose id the scope listing no longer carries at all is a
-        // listing change, and it is reported instead of mapped around.
-        let ghostRoot = fixture.root.appendingPathComponent("ghost")
-        try FileManager.default.createDirectory(at: ghostRoot, withIntermediateDirectories: true)
-        try makePDF(["幽灵"]).write(to: ghostRoot.appendingPathComponent("g.pdf"))
-        let otherScope = try await workspace.register(ghostRoot)
-        let other = try await workspace.scan(otherScope)
-        let lost = try await workspace.bindCapturedTargets(other.entries, captured: [:],
+        // listing change, and it is reported instead of mapped around. The
+        // entry is constructed directly, the way the engine-level suites do,
+        // because the point is the id, not how the listing lost it.
+        let ghostPath = "示例项目_2026/03_合同/ghost.pdf"
+        let ghost = SourceEntry(id: UUID(), rootID: scope.rootID, relativePath: ghostPath,
+                                normalizedRelativePath: ghostPath.lowercased(), state: .present,
+                                hydrationPending: false, sourceVersion: 1, snapshotRevision: 1,
+                                provider: .local, snapshotFingerprint: String(repeating: "a", count: 64),
+                                sizeBytes: 1_024, modificationTimeNanoseconds: 0, sha256: nil)
+        let lost = try await workspace.bindCapturedTargets(scanned.entries + [ghost], captured: [:],
                                                            readFailures: [:], scope: scope,
                                                            profile: profile, context: context)
         guard case .listingChanged(let listing1) = lost else {
