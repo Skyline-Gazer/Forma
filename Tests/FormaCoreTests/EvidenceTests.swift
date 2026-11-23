@@ -358,7 +358,10 @@ func slice(_ text: String, _ range: Range<Int>) -> String {
     guard range.lowerBound >= 0, range.upperBound <= text.utf16.count, range.lowerBound <= range.upperBound else {
         return "\u{0}OUT_OF_RANGE\u{0}"
     }
-    return String(decoding: text.utf16[range.lowerBound..<range.upperBound], as: UTF16.self)
+    // The units are copied into an array first because `String.UTF16View` is
+    // indexed by String.Index, not by the offsets a locator carries.
+    let units = Array(text.utf16)
+    return String(decoding: units[range.lowerBound..<range.upperBound], as: UTF16.self)
 }
 
 private let wordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
