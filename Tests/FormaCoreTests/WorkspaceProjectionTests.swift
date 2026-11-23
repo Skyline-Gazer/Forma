@@ -438,7 +438,8 @@ struct WorkspaceProjectionTests {
         #expect(cache.misses == 1)
         #expect(cache.pendingReads == 1)
         let rows = (1 ... 6).map { record($0, sourceID: 1, revision: 3) }
-        #expect(cache.publish(rows, against: ticket))
+        let published = cache.publish(rows, against: ticket)
+        #expect(published)
         #expect(cache.pendingReads == 0)
 
         if case .cached(let held) = cache.claim(key) {
@@ -485,7 +486,8 @@ struct WorkspaceProjectionTests {
         guard case .read(let ticket) = cache.claim(key) else { Issue.record("first claim must read"); return }
         let staleRows = (1 ... 3).map { record($0, sourceID: 3, revision: 5) }
         cache.invalidate(sourceID: id)
-        #expect(!cache.publish(staleRows, against: ticket))
+        let publishedAfterInvalidate = cache.publish(staleRows, against: ticket)
+        #expect(!publishedAfterInvalidate)
         #expect(cache.stale == 1)
         #expect(cache.rows(for: key) == nil, "a stale read stores nothing")
         #expect(cache.pendingReads == 0, "and it does not leave the key claimed forever")
@@ -498,14 +500,16 @@ struct WorkspaceProjectionTests {
         let key = EvidenceCacheKey(sourceID: id, snapshotRevision: 1)
         guard case .read(let first) = cache.claim(key) else { Issue.record("first claim must read"); return }
         cache.publish([record(1, sourceID: 4)], against: first)
-        #expect(cache.claim(key).isCached)
+        let reclamed = cache.claim(key)
+        #expect(reclamed.isCached)
 
         // A mapping run registered a row at the same revision: the key did not
         // move, so only the explicit invalidation can make the next chip read
         // the new set.
         cache.invalidate(sourceID: id)
         #expect(cache.invalidations == 1)
-        #expect(!cache.claim(key).isCached)
+        let afterInvalidate = cache.claim(key)
+        #expect(!afterInvalidate.isCached)
         #expect(cache.storedKeys == 0)
     }
 
@@ -535,8 +539,9 @@ struct WorkspaceProjectionTests {
         #expect(cache.storedKeys == 0)
         #expect(cache.pendingReads == 0)
         for index in 1 ... 50 {
-            #expect(!cache.claim(EvidenceCacheKey(sourceID: UUID(uuidString: Self.uuid(index))!,
-                                                  snapshotRevision: 1)).isCached)
+            let claim = cache.claim(EvidenceCacheKey(sourceID: UUID(uuidString: Self.uuid(index))!,
+                                                     snapshotRevision: 1))
+            #expect(!claim.isCached)
         }
     }
 
@@ -552,8 +557,9 @@ struct WorkspaceProjectionTests {
         #expect(cache.hits == 0)
         // Re-asking every one of them reads nothing.
         for index in 1 ... 1_000 {
-            #expect(cache.claim(EvidenceCacheKey(sourceID: UUID(uuidString: Self.uuid(index))!,
-                                                 snapshotRevision: 2)).isCached)
+            let claim = cache.claim(EvidenceCacheKey(sourceID: UUID(uuidString: Self.uuid(index))!,
+                                                     snapshotRevision: 2))
+            #expect(claim.isCached)
         }
         #expect(cache.hits == 1_000)
         #expect(cache.misses == 1_000)

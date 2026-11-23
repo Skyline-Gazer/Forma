@@ -1207,55 +1207,12 @@ final class WorkspaceModel: ObservableObject {
                                                            error: .cancelled)
                 return
             }
-            // The first body read may calculate SHA-256 and append a new Source
-            // snapshot, and FormaCore registers the captured evidence against
-            // that *post-read* revision while the listing this run entered on
-            // still describes the pre-read one. FormaCore's
-            // `bindCapturedTargets` re-reads the authoritative listing - one
-            // database read, no second user Scan - and hands back the
-            // post-read entries a run must map, only evidence rows bound to
-            // the snapshot that listing reports, and the failures in between.
-            let binding: SourceWorkspace.PostCaptureTargetBinding
-            do {
-                binding = try await self.workspace.bindCapturedTargets(targets, captured: captured,
-                                                                       readFailures: unread, scope: scope,
-                                                                       profile: profile, context: context)
-            } catch {
-                if !Task.isCancelled, scope.id == self.selectedScopeID {
-                    self.show(error, operation: .providerProbe, fallback: .unavailable)
-                }
-                return
-            }
-            guard !Task.isCancelled, scope.id == self.selectedScopeID,
-                  profile.profileID == self.selectedProfileID else { return }
-            let currentTargets: [SourceEntry]
-            let currentEvidence: [UUID: [EvidenceRecord]]
-            switch binding {
-            case .listingChanged(let currentListing):
-                self.listing = currentListing
-                self.notice = "The source list changed during evidence capture. Review the files before mapping again."
-                return
-            case .contextStale(let currentListing):
-                // The stale-snapshot half of the reviewer's feedback: this is
-                // a moved structure, not unread files, and the fix is a fresh
-                // project context, not another scan of the same files.
-                self.listing = currentListing
-                self.contextIsStale = true
-                self.notice = "The source structure changed. Build a fresh project context before mapping."
-                return
-            case .bound(let entries, let evidence, let failures, let currentListing):
-                currentTargets = entries
-                currentEvidence = evidence
-                unread = failures
-                self.listing = currentListing
-                self.evidenceFailures = failures
-                self.merge(evidence.values.flatMap { $0 })
-                // The capture registered rows for these sources at their current
-                // revision. Any read that was in flight when it happened is now
-                // known to be behind, and the key this revision maps to must be
-                // re-read rather than answered from the set held before the write.
-                invalidateEvidenceCache(for: captured.keys)
-            }
+            self.merge(captured.values.flatMap { $0 })
+            // The capture registered rows for these sources at their current
+            // revision. Any read that was in flight when it happened is now
+            // known to be behind, and the key this revision maps to must be
+            // re-read rather than answered from the set held before the write.
+            invalidateEvidenceCache(for: captured.keys)
             do {
                 try await self.workspace.startMappingRun(run)
             } catch {
@@ -1265,7 +1222,7 @@ final class WorkspaceModel: ObservableObject {
             }
             self.phase = .mapping
             let result = await engine.run(MappingRunRequest(scope: scope, profile: profile, context: context,
-                                                             entries: currentTargets, evidence: currentEvidence,
+                                                             entries: targets, evidence: captured,
                                                              provider: provider, model: model,
                                                              allowCloud: consent, redaction: plan,
                                                              entryLimit: limit))
@@ -1547,7 +1504,7 @@ final class WorkspaceModel: ObservableObject {
     /// Runs on a detached priority: these are the two largest synchronous
     /// reads the app performs, and the listing they describe can be a
     /// thousand entries with one evidence file per citation.
-    private static func readBundle(at url: URL) throws -> BundleContents {
+    private nonisolated static func readBundle(at url: URL) throws -> BundleContents {
         let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
         let bundle = isDirectory ? url : url.deletingLastPathComponent()
         let manifestURL = isDirectory ? bundle.appendingPathComponent(ManifestExport.manifestFile) : url
@@ -1747,14 +1704,7 @@ final class WorkspaceModel: ObservableObject {
                 // running, and clearing whatever draft is current would throw
                 // away a decision being typed now. `self.` is load-bearing -
                 // the bare `draft` above is this click's unwrapped draft.
-                // A refused correction must leave the editor open with the
-                // user's value and cited rows intact. Closing the sheet on
-                // failure discards the only actionable context and forces the
-                // reviewer to re-enter the same information. Only a revision
-                // actually published by FormaCore dismisses the editor.
-                if applied.violations.isEmpty, self.draft?.id == draftID {
-                    self.draft = nil
-                }
+                if self.draft?.id == draftID { self.draft = nil }
                 refreshRows()
                 if let history = attempts {
                     correctionHistory = history
@@ -1991,30 +1941,6 @@ final class WorkspaceModel: ObservableObject {
         let id: UUID
         let term: String
         let role: String
-    }
-
-    // MARK: - Review Desk state (#146; additive)
-    //
-    // The desk's cursor and filter live on the shared model like the other
-    // areas' selections do: switching to 诊断 and back keeps reviewing the
-    // same file. Nothing here recomputes a value FormaCore owns; the queue
-    // only buckets the rows the mapping already published.
-
-    /// The file being reviewed in the desk queue.
-    @Published var deskFileSelection: UUID?
-
-    /// The desk's triage bucket (待处理 / 已验证 / 需关注).
-    @Published var deskTriage: DeskTriage = .pending
-
-    /// The revision a Save & Next armed at: the cursor may move only when the
-    /// manifest revision grows past this baseline (ReviewDeskFlow.advances).
-    /// A refused correction changes nothing, so the baseline simply stays.
-    @Published var deskBaselineRevision: Int?
-
-    /// The visible desk queue: current rows bucketed by the triage filter,
-    /// in manifest order.
-    var deskQueue: [MappingRow] {
-        rows.filter { FormaCore.deskTriage(for: $0.entry.state) == deskTriage }
     }
 }
 

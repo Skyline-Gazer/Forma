@@ -170,25 +170,34 @@ struct ShellNavigationTests {
         var coalescing = ReloadCoalescing()
         // Scope and profile changed in the same second: three requests, and
         // the third arrives while the first is still running.
-        #expect(coalescing.request() == true, "the first request runs")
-        #expect(coalescing.request() == false)
-        #expect(coalescing.request() == false)
+        let firstRequest = coalescing.request()
+        #expect(firstRequest == true, "the first request runs")
+        let queuedRequest = coalescing.request()
+        #expect(queuedRequest == false)
+        let queuedAgain = coalescing.request()
+        #expect(queuedAgain == false)
         #expect(coalescing.started == 1)
         #expect(coalescing.coalesced == 2, "two duplicate passes were avoided, not two dropped reloads")
-        #expect(coalescing.complete() == true, "a pass is owed because the selection moved")
+        let owedPass = coalescing.complete()
+        #expect(owedPass == true, "a pass is owed because the selection moved")
         #expect(coalescing.started == 2)
-        #expect(coalescing.complete() == false)
+        let idlePass = coalescing.complete()
+        #expect(idlePass == false)
         #expect(coalescing.isRunning == false)
-        #expect(coalescing.request() == true, "and the coalescer is idle again for the next change")
+        let idleRequest = coalescing.request()
+        #expect(idleRequest == true, "and the coalescer is idle again for the next change")
 
         // A cancel is a request to stop, not a request to run later.
         var cancelled = ReloadCoalescing()
-        #expect(cancelled.request())
-        #expect(!cancelled.request())
+        let cancelledFirst = cancelled.request()
+        #expect(cancelledFirst)
+        let cancelledSecond = cancelled.request()
+        #expect(!cancelledSecond)
         cancelled.cancel()
         #expect(cancelled.pending == false)
         #expect(cancelled.isRunning == false)
-        #expect(cancelled.request(), "the next genuine change still starts a pass")
+        let afterCancel = cancelled.request()
+        #expect(afterCancel, "the next genuine change still starts a pass")
     }
 
     // MARK: - The trace vocabulary
