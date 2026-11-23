@@ -140,15 +140,34 @@ struct AppShellPresentationTests {
             #expect(!area.title.isEmpty)
             #expect(!area.systemImage.isEmpty)
         }
-        #expect(AppArea.allCases.count == 5)
+        #expect(AppArea.allCases.count == 6)
+        // Append-only contract: every raw value persisted before the desk was
+        // added still decodes to the same area, and "review" is the only new
+        // identity. A rename of an old case would break this and is a
+        // migration, not a refactor.
+        for legacy in ["workspace", "mapping", "import", "exceptions", "settings"] {
+            #expect(AppArea(rawValue: legacy) != nil, "\(legacy) no longer decodes")
+        }
+        #expect(AppArea(rawValue: "review") == .reviewDesk)
     }
 
-    @Test("a stored selection unknown to this build restores to a real area")
+    @Test("a stored selection unknown to this build restores to the desk, and known values survive")
     func appAreaRestoreFallback() {
-        #expect(AppArea.restored(from: nil) == .workspace)
-        #expect(AppArea.restored(from: "") == .workspace)
-        #expect(AppArea.restored(from: "some-future-area") == .workspace)
+        // #144 default landing: nothing stored, or a value from a future
+        // build, restores to the business Review Desk - never a blank window,
+        // never an engineering area.
+        #expect(AppArea.restored(from: nil) == .reviewDesk)
+        #expect(AppArea.restored(from: "") == .reviewDesk)
+        #expect(AppArea.restored(from: "some-future-area") == .reviewDesk)
+        #expect(AppArea.defaultLanding == .reviewDesk)
         #expect(AppArea.restored(from: "settings") == .settings)
+        #expect(AppArea.restored(from: "workspace") == .workspace)
+        #expect(AppArea.restored(from: "review") == .reviewDesk)
+        // The sidebar grammar: the desk leads, and every area appears exactly
+        // once.
+        #expect(Set(AppArea.navigationOrder) == Set(AppArea.allCases))
+        #expect(AppArea.navigationOrder.count == AppArea.allCases.count)
+        #expect(AppArea.navigationOrder.first == .reviewDesk)
     }
 
     // MARK: - Egress consent presentation
