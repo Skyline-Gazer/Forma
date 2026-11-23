@@ -196,6 +196,9 @@ private struct WorkspaceAreas: View {
                 Divider()
             }
             TabView {
+                ReviewDeskView(model: model)
+                    .tabItem { Label("整理资料", systemImage: "checklist") }
+                    .accessibilityIdentifier("area-review")
                 WorkspaceView(model: model)
                     .tabItem { Label("Workspace", systemImage: "folder") }
                     .accessibilityIdentifier("area-workspace")
