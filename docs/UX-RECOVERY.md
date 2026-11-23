@@ -2,6 +2,18 @@
 
 状态：实施中。总任务 #144，首次人工修正证据故障 #145。Owner Mac 现场 S1 = FAIL，S2–S5 = NOT_VERIFIED，S6 = launch PASS。任何新 App 构建都不能在未经现场复测时声称 Field Accepted。
 
+## 0. 2026-11-23 重构说明：审核工作台并入统一 App Shell（取代首轮独立 Tab）
+
+本节为规范性说明；下文 §1–§7 保留为历史记录（含首轮 06e7166 的 Tab 形态），其信息架构部分已被本节取代。
+
+Owner 决定（#148，2026-11-23）确认 Forma 是 AI-native 文档理解与归档助手：不存在 Offline-First 产品要求，LLM 语义路径是默认；确定性 Offline Planner 是内部替代/手动草稿工具，不是产品特性。据此，本 PR（#146，同分支重建）做了三件事：
+
+1. **撤销独立入口**：首轮 Review Desk 在顶部 TabView 追加「资料整理」Tab，加剧了 #148 指出的碎片化。该 Tab 已随 D1 统一 Shell（#157，`NavigationSplitView` + Inspector + 命令语法）并入而删除；资料整理改为 Shell 的**一个 AppArea**（`review`，Presentation 层 `AppArea` 追加，旧 rawValue 全部保留，Codable 兼容），并且是新的默认落地页（`AppArea.defaultLanding`；旧值「未选择/未知」恢复时落到工作台，已持久化的工程区域选择保持有效）。旧的 Workspace/Mapping/Import/Exceptions/Settings 五个区域原样保留为高级/诊断路径，未删除任何界面。
+2. **AI 默认 + 明示回退**：流程为 选择来源 → 扫描 → 项目上下文 → **AI 理解**（默认下一步）→ 逐份审核 → 归档预览（ImportPlanner Dry-Run，无写入）。AI 运行前必过 EgressConsent 确认（复用 #157 的确认弹窗与模型/许可摘要），无密钥或无许可时只做设置引导，绝不产出模拟的「AI 结果」；Offline Planner 仅以「手动草稿（非 AI 理解）」按钮显式呈现，措辞与结果均不按成功/智能框架。状态机在 Core Presentation（`ReviewDeskFlow.swift`）：阶段、每阶段允许动作、Save & Next 仅当 FormaCore 发布了新修订才前进（拒绝则保持当前文件、错误按 缺少证据/证据过期/冲突/权限 就近显示，原始代码只进「诊断详情」）。
+3. **复用业务组件**：字段中文标签、类别 Profile 枚举下拉、按 文件名/来源目录/正文（页·段）分组的证据勾选、被拒保留草稿、归档预览与导出，均为首轮 P1/P2 组件的延续，但承载在共享 Shell 的页内 + Inspector + 共享修正表单里，不再有第二套导航。
+
+依赖与边界（合并顺序敏感）：本 PR 以 D1（#157）为宿主；#158（D3）落地后，证据定位渲染补一行 `.text → 正文 · 字符 a–b`（当前新枚举统一走 `default:` 防御，不引用任何仅存在于 D3 分支的 API）；`evidence_snapshot_mismatch`（#147）同样按字符串匹配，不引用其符号；`WorkspaceModel` 仅追加工作台状态段（与 D2 #151 的改动面保持文本级可解）。FormaCore 验证器/快照/证据语义零改动。视觉与交互的最终验收属 Owner Mac 现场（#153），CI 只证明可构建与确定性合同。
+
 ## 1. 成熟产品参考
 
 | 产品 | 采用模式 | 不照搬 |
