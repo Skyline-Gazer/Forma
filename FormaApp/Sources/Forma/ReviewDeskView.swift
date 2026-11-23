@@ -53,7 +53,7 @@ struct ReviewDeskView: View {
 
     private var flow: ReviewDeskFlow { ReviewDeskFlow.evaluate(inputs) }
 
-    private var selectedRow: WorkspaceModel.MappingRow? {
+    private var selectedRow: MappingRow? {
         model.deskQueue.first { $0.sourceID == model.deskFileSelection }
             ?? model.rows.first { $0.sourceID == model.deskFileSelection }
     }
@@ -304,7 +304,7 @@ struct ReviewDeskView: View {
         }
     }
 
-    private func queueRow(_ row: WorkspaceModel.MappingRow) -> some View {
+    private func queueRow(_ row: MappingRow) -> some View {
         let chip = deskChip(for: row.entry.state)
         return VStack(alignment: .leading, spacing: 5) {
             Text((row.entry.relativePath as NSString).lastPathComponent)
@@ -352,7 +352,7 @@ struct ReviewDeskView: View {
         }
     }
 
-    private func header(_ row: WorkspaceModel.MappingRow) -> some View {
+    private func header(_ row: MappingRow) -> some View {
         let chip = deskChip(for: row.entry.state)
         return VStack(alignment: .leading, spacing: 5) {
             Text((row.entry.relativePath as NSString).lastPathComponent)
@@ -389,7 +389,7 @@ struct ReviewDeskView: View {
             : [.documentcategory, .documenttype, .issuer]
     }
 
-    private func fieldsCard(_ row: WorkspaceModel.MappingRow) -> some View {
+    private func fieldsCard(_ row: MappingRow) -> some View {
         GroupBox("业务字段 · 优先确认") {
             VStack(alignment: .leading, spacing: 12) {
                 ForEach(primaryFields, id: \.self) { field in
@@ -410,7 +410,7 @@ struct ReviewDeskView: View {
         }
     }
 
-    private func fieldRow(_ row: WorkspaceModel.MappingRow, field: MetadataFieldID) -> some View {
+    private func fieldRow(_ row: MappingRow, field: MetadataFieldID) -> some View {
         let outcome = row.entry.outcome(for: field)
         return VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -460,7 +460,7 @@ struct ReviewDeskView: View {
 
     // MARK: Evidence
 
-    private func evidenceCard(_ row: WorkspaceModel.MappingRow) -> some View {
+    private func evidenceCard(_ row: MappingRow) -> some View {
         let records = (model.evidenceBySource[row.sourceID] ?? []).filter { $0.isUsable }
         return GroupBox("证据摘录 · 按来源分组") {
             VStack(alignment: .leading, spacing: 8) {
@@ -613,7 +613,7 @@ struct ReviewDeskView: View {
 
     /// Opens the shell's shared correction sheet, arming the Save & Next gate
     /// at the revision currently on screen.
-    private func beginCorrection(_ row: WorkspaceModel.MappingRow, field: MetadataFieldID) {
+    private func beginCorrection(_ row: MappingRow, field: MetadataFieldID) {
         model.deskBaselineRevision = model.manifest?.envelope.revision
         refusal = nil
         model.beginCorrection(sourceID: row.sourceID, field: field)
@@ -658,7 +658,7 @@ struct ReviewDeskView: View {
 struct ReviewDeskInspector: View {
     @ObservedObject var model: WorkspaceModel
 
-    private var row: WorkspaceModel.MappingRow? {
+    private var row: MappingRow? {
         guard let selection = model.deskFileSelection else { return nil }
         return model.rows.first { $0.sourceID == selection }
     }
@@ -693,7 +693,7 @@ struct ReviewDeskInspector: View {
         .accessibilityIdentifier("desk-inspector")
     }
 
-    private func entryFacts(_ row: WorkspaceModel.MappingRow) -> some View {
+    private func entryFacts(_ row: MappingRow) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Divider()
             Text("快照修订 \(row.entry.snapshotRevision) · 指纹 \(row.entry.snapshotFingerprint.prefix(12))…")
@@ -712,7 +712,7 @@ struct ReviewDeskInspector: View {
         }
     }
 
-    private func fieldFacts(_ row: WorkspaceModel.MappingRow) -> some View {
+    private func fieldFacts(_ row: MappingRow) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Divider()
             Text("字段与引用 ID").font(.caption.weight(.semibold))
@@ -735,7 +735,7 @@ struct ReviewDeskInspector: View {
         }
     }
 
-    private func evidenceFacts(_ row: WorkspaceModel.MappingRow) -> some View {
+    private func evidenceFacts(_ row: MappingRow) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Divider()
             Text("登记证据行").font(.caption.weight(.semibold))
@@ -750,7 +750,7 @@ struct ReviewDeskInspector: View {
         }
     }
 
-    private func correctionFacts(_ row: WorkspaceModel.MappingRow) -> some View {
+    private func correctionFacts(_ row: MappingRow) -> some View {
         let mine = model.correctionHistory.filter { $0.sourceID == row.sourceID }
         return VStack(alignment: .leading, spacing: 4) {
             Divider()
