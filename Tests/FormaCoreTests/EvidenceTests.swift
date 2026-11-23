@@ -358,7 +358,7 @@ func slice(_ text: String, _ range: Range<Int>) -> String {
     guard range.lowerBound >= 0, range.upperBound <= text.utf16.count, range.lowerBound <= range.upperBound else {
         return "\u{0}OUT_OF_RANGE\u{0}"
     }
-    return String(text.utf16[range.lowerBound..<range.upperBound])
+    return String(decoding: text.utf16[range.lowerBound..<range.upperBound], as: UTF16.self)
 }
 
 private let wordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"

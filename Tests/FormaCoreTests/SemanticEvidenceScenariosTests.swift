@@ -152,7 +152,7 @@ private func answerText(for batch: MappingBatch, association: (state: String, ca
         if let association {
             // An explicit null, never a boxed Swift nil: JSONSerialization
             // rejects the latter, and the failure would surface as an empty run.
-            entry["project_association"] = ["candidate_ref": association.candidate ?? NSNull(),
+            entry["project_association"] = ["candidate_ref": association.candidate.map { $0 as Any } ?? NSNull(),
                                             "state": association.state]
         }
         entries.append(entry)
@@ -551,7 +551,8 @@ struct SemanticEvidenceScenariosTests {
         defer { archive.cleanUp() }
         #expect(archive.context.candidates.isEmpty,
                 "a vendor library invents no project directory, so nothing can be bound to one")
-        #expect(!try archive.content(path).isEmpty, "the body was still read, and is still citable")
+        let vendorRows = try archive.content(path)
+        #expect(!vendorRows.isEmpty, "the body was still read, and is still citable")
 
         let outcome = await mapped(archive) { batch, _ in
             // No candidate_ref at all: a vendor file with no project is a normal
