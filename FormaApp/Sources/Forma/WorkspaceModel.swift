@@ -862,19 +862,18 @@ final class WorkspaceModel: ObservableObject {
                 return
             }
             // The first body read may calculate SHA-256 and append a new Source
-            // snapshot. The captured evidence is registered against that
-            // *post-read* revision, while the listing used to enter this run
-            // still describes the pre-read revision. Mapping those old entries
-            // would publish an immediately uncorrectable Manifest: the visible
-            // evidence exists but CorrectionEngine refuses it as evidence_not_found.
-            //
-            // Read the authoritative listing after all captures, without a
-            // second user Scan. ContextBuilder.inputDigest binds IDs, paths and
-            // states, not SHA/snapshot revisions, so a normal first-hash update
-            // does not invalidate the existing project context.
-            let currentListing: SourceListing
+            // snapshot, and FormaCore registers the captured evidence against
+            // that *post-read* revision while the listing this run entered on
+            // still describes the pre-read one. FormaCore's
+            // `bindCapturedTargets` re-reads the authoritative listing - one
+            // database read, no second user Scan - and hands back the
+            // post-read entries a run must map, only evidence rows bound to
+            // the snapshot that listing reports, and the failures in between.
+            let binding: SourceWorkspace.PostCaptureTargetBinding
             do {
-                currentListing = try await self.workspace.listing(scope)
+                binding = try await self.workspace.bindCapturedTargets(targets, captured: captured,
+                                                                       readFailures: unread, scope: scope,
+                                                                       profile: profile, context: context)
             } catch {
                 if !Task.isCancelled, scope.id == self.selectedScopeID {
                     self.show(error, operation: .providerProbe, fallback: .unavailable)
@@ -883,40 +882,29 @@ final class WorkspaceModel: ObservableObject {
             }
             guard !Task.isCancelled, scope.id == self.selectedScopeID,
                   profile.profileID == self.selectedProfileID else { return }
-            let latestByID = Dictionary(uniqueKeysWithValues: currentListing.entries.map { ($0.id, $0) })
-            let currentTargets = targets.compactMap { latestByID[$0.id] }
-            guard currentTargets.count == targets.count else {
+            let currentTargets: [SourceEntry]
+            let currentEvidence: [UUID: [EvidenceRecord]]
+            switch binding {
+            case .listingChanged(let currentListing):
                 self.listing = currentListing
                 self.notice = "The source list changed during evidence capture. Review the files before mapping again."
                 return
-            }
-            let digest = ContextBuilder.inputDigest(scopeID: scope.id, profile: profile,
-                                                    entries: currentListing.entries)
-            guard digest == context.inputDigest else {
+            case .contextStale(let currentListing):
+                // The stale-snapshot half of the reviewer's feedback: this is
+                // a moved structure, not unread files, and the fix is a fresh
+                // project context, not another scan of the same files.
                 self.listing = currentListing
                 self.contextIsStale = true
                 self.notice = "The source structure changed. Build a fresh project context before mapping."
                 return
+            case .bound(let entries, let evidence, let failures, let currentListing):
+                currentTargets = entries
+                currentEvidence = evidence
+                unread = failures
+                self.listing = currentListing
+                self.evidenceFailures = failures
+                self.merge(evidence.values.flatMap { $0 })
             }
-            var currentEvidence: [UUID: [EvidenceRecord]] = [:]
-            for entry in currentTargets {
-                guard let records = captured[entry.id] else { continue }
-                // Never allow a stale or foreign evidence row into a new
-                // Manifest, even if a file changed between two reads. The
-                // validator keeps the same strict source/snapshot gates.
-                guard records.allSatisfy({
-                    $0.sourceID == entry.id
-                        && $0.snapshotRevision == Int(entry.snapshotRevision)
-                        && $0.snapshotFingerprint == entry.snapshotFingerprint
-                }) else {
-                    unread[entry.id] = .sourceChanged
-                    continue
-                }
-                currentEvidence[entry.id] = records
-            }
-            self.listing = currentListing
-            self.evidenceFailures = unread
-            self.merge(currentEvidence.values.flatMap { $0 })
             do {
                 try await self.workspace.startMappingRun(run)
             } catch {
