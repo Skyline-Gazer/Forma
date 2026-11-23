@@ -76,18 +76,21 @@
       "skill_path": "swiftui-pro",
       "declared_version": "2.0.0",
       "declared_version_source": "SKILL.md front-matter `metadata.version` at the pinned commit",
-      "use_scope": "Independent second opinion on key SwiftUI PRs (App Shell, navigation, review desk) against the reference files listed below. Never a permanent agent instruction set, never both skills in the same prompt by default.",
+      "use_scope": "Independent second opinion on key SwiftUI PRs (App Shell, navigation, review desk), restricted to the five reference files named in issue #149. Never a permanent agent instruction set, never both skills in the same prompt by default.",
       "references": [
         "design.md",
         "data.md",
         "views.md",
         "navigation.md",
-        "performance.md",
+        "performance.md"
+      ],
+      "optional_references": [
         "performance-plus.md",
         "resizability.md",
         "accessibility.md",
         "localization.md"
       ],
+      "optional_references_rule": "Pull one of these in only when the reviewed rule needs it (resizability → window geometry, performance-plus → traces, accessibility → VoiceOver, localization → copy) and record which file was read in the PR.",
       "cautions": [
         "reviewer-only: adopting its advice still requires the Apple/ADS hierarchy in this file and a human reviewer.",
         "resizability.md and design guidance may target platforms newer than macOS 14; the Forma baseline wins."

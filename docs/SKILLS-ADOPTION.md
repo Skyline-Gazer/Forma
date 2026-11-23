@@ -63,7 +63,10 @@ Top-level structure at the pinned commits (recorded, not copied):
   `accessibility-patterns`, `list-patterns`, `scroll-patterns`, `localization`, `performance-patterns`,
   `trace-recording`, `trace-analysis`) is listed in the manifest.
 - twostraws: `.claude-plugin/ assets/ CODE_OF_CONDUCT.md LICENSE README.md swiftui-pro/`; `swiftui-pro/` holds
-  `SKILL.md` (`metadata.version "2.0.0"`), `agents/`, `assets/`, and 12 `references/*.md`.
+  `SKILL.md` (`metadata.version "2.0.0"`), `agents/`, `assets/`, and 12 `references/*.md`. The standing review
+  scope is the five files named in issue #149 (`design`, `data`, `views`, `navigation`, `performance`);
+  `performance-plus`, `resizability`, `accessibility` and `localization` are available on request when the
+  reviewed rule needs them, and the file actually read is recorded in that PR.
 
 **Compatibility finding.** The primary skill's own `SKILL.md` declares itself for "iOS **or** macOS" and ships
 iOS-oriented references (`iphone-duo.md`, `liquid-glass.md`, `latest-apis.md`, charts). Forma consumes only the
