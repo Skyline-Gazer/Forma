@@ -164,8 +164,7 @@ struct FirstReadSnapshotBindingTests {
             correctedValue: "示例项目_2026", evidenceIDs: [citedPath.id],
             origin: .manual, scope: scope, profile: profile)
         #expect(applied.violations.contains { $0.code == "evidence_snapshot_mismatch" },
-                "a superseded-snapshot citation must be reported as stale, not missing: "
-                    + "\(applied.violations.map(\.code))")
+                "a superseded-snapshot citation must be reported as stale, not missing: \(applied.violations.map(\.code))")
         #expect(!applied.violations.contains { $0.code == "evidence_not_found" })
         #expect(applied.correction.reviewState == .rejected)
         #expect(applied.correction.producedRevision == nil)

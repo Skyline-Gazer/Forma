@@ -223,8 +223,7 @@ struct CorrectionEngineTests {
                                    context: context(profile: profile), evidence: [sourceID: [stale]],
                                    currentEntries: [source()])
         #expect(applied.violations.contains { $0.code == "evidence_snapshot_mismatch" },
-                "a row from a superseded snapshot is stale evidence, not missing evidence: "
-                    + "\(applied.violations.map(\.code))")
+                "a row from a superseded snapshot is stale evidence, not missing evidence: \(applied.violations.map(\.code))")
         #expect(!applied.violations.contains { $0.code == "evidence_not_found" })
         #expect(applied.manifest.entries[0].metadata[.completionyear] == "2026")
     }
