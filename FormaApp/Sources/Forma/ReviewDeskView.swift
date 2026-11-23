@@ -765,7 +765,7 @@ struct ReviewDeskInspector: View {
                         .foregroundStyle(record.reviewState == .rejected ? .orange : .secondary)
                     Text("\(metadataFieldLabel(record.field)) → \(record.correctedValue ?? "清空")")
                         .font(.caption2)
-                    Text("发布修订 \(record.producedRevision.map(String.init(describing:)) ?? "无")")
+                    Text("发布修订 \(record.producedRevision.map { "\($0)" } ?? "无")")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
