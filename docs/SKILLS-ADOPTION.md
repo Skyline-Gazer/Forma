@@ -134,6 +134,9 @@ Executed on the DevBox, 2026-11-23, exit 0 for both modes:
 ADS_PIN_OK: .ads gitlink == ads-pin.txt == 16b99f4b49769555acc66a0c57b8cfcb8c8bac60 (cnb/dev)
 ```
 
+The same line was observed in the macOS-15 `FormaCore tests` job log of this PR's CI run, i.e. the anonymous
+upstream verification also works from the runner, and the `test` job stayed green with the step added.
+
 Semantics: this step fails on gitlink/pin/`.gitmodules`/branch drift, on an absent upstream object, and
 distinguishes an unreachable ADS remote (`NOT_VERIFIED`) from a genuine mismatch. A red step is a finding to
 fix in a reviewed PR; it must not be silenced by deleting the step or by bumping the pin without review.
@@ -147,6 +150,6 @@ point-in-time record and is deliberately left unchanged. Branch protection was c
 
 - No Swift compile/test evidence from the DevBox (no toolchain, `FormaCore` uses `import Darwin`): macOS CI on
   the PR is the only build authority; its per-job status is recorded in the PR.
-- Real Provider calls and DEVONthink read/write: BLOCKED by program authorization, not attempted.
+- Real Provider calls and DEVONthink read/write: BLOCKED by the program decision in #148; not attempted.
 - GUI geometry, VoiceOver, Instruments and screenshot-level acceptance: deferred to M0 (#153).
 - `ads-pin.txt`, the `.ads` submodule, `docs/SPEC.md`, `docs/PLAN.md`, `AGENTS.md`: unchanged by this slice.
