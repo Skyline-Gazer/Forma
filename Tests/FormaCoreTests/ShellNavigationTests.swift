@@ -80,8 +80,11 @@ struct ShellNavigationTests {
         // point - and this test is what keeps it that way.
         var state = ShellNavigationState(area: .mapping, scopeID: UUID(), profileID: "p",
                                         manifestPresent: true)
+        // One run tallied before the switches: every assertion below is that
+        // the value the switch left behind, so an accidental extra start or
+        // cancel by the rule itself would move it.
+        state.counters.record(.mapping)
         for to in areas {
-            state.counters.record(.mapping)
             let effects = apply(.areaChanged(to: to), to: &state)
             #expect(effects.isEmpty)
             #expect(state.counters.count(of: .mapping) == 1, "the switch itself must not touch tallies")
@@ -97,7 +100,10 @@ struct ShellNavigationTests {
         #expect(closeEffects == [.cancelInFlightWork])
 
         var scope = ShellNavigationState(area: .workspace)
-        _ = apply(.scopeChanged(to: UUID()), to: &scope)
+        // The rule returns effects; the tally is the interpreter's (see the
+        // ledger's contract). Recording through the same helper the app's
+        // `perform(_:)` uses is what makes this a test of the real wiring.
+        scope.counters.record(effects: apply(.scopeChanged(to: UUID()), to: &scope))
         #expect(!scope.counters.isIdle, "a source switch does start a reload")
         #expect(scope.counters.count(of: .cancel) == 0, "...and it is not a cancel")
         #expect(scope.counters.count(of: .reload) == 1)
