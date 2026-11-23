@@ -861,7 +861,50 @@ final class WorkspaceModel: ObservableObject {
                                                            error: .cancelled)
                 return
             }
-            self.merge(captured.values.flatMap { $0 })
+            // The first body read may calculate SHA-256 and append a new Source
+            // snapshot, and FormaCore registers the captured evidence against
+            // that *post-read* revision while the listing this run entered on
+            // still describes the pre-read one. FormaCore's
+            // `bindCapturedTargets` re-reads the authoritative listing - one
+            // database read, no second user Scan - and hands back the
+            // post-read entries a run must map, only evidence rows bound to
+            // the snapshot that listing reports, and the failures in between.
+            let binding: SourceWorkspace.PostCaptureTargetBinding
+            do {
+                binding = try await self.workspace.bindCapturedTargets(targets, captured: captured,
+                                                                       readFailures: unread, scope: scope,
+                                                                       profile: profile, context: context)
+            } catch {
+                if !Task.isCancelled, scope.id == self.selectedScopeID {
+                    self.show(error, operation: .providerProbe, fallback: .unavailable)
+                }
+                return
+            }
+            guard !Task.isCancelled, scope.id == self.selectedScopeID,
+                  profile.profileID == self.selectedProfileID else { return }
+            let currentTargets: [SourceEntry]
+            let currentEvidence: [UUID: [EvidenceRecord]]
+            switch binding {
+            case .listingChanged(let currentListing):
+                self.listing = currentListing
+                self.notice = "The source list changed during evidence capture. Review the files before mapping again."
+                return
+            case .contextStale(let currentListing):
+                // The stale-snapshot half of the reviewer's feedback: this is
+                // a moved structure, not unread files, and the fix is a fresh
+                // project context, not another scan of the same files.
+                self.listing = currentListing
+                self.contextIsStale = true
+                self.notice = "The source structure changed. Build a fresh project context before mapping."
+                return
+            case .bound(let entries, let evidence, let failures, let currentListing):
+                currentTargets = entries
+                currentEvidence = evidence
+                unread = failures
+                self.listing = currentListing
+                self.evidenceFailures = failures
+                self.merge(evidence.values.flatMap { $0 })
+            }
             do {
                 try await self.workspace.startMappingRun(run)
             } catch {
@@ -871,7 +914,7 @@ final class WorkspaceModel: ObservableObject {
             }
             self.phase = .mapping
             let result = await engine.run(MappingRunRequest(scope: scope, profile: profile, context: context,
-                                                             entries: targets, evidence: captured,
+                                                             entries: currentTargets, evidence: currentEvidence,
                                                              provider: provider, model: model,
                                                              allowCloud: consent, redaction: plan,
                                                              entryLimit: limit))

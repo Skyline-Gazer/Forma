@@ -184,23 +184,49 @@ public struct CorrectionEngine: Sendable {
             let rows = evidence[sourceID] ?? []
             let target = manifest.entries[position]
             let rowsByID = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            let verified = evidenceIDs.filter { id in
+            // Two refusals wear different faces and the review screen has to say
+            // which one happened: a citation that names no row the program
+            // holds is missing evidence, while a row that exists but describes
+            // a superseded snapshot is a stale one - the file moved under the
+            // manifest, and re-reading its evidence, not a rescan of the
+            // listing, is the fix. The validator already keeps these codes
+            // apart for a model's answer; a human citation is judged by the
+            // same gates and reported the same way. Neither kind is accepted.
+            var verifiedCount = 0
+            var absentCitation = evidenceIDs.isEmpty
+            var staleCitation = false
+            for id in Set(evidenceIDs) {
                 guard let record = rowsByID[id], record.isUsable,
                       // The map is keyed by source, but the row itself carries a
                       // source id: a caller that mixed rows would otherwise let a
                       // correction cite another file's text.
-                      record.sourceID == sourceID else { return false }
+                      record.sourceID == sourceID else { absentCitation = true; continue }
                 // The same binding the validator insists on: a row from an older
                 // snapshot describes a file that is no longer the one in front of
                 // the reviewer, and accepting it would let a correction cite
                 // evidence the manifest cannot resolve.
-                return record.snapshotFingerprint == target.snapshotFingerprint
-                    && record.snapshotRevision == target.snapshotRevision
+                if record.snapshotFingerprint == target.snapshotFingerprint,
+                   record.snapshotRevision == target.snapshotRevision {
+                    verifiedCount += 1
+                } else {
+                    staleCitation = true
+                }
             }
-            if verified.count != Set(evidenceIDs).count || verified.isEmpty {
-                violations.append(ValidationViolation(code: "evidence_not_found", instancePath: field.rawValue,
-                                                      detail: "A corrected value must cite evidence that exists, "
-                                                            + "for this source and this snapshot."))
+            // `verifiedCount == 0` keeps the original rule that an empty
+            // citation list is an opinion, not a decision: with no citations
+            // the count check above is vacuous on its own.
+            if verifiedCount != Set(evidenceIDs).count || verifiedCount == 0 {
+                if absentCitation {
+                    violations.append(ValidationViolation(code: "evidence_not_found", instancePath: field.rawValue,
+                                                          detail: "A corrected value must cite evidence that exists, "
+                                                                + "for this source and this snapshot."))
+                }
+                if staleCitation {
+                    violations.append(ValidationViolation(code: "evidence_snapshot_mismatch",
+                                                          instancePath: field.rawValue,
+                                                          detail: "Evidence was read from a different snapshot revision. "
+                                                                + "Re-read the file's evidence before correcting."))
+                }
             }
         }
 

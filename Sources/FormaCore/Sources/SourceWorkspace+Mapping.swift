@@ -133,6 +133,84 @@ extension SourceWorkspace {
         return result
     }
 
+    /// What re-reading the authoritative listing says about a run's targets
+    /// once their evidence has been captured. See `bindCapturedTargets`.
+    public enum PostCaptureTargetBinding: Sendable {
+        /// Every target is still in the listing, the project context still
+        /// describes this membership, and `evidence` holds only rows bound to
+        /// the snapshot the listing reports. `entries` - not the caller's
+        /// pre-capture targets - is what a run must map, so the manifest it
+        /// publishes and the evidence the reviewer can cite describe the same
+        /// snapshot. `unread` is the caller's read failures plus any entry
+        /// whose rows no longer match the current snapshot.
+        case bound(entries: [SourceEntry], evidence: [UUID: [EvidenceRecord]],
+                   unread: [UUID: FormaError], listing: SourceListing)
+        /// A target id is no longer in the listing at all: the structure moved
+        /// while evidence was being read. Mapping cannot continue against a
+        /// listing that lost the file this run captured rows for.
+        case listingChanged(listing: SourceListing)
+        /// All target ids still exist, but the context membership digest moved
+        /// - an add, removal, rename or state change. The context a run would
+        /// cite no longer describes this listing; a fresh context is required,
+        /// not a fresh scan of the same files.
+        case contextStale(listing: SourceListing)
+    }
+
+    /// Binds mapping targets to the snapshots their captured evidence describes.
+    ///
+    /// The first body read of a file is what computes its SHA-256, and
+    /// `publishEvidence` appends a new snapshot revision the moment that hash
+    /// becomes known. So `captureEvidence` registers rows against the
+    /// *post-read* revision while the listing a run entered on still describes
+    /// the pre-read one. A manifest mapped from those stale entries would bind
+    /// the old snapshot, the evidence registry would hold only the new one, and
+    /// the reviewer's first correction - citing exactly the rows the UI shows -
+    /// would be refused forever. This is one database listing read, not a
+    /// rescan: a first-run review must never have to scan twice.
+    ///
+    /// The context survives the transition by construction:
+    /// `ContextBuilder.inputDigest` binds identities, paths and states, not
+    /// SHA-256 or snapshot revisions, so a normal first-hash update leaves the
+    /// digest - and the stored project context - untouched. Anything that does
+    /// move the digest is reported instead of mapped around.
+    ///
+    /// Nothing is relaxed here. Rows that do not describe the snapshot the
+    /// listing reports are dropped from the run and recorded as
+    /// `sourceChanged`, and the validator's source/snapshot gates stay exactly
+    /// as strict as before; a caller that wants to map stale evidence has to
+    /// falsify it, which this method makes observable instead of silent.
+    public func bindCapturedTargets(_ targets: [SourceEntry], captured: [UUID: [EvidenceRecord]],
+                                    readFailures: [UUID: FormaError], scope: SourceScope,
+                                    profile: MappingProfile,
+                                    context: ProjectContext) throws -> PostCaptureTargetBinding {
+        let currentListing = try listing(scope)
+        let latestByID = Dictionary(uniqueKeysWithValues: currentListing.entries.map { ($0.id, $0) })
+        var currentTargets: [SourceEntry] = []
+        currentTargets.reserveCapacity(targets.count)
+        for target in targets {
+            guard let fresh = latestByID[target.id] else { return .listingChanged(listing: currentListing) }
+            currentTargets.append(fresh)
+        }
+        let digest = ContextBuilder.inputDigest(scopeID: scope.id, profile: profile,
+                                                entries: currentListing.entries)
+        guard digest == context.inputDigest else { return .contextStale(listing: currentListing) }
+        var evidence: [UUID: [EvidenceRecord]] = [:]
+        var unread = readFailures
+        for entry in currentTargets {
+            guard let records = captured[entry.id] else { continue }
+            guard records.allSatisfy({
+                $0.sourceID == entry.id
+                    && $0.snapshotRevision == Int(entry.snapshotRevision)
+                    && $0.snapshotFingerprint == entry.snapshotFingerprint
+            }) else {
+                unread[entry.id] = .sourceChanged
+                continue
+            }
+            evidence[entry.id] = records
+        }
+        return .bound(entries: currentTargets, evidence: evidence, unread: unread, listing: currentListing)
+    }
+
     /// Stores a manifest as the next revision. A caller cannot overwrite an
     /// existing revision by handing it the same number: the store decides.
     public func saveManifest(_ manifest: Manifest, scopeID: UUID) async throws -> Manifest {
