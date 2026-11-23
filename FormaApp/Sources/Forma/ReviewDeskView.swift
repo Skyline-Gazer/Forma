@@ -111,6 +111,9 @@ struct ReviewDeskView: View {
                 .disabled(!model.canMap)
                 .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("review-offline-map")
+                Button("4 归档预览") { model.buildImportPlan() }
+                    .disabled(model.manifest == nil || model.phase.isBusy)
+                    .accessibilityIdentifier("review-build-plan")
             }
             if let notice = model.notice, !notice.isEmpty {
                 Label(ReviewDeskLabels.feedback(notice),
@@ -355,16 +358,38 @@ struct ReviewDeskView: View {
     }
 
     private func planSummary(_ plan: ImportPlan) -> some View {
-        HStack {
-            Label("归档预览 · 只读", systemImage: "doc.text.magnifyingglass")
-                .font(.subheadline.weight(.semibold))
-            Text("\(plan.rows.count) 份文件 · 本构建不会执行写入")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text("完整目标组与阻断原因见 Import 页面")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        DisclosureGroup {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(plan.rows, id: \.sourceID) { row in
+                        HStack(alignment: .top, spacing: 12) {
+                            Text((row.relativePath as NSString).lastPathComponent)
+                                .frame(maxWidth: 250, alignment: .leading)
+                            Text(row.groupPath.isEmpty
+                                 ? "归档位置尚未确定"
+                                 : row.groupPath.joined(separator: " / "))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text(row.codes.map(\.rawValue).joined(separator: " · "))
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.caption)
+                    }
+                }
+                .padding(.top, 8)
+            }
+            .frame(maxHeight: 150)
+        } label: {
+            HStack(spacing: 8) {
+                Label("归档预览 · 不会执行写入", systemImage: "doc.text.magnifyingglass")
+                    .font(.subheadline.weight(.semibold))
+                Text("\(plan.rows.count) 份文件")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("展开查看每份文件的目标目录与阻断原因")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(12)
     }
