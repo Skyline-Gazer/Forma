@@ -338,6 +338,13 @@ struct ReviewDeskView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
+            if let notice = model.notice, notice.contains("FormaCore refused this correction:") {
+                Label(ReviewDeskLabels.feedback(notice),
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .accessibilityIdentifier("review-correction-error")
+            }
             Divider()
             HStack {
                 Spacer()
