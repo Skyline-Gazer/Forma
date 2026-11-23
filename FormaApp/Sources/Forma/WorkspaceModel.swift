@@ -1504,7 +1504,7 @@ final class WorkspaceModel: ObservableObject {
     /// Runs on a detached priority: these are the two largest synchronous
     /// reads the app performs, and the listing they describe can be a
     /// thousand entries with one evidence file per citation.
-    private static func readBundle(at url: URL) throws -> BundleContents {
+    private nonisolated static func readBundle(at url: URL) throws -> BundleContents {
         let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
         let bundle = isDirectory ? url : url.deletingLastPathComponent()
         let manifestURL = isDirectory ? bundle.appendingPathComponent(ManifestExport.manifestFile) : url
