@@ -861,7 +861,62 @@ final class WorkspaceModel: ObservableObject {
                                                            error: .cancelled)
                 return
             }
-            self.merge(captured.values.flatMap { $0 })
+            // The first body read may calculate SHA-256 and append a new Source
+            // snapshot. The captured evidence is registered against that
+            // *post-read* revision, while the listing used to enter this run
+            // still describes the pre-read revision. Mapping those old entries
+            // would publish an immediately uncorrectable Manifest: the visible
+            // evidence exists but CorrectionEngine refuses it as evidence_not_found.
+            //
+            // Read the authoritative listing after all captures, without a
+            // second user Scan. ContextBuilder.inputDigest binds IDs, paths and
+            // states, not SHA/snapshot revisions, so a normal first-hash update
+            // does not invalidate the existing project context.
+            let currentListing: SourceListing
+            do {
+                currentListing = try await self.workspace.listing(scope)
+            } catch {
+                if !Task.isCancelled, scope.id == self.selectedScopeID {
+                    self.show(error, operation: .providerProbe, fallback: .unavailable)
+                }
+                return
+            }
+            guard !Task.isCancelled, scope.id == self.selectedScopeID,
+                  profile.profileID == self.selectedProfileID else { return }
+            let latestByID = Dictionary(uniqueKeysWithValues: currentListing.entries.map { ($0.id, $0) })
+            let currentTargets = targets.compactMap { latestByID[$0.id] }
+            guard currentTargets.count == targets.count else {
+                self.listing = currentListing
+                self.notice = "The source list changed during evidence capture. Review the files before mapping again."
+                return
+            }
+            let digest = ContextBuilder.inputDigest(scopeID: scope.id, profile: profile,
+                                                    entries: currentListing.entries)
+            guard digest == context.inputDigest else {
+                self.listing = currentListing
+                self.contextIsStale = true
+                self.notice = "The source structure changed. Build a fresh project context before mapping."
+                return
+            }
+            var currentEvidence: [UUID: [EvidenceRecord]] = [:]
+            for entry in currentTargets {
+                guard let records = captured[entry.id] else { continue }
+                // Never allow a stale or foreign evidence row into a new
+                // Manifest, even if a file changed between two reads. The
+                // validator keeps the same strict source/snapshot gates.
+                guard records.allSatisfy({
+                    $0.sourceID == entry.id
+                        && $0.snapshotRevision == Int(entry.snapshotRevision)
+                        && $0.snapshotFingerprint == entry.snapshotFingerprint
+                }) else {
+                    unread[entry.id] = .sourceChanged
+                    continue
+                }
+                currentEvidence[entry.id] = records
+            }
+            self.listing = currentListing
+            self.evidenceFailures = unread
+            self.merge(currentEvidence.values.flatMap { $0 })
             do {
                 try await self.workspace.startMappingRun(run)
             } catch {
@@ -871,7 +926,7 @@ final class WorkspaceModel: ObservableObject {
             }
             self.phase = .mapping
             let result = await engine.run(MappingRunRequest(scope: scope, profile: profile, context: context,
-                                                             entries: targets, evidence: captured,
+                                                             entries: currentTargets, evidence: currentEvidence,
                                                              provider: provider, model: model,
                                                              allowCloud: consent, redaction: plan,
                                                              entryLimit: limit))
