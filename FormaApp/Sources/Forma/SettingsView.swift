@@ -33,7 +33,7 @@ struct SettingsView: View {
             storageSection
         }
         .formStyle(.grouped)
-        .navigationTitle("Settings")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Provider
@@ -63,11 +63,14 @@ struct SettingsView: View {
 
     // MARK: - Egress consent
 
+    /// Consent is stated in the user's language and in the same short words the
+    /// shell's 外发许可 control uses; no full English sentence about leaving the
+    /// machine is shown anywhere in a titlebar or a form row (owner failure #7).
     private var egressSection: some View {
         Section("Cloud egress") {
-            Toggle("Allow one mapping request to leave this machine", isOn: $model.allowCloud)
+            Toggle("允许一次映射请求离开本机", isOn: $model.allowCloud)
                 .accessibilityIdentifier("egress-consent")
-            Text("Off by default and never restored after a restart. FormaCore's client refuses a request without it, and a run consumes the consent.")
+            Text("默认关闭，重启后绝不恢复。没有它，FormaCore 的客户端会拒绝任何外发请求；一次运行即消耗本许可。")
                 .font(.caption).foregroundStyle(.secondary)
             Link("API data handling policy",
                  destination: model.provider == .openAI
@@ -247,12 +250,21 @@ struct SettingsView: View {
 
     private var profileSection: some View {
         Section("Profile") {
-            Picker("Profile", selection: Binding(get: { model.selectedProfileID }, set: { model.selectedProfileID = $0 })) {
+            Picker("Profile", selection: Binding(
+                get: {
+                    guard model.profiles.contains(where: { $0.profileID == model.selectedProfileID }) else { return nil }
+                    return model.selectedProfileID
+                },
+                set: { model.selectedProfileID = $0 }
+            )) {
+                if !model.profiles.contains(where: { $0.profileID == model.selectedProfileID }) {
+                    Text(ShellProfilePicker.placeholder).tag(String?.none)
+                }
                 ForEach(model.profiles, id: \.profileID) { profile in
                     Text(profile.displayName).tag(Optional(profile.profileID))
                 }
             }
-            .disabled(model.phase.isBusy)
+            .disabled(!ShellProfilePicker.isEnabled(optionCount: model.profiles.count) || model.phase.isBusy)
             .accessibilityIdentifier("settings-profile")
             if let profile = model.selectedProfile {
                 LabeledContent("Identifier", value: profile.versionKey)

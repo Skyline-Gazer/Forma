@@ -110,16 +110,12 @@ final class WorkspaceModel: ObservableObject {
     /// a model: the manifest records `modelProvider = "offline"` and the run
     /// consumes no tokens. Switching modes never touches the stored provider,
     /// model or key of the other mode.
+    /// The user-facing name lives in FormaCore's Presentation layer
+    /// (`plannerModeLabel`) so it is one tested string; this enum only carries
+    /// the persisted choice.
     enum PlannerMode: String {
         case offline
         case ai
-
-        var label: String {
-            switch self {
-            case .offline: "Offline Planner — Not AI"
-            case .ai: "AI Mapping"
-            }
-        }
     }
 
     @Published var plannerMode: PlannerMode {
@@ -258,6 +254,34 @@ final class WorkspaceModel: ObservableObject {
     /// Cloud egress consent, never persisted: off at every launch, and
     /// FormaCore's client refuses the request without it.
     @Published var allowCloud = false
+
+    // MARK: - Shell presentation state
+    //
+    // The scene-owned shell binds these so a person's place survives an area
+    // switch, not merely a tab unmount: the shell never unmounts, and each
+    // area's leading pane, table and inspector read these same values. They
+    // are selections only - the model remains the single owner of everything
+    // FormaCore produced.
+    @Published var workspaceFileSelection: UUID?
+    @Published var workspaceClusterSelection: String?
+    @Published var mappingFileSelection: UUID?
+    @Published var mappingEvidenceSelection: String?
+    @Published var exceptionStateFilter: ExceptionFilterState = .all
+    @Published var exceptionCodeFilter: String?
+    @Published var exceptionSelection: Set<UUID> = []
+    /// Egress consent for the next reprocess only. It starts off, is read when
+    /// the run fires and is cleared on acceptance, so no later action inherits
+    /// it. The confirmation behind it is presentation of the same per-run
+    /// contract the old titlebar checkbox carried.
+    @Published var reprocessEgress = false
+
+    /// The shell calls this when the scope changes: files and clusters belong
+    /// to one listing, and these selections are the shell's, not the old
+    /// view's private state.
+    func resetAreaSelections() {
+        workspaceFileSelection = nil
+        workspaceClusterSelection = nil
+    }
 
     @Published var redactionSalt: String {
         didSet { defaults.set(redactionSalt, forKey: Keys.salt) }

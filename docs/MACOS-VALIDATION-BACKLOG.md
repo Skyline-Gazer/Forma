@@ -31,7 +31,8 @@
 | M8 | Mac App Store 沙盒兼容性 | #52 / R1 | Deferred（渠道未定） | 重新选择该渠道 |
 | M9 | 10,000 文件真实扫描性能验收 | #20 / P3-A | Deferred | 真实目录 + 硬件记录 |
 | M10 | 真实 Provider 外发授权、Keychain 与日志脱敏现场核验 | #20 / P3-A + P3-B | Deferred（部分未授权） | Provider 凭据、外发授权、真实 macOS 会话 |
-| M11 | Import Eligibility 生产接入与真实目录误排除复核 | #51 / P3-A | **Implemented, default off**；现场 = **`MACOS_SYNTHETIC_PARTIAL`**（2026-11-17 Mac 执行 30/30 PASS，Owner 提供证据；B3 本地未验证/CI PASS、A8b 内存未测量） | 真实目录与人工复核；默认启用需 Owner 再确认；切片 5 未授权 |
+|M11|Import Eligibility 生产接入与真实目录误排除复核|#51 / P3-A|**Implemented, default off**；现场 = **`MACOS_SYNTHETIC_PARTIAL`**（2026-11-17 Mac 执行 30/30 PASS，Owner 提供证据；B3 本地未验证/CI PASS、A8b 内存未测量）|真实目录与人工复核；默认启用需 Owner 再确认；切片 5 未授权|
+|M12|D1 统一 App Shell 的窗口、布局、工具栏与 VoiceOver 现场核验|#150 #153 / Phase 2|Deferred（PR #157：代码与确定性 Presentation 测试已入 CI）|Owner Mac 人工交互（#153/M0 批次）|
 
 ## 2. 各项明细
 
@@ -177,6 +178,13 @@
 - **安全声明（Owner）**：未访问真实业务目录、未做 DEVONthink 操作、未调用 Provider、未外发文件、未修改仓库、临时夹具已清理、资格默认仍关闭。
 - **2026-11-18（第 4 级只读验收工具已就绪，真实目录验收仍未开始）**：新增 `swift run FormaAcceptance m11-real`（`--source`、`--evidence-dir`、`--dry-run` 均为必填；拒绝相对路径、证据目录落在源目录内、源目录与证据目录互相包含、软链接越界、非 dry-run 模式）。流程为只读扫描 → 事实探测 → 四态决策 → 私人审核表 → 脱敏摘要；产物含私人审核表、脱敏摘要、扫描完整性报告、误排除报告、OneDrive 覆盖矩阵（固定 `NOT_VERIFIED`）与 `SHA256SUMS`。人工标签可离线导入后重算指标，**无需重新扫描**；覆盖不完整显式记 `PARTIAL`（退出码 `3`），无人工标注时误排除为 `N/A`（不报零误排除）。**证据写入安全**：一次扫描必须对应一个**新的、空的**证据运行目录（已有内容拒绝，旧运行的人工标签与结论不可能被覆盖）；证据目录必须 `0700`、产物写为 `0600` 且读回校验；固定产物名与 SQLite 文件（含 `-wal`/`-shm`）为符号链接时拒绝；写入前重新解析目录并复核与源目录的分离，无法证明安全即失败关闭。**标签绑定**：导入要求 `--source`、审核表记录的授权目录、发布的 Policy digest 三者一致，标签可选携带 `snapshot_fingerprint`，与审核表不一致即拒绝，防止旧结论被套用到新内容或新策略上；审核表缺失、读不出或本构建无法解析（旧版本工具产物）分别记 `sheetMissing` / `sheetUnreadable` / `sheetInvalid`，一律拒绝而不是当作空表。用法与产物格式见 `docs/M11-LEVEL4-RUNBOOK.md`。
 - **本轮报告**：`docs/M11-SYNTHETIC-ACCEPTANCE-REPORT.md` §8。合成验收**不构成**真实目录验收，也不构成关闭本项或开启默认过滤的依据。
+
+### M12 D1 统一 App Shell 的窗口、布局、工具栏与 VoiceOver 现场核验
+
+- **关联**：Issue #150（Phase 2 / D1，PR #157）、父计划 #148、验收批次 #153/M0。
+- **已在 DevBox 完成**：单场景 shell（应用侧栏 + 区域内容 + `.inspector` + shell 工具栏）替换 `TabView` 与三个各自为政的 `NavigationSplitView`；列宽集中在 `ShellGeometry` 一处声明；工具栏命令集与内部码业务文案移入 FormaCore Presentation 层（`ShellCommands` / `businessCopy` / `ShellProfilePicker` / `EgressConsent`），由 `AppShellPresentationTests` 做确定性断言（命令集跨 busy/idle/planner 稳定、选择器永不空白、文案对当前外显码全覆盖、区域持久化 round-trip）。macOS CI 的 build/package/launch smoke 只是过程检查。
+- **CI 不能证明、必须在 Owner Mac 核验的（全部 NOT_VERIFIED 直至现场）**：区域切换与分栏拖拽不改变外窗尺寸（100+ 切换、20+ 拖拽）；紧凑/默认/宽窗与明暗模式下无空白塌缩、无内容裁切；`VSplitView` 候选面板拖拽手感；inspector 折叠/展开与选中联动；VoiceOver 对侧栏、工具栏中文标签、外发确认对话框与「诊断详情」展开项的朗读顺序与标签；外发许可确认弹窗实际拦截一次运行。
+- **通过条件**：#150 验收 §M0 全项；任何一条不成立则本项记失败并回到 shell 分支修复，不得以 CI 绿替代。
 
 ## 3. 维护规则
 
