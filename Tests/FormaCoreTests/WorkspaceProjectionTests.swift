@@ -118,7 +118,7 @@ struct WorkspaceProjectionTests {
 
     @Test func lookupsMatchTheLinearScanAtEveryFixtureSize() throws {
         for size in [0, 1, 6, 1_000] {
-            let entries = size == 0 ? [] : (1 ... size).map { source($0) }
+            let entries: [SourceEntry] = size == 0 ? [] : (1 ... size).map { source($0) }
             let index = ListingProjection(entries: entries)
             #expect(index.entry(entries.first?.id ?? UUID()) == (size == 0 ? nil : entries.first))
             for entry in entries {
@@ -183,7 +183,7 @@ struct WorkspaceProjectionTests {
 
     @Test func mappingRowsAreIdenticalToThePerEntryScan() throws {
         for size in [0, 1, 6, 1_000] {
-            let entries = size == 0 ? [] : (1 ... size).map { entry($0, state: $0.isMultiple(of: 3) ? .hold : .validated) }
+            let entries: [ManifestEntry] = size == 0 ? [] : (1 ... size).map { entry($0, state: $0.isMultiple(of: 3) ? .hold : .validated) }
             let trimmed = size == 0 ? [] : entries
             let manifest = try manifest(trimmed)
             let sources = trimmed.indices.map { source($0 + 1) }

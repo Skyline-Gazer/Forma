@@ -43,7 +43,8 @@ struct ShellNavigationTests {
 
     @Test func retappingTheCurrentAreaIsNotASwitch() {
         var state = ShellNavigationState(area: .workspace)
-        #expect(apply(.areaChanged(to: .workspace), to: &state).isEmpty)
+        let switchEffects = apply(.areaChanged(to: .workspace), to: &state)
+        #expect(switchEffects.isEmpty)
         #expect(state.counters.areaSwitches == 0)
         #expect(state.area == .workspace)
     }
@@ -54,7 +55,7 @@ struct ShellNavigationTests {
         var ledger = ShellWorkCounters()
         // The cycle the issue describes: Workspace to Mapping and back, the
         // pair whose re-entry used to re-read the registry and cancel tasks.
-        let cycle: [AppArea] = [.workspace, .mapping, .workspace, .diagnostics, .settings, .import]
+        let cycle: [AppArea] = [.workspace, .mapping, .workspace, .exceptions, .settings, .importArchive]
         for step in 0 ..< 100 {
             let event = ShellNavigationEvent.areaChanged(to: cycle[step % cycle.count])
             let effects = apply(event, to: &state)
@@ -92,7 +93,8 @@ struct ShellNavigationTests {
 
     @Test func closingTheWindowCancelsAndNothingElseDoes() {
         var open = ShellNavigationState(area: .workspace)
-        #expect(apply(.shellClosed, to: &open) == [.cancelInFlightWork])
+        let closeEffects = apply(.shellClosed, to: &open)
+        #expect(closeEffects == [.cancelInFlightWork])
 
         var scope = ShellNavigationState(area: .workspace)
         _ = apply(.scopeChanged(to: UUID()), to: &scope)
