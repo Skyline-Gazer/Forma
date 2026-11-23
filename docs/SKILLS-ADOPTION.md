@@ -139,6 +139,9 @@ distinguishes an unreachable ADS remote (`NOT_VERIFIED`) from a genuine mismatch
 fix in a reviewed PR; it must not be silenced by deleting the step or by bumping the pin without review.
 Historical ADS adoption (PASS) and recurring CI enforcement are separate claims: the former was already
 recorded in `docs/ADS-ADOPTION.md`, the latter is what this change establishes.
+This closes readiness item **R-14** in `docs/R1-READINESS.md` ("CI 未接入 ADS pin 检查"); that report is a
+point-in-time record and is deliberately left unchanged. Branch protection was checked through the API and
+`dev` is not protected, so no required status check was added or altered by this change.
 
 ## 7. Deferred and not verified here
 
