@@ -1242,7 +1242,14 @@ final class WorkspaceModel: ObservableObject {
                 // running, and clearing whatever draft is current would throw
                 // away a decision being typed now. `self.` is load-bearing -
                 // the bare `draft` above is this click's unwrapped draft.
-                if self.draft?.id == draftID { self.draft = nil }
+                // A refused correction must leave the editor open with the
+                // user's value and cited rows intact. Closing the sheet on
+                // failure discards the only actionable context and forces the
+                // reviewer to re-enter the same information. Only a revision
+                // actually published by FormaCore dismisses the editor.
+                if applied.violations.isEmpty, self.draft?.id == draftID {
+                    self.draft = nil
+                }
                 refreshRows()
                 if let history = attempts {
                     correctionHistory = history
