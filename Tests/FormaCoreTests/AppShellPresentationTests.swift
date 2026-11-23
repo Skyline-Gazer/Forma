@@ -86,7 +86,10 @@ struct AppShellPresentationTests {
 
     @Test("the profile picker resolves to a label or the placeholder, never blank")
     func profilePickerNeverBlank() {
-        let options = [("id": "p1", "name": "档案一"), ("id": "p2", "name": "档案二")]
+        let options: [(id: String, name: String)] = [
+            (id: "p1", name: "档案一"),
+            (id: "p2", name: "档案二"),
+        ]
         #expect(ShellProfilePicker.label(selected: "p1", options: options) == "档案一")
         #expect(ShellProfilePicker.label(selected: "gone", options: options) == ShellProfilePicker.placeholder)
         #expect(ShellProfilePicker.label(selected: nil, options: options) == ShellProfilePicker.placeholder)
