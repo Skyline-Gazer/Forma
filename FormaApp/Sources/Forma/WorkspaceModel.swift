@@ -1490,6 +1490,30 @@ final class WorkspaceModel: ObservableObject {
         let term: String
         let role: String
     }
+
+    // MARK: - Review Desk state (#146; additive)
+    //
+    // The desk's cursor and filter live on the shared model like the other
+    // areas' selections do: switching to 诊断 and back keeps reviewing the
+    // same file. Nothing here recomputes a value FormaCore owns; the queue
+    // only buckets the rows the mapping already published.
+
+    /// The file being reviewed in the desk queue.
+    @Published var deskFileSelection: UUID?
+
+    /// The desk's triage bucket (待处理 / 已验证 / 需关注).
+    @Published var deskTriage: DeskTriage = .pending
+
+    /// The revision a Save & Next armed at: the cursor may move only when the
+    /// manifest revision grows past this baseline (ReviewDeskFlow.advances).
+    /// A refused correction changes nothing, so the baseline simply stays.
+    @Published var deskBaselineRevision: Int?
+
+    /// The visible desk queue: current rows bucketed by the triage filter,
+    /// in manifest order.
+    var deskQueue: [MappingRow] {
+        rows.filter { deskTriage(for: $0.entry.state) == deskTriage }
+    }
 }
 
 private extension UserDefaults {
