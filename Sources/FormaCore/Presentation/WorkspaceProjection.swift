@@ -166,6 +166,7 @@ public struct ListingProjection: Sendable {
 
     private static func measuredPathOrdered(_ entries: [SourceEntry], cost: inout ProjectionCost) -> [SourceEntry] {
         cost.sorts += 1
+        cost.listPasses += 1
         return entries.sorted { $0.relativePath < $1.relativePath }
     }
 }
