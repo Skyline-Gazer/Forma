@@ -132,7 +132,7 @@ public enum ShellCommands {
             return result
 
         case .importArchive:
-            [
+            return [
                 ToolbarCommand(id: "build-plan", title: "生成计划", systemImage: "list.bullet.clipboard",
                                isEnabled: idle,
                                help: "从当前清单生成导入计划；此构建只读，不会写入"),
@@ -158,7 +158,7 @@ public enum ShellCommands {
 
         case .settings:
             // Settings owns its actions inside the form; the shell adds nothing.
-            []
+            return []
         }
     }
 }
