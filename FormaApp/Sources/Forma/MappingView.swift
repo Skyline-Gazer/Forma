@@ -538,6 +538,7 @@ struct MappingView: View {
         case .pdf(let page, let range): "PDF page \(page) · UTF-16 \(range.lowerBound)–\(range.upperBound)"
         case .docx(let part, let paragraph, _): "\(part) · paragraph \(paragraph)"
         case .xlsx(let sheet, let cell): "\(sheet) · \(cell)"
+        case .text(let range): "UTF-16 \(range.lowerBound)–\(range.upperBound)"
         case nil: "No content locator"
         }
     }

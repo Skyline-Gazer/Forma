@@ -230,6 +230,9 @@ struct WorkspaceView: View {
             case .xlsx(let sheet, let cell):
                 Text("\(sheet) · \(cell)")
                     .font(.caption).foregroundStyle(.secondary)
+            case .text(let range):
+                Text("UTF-16 \(range.lowerBound)–\(range.upperBound)")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             if let text = item.text { Text(text).textSelection(.enabled) }
             if let formula = item.formula {
