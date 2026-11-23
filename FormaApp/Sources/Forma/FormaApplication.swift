@@ -227,7 +227,7 @@ private struct WorkspaceAreas: View {
     @StateObject private var model: WorkspaceModel
     @ObservedObject var state: FormaApplicationState
 
-    @AppStorage("shell.selectedArea") private var storedArea: String = AppArea.workspace.rawValue
+    @AppStorage("shell.selectedArea") private var storedArea: String = AppArea.defaultLanding.rawValue
     @AppStorage("shell.inspectorVisible") private var inspectorVisible = true
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var bundleImporting = false
@@ -258,7 +258,7 @@ private struct WorkspaceAreas: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             List(selection: selectionBinding) {
-                ForEach(AppArea.allCases) { area in
+                ForEach(AppArea.navigationOrder) { area in
                     Label(area.title, systemImage: area.systemImage)
                         .tag(area)
                         .accessibilityIdentifier("area-\(area.rawValue)")
@@ -414,6 +414,10 @@ private struct WorkspaceAreas: View {
             ExceptionsView(model: model, leading: ShellGeometry.exceptionsLeading)
         case .settings:
             SettingsView(model: model)
+        case .reviewDesk:
+            ReviewDeskView(model: model,
+                           selectArea: { area in storedArea = area.rawValue },
+                           openExport: { chooseExportDirectory() })
         }
     }
 
@@ -425,6 +429,8 @@ private struct WorkspaceAreas: View {
             MappingInspector(model: model)
         case .exceptions:
             ExceptionsInspector(model: model)
+        case .reviewDesk:
+            ReviewDeskInspector(model: model)
         case .importArchive, .settings:
             ContentUnavailableView("此区域没有可检视的选中项", systemImage: "sidebar.right",
                                    description: Text("在「工作区」「映射」或「诊断」中选择一条记录，详情会显示在这里。"))
