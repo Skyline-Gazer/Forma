@@ -33,6 +33,7 @@
 | M10 | 真实 Provider 外发授权、Keychain 与日志脱敏现场核验 | #20 / P3-A + P3-B | Deferred（部分未授权） | Provider 凭据、外发授权、真实 macOS 会话 |
 |M11|Import Eligibility 生产接入与真实目录误排除复核|#51 / P3-A|**Implemented, default off**；现场 = **`MACOS_SYNTHETIC_PARTIAL`**（2026-11-17 Mac 执行 30/30 PASS，Owner 提供证据；B3 本地未验证/CI PASS、A8b 内存未测量）|真实目录与人工复核；默认启用需 Owner 再确认；切片 5 未授权|
 |M12|D1 统一 App Shell 的窗口、布局、工具栏与 VoiceOver 现场核验|#150 #153 / Phase 2|Deferred（PR #157：代码与确定性 Presentation 测试已入 CI）|Owner Mac 人工交互（#153/M0 批次）|
+|M13|D2 导航性能：os_signpost 采集与切换延迟现场核验|#151 #153 / Phase 2|**NOT_VERIFIED**（DevBox Completed：signpost 桥、缓存与索引投影、确定性回归测试已在 PR 中）|Owner Mac + Xcode 26.3 + `.trace`；配方见 `docs/NAV-PERF-MAC-TRACE.md`|
 
 ## 2. 各项明细
 
@@ -185,6 +186,13 @@
 - **已在 DevBox 完成**：单场景 shell（应用侧栏 + 区域内容 + `.inspector` + shell 工具栏）替换 `TabView` 与三个各自为政的 `NavigationSplitView`；列宽集中在 `ShellGeometry` 一处声明；工具栏命令集与内部码业务文案移入 FormaCore Presentation 层（`ShellCommands` / `businessCopy` / `ShellProfilePicker` / `EgressConsent`），由 `AppShellPresentationTests` 做确定性断言（命令集跨 busy/idle/planner 稳定、选择器永不空白、文案对当前外显码全覆盖、区域持久化 round-trip）。macOS CI 的 build/package/launch smoke 只是过程检查。
 - **CI 不能证明、必须在 Owner Mac 核验的（全部 NOT_VERIFIED 直至现场）**：区域切换与分栏拖拽不改变外窗尺寸（100+ 切换、20+ 拖拽）；紧凑/默认/宽窗与明暗模式下无空白塌缩、无内容裁切；`VSplitView` 候选面板拖拽手感；inspector 折叠/展开与选中联动；VoiceOver 对侧栏、工具栏中文标签、外发确认对话框与「诊断详情」展开项的朗读顺序与标签；外发许可确认弹窗实际拦截一次运行。
 - **通过条件**：#150 验收 §M0 全项；任何一条不成立则本项记失败并回到 shell 分支修复，不得以 CI 绿替代。
+
+### M13 D2 导航性能的 signpost 采集与切换延迟现场核验
+
+- **关联**：Issue #151（Phase 2 / D2）、父计划 #148、验收批次 #153/M0；执行配方 `docs/NAV-PERF-MAC-TRACE.md`；技能与脚本 pin 来自 PR #155（SHA `62bd760f005093d1e2e4de5db156e456a5f96400`）。
+- **已在 DevBox 完成**：`com.forma.perf` / `Navigation` 的 `OSSignposter` 桥（事件名与区间名全部是编译期字面量，计数走 oslog）；证据读取缓存（键 `(sourceID, snapshotRevision)` + 每源 epoch，捕获/修正/载入 bundle/换 scope/关窗显式失效）；列表与上下文的索引投影（`refreshRows`、Project 列标签、例外表与筛选结果改为一次性预计算）；导出/复检/bundle 读取/Keychain 写出移出 MainActor；重载与捕获进度的合并；区域切换规则 `apply(_:to:)` 与两套计数器。CI 另有确定性测试证明新旧计算逐字段相等、代价形状线性、切换不排任何工作。
+- **CI 不能证明、必须在 Owner Mac 核验的（全部 NOT_VERIFIED 直至现场）**：6 文件与 1,000 条记录两种规模下 100 次热切换的 median/p95（目标 warm p95 ≤ 150 ms，属目标而非承诺）；20 次分栏拖拽期间的帧稳定性与外窗尺寸；`evidence-load` 区间在重看同一文件时确实只出现一次；导出与复检期间主线程无阻塞；`area-switch` 与计数器差值一致（规则之外无工作）；oslog/signpost 无任何路径、文件名或 token。
+- **通过条件**：按 `docs/NAV-PERF-MAC-TRACE.md` §3 全部步骤给出 PASS/FAIL/BLOCKED，并回填实际命令行与数字；任何一步未执行即保持 NOT_VERIFIED，**不得**以 CI 绿或"代码已合并"替代。
 
 ## 3. 维护规则
 

@@ -52,7 +52,13 @@ struct SettingsView: View {
             TextField("Files per batch request", value: $model.entryLimit, format: .number)
                 .accessibilityIdentifier("mapping-entry-limit")
             SecureField("API key for \(model.provider.displayName)", text: $key)
-            Button("Save API Key to Keychain") { keySaved = model.saveKey(key) }
+            Button("Save API Key to Keychain") {
+                // The Keychain write left the main actor (#151 audit item 4),
+                // so the answer arrives on a later turn: the field's "saved"
+                // mark means the write returned successfully, not that the
+                // click happened.
+                Task { keySaved = await model.saveKey(key) }
+            }
                 .disabled(key.isEmpty)
                 .accessibilityIdentifier("save-api-key")
             if keySaved { Text("API key saved in Keychain.").foregroundStyle(.secondary) }

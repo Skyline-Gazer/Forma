@@ -14,16 +14,18 @@ struct ExceptionsView: View {
     /// The width bounds the shell declared for this area's leading pane.
     let leading: AreaWidth
 
-    private var codes: [String] {
-        Array(Set(model.exceptions.flatMap(\.codes))).sorted()
-    }
-
-    private var rows: [WorkspaceModel.ExceptionRow] {
-        model.exceptions.filter { row in
-            (model.exceptionStateFilter.state == nil || row.state == model.exceptionStateFilter.state)
-                && (model.exceptionCodeFilter == nil || row.codes.contains(model.exceptionCodeFilter ?? ""))
-        }
-    }
+    /// The filter's code options and the filtered table.
+    ///
+    /// Both were computed here, which meant a flatMap over every violation of
+    /// every blocked row plus a `Set` plus a sort, and a second full pass over
+    /// the rows for the table, on *every body evaluation* - and the body reads
+    /// `rows` three times (the table, the "Shown N of M" line and the
+    /// reprocess count), so one render did the work three times. They are
+    /// stored on the model now, rebuilt where the rows or the filters change,
+    /// by the same rule `WorkspaceProjection.filteredExceptions` implements and
+    /// `WorkspaceProjectionTests` pins.
+    private var codes: [String] { model.exceptionCodes }
+    private var rows: [ExceptionRow] { model.visibleExceptions }
 
     var body: some View {
         HSplitView {
@@ -158,7 +160,7 @@ struct ExceptionsView: View {
 struct ExceptionsInspector: View {
     @ObservedObject var model: WorkspaceModel
 
-    private var selected: [WorkspaceModel.ExceptionRow] {
+    private var selected: [ExceptionRow] {
         model.exceptions.filter { model.exceptionSelection.contains($0.sourceID) }
     }
 
