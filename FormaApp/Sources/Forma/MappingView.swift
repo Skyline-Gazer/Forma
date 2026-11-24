@@ -13,6 +13,9 @@ struct MappingView: View {
     /// The width bounds the shell declared for this area's leading pane.
     let leading: AreaWidth
 
+    /// The column budget the shell declared for the result table.
+    private var rowWidths: [ShellColumnWidth] { ShellLayout.columns(for: .mappingRows) }
+
     var body: some View {
         HSplitView {
             runPanel
@@ -224,37 +227,37 @@ struct MappingView: View {
             TableColumn("Relative path") { row in
                 Text(row.entry.relativePath).lineLimit(1).help(row.entry.relativePath)
             }
-            .shellWidth(.mappingRows, 0)
+            .width(min: rowWidths[0].cgMin, ideal: rowWidths[0].cgIdeal, max: rowWidths[0].cgMax)
             TableColumn("documentcategory") { row in
                 Text(row.value(.documentcategory)).lineLimit(1).help(row.value(.documentcategory))
             }
-            .shellWidth(.mappingRows, 1)
+            .width(min: rowWidths[1].cgMin, ideal: rowWidths[1].cgIdeal, max: rowWidths[1].cgMax)
             TableColumn("documenttype") { row in
                 Text(row.value(.documenttype)).lineLimit(1).help(row.value(.documenttype))
             }
-            .shellWidth(.mappingRows, 2)
+            .width(min: rowWidths[2].cgMin, ideal: rowWidths[2].cgIdeal, max: rowWidths[2].cgMax)
             TableColumn("State") { row in
                 let copy = businessCopy(for: row.entry.state.rawValue)
                 Text(copy.headline)
                     .help(copy.sentence)
                     .accessibilityIdentifier("diagnostic-raw-\(row.entry.state.rawValue)")
             }
-            .shellWidth(.mappingRows, 3)
+            .width(min: rowWidths[3].cgMin, ideal: rowWidths[3].cgIdeal, max: rowWidths[3].cgMax)
             TableColumn("Confidence (model-reported)") { row in
                 Text(row.entry.confidence?.rawValue ?? "Not reported")
                     .help("Reported by the model. FormaCore's evidence rules, not this value, decide eligibility.")
             }
-            .shellWidth(.mappingRows, 4)
+            .width(min: rowWidths[4].cgMin, ideal: rowWidths[4].cgIdeal, max: rowWidths[4].cgMax)
             TableColumn("Eligible (policy simulation)") { row in
                 Text(row.entry.eligibleForAutoExecution ? "Simulated yes" : "Simulated no")
                     .help("Policy simulation only. FormaCore writes nothing to any database.")
             }
-            .shellWidth(.mappingRows, 5)
+            .width(min: rowWidths[5].cgMin, ideal: rowWidths[5].cgIdeal, max: rowWidths[5].cgMax)
             TableColumn("Evidence") { row in
                 Text("\(row.entry.fields.reduce(0) { $0 + $1.evidenceIDs.count }).formatted()")
                     .monospacedDigit()
             }
-            .shellWidth(.mappingRows, 6)
+            .width(min: rowWidths[6].cgMin, ideal: rowWidths[6].cgIdeal, max: rowWidths[6].cgMax)
         }
     }
 

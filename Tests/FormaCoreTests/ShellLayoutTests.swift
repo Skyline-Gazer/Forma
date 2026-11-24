@@ -65,11 +65,11 @@ struct ShellLayoutTests {
     @Test("the width classes are ordered and cover every width")
     func widthClassesAreOrdered() {
         #expect(ShellLayout.compactContentWidth < ShellLayout.wideContentWidth)
-        #expect(ShellLayout.classify(contentWidth: 0) == .compact)
-        #expect(ShellLayout.classify(contentWidth: ShellLayout.compactContentWidth - 1) == .compact)
-        #expect(ShellLayout.classify(contentWidth: ShellLayout.compactContentWidth) == .regular)
-        #expect(ShellLayout.classify(contentWidth: ShellLayout.wideContentWidth - 1) == .regular)
-        #expect(ShellLayout.classify(contentWidth: ShellLayout.wideContentWidth) == .wide)
-        #expect(ShellLayout.classify(contentWidth: 10_000) == .wide)
+        #expect(ShellWidthClass.classify(contentWidth: 0) == .compact)
+        #expect(ShellWidthClass.classify(contentWidth: ShellLayout.compactContentWidth - 1) == .compact)
+        #expect(ShellWidthClass.classify(contentWidth: ShellLayout.compactContentWidth) == .regular)
+        #expect(ShellWidthClass.classify(contentWidth: ShellLayout.wideContentWidth - 1) == .regular)
+        #expect(ShellWidthClass.classify(contentWidth: ShellLayout.wideContentWidth) == .wide)
+        #expect(ShellWidthClass.classify(contentWidth: 10_000) == .wide)
     }
 }

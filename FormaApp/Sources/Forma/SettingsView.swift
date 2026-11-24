@@ -39,24 +39,24 @@ struct SettingsView: View {
     // MARK: - Provider
 
     private var providerSection: some View {
-        Section("Provider") {
-            Picker("Provider", selection: Binding(get: { model.provider }, set: { model.selectProvider($0) })) {
+        Section("服务商") {
+            Picker("服务商", selection: Binding(get: { model.provider }, set: { model.selectProvider($0) })) {
                 ForEach(ProbeProvider.networkCases, id: \.self) { provider in
                     Text(provider.displayName).tag(provider)
                 }
             }
             .disabled(model.phase.isBusy)
             .accessibilityIdentifier("mapping-provider")
-            TextField("Model ID", text: $model.modelID)
+            TextField("模型 ID", text: $model.modelID)
                 .accessibilityIdentifier("mapping-model")
-            TextField("Files per batch request", value: $model.entryLimit, format: .number)
+            TextField("每批请求文件数", value: $model.entryLimit, format: .number)
                 .accessibilityIdentifier("mapping-entry-limit")
-            SecureField("API key for \(model.provider.displayName)", text: $key)
-            Button("Save API Key to Keychain") { keySaved = model.saveKey(key) }
+            SecureField("\(model.provider.displayName) 的 API 密钥", text: $key)
+            Button("保存 API 密钥到钥匙串") { keySaved = model.saveKey(key) }
                 .disabled(key.isEmpty)
                 .accessibilityIdentifier("save-api-key")
-            if keySaved { Text("API key saved in Keychain.").foregroundStyle(.secondary) }
-            Text("Forma stores the key in the macOS Keychain and reads it only when a request is sent.")
+            if keySaved { Text("API 密钥已保存到钥匙串。").foregroundStyle(.secondary) }
+            Text("Forma 将密钥保存在 macOS 钥匙串中，仅在发送请求时读取。")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -67,12 +67,12 @@ struct SettingsView: View {
     /// shell's 外发许可 control uses; no full English sentence about leaving the
     /// machine is shown anywhere in a titlebar or a form row (owner failure #7).
     private var egressSection: some View {
-        Section("Cloud egress") {
+        Section("云端外发") {
             Toggle("允许一次映射请求离开本机", isOn: $model.allowCloud)
                 .accessibilityIdentifier("egress-consent")
             Text("默认关闭，重启后绝不恢复。没有它，FormaCore 的客户端会拒绝任何外发请求；一次运行即消耗本许可。")
                 .font(.caption).foregroundStyle(.secondary)
-            Link("API data handling policy",
+            Link("API 数据处理政策",
                  destination: model.provider == .openAI
                     ? URL(string: "https://platform.openai.com/docs/guides/your-data")!
                     : URL(string: "https://privacy.anthropic.com/")!)
@@ -82,37 +82,37 @@ struct SettingsView: View {
     // MARK: - Payload preview
 
     private var previewSection: some View {
-        Section("Request preview") {
+        Section("请求预览") {
             HStack {
-                Button("Build Preview") { model.previewEgress() }
+                Button("生成预览") { model.previewEgress() }
                     .disabled(model.phase != .idle)
                     .accessibilityIdentifier("build-preview")
                 if model.phase == .previewing {
-                    Button("Cancel") { model.cancelAux() }
+                    Button("取消") { model.cancelAux() }
                 }
             }
             // Not "the exact bytes a run sends": a run re-captures each file's
             // rows before dispatch, so this is the request the current stored
             // evidence produces. The distinction decides whether a reviewer
             // treats what they read as a receipt or as an estimate.
-            Text("Shows the first batch a whole-listing run would build from this listing and context — system text, payload, digest. Planned by the same code a run uses, and assembled from the evidence already registered, but a run re-reads file bodies before sending, so a body excerpt here can differ from what a run would attach. Reprocessing selected exceptions sends only those files, so its first batch can be a different set of documents. Built locally, with no network access.")
+            Text("展示整表运行会基于当前清单和上下文构建的第一批内容——系统文本、负载、摘要。它由运行所用的同一套代码规划，并基于已登记的证据组装；但运行会在发送前重新读取文件正文，因此这里的正文摘录可能与运行实际附上的内容不同。重新处理选定的例外时只发送这些文件，其第一批可能是另一组文档。全部在本地构建，不访问网络。")
                 .font(.caption).foregroundStyle(.secondary)
             if let preview = model.preview {
-                LabeledContent("Payload bytes", value: preview.value.byteCount.formatted())
-                LabeledContent("Request digest", value: preview.value.digest)
+                LabeledContent("负载字节数", value: preview.value.byteCount.formatted())
+                LabeledContent("请求摘要", value: preview.value.digest)
                     .font(.caption.monospaced())
-                LabeledContent("Redaction applied", value: preview.value.redactionVersion)
-                LabeledContent("Files in previewed batch", value: preview.fileCount.formatted())
-                LabeledContent("Batches for this listing", value: preview.batchCount.formatted())
-                    .help("The engine groups files by the candidate that claims them: one batch is one "
-                        + "candidate's slice of the listing, and the limit is the most files any batch "
-                        + "may carry - not a fixed slice taken from the top")
-                LabeledContent("Limit used by this preview", value: preview.entryLimit.formatted())
+                LabeledContent("已应用的脱敏版本", value: preview.value.redactionVersion)
+                LabeledContent("预览批次的文件数", value: preview.fileCount.formatted())
+                LabeledContent("此清单的批次数", value: preview.batchCount.formatted())
+                    .help("引擎按认领文件的候选对文件分组：一批就是某个候选在清单中的切片，"
+                        + "上限是任一批可携带的最多文件数，"
+                        + "而不是从顶部取出的固定切片")
+                LabeledContent("本次预览使用的上限", value: preview.entryLimit.formatted())
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("System text").font(.caption).foregroundStyle(.secondary)
+                        Text("系统文本").font(.caption).foregroundStyle(.secondary)
                         Text(preview.value.system).font(.caption).textSelection(.enabled)
-                        Text("Payload").font(.caption).foregroundStyle(.secondary)
+                        Text("负载").font(.caption).foregroundStyle(.secondary)
                         Text(Self.payloadExcerpt(preview.value))
                             .font(.caption.monospaced())
                             .textSelection(.enabled)
@@ -121,33 +121,33 @@ struct SettingsView: View {
                 }
                 .frame(minHeight: 180, maxHeight: 260)
                 if !model.leakedTerms.isEmpty {
-                    Text("Terms FormaCore's plan did not substitute in these bytes: \(model.leakedTerms.joined(separator: ", "))")
+                    Text("FormaCore 的方案未在这些字节中替换的词条：\(model.leakedTerms.joined(separator: ", "))")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             } else {
-                Text(model.notice ?? "No preview built yet. A preview needs a scanned source, a profile and a stored project context.")
+                Text(model.notice ?? "尚未生成预览。生成预览需要一个已扫描的来源、一个档案和一个已保存的项目上下文。")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            LabeledContent("Redacted roles", value: model.roleInventory.isEmpty ? "No terms defined" : "See inventory below")
+            LabeledContent("已脱敏角色", value: model.roleInventory.isEmpty ? "未定义词条" : "见下方清单")
         }
     }
 
     private static func payloadExcerpt(_ preview: ProviderMappingClient.Preview) -> String {
         let text = String(decoding: preview.payload, as: UTF8.self)
         guard text.count > previewCharacters else { return text }
-        return String(text.prefix(previewCharacters)) + "\n… \(text.count.formatted()) characters in total; the count and digest above cover all of them."
+        return String(text.prefix(previewCharacters)) + "\n… 共 \(text.count.formatted()) 个字符；上方的计数和摘要涵盖全部字符。"
     }
 
     // MARK: - Redaction
 
     private var redactionSection: some View {
-        Section("Redaction terms") {
+        Section("脱敏词条") {
             // Bound to each term's own identity, so the delete button below
             // removes one row without re-parenting the fields of the survivors.
             ForEach($model.redactionTerms) { $term in
                 HStack(spacing: 8) {
-                    TextField("Term", text: $term.term)
-                    Picker("Role", selection: $term.role) {
+                    TextField("词条", text: $term.term)
+                    Picker("角色", selection: $term.role) {
                         ForEach(RedactionPlan.Role.allCases, id: \.self) { role in
                             Text(role.rawValue).tag(role)
                         }
@@ -164,29 +164,29 @@ struct SettingsView: View {
                         Image(systemName: "minus.circle")
                     }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("Remove this term")
+                    .accessibilityLabel("删除该词条")
                     .accessibilityIdentifier("remove-redaction-term")
                 }
             }
             if model.redactionTerms.isEmpty {
-                Text("No terms: FormaCore's identity plan substitutes nothing.")
+                Text("没有词条：FormaCore 的身份方案不替换任何内容。")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Button("Add Term") { model.redactionTerms.append(WorkspaceModel.RedactionTerm(term: "", role: .identifier)) }
+            Button("添加词条") { model.redactionTerms.append(WorkspaceModel.RedactionTerm(term: "", role: .identifier)) }
                 .accessibilityIdentifier("add-redaction-term")
-            TextField("Placeholder salt", text: $model.redactionSalt)
+            TextField("占位符盐值", text: $model.redactionSalt)
                 .accessibilityIdentifier("redaction-salt")
-            Text("Placeholders are deterministic hashes of salt plus term; the salt never leaves the machine.")
+            Text("占位符是盐值与词条的确定性哈希；盐值不会离开本机。")
                 .font(.caption).foregroundStyle(.secondary)
             ForEach(RedactionPlan.Role.allCases, id: \.self) { role in
                 LabeledContent(role.rawValue, value: (model.roleInventory[role] ?? 0).formatted())
             }
             if let profile = model.selectedProfile {
-                LabeledContent("Sample placeholder",
+                LabeledContent("示例占位符",
                                value: model.redactionTerms.first.flatMap { model.redaction.placeholder(for: $0.term) }
-                                    ?? "Add a non-empty term to see one")
+                                    ?? "添加一个非空词条即可查看示例")
                     .font(.caption.monospaced())
-                Text("Profile counter-examples the model must see: \(profile.counterExamples.count.formatted())")
+                Text("档案中模型必须看到的反例数：\(profile.counterExamples.count.formatted())")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -197,28 +197,28 @@ struct SettingsView: View {
     private var mcpSection: some View {
         Section("DEVONthink MCP") {
             HStack {
-                Button("Discover Official MCP") { model.discoverMCP() }
+                Button("发现官方 MCP") { model.discoverMCP() }
                     .disabled(model.phase != .idle)
                     .accessibilityIdentifier("discover-mcp")
                 if model.phase == .discoveringMCP {
-                    Button("Cancel") { model.cancelAux() }
+                    Button("取消") { model.cancelAux() }
                 }
             }
-            Text("Discovery sends initialize and tools/list to the installed DEVONthink MCP server. Forma uses the read-only client only: this app has no path that writes, imports or moves a record.")
+            Text("发现过程会向已安装的 DEVONthink MCP 服务器发送 initialize 和 tools/list。Forma 仅使用只读客户端：本应用没有写入、导入或移动记录的路径。")
                 .font(.caption).foregroundStyle(.secondary)
             if let capabilities = model.capabilities {
-                LabeledContent("Server", value: "\(capabilities.serverName) \(capabilities.serverVersion)")
-                LabeledContent("Protocol", value: capabilities.protocolVersion)
-                LabeledContent("Tool descriptors", value: capabilities.tools.count.formatted())
-                LabeledContent("Probed", value: capabilities.probedAt.formatted())
-                LabeledContent("get_record_parents", value: capabilities.hasRecordParents ? "Advertised" : "Unavailable")
-                LabeledContent("Read-only tools with a supported contract",
+                LabeledContent("服务器", value: "\(capabilities.serverName) \(capabilities.serverVersion)")
+                LabeledContent("协议", value: capabilities.protocolVersion)
+                LabeledContent("工具描述符", value: capabilities.tools.count.formatted())
+                LabeledContent("探测时间", value: capabilities.probedAt.formatted())
+                LabeledContent("get_record_parents", value: capabilities.hasRecordParents ? "已声明" : "不可用")
+                LabeledContent("契约受支持的只读工具",
                                value: capabilities.availableReadOnlyTools.joined(separator: ", ").isEmpty
-                                ? "None advertised" : capabilities.availableReadOnlyTools.joined(separator: ", "))
+                                ? "未声明任何工具" : capabilities.availableReadOnlyTools.joined(separator: ", "))
             }
-            Text("Queries against an isolated DEVONthink database are BLOCKED until you supply that database's own UUID in the Forma settings window; nothing is read from a database Forma has not been pointed at.")
+            Text("在 Forma 设置窗口中提供某个隔离 DEVONthink 数据库自身的 UUID 之前，对该数据库的查询一律被阻止；Forma 不会读取未被指向的数据库。")
                 .font(.caption).foregroundStyle(.secondary)
-            Text("Authorized history can only enter a context as a `ContextHistoryMatch` built from records the user named. This area supplies none, so a context is built from structure alone.")
+            Text("授权的历史只能以用户指明记录构建的 `ContextHistoryMatch` 形式进入上下文。本区域不提供此类记录，因此上下文仅由结构构建。")
                 .font(.caption2).foregroundStyle(.secondary)
         }
     }
@@ -228,20 +228,20 @@ struct SettingsView: View {
     private var casePackSection: some View {
         Section("CasePack") {
             if let pack = model.casePack {
-                LabeledContent("Identifier", value: pack.id)
-                LabeledContent("Version", value: pack.version)
-                LabeledContent("Schema", value: pack.schemaVersion)
-                LabeledContent("Cases in pack", value: pack.cases.count.formatted())
-                LabeledContent("Admissible cases", value: pack.cases.filter(\.isAdmissible).count.formatted())
+                LabeledContent("标识符", value: pack.id)
+                LabeledContent("版本", value: pack.version)
+                LabeledContent("结构", value: pack.schemaVersion)
+                LabeledContent("包内案例数", value: pack.cases.count.formatted())
+                LabeledContent("可受理案例数", value: pack.cases.filter(\.isAdmissible).count.formatted())
                 if let profile = model.selectedProfile {
-                    LabeledContent("Selected for \(profile.profileID)",
-                                   value: "\(model.selectedCaseCount(for: profile).formatted()) of \(pack.cases.count.formatted()) cases")
+                    LabeledContent("为 \(profile.profileID) 选定",
+                                   value: "\(model.selectedCaseCount(for: profile).formatted()) / \(pack.cases.count.formatted()) 个案例")
                 }
             } else {
-                Text(model.notice ?? "The shipped CasePack could not be read from the app bundle.")
+                Text(model.notice ?? "无法从应用包中读取随附的 CasePack。")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Text("Cases are FormaCore's own examples and counter-examples. The engine selects them per profile and version; nothing here edits them.")
+            Text("案例是 FormaCore 自带的示例与反例。引擎按档案和版本选择它们；此处不会编辑它们。")
                 .font(.caption2).foregroundStyle(.secondary)
         }
     }
@@ -249,8 +249,8 @@ struct SettingsView: View {
     // MARK: - Profile
 
     private var profileSection: some View {
-        Section("Profile") {
-            Picker("Profile", selection: Binding(
+        Section("档案") {
+            Picker("档案", selection: Binding(
                 get: {
                     guard model.profiles.contains(where: { $0.profileID == model.selectedProfileID }) else { return nil }
                     return model.selectedProfileID
@@ -267,27 +267,27 @@ struct SettingsView: View {
             .disabled(!ShellProfilePicker.isEnabled(optionCount: model.profiles.count) || model.phase.isBusy)
             .accessibilityIdentifier("settings-profile")
             if let profile = model.selectedProfile {
-                LabeledContent("Identifier", value: profile.versionKey)
-                LabeledContent("Schema", value: profile.schemaVersion)
-                LabeledContent("Target kind", value: profile.target.kind.rawValue)
-                LabeledContent("Target database", value: profile.target.databaseName ?? "Not named")
-                LabeledContent("Target UUID", value: profile.target.databaseUUID ?? "None · binding is symbolic")
-                LabeledContent("Group template", value: profile.target.groupTemplate.joined(separator: " / "))
-                LabeledContent("Categories", value: profile.categories.map(\.identifier).joined(separator: ", "))
-                LabeledContent("Document types", value: profile.documentTypes.count.formatted())
-                LabeledContent("Permits unaffiliated documents", value: profile.permitsUnaffiliatedDocuments ? "Yes" : "No")
-                LabeledContent("Grants execution", value: profile.grantsExecution ? "Yes" : "No · nothing is written")
-                Text("Field policy: \(profile.fields.count.formatted()) of \(MetadataFieldID.allCases.count.formatted()) slots")
+                LabeledContent("标识符", value: profile.versionKey)
+                LabeledContent("结构", value: profile.schemaVersion)
+                LabeledContent("目标类型", value: profile.target.kind.rawValue)
+                LabeledContent("目标数据库", value: profile.target.databaseName ?? "未命名")
+                LabeledContent("目标 UUID", value: profile.target.databaseUUID ?? "无 · 绑定为符号形式")
+                LabeledContent("分组模板", value: profile.target.groupTemplate.joined(separator: " / "))
+                LabeledContent("分类", value: profile.categories.map(\.identifier).joined(separator: ", "))
+                LabeledContent("文档类型数", value: profile.documentTypes.count.formatted())
+                LabeledContent("允许无关联文档", value: profile.permitsUnaffiliatedDocuments ? "是" : "否")
+                LabeledContent("授予执行权限", value: profile.grantsExecution ? "是" : "否 · 不会写入任何内容")
+                Text("字段策略：\(profile.fields.count.formatted()) / \(MetadataFieldID.allCases.count.formatted()) 个槽位")
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach(MetadataFieldID.allCases, id: \.self) { field in
                     if let policy = profile.fields[field] {
                         LabeledContent(field.rawValue,
-                                       value: "\(policy.level.rawValue) · \(policy.valueType.rawValue) · \(policy.requiredForValidated ? "required" : "optional") · native \(policy.nativeTypeStatus.rawValue)")
+                                       value: "\(policy.level.rawValue) · \(policy.valueType.rawValue) · \(policy.requiredForValidated ? "必填" : "可选") · 原生 \(policy.nativeTypeStatus.rawValue)")
                             .font(.caption)
                     }
                 }
             } else {
-                Text(model.notice ?? "No profile is available.")
+                Text(model.notice ?? "没有可用的档案。")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -296,18 +296,18 @@ struct SettingsView: View {
     // MARK: - Local state
 
     private var storageSection: some View {
-        Section("Versions and local state") {
-            LabeledContent("Extractor", value: EvidenceRegistry.extractorVersion)
-            LabeledContent("Prompt", value: MappingPrompt.version)
-            LabeledContent("Redaction", value: RedactionPlan.version)
-            LabeledContent("Egress scope", value: "\(EgressContract.version) / \(EgressContract.scopeVersion)")
-            LabeledContent("Excerpt limit", value: "\(EvidenceRegistry.maximumExcerptCharacters.formatted()) characters")
-            LabeledContent("Prompt excerpt limit", value: "\(EvidenceRegistry.maximumPromptExcerptCharacters.formatted()) characters")
-            LabeledContent("Scope", value: model.selectedScope?.displayName ?? "None selected")
-            LabeledContent("Context", value: model.context.map { "revision \($0.revision) · \($0.candidates.count) candidates" } ?? "Not built")
-            LabeledContent("Manifest", value: model.manifest.map { "revision \($0.envelope.revision) · \($0.entries.count) entries" } ?? "None")
-            LabeledContent("Bundle", value: model.bundleURL?.path ?? "Not selected")
-            Text("Selections, the profile, provider, model, batch limit and redaction terms are restored after a restart. Cloud egress consent never is.")
+        Section("版本与本地状态") {
+            LabeledContent("提取器", value: EvidenceRegistry.extractorVersion)
+            LabeledContent("提示词", value: MappingPrompt.version)
+            LabeledContent("脱敏", value: RedactionPlan.version)
+            LabeledContent("外发范围", value: "\(EgressContract.version) / \(EgressContract.scopeVersion)")
+            LabeledContent("摘录上限", value: "\(EvidenceRegistry.maximumExcerptCharacters.formatted()) 个字符")
+            LabeledContent("提示词摘录上限", value: "\(EvidenceRegistry.maximumPromptExcerptCharacters.formatted()) 个字符")
+            LabeledContent("范围", value: model.selectedScope?.displayName ?? "未选择")
+            LabeledContent("上下文", value: model.context.map { "修订 \($0.revision) · \($0.candidates.count) 个候选" } ?? "未构建")
+            LabeledContent("清单", value: model.manifest.map { "修订 \($0.envelope.revision) · \($0.entries.count) 条目" } ?? "无")
+            LabeledContent("打包", value: model.bundleURL?.path ?? "未选择")
+            Text("选择项、档案、服务商、模型、批次上限和脱敏词条在重启后恢复。云端外发许可不会恢复。")
                 .font(.caption2).foregroundStyle(.secondary)
         }
     }

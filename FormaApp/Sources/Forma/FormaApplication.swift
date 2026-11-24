@@ -206,20 +206,17 @@ struct AreaWidth {
     }
 }
 
-extension TableColumnContent {
-    /// Applies the shell's declared width budget to one table column.
+extension ShellColumnWidth {
+    /// The three bounds SwiftUI's table column takes, in the types it takes
+    /// them.
     ///
-    /// Every column needs all three bounds. A column without a maximum
-    /// measures its content, and a long path then becomes a demand on the
-    /// window: the field measured a 1845-1941pt minimum window on a 1512pt
-    /// screen. The index is the column's position in the view, and the budget
-    /// is the one FormaCore declares for that table.
-    func shellWidth(_ table: ShellTable, _ index: Int) -> some TableColumnContent {
-        let columns = ShellLayout.columns(for: table)
-        guard index < columns.count else { return self }
-        let column = columns[index]
-        return width(min: CGFloat(column.min), ideal: CGFloat(column.ideal), max: CGFloat(column.max))
-    }
+    /// The budget is declared in FormaCore; the app only hands it over. A
+    /// column that declares no bound measures its content, and a long path
+    /// then becomes a demand on the window: the field measured a 1845-1941pt
+    /// minimum window on a 1512pt screen.
+    var cgMin: CGFloat { CGFloat(min) }
+    var cgIdeal: CGFloat { CGFloat(ideal) }
+    var cgMax: CGFloat { CGFloat(max) }
 }
 
 enum ShellGeometry {
