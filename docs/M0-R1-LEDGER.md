@@ -89,14 +89,14 @@ initialize/tools/list、UUID、API、CasePack）保持原样。Profile 选择器
 | #157 | `feat/d1-app-shell` | 统一外壳、布局契约、文案统一 | `b24a594` | PASS | BLOCKED：复审代理额度耗尽 |
 | #159 | `feat/d2-nav-perf` | 导航性能与投影 + #157 同步 | `80f2479` | PASS | BLOCKED：本轮合并增量 |
 | #146 | `feat/ux-review-desk-v1` | 审核台 UX + 证据时效界面 | `d519332` | PASS | BLOCKED：复审代理额度耗尽 |
-| #161 | `feat/m0-r1-candidate` | M0-R1 集成候选（Draft） | `9b7a3f5` + #159 拓扑合并 | PASS @ `9b7a3f5`；最终 HEAD 见 PR | BLOCKED：本轮集成增量 |
+| #161 | `feat/m0-r1-candidate` | M0-R1 集成候选（Draft） | `c432e7a` | PASS | BLOCKED：本轮集成增量 |
 
 CI 全部在 macos-15 + Xcode 26.3 上运行并通过：`swift test`（FormaCore）、
 `swift build`（应用）、`scripts/build_app.sh`（打包）、`scripts/smoke_app.sh`
-（启动冒烟）、Benchmark smoke。候选源码验证基线 `9b7a3f5` 的 CI run：
-`45320471982`；Benchmark run：`45320471966`；该次 FormaCore 为 **890 tests / 79
-suites**。后续仅补齐 #159 精确提交拓扑，无文件变化；最终 HEAD 的 CI 以 PR #161
-页面为准。
+（启动冒烟）、Benchmark smoke。集成审计修复 HEAD `c432e7a` 的 CI run：
+`45323088685`；Benchmark run：`45323088723`；FormaCore 为 **890 tests / 79
+suites**。六个来源 PR 的精确 HEAD 均为该候选祖先。后续台账提交只改文档，最终
+候选 HEAD 与按该 HEAD 重跑的 CI 以 PR #161 页面为准。
 
 三个独立复审代理（证据、语义、Shell/性能/ADS）均因模型 Token Plan 额度耗尽而
 未能完成本轮增量复审，状态如实记为 BLOCKED；主 Agent 的源码走查不冒充独立复审。
