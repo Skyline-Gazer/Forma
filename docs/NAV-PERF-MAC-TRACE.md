@@ -40,15 +40,15 @@ CI 侧的对应物：`Tests/FormaCoreTests/ShellNavigationTests.swift`（切换�
 
 ## 2. 技能脚本安装与「先看再跑」门槛
 
-技能按 #155 引入的 `scripts/install_skills.sh` 安装，固定 SHA `62bd760f005093d1e2e4de5db156e456a5f96400`（`AvdLee/SwiftUI-Agent-Skill`），落地目录 `.agents/skills`，技能名 `skills/swiftui-expert-skill`，其追踪脚本为 `scripts/record_trace.py` 与 `scripts/analyze_trace.py`，配套 `references/trace-recording.md`、`references/trace-analysis.md`。
+技能按 #155 引入的 `scripts/install_skills.sh` 安装，固定 SHA `62bd760f005093d1e2e4de5db156e456a5f96400`（`AvdLee/SwiftUI-Agent-Skill`），安装根目录 `.agents/skills/swiftui-expert-skill`；上游 `skill_path` 是 `skills/swiftui-expert-skill`，安装器把该子树内容放到根目录，因此本机路径不含上游仓库前缀。其追踪脚本为 `scripts/record_trace.py` 与 `scripts/analyze_trace.py`，配套 `references/trace-recording.md`、`references/trace-analysis.md`。
 
 **硬性门槛：第一次运行前必须自己读完这三样**：
 
 ```bash
-sed -n '1,200p' .agents/skills/skills/swiftui-expert-skill/references/trace-recording.md
-sed -n '1,200p' .agents/skills/skills/swiftui-expert-skill/references/trace-analysis.md
-python3 .agents/skills/skills/swiftui-expert-skill/scripts/record_trace.py --help
-python3 .agents/skills/skills/swiftui-expert-skill/scripts/analyze_trace.py --help
+sed -n '1,200p' .agents/skills/swiftui-expert-skill/references/trace-recording.md
+sed -n '1,200p' .agents/skills/swiftui-expert-skill/references/trace-analysis.md
+python3 .agents/skills/swiftui-expert-skill/scripts/record_trace.py --help
+python3 .agents/skills/swiftui-expert-skill/scripts/analyze_trace.py --help
 ```
 
 原因：脚本参数随上游版本变化，本文件不复制它们的签名。下文只描述**需要覆盖的能力**（录制 macOS 应用、按名字列 signpost、按时间窗过滤、两次 trace 对比）；若 help 里的旗标名与此处不同，**以 help 为准**，并在 M13 记录里写下实际使用的命令行。特别注意：上游录制脚本可能默认面向 iOS 模板，macOS 采集必须显式选择 macOS 模板或以 `--attach` 附加到已启动的 Forma，否则拿到的是空轨道。
