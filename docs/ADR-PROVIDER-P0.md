@@ -11,18 +11,22 @@ Forma 此前只认识两个 Provider：OpenAI Responses 与 Anthropic Messages�
 
 ## 协议事实矩阵
 
-| 事实 | OpenAI Responses | Anthropic Messages | OpenAI Chat Completions（本 ADR 新增） | Jev / System One |
-| --- | --- | --- | --- | --- |
-| 端点 | `https://api.openai.com/v1/responses`（硬编码） | `https://api.anthropic.com/v1/messages`（硬编码） | 用户配置的 Base URL 规范化后的 `<base>/chat/completions`，单条精确值进 scope | 未验证 |
-| 认证 | `Authorization: Bearer` | `x-api-key` + `anthropic-version: 2023-06-01` | `Authorization: Bearer`（不带任何 anthropic 头） | 未验证 |
-| 结构化输出 | `text.format` = `json_schema` + `strict` | `output_config.format` | `response_format.json_schema` 嵌套对象 + `strict: true` | 未验证 |
-| 完成/截断/拒答 | `status completed/incomplete` + `incomplete_details.reason` | `stop_reason end_turn/refusal/max_tokens` | `finish_reason stop/length/content_filter` + `message.refusal` | 未验证 |
-| 用量 | `input_tokens`/`output_tokens`/`input_tokens_details.cached_tokens` | `input_tokens`/`output_tokens`/两个 cache 字段 | `prompt_tokens`/`completion_tokens`/`prompt_tokens_details.cached_tokens` | 未验证 |
+| 端点 | `https://api.openai.com/v1/responses`（硬编码） | `https://api.anthropic.com/v1/messages`（硬编码） | 用户配置的 Base URL 规范化后的 `<base>/chat/completions`，单条精确值进 scope | `https://openrouter.ai/api/v1/systemone`（独立协议，不是 Chat Completions 变体） |
+| 认证 | `Authorization: Bearer` | `x-api-key` + `anthropic-version: 2023-06-01` | `Authorization: Bearer`（不带任何 anthropic 头） | `Authorization: Bearer`（OpenRouter key，OpenAPI `securitySchemes.apiKey` 实证） |
+| 结构化输出 | `text.format` = `json_schema` + `strict` | `output_config.format` | `response_format.json_schema` 嵌套对象 + `strict: true` | 不是任意 JSON Schema：`questions`（`noul`/`choice`/`score`/bbox 判别式类型）+ `state`（自由对象），同步返回 `answers` |
+| 完成/截断/拒答 | `status completed/incomplete` + `incomplete_details.reason` | `stop_reason end_turn/refusal/max_tokens` | `finish_reason stop/length/content_filter` + `message.refusal` | 文档未给 finish-reason 语义；`400` 会以未引用的 `assets` 键等具体原因拒绝 |
+| 用量 | `input_tokens`/`output_tokens`/`input_tokens_details.cached_tokens` | `input_tokens`/`output_tokens`/两个 cache 字段 | `prompt_tokens`/`completion_tokens`/`prompt_tokens_details.cached_tokens` | `usage{cost, input_tokens, output_tokens}` |
 | 不保留服务端数据 | `store:false` 强制 | Messages API 本身无 store 字段（未发送） | Chat Completions 无 store 字段；绝不发送 Responses-only 字段 | 未验证 |
 
 OpenAI Responses / Chat Completions、Anthropic Messages 的字段名以上述官方文档口径核对为协议事实。
-**Jev/System One：本仓库无任何引用，公开权威资料未能在离线 devbox 上完成逐条核对；状态为
-NOT_VERIFIED，不实现、不接线、不 PoC。** 任何后续接入必须先补齐本矩阵的事实核对。
+**Jev / System One 已于 2026-11-24 对照 OpenRouter 官方 OpenAPI 规范核对**（
+`openrouter.ai/docs/api/api-reference/systemone/submit-a-system-one-request`）：模型如 `typesafe/jev-1.13`、
+裸 ID `jev-1.13`/`jev-latest` 映射进 `typesafe/` 命名空间，请求体为 `DecisionsRequest`
+（`questions` 判别式类型 + `state` + 可选 `assets` 图像引用 + provider 路由偏好），响应为按问题键组织的
+`answers`（`noul` 数值、`choice`+`probabilities`、`score`+`legend`），并回带自报 `model` 全版本与 `provider: TypeSafe`。
+结论：它是**第四种协议**，不是本表前三行的变体，也不承载 Forma 的映射 JSON Schema。本轮**不实现、不接线、不做 PoC**；
+数据保留策略、速率限制细节、流式支持属未验证项。若未来要用其判定/评分能力，先在 #152 验证映射 schema 能否表达为
+`noul/choice/score` 类型，再走独立授权。
 
 ## 决策
 
