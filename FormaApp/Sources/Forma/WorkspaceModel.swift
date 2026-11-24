@@ -814,7 +814,7 @@ final class WorkspaceModel: ObservableObject {
                 let records = try await workspace.captureEvidence(for: entry)
                 guard !Task.isCancelled else { return }
                 merge(records)
-                if let scope = selectedScope, let refreshed = try? workspace.listing(scope) {
+                if let scope = selectedScope, let refreshed = try? await workspace.listing(scope) {
                     listing = refreshed
                 }
                 if let draft, draft.sourceID == sourceID {
