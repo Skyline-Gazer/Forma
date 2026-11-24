@@ -143,7 +143,9 @@ struct CategoryCorrectionTests {
                             value: "01_招标文件", citations: ["ev_notice"], profile: profile,
                             evidence: evidence(revision: 1))
 
-        #expect(applied.violations.contains { $0.code == "evidence_not_found" })
+        #expect(applied.violations.contains { $0.code == "evidence_snapshot_mismatch" },
+                "a superseded-snapshot citation is stale evidence, not missing evidence")
+        #expect(!applied.violations.contains { $0.code == "evidence_not_found" })
         #expect(applied.correction.reviewState == .rejected)
         #expect(applied.correction.producedRevision == nil)
         #expect(applied.manifest.entries.first?.metadata[.documentcategory] == nil)
