@@ -281,6 +281,7 @@ public enum MappingPrompt {
         case .docx(let part, let paragraph, let range):
             "docx:\(redaction.redact(text: part)):paragraph=\(paragraph):utf16=\(range.lowerBound)-\(range.upperBound)"
         case .xlsx(let sheet, let cell): "xlsx:\(redaction.redact(text: sheet)):\(cell)"
+        case .text(let range): "text:utf16=\(range.lowerBound)-\(range.upperBound)"
         }
     }
 

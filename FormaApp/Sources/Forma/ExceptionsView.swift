@@ -1,151 +1,89 @@
 import FormaCore
 import SwiftUI
 
-/// The exception area: every entry FormaCore refused to validate, with the
-/// reason the program recorded rather than the model's own explanation.
-///
-/// Rows come from the same two sources the exporter uses: the manifest's
-/// hold/unknown/invalidated entries and `ValidationReport.allViolations`
+/// The exceptions area inside the shell: the filter/diagnostic pane and the
+/// blocked-entry table. Row details moved to `ExceptionsInspector`, the
+/// reprocess commands and the per-run egress permission to the shell's toolbar
+/// grammar. Rows still come from the same two sources the exporter uses: the
+/// manifest's hold/unknown/invalidated entries and `ValidationReport.allViolations`
 /// grouped by `instancePath`. Reprocessing hands FormaCore only the selected
 /// source identifiers; the engine decides what to ask and the validator decides
 /// the resulting state.
 struct ExceptionsView: View {
     @ObservedObject var model: WorkspaceModel
-    @State private var stateFilter: StateFilter = .all
-    @State private var codeFilter: String?
-    @State private var selection = Set<UUID>()
+    /// The width bounds the shell declared for this area's leading pane.
+    let leading: AreaWidth
 
-    /// Egress consent for this reprocess only. It starts off, is read when the
-    /// button fires and is cleared right after, so no later action inherits it.
-    @State private var reprocessEgress = false
+    /// The column budget the shell declared for the blocked-entry table.
+    private var rowWidths: [ShellColumnWidth] { ShellLayout.columns(for: .exceptionRows) }
 
-    enum StateFilter: String, CaseIterable, Identifiable {
-        case all
-        case hold
-        case unknown
-        case invalidated
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .all: "All blocked states"
-            case .hold: DecisionState.hold.rawValue
-            case .unknown: DecisionState.unknown.rawValue
-            case .invalidated: DecisionState.invalidated.rawValue
-            }
-        }
-
-        var state: DecisionState? {
-            switch self {
-            case .all: nil
-            case .hold: .hold
-            case .unknown: .unknown
-            case .invalidated: .invalidated
-            }
-        }
-    }
-
-    private var codes: [String] {
-        Array(Set(model.exceptions.flatMap(\.codes))).sorted()
-    }
-
-    private var rows: [WorkspaceModel.ExceptionRow] {
-        model.exceptions.filter { row in
-            (stateFilter.state == nil || row.state == stateFilter.state)
-                && (codeFilter == nil || row.codes.contains(codeFilter ?? ""))
-        }
-    }
-
-    private var selected: [WorkspaceModel.ExceptionRow] {
-        rows.filter { selection.contains($0.sourceID) }
-    }
+    /// The filter's code options and the filtered table.
+    ///
+    /// Both were computed here, which meant a flatMap over every violation of
+    /// every blocked row plus a `Set` plus a sort, and a second full pass over
+    /// the rows for the table, on *every body evaluation* - and the body reads
+    /// `rows` three times (the table, the "Shown N of M" line and the
+    /// reprocess count), so one render did the work three times. They are
+    /// stored on the model now, rebuilt where the rows or the filters change,
+    /// by the same rule `WorkspaceProjection.filteredExceptions` implements and
+    /// `WorkspaceProjectionTests` pins.
+    private var codes: [String] { model.exceptionCodes }
+    private var rows: [ExceptionRow] { model.visibleExceptions }
 
     var body: some View {
-        NavigationSplitView {
+        HSplitView {
             filterPanel
-                .navigationTitle("Exceptions")
-                .navigationSplitViewColumnWidth(min: 230, ideal: 280)
-        } detail: {
+                .areaWidth(leading)
             if model.exceptions.isEmpty {
                 ContentUnavailableView("No exceptions", systemImage: "checkmark.seal",
                                        description: Text(emptyReason))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                HSplitView {
-                    rowTable
-                        .frame(minWidth: 420)
-                    detailPane
-                        .frame(minWidth: 280, idealWidth: 340)
-                }
+                rowTable
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
-        .toolbar {
-            ToolbarItemGroup {
-                if model.phase.isBusy {
-                    Button("Cancel", systemImage: "stop.circle") { model.cancelWork() }
-                        .accessibilityIdentifier("cancel-reprocess")
-                } else {
-                    Button("Reprocess Selected", systemImage: "arrow.3.trianglepath") {
-                        // The run says whether anything left the guard list.
-                        // Clearing consent after a refusal - no context, no
-                        // case pack, an engine that failed to build - would
-                        // make the reviewer re-authorise bytes that were never
-                        // touched, and the second click would then send them
-                        // without the tick having meant anything in between.
-                        if model.runMapping(sourceIDs: selection, egress: reprocessEgress) {
-                            reprocessEgress = false
-                        }
-                    }
-                    .disabled(selection.isEmpty || !model.canMap)
-                    .help("Runs the mapping engine over the selected source identifiers only")
-                    .accessibilityIdentifier("reprocess-selected")
-                    // Consent is per action, not per session. Reading the
-                    // Settings-level flag here would let a box ticked an hour
-                    // ago, for a different question, authorise sending these
-                    // files now.
-                    Toggle("Let this run leave the machine", isOn: $reprocessEgress)
-                        .toggleStyle(.checkbox)
-                        .help("Off means FormaCore refuses every provider request and records that reason per file")
-                        .accessibilityIdentifier("reprocess-egress")
-                }
-                Button("Clear Selection") { selection.removeAll() }
-                    .disabled(selection.isEmpty)
-            }
-        }
-        .onChange(of: stateFilter) { _, _ in selection.removeAll() }
-        .onChange(of: codeFilter) { _, _ in selection.removeAll() }
+        .onChange(of: model.exceptionStateFilter) { _, _ in model.exceptionSelection.removeAll() }
+        .onChange(of: model.exceptionCodeFilter) { _, _ in model.exceptionSelection.removeAll() }
     }
 
     private var emptyReason: String {
         guard let manifest = model.manifest else {
-            return "There is no manifest yet. Run the mapping engine, or open an exported bundle in the Mapping area."
+            return "还没有清单。运行映射引擎，或在「映射」区域打开一个已导出的包。"
         }
         // Both numbers come off one binding, so they describe the same manifest.
         if manifest.report.counts.validated == manifest.entries.count {
-            return "FormaCore validated every entry in this revision."
+            return "FormaCore 已验证本版本的每一条记录。"
         }
-        return "No entry in this revision is held, unknown or invalidated."
+        return "本版本没有待定、未知或已作废的记录。"
     }
+
+    // MARK: - Filter pane
 
     private var filterPanel: some View {
         List {
             Section("Filter") {
-                Picker("State", selection: $stateFilter) {
-                    ForEach(StateFilter.allCases) { filter in
+                Picker("State", selection: $model.exceptionStateFilter) {
+                    ForEach(ExceptionFilterState.allCases) { filter in
                         Text(filter.title).tag(filter)
                     }
                 }
                 .accessibilityIdentifier("exception-state-filter")
-                Picker("Violation code", selection: $codeFilter) {
-                    Text("All codes").tag(String?.none)
+                Picker("Violation code", selection: $model.exceptionCodeFilter) {
+                    Text("全部原因").tag(String?.none)
                     ForEach(codes, id: \.self) { code in
-                        Text(code).tag(String?.some(code))
+                        // Business copy in the list, raw code in the help and in
+                        // the row's 诊断 detail - never the other way round
+                        // (owner failure #8).
+                        Text(businessCopy(for: code).headline)
+                            .help("\(businessCopy(for: code).sentence)\n\(code)")
+                            .tag(String?.some(code))
                     }
                 }
                 .accessibilityIdentifier("exception-code-filter")
                 .disabled(codes.isEmpty)
                 LabeledContent("Shown", value: "\(rows.count.formatted()) of \(model.exceptions.count.formatted())")
-                LabeledContent("Selected", value: selection.count.formatted())
+                LabeledContent("Selected", value: model.exceptionSelection.count.formatted())
             }
             if let report = model.manifest?.report {
                 Section("Revision counts") {
@@ -156,22 +94,25 @@ struct ExceptionsView: View {
                     LabeledContent("Invalidated", value: report.counts.invalidated.formatted())
                     LabeledContent("Eligible", value: report.counts.eligible.formatted())
                     ForEach(report.groups, id: \.group) { group in
-                        LabeledContent(group.group.rawValue,
-                                       value: "\(group.status.rawValue) · \(group.violations.count.formatted())")
+                        LabeledContent(businessCopy(for: group.group.rawValue).headline,
+                                       value: "\(businessCopy(for: group.status.rawValue).headline) · \(group.violations.count.formatted())")
+                            .help(businessCopy(for: group.group.rawValue).sentence)
+                            .accessibilityIdentifier("diagnostic-raw-\(group.group.rawValue)")
                     }
                 }
             }
             Section("Reprocessing") {
-                // This describes what the button next to it will do, so it reads
-                // this panel's own box - not the Settings-level flag, which a
-                // different action may have set and which this run ignores.
-                Text(reprocessEgress
-                     ? "This run may use cloud egress, because the box above is ticked."
-                     : "Cloud egress is off for this run, so FormaCore refuses every provider request and reports that reason per file.")
+                // This describes what the toolbar control will do, so it reads
+                // the same per-run flag the confirmation sets - not the
+                // Settings-level one, which a different action may have set and
+                // which this run ignores.
+                Text(model.reprocessEgress
+                     ? "本次运行已获外发许可；点击工具栏「外发许可」可立即关闭。"
+                     : "外发许可关闭：FormaCore 会拒绝每个 Provider 请求，并逐文件记录原因。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if !selection.isEmpty {
-                    LabeledContent("Files in scope", value: model.files(in: selection).count.formatted())
+                if !model.exceptionSelection.isEmpty {
+                    LabeledContent("Files in scope", value: model.files(in: model.exceptionSelection).count.formatted())
                 }
                 Text("A reprocessed run covers only the selected files, so this revision's manifest lists those entries.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -179,36 +120,66 @@ struct ExceptionsView: View {
         }
     }
 
+    // MARK: - Table
+
     private var rowTable: some View {
-        Table(rows, selection: $selection) {
+        Table(rows, selection: $model.exceptionSelection) {
             TableColumn("Relative path") { row in
                 Text(row.relativePath).lineLimit(1).help(row.relativePath)
             }
+            .width(min: rowWidths[0].cgMin, ideal: rowWidths[0].cgIdeal, max: rowWidths[0].cgMax)
             TableColumn("State") { row in
-                Text(row.state.rawValue)
+                let copy = businessCopy(for: row.state.rawValue)
+                Text(copy.headline)
+                    .help(copy.sentence)
+                    .accessibilityIdentifier("diagnostic-raw-\(row.state.rawValue)")
             }
-            .width(min: 90, ideal: 105)
+            .width(min: rowWidths[1].cgMin, ideal: rowWidths[1].cgIdeal, max: rowWidths[1].cgMax)
             TableColumn("Reason") { row in
-                Text(row.reason).lineLimit(1).help(row.reason)
+                Text(businessCopy(for: row.reason).headline)
+                    .lineLimit(1)
+                    .help(businessCopy(for: row.reason).sentence + "\n" + row.reason)
+                    .accessibilityIdentifier("diagnostic-raw-\(row.reason)")
             }
-            .width(min: 150, ideal: 220)
+            .width(min: rowWidths[2].cgMin, ideal: rowWidths[2].cgIdeal, max: rowWidths[2].cgMax)
             TableColumn("Codes") { row in
-                Text(row.codeList).lineLimit(1).help(row.codeList)
+                Text(row.codes.map { businessCopy(for: $0).headline }.joined(separator: " · "))
+                    .lineLimit(1)
+                    .help(row.codes.map { "\(businessCopy(for: $0).headline)（\($0)）" }.joined(separator: " · "))
+                    .accessibilityIdentifier("diagnostic-codes-\(row.sourceID.uuidString)")
             }
+            .width(min: rowWidths[3].cgMin, ideal: rowWidths[3].cgIdeal, max: rowWidths[3].cgMax)
             TableColumn("Violations") { row in
                 Text(row.violations.count.formatted()).monospacedDigit()
             }
-            .width(min: 70, ideal: 80)
+            .width(min: rowWidths[4].cgMin, ideal: rowWidths[4].cgIdeal, max: rowWidths[4].cgMax)
         }
     }
+}
 
-    @ViewBuilder private var detailPane: some View {
+/// The exceptions inspector: one blocked entry's recorded reasons and
+/// violations, or the selected set. The raw codes FormaCore recorded stay in
+/// the expandable 诊断 detail of each violation; everything above it speaks in
+/// business sentences (owner failures #7 and #8).
+@MainActor
+struct ExceptionsInspector: View {
+    @ObservedObject var model: WorkspaceModel
+
+    private var selected: [ExceptionRow] {
+        model.exceptions.filter { model.exceptionSelection.contains($0.sourceID) }
+    }
+
+    var body: some View {
         if selected.count == 1, let row = selected.first {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(row.relativePath).font(.headline).textSelection(.enabled)
-                    LabeledContent("Decision state", value: row.state.rawValue)
-                    LabeledContent("Recorded reason", value: row.reason)
+                    let stateCopy = businessCopy(for: row.state.rawValue)
+                    LabeledContent("Decision state", value: stateCopy.headline)
+                        .help(stateCopy.sentence)
+                    let reasonCopy = businessCopy(for: row.reason)
+                    LabeledContent("Recorded reason", value: reasonCopy.headline)
+                        .help(reasonCopy.sentence + "\n" + row.reason)
                     LabeledContent("Source identifier", value: row.sourceID.uuidString.lowercased())
                     if let entry = model.manifest?.entry(for: row.sourceID) {
                         LabeledContent("Snapshot", value: "revision \(entry.snapshotRevision.formatted()) · \(entry.snapshotFingerprint)")
@@ -229,12 +200,23 @@ struct ExceptionsView: View {
                     } else {
                         ForEach(row.violations.indices, id: \.self) { index in
                             let violation = row.violations[index]
+                            let copy = businessCopy(for: violation.code)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("\(violation.code) · \(violation.instancePath)")
-                                    .font(.caption.monospaced())
+                                Text(copy.headline)
+                                    .font(.caption)
+                                Text(copy.sentence)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
                                 Text(violation.detail).font(.caption2).foregroundStyle(.secondary)
+                                DisclosureGroup("诊断详情") {
+                                    Text("\(copy.rawCode) · \(violation.instancePath)")
+                                        .font(.caption2.monospaced())
+                                        .textSelection(.enabled)
+                                }
+                                .font(.caption2)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("diagnostic-raw-\(violation.code)-\(index)")
                         }
                     }
                 }
@@ -242,7 +224,8 @@ struct ExceptionsView: View {
                 .padding(15)
             }
         } else if selected.isEmpty {
-            ContentUnavailableView("Select an exception", systemImage: "exclamationmark.triangle")
+            ContentUnavailableView("Select an exception", systemImage: "exclamationmark.triangle",
+                                   description: Text("在「诊断」表格中选择一行。"))
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
@@ -250,7 +233,9 @@ struct ExceptionsView: View {
                     ForEach(selected) { row in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(row.relativePath).font(.caption)
-                            Text("\(row.state.rawValue) · \(row.reason)").font(.caption2).foregroundStyle(.secondary)
+                            Text("\(businessCopy(for: row.state.rawValue).headline) · \(businessCopy(for: row.reason).headline)")
+                                .font(.caption2).foregroundStyle(.secondary)
+                                .help("\(row.state.rawValue) · \(row.reason)")
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }

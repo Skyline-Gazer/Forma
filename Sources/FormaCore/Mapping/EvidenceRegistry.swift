@@ -18,10 +18,22 @@ public enum EvidenceRegistry {
     /// later reader can tell which extractor version was authoritative.
     public static var extractorVersion: String { EvidenceExtraction.extractorVersion }
 
+    /// The version of the *identifier formula*, hashed into every id below.
+    ///
+    /// It is deliberately not `extractorVersion`: an id is derived from source,
+    /// snapshot, evidence kind and locator, and none of those moved when plain
+    /// text became readable (#152). Re-versioning the formula would mint a new id
+    /// for every row of an unchanged file, which is exactly how a stored
+    /// manifest's citations stop resolving - the failure `evidence_not_found`
+    /// exists to catch. A locator *shape* change is what would force this up.
+    static let identityVersion = "evidence.v1"
+
     public static func identifier(sourceID: UUID, snapshotRevision: Int, source: EvidenceSource,
                                   locator: EvidenceLocator?, relativePath: String?) throws -> String {
         var hasher = SHA256()
-        hasher.update(data: Data("evidence.v1|\(sourceID.sourceKey)|\(snapshotRevision)|\(source.rawValue)".utf8))
+        hasher.update(data: Data(
+            "\(identityVersion)|\(sourceID.sourceKey)|\(snapshotRevision)|\(source.rawValue)".utf8
+        ))
         if let locator {
             // Sorted-key encoding keeps the digest stable across encoder changes.
             hasher.update(data: try FormaJSON.encode(locator))

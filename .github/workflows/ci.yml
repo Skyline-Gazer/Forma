@@ -25,6 +25,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Toolchain
         run: xcodebuild -version && swift --version && sw_vers
+      # Issue #149: the pin record and the gitlink must not drift apart. This is
+      # a consistency check, not a gate redesign: no new job, no new required
+      # status check, no pin upgrade. `--verify-upstream` fetches the pinned ADS
+      # object by SHA; Skyline-Gazer/ADS is public, so the no-token runner can reach
+      # it (verified on the DevBox with an unauthenticated `git fetch`).
+      - name: ADS pin consistency
+        run: python3 scripts/check_ads_pin.py --verify-upstream
       - name: Unit tests
         run: swift test --parallel --force-resolved-versions
 
@@ -38,8 +45,8 @@ jobs:
         run: xcodebuild -version && swift --version
       - name: Build the Forma app product
         run: swift build --package-path FormaApp --product Forma --only-use-versions-from-resolved-file
-        # The ADS pin check is wired into CI by the consumer change that adds
-        # scripts/check_ads_pin.py; scheduling it here first would be a red job.
+        # The ADS pin check runs in the `test` job (issue #149), once for the
+        # whole workflow; this job stays focused on building the app product.
 
   # A development bundle, not a release artifact: ad-hoc signed, not notarized,
   # no Developer ID. It exists so "the app packages" is checked on every PR
