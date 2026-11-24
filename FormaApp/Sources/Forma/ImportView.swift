@@ -184,11 +184,18 @@ struct ImportView: View {
 
 /// A minimal flow layout: enough for a row of reason chips, without pulling in a
 /// layout system the rest of the app does not use.
+///
+/// The chips wrap. A row of reason codes is data, and how many there are is
+/// not the window's business: a single line would demand the width of every
+/// chip at once and put the window's minimum back where it was.
 private struct WrapLine<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        HStack(spacing: 6) { content }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 96, maximum: 220), spacing: 6)],
+                  alignment: .leading, spacing: 6) {
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

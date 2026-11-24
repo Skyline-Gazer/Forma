@@ -224,36 +224,37 @@ struct MappingView: View {
             TableColumn("Relative path") { row in
                 Text(row.entry.relativePath).lineLimit(1).help(row.entry.relativePath)
             }
+            .shellWidth(.mappingRows, 0)
             TableColumn("documentcategory") { row in
                 Text(row.value(.documentcategory)).lineLimit(1).help(row.value(.documentcategory))
             }
-            .width(min: 110, ideal: 140)
+            .shellWidth(.mappingRows, 1)
             TableColumn("documenttype") { row in
                 Text(row.value(.documenttype)).lineLimit(1).help(row.value(.documenttype))
             }
-            .width(min: 100, ideal: 130)
+            .shellWidth(.mappingRows, 2)
             TableColumn("State") { row in
                 let copy = businessCopy(for: row.entry.state.rawValue)
                 Text(copy.headline)
                     .help(copy.sentence)
                     .accessibilityIdentifier("diagnostic-raw-\(row.entry.state.rawValue)")
             }
-            .width(min: 80, ideal: 95)
+            .shellWidth(.mappingRows, 3)
             TableColumn("Confidence (model-reported)") { row in
                 Text(row.entry.confidence?.rawValue ?? "Not reported")
                     .help("Reported by the model. FormaCore's evidence rules, not this value, decide eligibility.")
             }
-            .width(min: 120, ideal: 150)
+            .shellWidth(.mappingRows, 4)
             TableColumn("Eligible (policy simulation)") { row in
                 Text(row.entry.eligibleForAutoExecution ? "Simulated yes" : "Simulated no")
                     .help("Policy simulation only. FormaCore writes nothing to any database.")
             }
-            .width(min: 130, ideal: 160)
+            .shellWidth(.mappingRows, 5)
             TableColumn("Evidence") { row in
                 Text("\(row.entry.fields.reduce(0) { $0 + $1.evidenceIDs.count }).formatted()")
                     .monospacedDigit()
             }
-            .width(min: 70, ideal: 80)
+            .shellWidth(.mappingRows, 6)
         }
     }
 

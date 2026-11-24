@@ -189,14 +189,45 @@ struct AreaWidth {
     let min: CGFloat
     let ideal: CGFloat
     let max: CGFloat
+
+    init(min: CGFloat, ideal: CGFloat, max: CGFloat) {
+        self.min = min
+        self.ideal = ideal
+        self.max = max
+    }
+
+    /// The shell's own budget, read from FormaCore.
+    ///
+    /// The numbers used to live here, where no test could see them. They live
+    /// in FormaCore now, because the window's minimum width is the sum of
+    /// these minimums and a budget nobody can assert is a budget nobody holds.
+    init(_ column: ShellColumnWidth) {
+        self.init(min: CGFloat(column.min), ideal: CGFloat(column.ideal), max: CGFloat(column.max))
+    }
+}
+
+extension TableColumnContent {
+    /// Applies the shell's declared width budget to one table column.
+    ///
+    /// Every column needs all three bounds. A column without a maximum
+    /// measures its content, and a long path then becomes a demand on the
+    /// window: the field measured a 1845-1941pt minimum window on a 1512pt
+    /// screen. The index is the column's position in the view, and the budget
+    /// is the one FormaCore declares for that table.
+    func shellWidth(_ table: ShellTable, _ index: Int) -> some TableColumnContent {
+        let columns = ShellLayout.columns(for: table)
+        guard index < columns.count else { return self }
+        let column = columns[index]
+        return width(min: CGFloat(column.min), ideal: CGFloat(column.ideal), max: CGFloat(column.max))
+    }
 }
 
 enum ShellGeometry {
-    static let sidebar = AreaWidth(min: 132, ideal: 168, max: 230)
-    static let inspector = AreaWidth(min: 260, ideal: 340, max: 520)
-    static let workspaceLeading = AreaWidth(min: 150, ideal: 190, max: 280)
-    static let mappingLeading = AreaWidth(min: 240, ideal: 300, max: 420)
-    static let exceptionsLeading = AreaWidth(min: 210, ideal: 260, max: 360)
+    static let sidebar = AreaWidth(ShellLayout.sidebar)
+    static let inspector = AreaWidth(ShellLayout.inspector)
+    static let workspaceLeading = AreaWidth(ShellLayout.leading(for: .workspace))
+    static let mappingLeading = AreaWidth(ShellLayout.leading(for: .mapping))
+    static let exceptionsLeading = AreaWidth(ShellLayout.leading(for: .exceptions))
 }
 
 extension View {
@@ -500,7 +531,7 @@ private struct WorkspaceAreas: View {
 
     private var profilePicker: some View {
         let resolved = profilePickerSelection.wrappedValue
-        return Picker("Profile", selection: profilePickerSelection) {
+        return Picker("资料库类型", selection: profilePickerSelection) {
             if resolved == nil {
                 Text(ShellProfilePicker.placeholder).tag(String?.none)
             }
@@ -508,7 +539,7 @@ private struct WorkspaceAreas: View {
                 Text(profile.displayName).tag(Optional(profile.profileID))
             }
         }
-        .fixedSize()
+        .frame(maxWidth: 240)
         .disabled(!ShellProfilePicker.isEnabled(optionCount: model.profiles.count) || model.phase.isBusy)
         .help(ShellProfilePicker.label(selected: resolved,
                                        options: model.profiles.map { ($0.profileID, $0.displayName) }))
