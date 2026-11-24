@@ -121,6 +121,18 @@ public struct CorrectionEngine: Sendable {
 
     public let profile: MappingProfile
 
+    /// The codes the validator raises when a citation does not resolve.
+    ///
+    /// They name the evidence row rather than the field, so the refusal path
+    /// has to recognise them by code: without that, the precise reason a
+    /// correction was refused - an expired snapshot, a row from another file,
+    /// an unreadable row - was filtered out of the report and the reviewer saw
+    /// only a generic refusal.
+    static let citationViolationCodes: Set<String> = [
+        "evidence_not_found", "evidence_foreign_source", "evidence_snapshot_mismatch",
+        "evidence_unusable", "locator_invalid", "locator_excerpt_mismatch", "source_not_allowed"
+    ]
+
     public init(profile: MappingProfile) {
         self.profile = profile
     }
@@ -139,7 +151,8 @@ public struct CorrectionEngine: Sendable {
     public func apply(to manifest: Manifest, sourceID: UUID, field: MetadataFieldID, correctedValue: String?,
                       evidenceIDs: [String], origin: CorrectionRecord.Origin, context: ProjectContext,
                       evidence: [UUID: [EvidenceRecord]], currentEntries: [SourceEntry],
-                      reviewerConfirmations: [CorrectionRecord] = []) -> Applied {
+                      reviewerConfirmations: [CorrectionRecord] = [],
+                      citedRecords: [String: EvidenceRecord] = [:]) -> Applied {
         guard let position = manifest.entries.firstIndex(where: { $0.sourceID == sourceID }) else {
             return Applied(manifest: manifest, correction: CorrectionRecord(
                 manifestID: manifest.envelope.manifestID, manifestRevision: manifest.envelope.revision,
@@ -184,33 +197,71 @@ public struct CorrectionEngine: Sendable {
             let rows = evidence[sourceID] ?? []
             let target = manifest.entries[position]
             let rowsByID = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            // Two refusals wear different faces and the review screen has to say
-            // which one happened: a citation that names no row the program
-            // holds is missing evidence, while a row that exists but describes
-            // a superseded snapshot is a stale one - the file moved under the
-            // manifest, and re-reading its evidence, not a rescan of the
-            // listing, is the fix. The validator already keeps these codes
+            // A citation is judged against two snapshots, not one. The manifest
+            // says which snapshot the entry under correction describes; the
+            // current listing says which snapshot the file has now. A row that
+            // matches the manifest but not the listing is a row read before the
+            // file moved - publishing on it would describe a document state
+            // nobody is looking at any more. A row that matches neither was
+            // never evidence for this revision at all.
+            let listingEntry = currentEntries.first { $0.id == sourceID }
+            let manifestSnapshot = (revision: target.snapshotRevision, fingerprint: target.snapshotFingerprint)
+            let listingSnapshot = listingEntry.map {
+                (revision: Int($0.snapshotRevision), fingerprint: $0.snapshotFingerprint)
+            }
+            let manifestIsCurrent = listingSnapshot.map {
+                $0.revision == manifestSnapshot.revision && $0.fingerprint == manifestSnapshot.fingerprint
+            } ?? true
+            // Three refusals wear different faces and the review screen has to
+            // say which one happened: a citation that names no row the program
+            // holds anywhere is missing evidence; a row that exists but
+            // describes a superseded snapshot is a stale one - the file moved
+            // under the manifest, and re-reading its evidence, not a rescan of
+            // the listing, is the fix; and a row that belongs to another file
+            // is neither of those. The validator already keeps these codes
             // apart for a model's answer; a human citation is judged by the
-            // same gates and reported the same way. Neither kind is accepted.
+            // same gates and reported the same way. None of them is accepted.
             var verifiedCount = 0
             var absentCitation = evidenceIDs.isEmpty
             var staleCitation = false
+            var foreignCitation = false
+            var unusableCitation = false
             for id in Set(evidenceIDs) {
-                guard let record = rowsByID[id], record.isUsable,
-                      // The map is keyed by source, but the row itself carries a
-                      // source id: a caller that mixed rows would otherwise let a
-                      // correction cite another file's text.
-                      record.sourceID == sourceID else { absentCitation = true; continue }
-                // The same binding the validator insists on: a row from an older
-                // snapshot describes a file that is no longer the one in front of
-                // the reviewer, and accepting it would let a correction cite
-                // evidence the manifest cannot resolve.
-                if record.snapshotFingerprint == target.snapshotFingerprint,
-                   record.snapshotRevision == target.snapshotRevision {
-                    verifiedCount += 1
-                } else {
-                    staleCitation = true
+                // The row is looked up by id across the whole registry, not only
+                // among the rows this source holds now: a row an earlier
+                // revision registered is still in the store, and finding it is
+                // what lets the refusal say "this evidence is from an older
+                // snapshot" instead of "this evidence does not exist". Only a
+                // row the store never held is missing.
+                guard let record = rowsByID[id] ?? citedRecords[id] else {
+                    absentCitation = true
+                    continue
                 }
+                // The map is keyed by source, but the row itself carries a
+                // source id: a caller that mixed rows would otherwise let a
+                // correction cite another file's text.
+                guard record.sourceID == sourceID else {
+                    foreignCitation = true
+                    continue
+                }
+                // A row the program could not read is not missing evidence; it
+                // is evidence that cannot support a value, and the reviewer
+                // needs that difference to know what to do next.
+                guard record.isUsable else {
+                    unusableCitation = true
+                    continue
+                }
+                // The same binding the validator insists on: a row from an
+                // older snapshot describes a file that is no longer the one in
+                // front of the reviewer, and accepting it would let a
+                // correction cite evidence the manifest cannot resolve.
+                guard record.snapshotFingerprint == manifestSnapshot.fingerprint,
+                      record.snapshotRevision == manifestSnapshot.revision,
+                      manifestIsCurrent else {
+                    staleCitation = true
+                    continue
+                }
+                verifiedCount += 1
             }
             // `verifiedCount == 0` keeps the original rule that an empty
             // citation list is an opinion, not a decision: with no citations
@@ -224,8 +275,18 @@ public struct CorrectionEngine: Sendable {
                 if staleCitation {
                     violations.append(ValidationViolation(code: "evidence_snapshot_mismatch",
                                                           instancePath: field.rawValue,
-                                                          detail: "Evidence was read from a different snapshot revision. "
-                                                                + "Re-read the file's evidence before correcting."))
+                                                          detail: "Evidence was read from a superseded snapshot. "
+                                                                + "Re-read the file's evidence and cite the current rows."))
+                }
+                if foreignCitation {
+                    violations.append(ValidationViolation(code: "evidence_foreign_source",
+                                                          instancePath: field.rawValue,
+                                                          detail: "The cited evidence belongs to a different file."))
+                }
+                if unusableCitation {
+                    violations.append(ValidationViolation(code: "evidence_unusable",
+                                                          instancePath: field.rawValue,
+                                                          detail: "The cited evidence could not be read as text."))
                 }
             }
         }
@@ -324,9 +385,20 @@ public struct CorrectionEngine: Sendable {
             // The report groups violations by rule group; a violation for this
             // field is identified by the same instance path the policy used.
             let instancePath = "\(manifest.entries[position].relativePath)#\(field.rawValue)"
+            // A citation that fails to resolve is reported against the row it
+            // names, not against the field: the validator addresses the
+            // evidence, and the evidence id is what the reviewer can act on.
+            // Without this the precise reason - an expired snapshot, a row
+            // from another file, an unreadable row - was filtered away and the
+            // desk was left with the generic "the correction did not land".
+            let citedIDs = Set(evidenceIDs)
             let fieldViolations = result.report.groups
                 .flatMap(\.violations)
-                .filter { $0.instancePath == instancePath }
+                .filter { violation in
+                    if violation.instancePath == instancePath { return true }
+                    guard Self.citationViolationCodes.contains(violation.code) else { return false }
+                    return citedIDs.contains { violation.instancePath.contains($0) }
+                }
             return Applied(manifest: manifest, correction: CorrectionRecord(
                 manifestID: manifest.envelope.manifestID, manifestRevision: manifest.envelope.revision,
                 producedRevision: nil, sourceID: sourceID, field: field, previousValue: previous,

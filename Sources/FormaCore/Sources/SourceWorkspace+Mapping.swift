@@ -362,6 +362,15 @@ extension SourceWorkspace {
         let evidence = try await store.database.read { db in
             try MappingStore.evidence(for: Set(manifest.entries.map(\.sourceID)), in: db)
         }
+        // The cited rows are looked up by id across the whole registry as well.
+        // A row an earlier revision registered is still in the store, and
+        // finding it is what lets the engine answer "this evidence is from an
+        // older snapshot" instead of "this evidence does not exist" - the
+        // difference between a reviewer who re-reads the file and one who is
+        // told to go and look for evidence that was never lost.
+        let citedRecords = try await store.database.read { db in
+            try MappingStore.evidence(ids: Set(evidenceIDs), in: db)
+        }
         // The decisions this store has already verified. They are the proof
         // that a classification was reviewed, and they are read from the audit
         // trail rather than from the manifest in hand: a manifest that claims a
@@ -372,7 +381,8 @@ extension SourceWorkspace {
         let applied = CorrectionEngine(profile: profile).apply(
             to: manifest, sourceID: sourceID, field: field, correctedValue: correctedValue,
             evidenceIDs: evidenceIDs, origin: origin, context: context, evidence: evidence,
-            currentEntries: listing.entries, reviewerConfirmations: history)
+            currentEntries: listing.entries, reviewerConfirmations: history,
+            citedRecords: citedRecords)
         if applied.violations.isEmpty {
             // Publish and record together: a row claiming a revision that was
             // never stored would occupy the index and refuse the retry.
