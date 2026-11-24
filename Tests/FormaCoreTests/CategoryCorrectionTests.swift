@@ -162,7 +162,10 @@ struct CategoryCorrectionTests {
                             value: "01_招标文件", citations: ["ev_foreign"], profile: profile,
                             evidence: rows)
 
-        #expect(applied.violations.contains { $0.code == "evidence_not_found" })
+        #expect(applied.violations.contains { $0.code == "evidence_foreign_source" },
+                "a row that belongs to another file is its own refusal: \(applied.violations.map(\.code))")
+        #expect(!applied.violations.contains { $0.code == "evidence_not_found" },
+                "the row exists in the registry; it is simply another file's row")
         #expect(applied.correction.reviewState == .rejected)
     }
 
