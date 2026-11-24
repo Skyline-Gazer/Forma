@@ -560,8 +560,8 @@ struct CorrectionSheet: View {
         .padding(20)
         .frame(width: 570, height: 520)
         .onAppear { refusalCodes = [] }
-        .onChange(of: model.notice) { _, notice in
-            refusalCodes = ReviewDeskFlow.refusalCodes(fromNotice: notice)
+        .onChange(of: model.lastRefusalCodes) { _, codes in
+            refusalCodes = codes
         }
     }
 
@@ -610,15 +610,34 @@ struct CorrectionSheet: View {
     /// visible but unchecked - their absence from a citation is information.
     @ViewBuilder private var citationList: some View {
         let rows = model.evidenceBySource[draft.sourceID] ?? []
+        let expired = rows.filter { model.currency(of: $0, for: draft.sourceID) == .expired }
         if rows.isEmpty {
             Text("这份文件还没有登记过证据；只填写内容而不勾选证据的判断会被 FormaCore 拒绝。")
                 .font(.caption).foregroundStyle(.secondary)
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
+                    if !expired.isEmpty {
+                        // The rows on screen describe an older snapshot. They
+                        // are shown, marked, and not offered: a checked row
+                        // that cannot be cited is the trap this replaces.
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label(EvidenceCurrencyCopy.expiredSentence, systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                            Text(EvidenceCurrencyCopy.rereadHint)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Button(EvidenceCurrencyCopy.rereadAction) { model.rereadEvidence(for: draft.sourceID) }
+                                .controlSize(.small)
+                                .disabled(model.phase.isBusy)
+                                .accessibilityIdentifier("reread-evidence")
+                        }
+                    }
                     ForEach(CitationGroup.groups(in: rows), id: \.key) { group in
                         Text(group.key).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
                         ForEach(group.rows, id: \.id) { record in
+                            let currency = model.currency(of: record, for: draft.sourceID)
                             Toggle(isOn: Binding(
                                 get: { currentCitations.contains(record.id) },
                                 set: { turning in
@@ -627,8 +646,15 @@ struct CorrectionSheet: View {
                                 }
                             )) {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text("\(deskEvidenceSourceLabel(record.source)) · \(deskEvidenceLocatorLabel(record.locator))")
-                                        .font(.caption.weight(.semibold))
+                                    HStack(spacing: 6) {
+                                        Text("\(deskEvidenceSourceLabel(record.source)) · \(deskEvidenceLocatorLabel(record.locator))")
+                                            .font(.caption.weight(.semibold))
+                                        if currency == .expired {
+                                            Text(EvidenceCurrencyCopy.expiredBadge)
+                                                .font(.caption2)
+                                                .foregroundStyle(.orange)
+                                        }
+                                    }
                                     Text(record.excerpt ?? "内容不可读取")
                                         .font(.callout)
                                         .lineLimit(3)
@@ -636,7 +662,7 @@ struct CorrectionSheet: View {
                                 }
                             }
                             .toggleStyle(.checkbox)
-                            .disabled(!record.isUsable)
+                            .disabled(!record.isUsable || currency != .current)
                             .accessibilityIdentifier("cite-\(record.id)")
                         }
                     }

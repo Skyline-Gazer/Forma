@@ -139,15 +139,6 @@ struct ReviewDeskFlowTests {
 
     // MARK: - Refusal buckets (P0: the error beside the edit)
 
-    @Test("the model refusal notice parses to its codes, and any other notice to none")
-    func refusalNoticeParsing() {
-        let notice = "FormaCore refused this correction: evidence_not_found · insufficient_evidence. "
-            + "Nothing was changed, and the attempt is on the exceptions list."
-        #expect(ReviewDeskFlow.refusalCodes(fromNotice: notice) == ["evidence_not_found", "insufficient_evidence"])
-        #expect(ReviewDeskFlow.refusalCodes(fromNotice: nil) == [])
-        #expect(ReviewDeskFlow.refusalCodes(fromNotice: "Correction recorded as revision 6.") == [])
-    }
-
     @Test("the four actionable buckets exist and the stale bucket catches the #147 code by literal")
     func refusalBuckets() {
         #expect(deskRefusalKind(forCode: "evidence_missing") == .missingEvidence)

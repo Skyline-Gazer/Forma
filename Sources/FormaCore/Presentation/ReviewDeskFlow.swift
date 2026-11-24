@@ -205,18 +205,11 @@ public struct ReviewDeskFlow: Equatable, Sendable {
         return rest.first ?? order.first
     }
 
-    /// Extracts the violation codes from the model notice a refused correction
-    /// writes ("FormaCore refused this correction: a · b. Nothing was
-    /// changed…"). Parsing lives here rather than in the view so the format is
-    /// one tested contract; any other notice yields no codes and the desk
-    /// shows no field-level refusal.
-    public static func refusalCodes(fromNotice notice: String?) -> [String] {
-        let marker = "FormaCore refused this correction: "
-        guard let notice, let start = notice.range(of: marker) else { return [] }
-        let tail = notice[start.upperBound...]
-        let head = tail.prefix(while: { $0 != "." && $0 != "。" })
-        return head.split(separator: "·").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-    }
+    /// The refusal codes travel as themselves now - `WorkspaceModel
+    /// .lastRefusalCodes` publishes them - so this view used to parse a
+    /// sentence to recover them, and the parser is gone. A sentence is not an
+    /// interface: it forced the refusal notice to stay in one language and
+    /// one shape, and the desk to guess at what the sentence meant.
 }
 
 /// The per-file status chip (#144 P1): four business states, mapped total

@@ -64,13 +64,17 @@ struct ReviewDeskView: View {
             Divider()
             HSplitView {
                 queue
-                    .frame(minWidth: 260, idealWidth: 330, maxWidth: 420)
+                    .frame(minWidth: CGFloat(ShellLayout.deskQueue.min),
+                           idealWidth: CGFloat(ShellLayout.deskQueue.ideal),
+                           maxWidth: CGFloat(ShellLayout.deskQueue.max))
                 ScrollView {
                     detail
                         .padding(20)
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
-                .frame(minWidth: 400, idealWidth: 620)
+                .frame(minWidth: CGFloat(ShellLayout.deskDetail.min),
+                       idealWidth: CGFloat(ShellLayout.deskDetail.ideal),
+                       maxWidth: CGFloat(ShellLayout.deskDetail.max))
             }
         }
         .confirmationDialog(EgressConsent.confirmationHeading,
@@ -119,14 +123,13 @@ struct ReviewDeskView: View {
             refusal = nil
             advanceCursor()
         }
-        .onChange(of: model.notice) { _, notice in
-            let codes = ReviewDeskFlow.refusalCodes(fromNotice: notice)
+        .onChange(of: model.lastRefusalCodes) { _, codes in
             if !codes.isEmpty, let field = model.draft?.field {
                 refusal = Refusal(field: field, codes: codes)
-            } else if notice != nil {
-                // Any other published notice supersedes the remembered
-                // refusal: the cause beside the field is a statement about
-                // the last click, not a permanent banner.
+            } else if codes.isEmpty {
+                // Any other outcome supersedes the remembered refusal: the
+                // cause beside the field is a statement about the last click,
+                // not a permanent banner.
                 refusal = nil
             }
         }
@@ -462,11 +465,15 @@ struct ReviewDeskView: View {
 
     private func evidenceCard(_ row: WorkspaceModel.MappingRow) -> some View {
         let records = (model.evidenceBySource[row.sourceID] ?? []).filter { $0.isUsable }
+        let expired = records.filter { model.currency(of: $0, for: row.sourceID) == .expired }
         return GroupBox("证据摘录 · 按来源分组") {
             VStack(alignment: .leading, spacing: 8) {
                 Text("以下是本地提取的证据摘录，不是完整文档预览；选择字段时请确认内容确实支持该判断。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if !expired.isEmpty {
+                    expiredEvidenceNotice(row: row, count: expired.count)
+                }
                 if records.isEmpty {
                     Text("暂无可引用的证据行；请检查文件是否已扫描、是否可读或为未下载的云端占位。")
                         .font(.callout)
@@ -480,11 +487,22 @@ struct ReviewDeskView: View {
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                         .frame(width: 132, alignment: .leading)
-                                    Text(record.excerpt ?? "")
-                                        .font(.callout)
-                                        .lineLimit(3)
-                                        .textSelection(.enabled)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(record.excerpt ?? "")
+                                            .font(.callout)
+                                            .lineLimit(3)
+                                            .textSelection(.enabled)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        // A row read from an older snapshot is
+                                        // marked as such. The reviewer has to
+                                        // see that it no longer describes the
+                                        // file in front of them.
+                                        if model.currency(of: record, for: row.sourceID) == .expired {
+                                            Text(EvidenceCurrencyCopy.expiredBadge)
+                                                .font(.caption2)
+                                                .foregroundStyle(.orange)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -493,6 +511,25 @@ struct ReviewDeskView: View {
             }
             .padding(7)
         }
+    }
+
+    /// The recovery the reviewer gets when the rows on screen describe an
+    /// older snapshot: read the file again, and cite what that read produced.
+    private func expiredEvidenceNotice(row: WorkspaceModel.MappingRow, count: Int) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("\(EvidenceCurrencyCopy.expiredSentence)（\(count.formatted()) 行）",
+                  systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+            Text(EvidenceCurrencyCopy.rereadHint)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Button(EvidenceCurrencyCopy.rereadAction) { model.rereadEvidence(for: row.sourceID) }
+                .controlSize(.small)
+                .disabled(model.phase.isBusy)
+                .accessibilityIdentifier("reread-evidence")
+        }
+        .accessibilityIdentifier("evidence-expired-notice")
     }
 
     /// Groups rows by the provenance label the reviewer reads (文件名/来源目录/
