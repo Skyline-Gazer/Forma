@@ -14,6 +14,9 @@ struct ExceptionsView: View {
     /// The width bounds the shell declared for this area's leading pane.
     let leading: AreaWidth
 
+    /// The column budget the shell declared for the blocked-entry table.
+    private var rowWidths: [ShellColumnWidth] { ShellLayout.columns(for: .exceptionRows) }
+
     /// The filter's code options and the filtered table.
     ///
     /// Both were computed here, which meant a flatMap over every violation of
@@ -124,32 +127,32 @@ struct ExceptionsView: View {
             TableColumn("Relative path") { row in
                 Text(row.relativePath).lineLimit(1).help(row.relativePath)
             }
-            .shellWidth(.exceptionRows, 0)
+            .width(min: rowWidths[0].cgMin, ideal: rowWidths[0].cgIdeal, max: rowWidths[0].cgMax)
             TableColumn("State") { row in
                 let copy = businessCopy(for: row.state.rawValue)
                 Text(copy.headline)
                     .help(copy.sentence)
                     .accessibilityIdentifier("diagnostic-raw-\(row.state.rawValue)")
             }
-            .shellWidth(.exceptionRows, 1)
+            .width(min: rowWidths[1].cgMin, ideal: rowWidths[1].cgIdeal, max: rowWidths[1].cgMax)
             TableColumn("Reason") { row in
                 Text(businessCopy(for: row.reason).headline)
                     .lineLimit(1)
                     .help(businessCopy(for: row.reason).sentence + "\n" + row.reason)
                     .accessibilityIdentifier("diagnostic-raw-\(row.reason)")
             }
-            .shellWidth(.exceptionRows, 2)
+            .width(min: rowWidths[2].cgMin, ideal: rowWidths[2].cgIdeal, max: rowWidths[2].cgMax)
             TableColumn("Codes") { row in
                 Text(row.codes.map { businessCopy(for: $0).headline }.joined(separator: " · "))
                     .lineLimit(1)
                     .help(row.codes.map { "\(businessCopy(for: $0).headline)（\($0)）" }.joined(separator: " · "))
                     .accessibilityIdentifier("diagnostic-codes-\(row.sourceID.uuidString)")
             }
-            .shellWidth(.exceptionRows, 3)
+            .width(min: rowWidths[3].cgMin, ideal: rowWidths[3].cgIdeal, max: rowWidths[3].cgMax)
             TableColumn("Violations") { row in
                 Text(row.violations.count.formatted()).monospacedDigit()
             }
-            .shellWidth(.exceptionRows, 4)
+            .width(min: rowWidths[4].cgMin, ideal: rowWidths[4].cgIdeal, max: rowWidths[4].cgMax)
         }
     }
 }
