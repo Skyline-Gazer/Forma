@@ -233,8 +233,15 @@ public struct EgressAuthorization: Codable, Sendable, Equatable {
 
     /// The restricted grant a connectivity probe uses. It carries no document
     /// categories at all: a probe can never authorize a mapping request.
+    public static func probe(provider: ProbeProvider, model: String) -> EgressAuthorization {
+        probe(provider: provider, model: model, endpoint: .provider(provider))
+    }
+
+    /// The same restricted grant for a configured endpoint: the probe binds
+    /// to the exact target it resolved before building the request, because
+    /// structured output is a per-endpoint capability, not an inherited one.
     public static func probe(provider: ProbeProvider, model: String,
-                             endpoint: EgressEndpoint = .provider(provider)) -> EgressAuthorization {
+                             endpoint: EgressEndpoint) -> EgressAuthorization {
         EgressAuthorization(
             scope: EgressScope(provider: provider, model: model, endpoint: endpoint,
                                mode: endpoint.egressMode, categories: [.syntheticProbe],

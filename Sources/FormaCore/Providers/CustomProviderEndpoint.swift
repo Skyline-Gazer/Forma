@@ -65,19 +65,12 @@ public enum CustomProviderEndpoint {
         if bare == "::1" || bare == "0:0:0:0:0:0:0:1" { return true }
         let parts = bare.split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 4 else { return false }
-        let octets: [Int]
-        do {
-            octets = try parts.map { part in
-                guard part.count >= 1, part.count <= 3, part.allSatisfy({ $0.isASCII && $0.isNumber }),
-                      let value = Int(part), (0...255).contains(value) else {
-                    throw CocoaError(.formattingUnsupported)
-                }
-                return value
-            }
-        } catch {
-            return false
+        for (index, part) in parts.enumerated() {
+            guard part.count >= 1, part.count <= 3, part.allSatisfy({ $0.isASCII && $0.isNumber }),
+                  let value = Int(part), (0...255).contains(value) else { return false }
+            if index == 0, value != 127 { return false }
         }
-        return octets.first == 127
+        return true
     }
 }
 
