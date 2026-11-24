@@ -122,30 +122,32 @@ struct ExceptionsView: View {
             TableColumn("Relative path") { row in
                 Text(row.relativePath).lineLimit(1).help(row.relativePath)
             }
+            .shellWidth(.exceptionRows, 0)
             TableColumn("State") { row in
                 let copy = businessCopy(for: row.state.rawValue)
                 Text(copy.headline)
                     .help(copy.sentence)
                     .accessibilityIdentifier("diagnostic-raw-\(row.state.rawValue)")
             }
-            .width(min: 90, ideal: 105)
+            .shellWidth(.exceptionRows, 1)
             TableColumn("Reason") { row in
                 Text(businessCopy(for: row.reason).headline)
                     .lineLimit(1)
                     .help(businessCopy(for: row.reason).sentence + "\n" + row.reason)
                     .accessibilityIdentifier("diagnostic-raw-\(row.reason)")
             }
-            .width(min: 150, ideal: 220)
+            .shellWidth(.exceptionRows, 2)
             TableColumn("Codes") { row in
                 Text(row.codes.map { businessCopy(for: $0).headline }.joined(separator: " · "))
                     .lineLimit(1)
                     .help(row.codes.map { "\(businessCopy(for: $0).headline)（\($0)）" }.joined(separator: " · "))
                     .accessibilityIdentifier("diagnostic-codes-\(row.sourceID.uuidString)")
             }
+            .shellWidth(.exceptionRows, 3)
             TableColumn("Violations") { row in
                 Text(row.violations.count.formatted()).monospacedDigit()
             }
-            .width(min: 70, ideal: 80)
+            .shellWidth(.exceptionRows, 4)
         }
     }
 }
