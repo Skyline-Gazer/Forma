@@ -40,7 +40,7 @@ jobs:
   smoke:
     if: github.event_name == 'pull_request'
     name: Benchmark smoke (100 records)
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -68,6 +68,7 @@ jobs:
           path: benchmark-smoke.json
           if-no-files-found: error
 
+# Keep manual scale measurements on the established macOS 15 baseline.
   scale:
     if: github.event_name == 'workflow_dispatch'
     name: 10k synthetic scale (manual)
