@@ -312,7 +312,7 @@ final class WorkspaceModel: ObservableObject {
     /// grant can never name a host the user did not save.
     @Published var customBaseURL: String {
         didSet {
-            guard oldValue != customBaseURL else { return }
+            guard !oldValue.utf8.elementsEqual(customBaseURL.utf8) else { return }
             defaults.set(customBaseURL, forKey: Keys.customBaseURL)
             allowCloud = false
             reprocessEgress = false
@@ -1898,7 +1898,10 @@ final class WorkspaceModel: ObservableObject {
     }
 
     // MARK: - Settings actions
-    var providerConsentConfiguration: [String] { [provider.rawValue, modelID, customBaseURL] }
+    var providerConsentConfiguration: [String] {
+        let endpoint = try? EgressEndpoint.target(provider: provider, customBaseURL: customBaseURL).get()
+        return [provider.rawValue, modelID, endpoint?.identity ?? ""]
+    }
 
     var providerConsentDestination: String {
         guard let endpoint = try? EgressEndpoint.target(provider: provider, customBaseURL: customBaseURL).get() else {

@@ -10,7 +10,8 @@ struct ProbesView: View {
     /// to probe, and the pane says so instead of inventing one.
     @ObservedObject var workspaceModel: WorkspaceModel
     @State private var key = ""
-    @State private var consent = false
+    @State private var keyConfiguration: [String]?
+    @State private var consentConfiguration: [String]?
     @State private var providerResult: ProviderProbeResult?
     @State private var providerError: FormaError?
     @State private var keySaved = false
@@ -37,7 +38,8 @@ struct ProbesView: View {
     }
 
     private var configuration: Configuration {
-        Configuration(provider: provider, model: workspaceModel.modelID, baseURL: workspaceModel.customBaseURL)
+        Configuration(provider: provider, model: workspaceModel.modelID,
+                      baseURL: workspaceModel.providerConsentConfiguration[2])
     }
 
     /// Writes go through `selectProvider`, not a raw assignment: switching
@@ -104,12 +106,19 @@ struct ProbesView: View {
                         .disabled(providerTask != nil)
                         .accessibilityIdentifier("probe-base-url")
                 }
-                SecureField("API 密钥", text: $key)
+                let selected = workspaceModel.providerConsentConfiguration
+                SecureField("API 密钥", text: Binding(
+                    get: { keyConfiguration == selected ? key : "" },
+                    set: { keyConfiguration = selected; key = $0 }
+                ))
                 Button("将 API 密钥保存到钥匙串", action: saveKey).disabled(key.isEmpty)
                 if keySaved { Text("API 密钥已保存到钥匙串。").foregroundStyle(.secondary) }
                 Text(ProviderProbe.syntheticPrompt)
                     .font(.caption).textSelection(.enabled)
-                Toggle("向 \(provider.displayName) 发送合成探测请求", isOn: $consent)
+                Toggle("向 \(provider.displayName) 发送合成探测请求", isOn: Binding(
+                    get: { consentConfiguration == selected },
+                    set: { consentConfiguration = $0 ? selected : nil }
+                ))
                 if provider == .openAICompatible {
                     Text("探测目标就是设置页填写的 Base URL 解析出的完整地址；两者不一致时不会发出请求。")
                         .font(.caption).foregroundStyle(.secondary)
@@ -128,7 +137,7 @@ struct ProbesView: View {
                     EmptyView()
                 }
                 Button("运行服务商探测", action: runProvider)
-                    .disabled(!consent || providerTask != nil)
+                    .disabled(consentConfiguration != selected || providerTask != nil)
                 if let providerError { Text(providerError.localizedDescription).foregroundStyle(.secondary) }
                 if let providerResult {
                     LabeledContent("结果", value: providerResult.error?.localizedDescription ?? "结构校验通过")
@@ -144,7 +153,7 @@ struct ProbesView: View {
         .formStyle(.grouped)
         .frame(minWidth: 470, idealWidth: 550, minHeight: 460, idealHeight: 610)
         .onChange(of: configuration) { _, _ in
-            consent = false
+            consentConfiguration = nil
             key = ""
             keySaved = false
             providerResult = nil
@@ -213,9 +222,13 @@ struct ProbesView: View {
     }
 
     private func saveKey() {
+        guard keyConfiguration == workspaceModel.providerConsentConfiguration else { return }
         providerError = nil
         keySaved = false
-        defer { key = "" }
+        defer {
+            key = ""
+            keyConfiguration = nil
+        }
         do {
             try probe.saveKey(key, for: provider, customBaseURL: workspaceModel.customBaseURL)
             keySaved = true
@@ -231,12 +244,12 @@ struct ProbesView: View {
         let model = modelBinding.wrappedValue
         let customBaseURL = workspaceModel.customBaseURL
         let configuration = configuration
-        let allowed = consent
+        guard consentConfiguration == workspaceModel.providerConsentConfiguration else { return }
         providerResult = nil
         providerError = nil
-        consent = false
+        consentConfiguration = nil
         providerTask = Task {
-            let result = await probe.run(provider: provider, model: model, allowCloud: allowed,
+            let result = await probe.run(provider: provider, model: model, allowCloud: true,
                                          customBaseURL: customBaseURL)
             if let error = result.error { FormaDiagnostics.failure(.providerProbe, error) }
             if !Task.isCancelled, configuration == self.configuration { providerResult = result }
