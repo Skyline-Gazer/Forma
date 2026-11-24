@@ -166,10 +166,11 @@ public struct ProviderMappingClient: Sendable {
 
         do {
             try Task.checkCancellation()
-            guard allowCloud else { throw FormaError.unauthorized }
+            let endpoint = authorization?.scope.endpoint ?? .provider(provider)
+            guard endpoint.egressMode == .local || allowCloud else { throw FormaError.unauthorized }
             let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
             guard ProviderTransport.validModelID(trimmed) else { throw FormaError.incompatible }
-            guard let key = try keyStore.load(for: provider), ProviderTransport.validKey(key) else {
+            guard let key = try keyStore.load(for: provider, endpoint: endpoint), ProviderTransport.validKey(key) else {
                 throw FormaError.credentialMissing
             }
             guard !trimmed.contains(key) else { throw FormaError.incompatible }

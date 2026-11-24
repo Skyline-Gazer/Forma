@@ -105,10 +105,11 @@ public struct ProviderProbe: Sendable {
         self.telemetry = defaults.map(ProviderProbeTelemetry.init)
     }
 
-    public func saveKey(_ key: String, for provider: ProbeProvider) throws {
+    public func saveKey(_ key: String, for provider: ProbeProvider, customBaseURL: String? = nil) throws {
         let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard ProviderTransport.validKey(key) else { throw FormaError.credentialMissing }
-        try keyStore.save(key, for: provider)
+        let endpoint = try EgressEndpoint.target(provider: provider, customBaseURL: customBaseURL).get()
+        try keyStore.save(key, for: provider, endpoint: endpoint)
     }
 
     /// The latest network attempt's metrics, available without reading Keychain.
@@ -126,7 +127,8 @@ public struct ProviderProbe: Sendable {
             guard allowCloud else { throw FormaError.unauthorized }
             let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
             guard ProviderTransport.validModelID(model) else { throw FormaError.incompatible }
-            guard let key = try keyStore.load(for: provider), ProviderTransport.validKey(key) else {
+            let endpoint = try EgressEndpoint.target(provider: provider, customBaseURL: customBaseURL).get()
+            guard let key = try keyStore.load(for: provider, endpoint: endpoint), ProviderTransport.validKey(key) else {
                 result.modelID = model
                 throw FormaError.credentialMissing
             }
@@ -134,13 +136,6 @@ public struct ProviderProbe: Sendable {
             result.modelID = model
 
             let schema = try JSONSerialization.data(withJSONObject: ProviderProbeOutput.schema)
-            // Resolve the send target before anything is built: for a
-            // configured endpoint the grant, the request and the wire URL must
-            // be the one same exact URL, and a missing configuration is a
-            // probe failure with a cause rather than an unexplained
-            // `endpoint_mismatch` denial later.
-            let endpoint = try EgressEndpoint.target(provider: provider,
-                                                     customBaseURL: customBaseURL).get()
             let request = try transport.makeRequest(ProviderTransport.StructuredRequest(
                 provider: provider, model: model, name: "forma_probe", system: nil,
                 payload: Self.syntheticPrompt, schema: schema, maxOutputTokens: 256,

@@ -18,7 +18,11 @@ struct FormaApplication: App {
         // every pane inside is flexible with declared bounds.
 
         Settings {
-            ProbesView(state: delegate.state)
+            if let model = delegate.state.model {
+                ProbesView(workspaceModel: model)
+            } else {
+                Text("正在打开工作区。")
+            }
         }
     }
 }

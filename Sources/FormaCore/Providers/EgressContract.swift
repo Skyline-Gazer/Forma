@@ -259,6 +259,7 @@ public struct EgressAuthorization: Codable, Sendable, Equatable {
     public static func mapping(provider: ProbeProvider, model: String, customBaseURL: String?,
                                previewDigest: String?, redactionVersion: String,
                                identitySubstitution: Bool) -> Result<EgressAuthorization, FormaError> {
+        guard ProviderTransport.validModelID(model) else { return .failure(.incompatible) }
         let endpoint: EgressEndpoint
         switch EgressEndpoint.target(provider: provider, customBaseURL: customBaseURL) {
         case .failure(let error): return .failure(error)

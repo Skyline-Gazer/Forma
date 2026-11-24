@@ -8,7 +8,7 @@ struct ProbesView: View {
     /// ids - a second spelling of "the model" that could and did drift from
     /// what Settings showed. With no workspace open there is no configuration
     /// to probe, and the pane says so instead of inventing one.
-    @ObservedObject var state: FormaApplicationState
+    @ObservedObject var workspaceModel: WorkspaceModel
     @State private var key = ""
     @State private var consent = false
     @State private var providerResult: ProviderProbeResult?
@@ -27,23 +27,32 @@ struct ProbesView: View {
     @State private var mcpTask: Task<Void, Never>?
     private let probe = ProviderProbe()
 
-    private var workspaceModel: WorkspaceModel? { state.model }
 
-    private var provider: ProbeProvider { workspaceModel?.provider ?? .openAI }
+    private var provider: ProbeProvider { workspaceModel.provider }
+
+    private struct Configuration: Equatable {
+        let provider: ProbeProvider
+        let model: String
+        let baseURL: String
+    }
+
+    private var configuration: Configuration {
+        Configuration(provider: provider, model: workspaceModel.modelID, baseURL: workspaceModel.customBaseURL)
+    }
 
     /// Writes go through `selectProvider`, not a raw assignment: switching
     /// there resets consent and swaps a untouched default model id, which is
     /// exactly the discipline a probe must inherit from Settings.
     private var providerBinding: Binding<ProbeProvider> {
-        Binding(get: { provider }, set: { workspaceModel?.selectProvider($0) })
+        Binding(get: { provider }, set: { workspaceModel.selectProvider($0) })
     }
 
     private var modelBinding: Binding<String> {
-        Binding(get: { workspaceModel?.modelID ?? "" }, set: { workspaceModel?.modelID = $0 })
+        $workspaceModel.modelID
     }
 
     private var customBaseURLBinding: Binding<String> {
-        Binding(get: { workspaceModel?.customBaseURL ?? "" }, set: { workspaceModel?.customBaseURL = $0 })
+        $workspaceModel.customBaseURL
     }
 
     var body: some View {
@@ -84,10 +93,6 @@ struct ProbesView: View {
                 }
             }
             Section("AI 服务商探测") {
-                if workspaceModel == nil {
-                    Text("打开项目后可探测：此处服务商、模型 ID 与 Base URL 均来自设置页的同一份配置。")
-                        .font(.caption).foregroundStyle(.secondary)
-                } else {
                 Picker("服务商", selection: providerBinding) {
                     ForEach(ProbeProvider.networkCases, id: \.self) { provider in Text(provider.displayName).tag(provider) }
                 }
@@ -98,7 +103,6 @@ struct ProbesView: View {
                     TextField("Base URL（例如 http://127.0.0.1:11434/v1）", text: customBaseURLBinding)
                         .disabled(providerTask != nil)
                         .accessibilityIdentifier("probe-base-url")
-                }
                 }
                 SecureField("API 密钥", text: $key)
                 Button("将 API 密钥保存到钥匙串", action: saveKey).disabled(key.isEmpty)
@@ -137,14 +141,13 @@ struct ProbesView: View {
                 }
             }
         }
-        .onAppear { providerResult = probe.lastResult(for: provider) }
         .formStyle(.grouped)
         .frame(minWidth: 470, idealWidth: 550, minHeight: 460, idealHeight: 610)
-        .onChange(of: provider) { _, _ in
+        .onChange(of: configuration) { _, _ in
             consent = false
             key = ""
             keySaved = false
-            providerResult = probe.lastResult(for: provider)
+            providerResult = nil
             providerError = nil
         }
         .onDisappear {
@@ -214,7 +217,7 @@ struct ProbesView: View {
         keySaved = false
         defer { key = "" }
         do {
-            try probe.saveKey(key, for: provider)
+            try probe.saveKey(key, for: provider, customBaseURL: workspaceModel.customBaseURL)
             keySaved = true
         } catch {
             let safe = error as? FormaError ?? .storage
@@ -226,7 +229,8 @@ struct ProbesView: View {
     private func runProvider() {
         let provider = provider
         let model = modelBinding.wrappedValue
-        let customBaseURL = workspaceModel?.customBaseURL ?? ""
+        let customBaseURL = workspaceModel.customBaseURL
+        let configuration = configuration
         let allowed = consent
         providerResult = nil
         providerError = nil
@@ -235,7 +239,7 @@ struct ProbesView: View {
             let result = await probe.run(provider: provider, model: model, allowCloud: allowed,
                                          customBaseURL: customBaseURL)
             if let error = result.error { FormaDiagnostics.failure(.providerProbe, error) }
-            if !Task.isCancelled { providerResult = result }
+            if !Task.isCancelled, configuration == self.configuration { providerResult = result }
             providerTask = nil
         }
     }

@@ -295,7 +295,14 @@ final class WorkspaceModel: ObservableObject {
     }
 
     @Published var modelID: String {
-        didSet { defaults.set(modelID, forKey: Keys.model) }
+        didSet {
+            defaults.set(modelID, forKey: Keys.model)
+            if oldValue != modelID {
+                allowCloud = false
+                reprocessEgress = false
+                preview = nil
+            }
+        }
     }
 
     /// The OpenAI-compatible server's base URL. Persisted like the model id:
@@ -307,6 +314,8 @@ final class WorkspaceModel: ObservableObject {
         didSet {
             guard oldValue != customBaseURL else { return }
             defaults.set(customBaseURL, forKey: Keys.customBaseURL)
+            allowCloud = false
+            reprocessEgress = false
             // A stale preview was consented against the old target; the
             // identity the person approved changed with the URL.
             preview = nil
@@ -1227,7 +1236,7 @@ final class WorkspaceModel: ObservableObject {
         // an offline draft must never be written as a model's work.
         let offline = plannerMode == .offline
         let provider: ProbeProvider = offline ? .offline : self.provider
-        let model = offline ? OfflinePlannerAnswerer.modelID : modelID
+        let model = offline ? OfflinePlannerAnswerer.modelID : modelID.trimmingCharacters(in: .whitespacesAndNewlines)
         // Nothing is sent in offline mode, so there is nothing to consent to.
         let consent = offline ? false : egress
         let limit = entryLimit
@@ -1908,12 +1917,13 @@ final class WorkspaceModel: ObservableObject {
     /// the field's own "saved" mark are published where views can see them.
     @discardableResult func saveKey(_ key: String) async -> Bool {
         let chosenProvider = provider
+        let chosenBaseURL = customBaseURL
         do {
             // The client is built inside the detached work rather than here:
             // it wraps the Keychain store and the egress authoriser, and none
             // of that belongs on the main actor for the length of one write.
             try await Self.offMain {
-                try ProviderMappingClient().saveKey(key, for: chosenProvider)
+                try ProviderProbe().saveKey(key, for: chosenProvider, customBaseURL: chosenBaseURL)
             }
             notice = "API key saved in Keychain for \(chosenProvider.displayName)."
             return true

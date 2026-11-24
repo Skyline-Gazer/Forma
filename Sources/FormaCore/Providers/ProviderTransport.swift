@@ -82,7 +82,7 @@ struct ProviderTransport: Sendable {
         // Strict mode is what makes `additionalProperties: false` binding on the
         // provider side as well: a permissive format lets a model add identity
         // fields back in.
-        var format: [String: Any] = ["type": "json_schema", "schema": schema, "strict": true]
+        var format: [String: Any] = ["type": "json_schema", "schema": schema]
         let endpoint: URL
         if request.provider.requiresConfiguredEndpoint {
             // There is no built-in host to fall back to: a compatible server is
@@ -99,6 +99,7 @@ struct ProviderTransport: Sendable {
         case .offline:
             throw FormaError.unavailable
         case .openAI:
+            format["strict"] = true
             format["name"] = request.name
             body = [
                 "model": request.model,
@@ -140,7 +141,7 @@ struct ProviderTransport: Sendable {
                 "max_tokens": request.maxOutputTokens,
             ]
         }
-        var urlRequest = URLRequest(url: request.endpoint ?? endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
+        var urlRequest = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -247,7 +248,7 @@ struct ProviderTransport: Sendable {
             switch choice["finish_reason"] as? String {
             case "length": throw FormaError.invalidOutput
             case "content_filter": throw FormaError.refused
-            case .some("stop"), .some("function_call"), .some("tool_calls"), nil: break
+            case "stop": break
             default: throw FormaError.invalidResponse
             }
             guard let message = choice["message"] as? [String: Any] else { throw FormaError.invalidOutput }

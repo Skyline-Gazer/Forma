@@ -8,7 +8,7 @@ struct ProviderTests {
         let fixture = ProviderFixture(provider: provider, hasKey: false) { _ in
             .response(body: provider.successBody())
         }
-        try fixture.probe.saveKey(" \(fixture.key)\n", for: provider)
+        try fixture.probe.saveKey(" \(fixture.key)\n", for: provider, customBaseURL: fixture.baseURL)
         let result = await fixture.run()
 
         #expect(result.error == nil)
@@ -54,6 +54,7 @@ struct ProviderTests {
             #expect(body["max_tokens"] as? Int == 256)
             format = try #require((body["output_config"] as? [String: Any])?["format"] as? [String: Any])
             #expect(format["type"] as? String == "json_schema")
+            #expect(format["strict"] == nil)
         case .openAICompatible:
             // The request goes to the fixture's loopback base, completed to
             // the operation path - and to nothing else. Bearer auth, no

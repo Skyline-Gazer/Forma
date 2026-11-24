@@ -10,6 +10,18 @@ import Security
 protocol ProviderKeyStore: Sendable {
     func save(_ key: String, for provider: ProbeProvider) throws
     func load(for provider: ProbeProvider) throws -> String?
+    func save(_ key: String, for provider: ProbeProvider, endpoint: EgressEndpoint) throws
+    func load(for provider: ProbeProvider, endpoint: EgressEndpoint) throws -> String?
+}
+
+extension ProviderKeyStore {
+    func save(_ key: String, for provider: ProbeProvider, endpoint: EgressEndpoint) throws {
+        try save(key, for: provider)
+    }
+
+    func load(for provider: ProbeProvider, endpoint: EgressEndpoint) throws -> String? {
+        try load(for: provider)
+    }
 }
 
 /// How a stored credential may be read back.
@@ -260,16 +272,24 @@ public struct KeychainCredentialStore: Sendable {
     /// accessibility attribute is only applied when the item is created: changing
     /// it later would require re-adding the item, which is a migration, not a save.
     public func save(_ secret: String, for provider: ProbeProvider) throws {
+        try save(secret, account: provider.rawValue)
+    }
+
+    fileprivate func save(_ secret: String, account: String) throws {
         let data = Data(secret.utf8)
-        if try backend.add(service: service, account: provider.rawValue, secret: data,
+        if try backend.add(service: service, account: account, secret: data,
                            accessible: accessibility) {
             return
         }
-        try backend.update(service: service, account: provider.rawValue, secret: data)
+        try backend.update(service: service, account: account, secret: data)
     }
 
     public func load(for provider: ProbeProvider) throws -> String? {
-        guard let data = try backend.read(service: service, account: provider.rawValue) else {
+        try load(account: provider.rawValue)
+    }
+
+    fileprivate func load(account: String) throws -> String? {
+        guard let data = try backend.read(service: service, account: account) else {
             return nil
         }
         guard let secret = String(data: data, encoding: .utf8) else { throw FormaError.storage }
@@ -398,5 +418,19 @@ struct KeychainProviderKeyStore: ProviderKeyStore {
 
     func load(for provider: ProbeProvider) throws -> String? {
         try store.load(for: provider)
+    }
+
+    func save(_ key: String, for provider: ProbeProvider, endpoint: EgressEndpoint) throws {
+        try store.save(key, account: account(for: provider, endpoint: endpoint))
+    }
+
+    func load(for provider: ProbeProvider, endpoint: EgressEndpoint) throws -> String? {
+        try store.load(account: account(for: provider, endpoint: endpoint))
+    }
+
+    private func account(for provider: ProbeProvider, endpoint: EgressEndpoint) throws -> String {
+        guard provider.requiresConfiguredEndpoint else { return provider.rawValue }
+        guard case .custom = endpoint else { throw FormaError.incompatible }
+        return provider.rawValue + ":" + EgressContract.digest(endpoint.identity)
     }
 }
