@@ -16,6 +16,9 @@ struct WorkspaceView: View {
     /// The width bounds the shell declared for this area's leading pane.
     let leading: AreaWidth
 
+    /// The column budget the shell declared for the candidate table.
+    private var candidateWidths: [ShellColumnWidth] { ShellLayout.columns(for: .workspaceCandidates) }
+
     @AppStorage("shell.workspace.clustersVisible") private var clustersVisible = true
 
     var body: some View {
@@ -77,19 +80,20 @@ struct WorkspaceView: View {
     }
 
     private func fileTable(_ listing: SourceListing) -> some View {
-        Table(listing.entries, selection: $model.workspaceFileSelection) {
+        let widths = ShellLayout.columns(for: .workspaceFiles)
+        return Table(listing.entries, selection: $model.workspaceFileSelection) {
             TableColumn("Relative path") { file in
                 Text(file.relativePath).lineLimit(1).help(file.relativePath)
             }
-            .shellWidth(.workspaceFiles, 0)
+            .width(min: widths[0].cgMin, ideal: widths[0].cgIdeal, max: widths[0].cgMax)
             TableColumn("Project") { file in
                 Text(model.clusterLabel(for: file.id)).lineLimit(1).help(model.clusterLabel(for: file.id))
             }
-            .shellWidth(.workspaceFiles, 1)
+            .width(min: widths[1].cgMin, ideal: widths[1].cgIdeal, max: widths[1].cgMax)
             TableColumn("Size") { file in Text(size(file.sizeBytes)).monospacedDigit() }
-                .shellWidth(.workspaceFiles, 2)
+                .width(min: widths[2].cgMin, ideal: widths[2].cgIdeal, max: widths[2].cgMax)
             TableColumn("Status") { file in Text(status(file)) }
-                .shellWidth(.workspaceFiles, 3)
+                .width(min: widths[3].cgMin, ideal: widths[3].cgIdeal, max: widths[3].cgMax)
         }
     }
 
@@ -114,13 +118,13 @@ struct WorkspaceView: View {
                     TableColumn("Candidate") { row in
                         Text(row.title).lineLimit(1).help(row.title)
                     }
-                    .shellWidth(.workspaceCandidates, 0)
+                    .width(min: candidateWidths[0].cgMin, ideal: candidateWidths[0].cgIdeal, max: candidateWidths[0].cgMax)
                     TableColumn("Files") { row in Text(row.fileCount.formatted()).monospacedDigit() }
-                        .shellWidth(.workspaceCandidates, 1)
+                        .width(min: candidateWidths[1].cgMin, ideal: candidateWidths[1].cgIdeal, max: candidateWidths[1].cgMax)
                     TableColumn("Basis") { row in Text(row.basis).lineLimit(1).help(row.basis) }
-                        .shellWidth(.workspaceCandidates, 2)
+                        .width(min: candidateWidths[2].cgMin, ideal: candidateWidths[2].cgIdeal, max: candidateWidths[2].cgMax)
                     TableColumn("Confidence") { row in Text(row.confidence) }
-                        .shellWidth(.workspaceCandidates, 3)
+                        .width(min: candidateWidths[3].cgMin, ideal: candidateWidths[3].cgIdeal, max: candidateWidths[3].cgMax)
                 }
             }
         } else {
