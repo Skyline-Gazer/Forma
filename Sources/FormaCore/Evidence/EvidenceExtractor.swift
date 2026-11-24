@@ -12,8 +12,13 @@ public enum EvidenceLocator: Codable, Equatable, Sendable {
     /// Pages are one-based. Character ranges use zero-based UTF-16 offsets.
     case pdf(page: Int, characterRange: Range<Int>)
     /// Paragraphs are one-based in document order, including table paragraphs.
+    /// Character ranges use zero-based UTF-16 offsets within the paragraph.
     case docx(part: String, paragraph: Int, characterRange: Range<Int>)
     case xlsx(sheet: String, cell: String)
+    /// Plain text has no page, part or cell: a block is addressed by its
+    /// zero-based UTF-16 range in the *decoded document*, so the range and the
+    /// stored excerpt describe the same span (`PlainTextEvidence`).
+    case text(characterRange: Range<Int>)
 }
 
 public enum EvidenceSheetVisibility: String, Codable, Sendable {
@@ -44,7 +49,13 @@ public struct EvidenceItem: Codable, Equatable, Sendable {
 }
 
 public struct EvidenceExtraction: Equatable, Sendable {
-    public static let extractorVersion = "evidence.v1"
+    /// `evidence.v2` adds plain-text bodies (#152): a `.txt` file now yields
+    /// content rows where v1 reported `unavailable` and none at all. Existing
+    /// PDF/DOCX/XLSX rows are unchanged, and an evidence *identifier* is not
+    /// re-versioned here - see `EvidenceRegistry.identityVersion`, which stays
+    /// `evidence.v1` so a citation in an older manifest keeps resolving. What
+    /// this string records is which extractor was authoritative for a read.
+    public static let extractorVersion = "evidence.v2"
     public var version: String { Self.extractorVersion }
     public let status: EvidenceStatus
     public let items: [EvidenceItem]
@@ -58,10 +69,17 @@ public struct EvidenceExtraction: Equatable, Sendable {
 public enum EvidenceExtractor {
     public static let maximumInputBytes: Int64 = 64 * 1_024 * 1_024
 
+    /// The formats whose *body* Forma is willing to quote. The list is one
+    /// place on purpose: `SourceEvidenceReader` gates the same decision before
+    /// it copies a file, and a second literal list would let one side learn
+    /// about a format the other still refuses. Everything else is hashed and
+    /// named, never read.
+    public static let supportedFileExtensions: Set<String> = ["pdf", "docx", "xlsx", "txt"]
+
     public static func extract(file: URL, fileExtension: String) throws -> EvidenceExtraction {
         try Task.checkCancellation()
         let format = fileExtension.lowercased()
-        guard file.isFileURL, ["pdf", "docx", "xlsx"].contains(format) else { return .empty(.unavailable) }
+        guard file.isFileURL, supportedFileExtensions.contains(format) else { return .empty(.unavailable) }
         guard let before = try? SourceFileMetadata.read(file), before.isRegular else { return .empty(.unavailable) }
         if before.isHydrationPending { return .empty(.hydrationPending) }
         guard before.sizeBytes >= 0 else { return .empty(.unavailable) }
@@ -88,6 +106,7 @@ public enum EvidenceExtractor {
             try Task.checkCancellation()
             switch format {
             case "pdf": result = try pdf(data)
+            case "txt": result = try PlainTextEvidence.extract(from: data)
             case "docx": result = try DOCXEvidence.extract(from: OfficePackage(data))
             default: result = try XLSXEvidence.extract(from: OfficePackage(data))
             }

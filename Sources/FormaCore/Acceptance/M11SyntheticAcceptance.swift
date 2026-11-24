@@ -317,7 +317,7 @@ public enum M11SyntheticAcceptance {
                 manifestID: UUID(), revision: 1, supersedesRevision: nil, scopeID: UUID(),
                 sourceRootID: UUID(), profile: profile, casePack: ("forma-governance-cases", "1.0"),
                 modelProvider: "none", modelID: nil, contextRevision: 1, promptVersion: "mapping.v1",
-                extractorVersion: "evidence.v1", redactionVersion: nil,
+                extractorVersion: EvidenceRegistry.extractorVersion, redactionVersion: nil,
                 inputDigest: digest, contextDigest: digest,
                 createdAt: Date(timeIntervalSince1970: 1_800_000_000), state: .draft,
                 eligibility: eligibility)
