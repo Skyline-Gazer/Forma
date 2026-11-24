@@ -81,19 +81,23 @@ initialize/tools/list、UUID、API、CasePack）保持原样。Profile 选择器
 
 ## 2. PR / SHA / CI 台账
 
-| PR | 分支 | 内容 | HEAD | CI |
-| --- | --- | --- | --- | --- |
-| #147 | `fix/alpha-first-capture-snapshot` | 证据快照修复 + 陈旧证据语义 | `33c114e` | 见下 |
-| #155 | `feat/d0-skills-ads-pin` | 技能与 ADS 固定 | `54bfa5a` | 见下 |
-| #158 | `feat/d3-ai-semantic-extraction` | AI 语义抽取与证据 | `4a23d04` | 见下 |
-| #157 | `feat/d1-app-shell` | 统一外壳、布局契约、文案统一 | `b24a594` | 见下 |
-| #159 | `feat/d2-nav-perf` | 导航性能与投影 | `d2 head` | 见下 |
-| #146 | `feat/ux-review-desk-v1` | 审核台 UX + 证据时效界面 | `d817f2a` | 见下 |
-| #161 | `feat/m0-r1-candidate` | M0-R1 集成候选（Draft） | `81429d0` | 见下 |
+| PR | 分支 | 内容 | HEAD | CI | 本轮增量复审 |
+| --- | --- | --- | --- | --- | --- |
+| #147 | `fix/alpha-first-capture-snapshot` | 证据快照修复 + 陈旧证据语义 | `df38c0b` | PASS | BLOCKED：复审代理额度耗尽 |
+| #155 | `feat/d0-skills-ads-pin` | 技能与 ADS 固定 | `54bfa5a` | PASS | 既有评审；本轮无新增代码 |
+| #158 | `feat/d3-ai-semantic-extraction` | AI 语义抽取与证据 | `4a23d04` | PASS | 既有评审；本轮无新增代码 |
+| #157 | `feat/d1-app-shell` | 统一外壳、布局契约、文案统一 | `b24a594` | PASS | BLOCKED：复审代理额度耗尽 |
+| #159 | `feat/d2-nav-perf` | 导航性能与投影 + #157 同步 | `80f2479` | PASS | BLOCKED：本轮合并增量 |
+| #146 | `feat/ux-review-desk-v1` | 审核台 UX + 证据时效界面 | `d519332` | PASS | BLOCKED：复审代理额度耗尽 |
+| #161 | `feat/m0-r1-candidate` | M0-R1 集成候选（Draft） | `fbcb074` | PASS | BLOCKED：本轮集成增量 |
 
-CI 全部在 macos-15 + Xcode 26.3 上运行：`swift test`（FormaCore）、`swift build`
-（应用）、`scripts/build_app.sh`（打包）、`scripts/smoke_app.sh`（启动冒烟）、
-Benchmark smoke。
+CI 全部在 macos-15 + Xcode 26.3 上运行并通过：`swift test`（FormaCore）、
+`swift build`（应用）、`scripts/build_app.sh`（打包）、`scripts/smoke_app.sh`
+（启动冒烟）、Benchmark smoke。候选构建的 CI run：`45319062225`；Benchmark run：
+`45319062067`。
+
+两个独立复审代理均因模型 Token Plan 额度耗尽而未能完成本轮增量复审，状态如实记为
+BLOCKED；主 Agent 的源码走查不冒充独立复审。Owner 授权整合前应补齐独立复审。
 
 ## 3. 验证矩阵
 
@@ -107,6 +111,7 @@ Benchmark smoke。
 | 重新读取并重新映射后一次修正成功 | PASS | `EvidenceCurrencyTests`（CI） |
 | 首次修正仍一次成功 | PASS | `FirstReadSnapshotBindingTests`（CI） |
 | macOS 构建、打包、启动冒烟 | PASS | CI（见 §2） |
+| 本轮增量独立复审 | BLOCKED | 两个复审代理均因 Token Plan 额度耗尽失败；主 Agent 走查不替代独立复审 |
 | 真实 macOS 窗口尺寸与审核台交互 | NOT_VERIFIED | 需 Mac 现场，见 #153 |
 | 真实模型调用效果 | BLOCKED | 未获外发授权与安全凭据；Mock/Fixture 结果不等于模型效果 |
 | 真实 DEVONthink 写入 | BLOCKED | 未授权；本轮无任何写入路径 |
@@ -118,6 +123,12 @@ Benchmark smoke。
 - #157 的外壳重构与 #158 的纯文本证据定位：保留 #158 新增的 `.text` 定位显示。
 - #159 的设置面板异步写入钥匙串与 #157 的中文文案：保留异步结构，采用中文文案。
 - 异常面板的属性块：保留 #159 的模型侧过滤计算，并入 #157 的列宽预算属性。
+- #159 把 `MappingRow` 提升到 FormaCore 顶层后，审核台视图改用该顶层类型；与
+  #160 的同一处集合作法一致。
+- 审核台重新读取后调用 actor 隔离的 `SourceWorkspace.listing` 时保留 `await`，
+  同时保留 #159 的证据缓存失效。
+- CI 首次暴露的列宽辅助方法返回类型与宽度分级调用错误已按具体编译诊断修正；
+  几何预算未改变。
 
 ## 5. 未验证项与 Mac 现场入口
 
@@ -136,3 +147,5 @@ Benchmark smoke。
 - #146 的强制推送一次：修正了提交信息中被写坏的一个汉字（`--force-with-lease`，
   仅重写自己刚推送的提交，未触及他人提交）。
 - 布局预算目前只约束几何；渲染表现与 Instruments 采样仍属 Mac 阶段。
+- 表中候选源码 HEAD `fbcb074` 是台账提交前已全绿的验证基线；本台账提交只改
+  文档，最终候选 HEAD 与按该 HEAD 重跑的 CI 以 PR #161 页面为准。
