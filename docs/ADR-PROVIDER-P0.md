@@ -16,7 +16,7 @@ Forma 此前只认识两个 Provider：OpenAI Responses 与 Anthropic Messages�
 | 结构化输出 | `text.format` = `json_schema` + `strict` | `output_config.format` | `response_format.json_schema` 嵌套对象 + `strict: true` | 不是任意 JSON Schema：`questions`（`noul`/`choice`/`score`/bbox 判别式类型）+ `state`（自由对象），同步返回 `answers` |
 | 完成/截断/拒答 | `status completed/incomplete` + `incomplete_details.reason` | `stop_reason end_turn/refusal/max_tokens` | `finish_reason stop/length/content_filter` + `message.refusal` | 文档未给 finish-reason 语义；`400` 会以未引用的 `assets` 键等具体原因拒绝 |
 | 用量 | `input_tokens`/`output_tokens`/`input_tokens_details.cached_tokens` | `input_tokens`/`output_tokens`/两个 cache 字段 | `prompt_tokens`/`completion_tokens`/`prompt_tokens_details.cached_tokens` | `usage{cost, input_tokens, output_tokens}` |
-| 不保留服务端数据 | `store:false` 强制 | Messages API 本身无 store 字段（未发送） | Chat Completions 无 store 字段；绝不发送 Responses-only 字段 | 未验证 |
+| 请求中的存储设置 | 发送 `store:false` | 不发送存储设置 | 不发送存储设置，保留策略由端点运营方决定 | 未验证 |
 
 OpenAI Responses / Chat Completions、Anthropic Messages 的字段名以上述官方文档口径核对为协议事实。
 **Jev / System One 已于 2026-11-24 对照 OpenRouter 官方 OpenAPI 规范核对**（
@@ -31,8 +31,8 @@ OpenAI Responses / Chat Completions、Anthropic Messages 的字段名以上述�
 ## 决策
 
 1. **新 provider，而不是新端点字符串。** `ProbeProvider.openAICompatible = "openai-compatible"`。
-   协议相同、主机不同，意味着 scope 不同、Keychain 账户不同（account 即 rawValue，天然隔离
-   api.openai.com 的凭据）、能力探测必须按端点重跑（structured output 是逐服务器能力，不是继承保证）。
+   原生凭据沿用 provider 账户。兼容凭据的账户包含完整规范化 URL 的摘要，切换端点后须为新端点保存密钥。
+   能力探测必须按端点与模型重跑。
 2. **端点只有一个真源。** `EgressEndpoint.target(provider:customBaseURL:)` 把 Base URL 规范化为完整
    Chat Completions URL：必须 https，仅回环（`127.0.0.0/8`、`localhost`、`::1`，按字面判定而非 DNS）允许
    http；拒绝 userinfo/query/fragment；`/v1` 或裸主机补全为 `/v1/chat/completions`；已含操作路径保留；

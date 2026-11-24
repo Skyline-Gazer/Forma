@@ -116,6 +116,20 @@ struct ProviderTests {
         #expect(result.inputTokens == 31)
     }
 
+    @Test(arguments: [nil, "tool_calls", "function_call"] as [String?])
+    func compatibleRejectsNonterminalCompletion(reason: String?) async {
+        let fixture = ProviderFixture(provider: .openAICompatible) { _ in
+            var envelope = ProbeProvider.openAICompatible.successEnvelope()
+            var choices = envelope["choices"] as! [[String: Any]]
+            choices[0]["finish_reason"] = reason
+            envelope["choices"] = choices
+            return .response(body: json(envelope))
+        }
+        let result = await fixture.run()
+        #expect(result.error == .invalidResponse)
+        #expect(result.output == nil)
+    }
+
     @Test(arguments: ProbeProvider.networkCases)
     func distinguishesRefusalAndTruncation(provider: ProbeProvider) async {
         let refusal = ProviderFixture(provider: provider) { key in
