@@ -42,8 +42,8 @@ public enum EgressMode: String, Codable, Sendable, Equatable {
 /// The only endpoints a send may target. The two built-in cloud hosts are
 /// hard-coded here; an OpenAI-compatible install records the *exact* resolved
 /// Chat Completions URL as `.custom`, so changing the server of an authorized
-/// workspace stays a *scope mismatch* rather than an unnoticed edit in a URL
-/// literal - the same property the built-ins were created to provide.
+/// run stays a *scope mismatch* rather than an unnoticed edit in a URL literal
+/// - the same property the built-ins were created to provide.
 public enum EgressEndpoint: Codable, Sendable, Equatable {
     case provider(ProbeProvider)
     case local(URL)
@@ -55,7 +55,7 @@ public enum EgressEndpoint: Codable, Sendable, Equatable {
     public var canonicalURL: URL {
         switch self {
         case .provider(.openAI): return URL(string: "https://api.openai.com/v1/responses")!
-        case .provider(.anthropic): return URL(string: "https://api.openai.com/v1/messages")!
+        case .provider(.anthropic): return URL(string: "https://api.anthropic.com/v1/messages")!
         // A stable, non-routable identity for a provider that must resolve a
         // configured target first. It never reaches the wire: the transport
         // refuses to build a request without the override, and a grant is only
