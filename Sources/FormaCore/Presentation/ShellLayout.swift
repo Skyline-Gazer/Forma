@@ -97,6 +97,7 @@ public enum ShellLayout {
         case .workspace: ShellColumnWidth(min: 140, ideal: 180, max: 260)
         case .mapping: ShellColumnWidth(min: 190, ideal: 240, max: 380)
         case .exceptions: ShellColumnWidth(min: 180, ideal: 230, max: 330)
+        case .reviewDesk: ShellColumnWidth(min: 200, ideal: 300, max: 400)
         case .importArchive, .settings: ShellColumnWidth(min: 0, ideal: 0, max: 0)
         }
     }
@@ -163,7 +164,7 @@ public enum ShellLayout {
         case .workspace: .workspaceFiles
         case .mapping: .mappingRows
         case .exceptions: .exceptionRows
-        case .importArchive, .settings: nil
+        case .reviewDesk, .importArchive, .settings: nil
         }
     }
 
@@ -175,6 +176,8 @@ public enum ShellLayout {
     public static func minimumContentWidth(for area: AppArea) -> Double {
         let leading = leading(for: area)
         switch area {
+        case .reviewDesk:
+            return deskMinimumContentWidth
         case .importArchive:
             return 360
         case .settings:

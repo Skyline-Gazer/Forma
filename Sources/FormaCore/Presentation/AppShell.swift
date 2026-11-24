@@ -19,6 +19,11 @@ public enum AppArea: String, CaseIterable, Codable, Sendable, Identifiable {
     case exceptions = "exceptions"
     /// The provider, redaction and versions area.
     case settings = "settings"
+    /// The business Review Desk (#144 reworked under the #148 decision): the
+    /// guided source → AI understanding → file review → archive-preview flow.
+    /// Appended last on purpose - every earlier raw value keeps its persisted
+    /// identity; only the landing default moves here.
+    case reviewDesk = "review"
 
     public var id: String { rawValue }
 
@@ -30,6 +35,7 @@ public enum AppArea: String, CaseIterable, Codable, Sendable, Identifiable {
         case .importArchive: "归档"
         case .exceptions: "诊断"
         case .settings: "设置"
+        case .reviewDesk: "资料整理"
         }
     }
 
@@ -41,14 +47,27 @@ public enum AppArea: String, CaseIterable, Codable, Sendable, Identifiable {
         case .importArchive: "tray.and.arrow.down"
         case .exceptions: "exclamationmark.triangle"
         case .settings: "slider.horizontal.3"
+        case .reviewDesk: "checklist"
         }
     }
 
+    /// Where the app lands when no real area was persisted: the business
+    /// Review Desk (#144), not an engineering area. A persisted id outliving a
+    /// rename must degrade to a place the person can navigate from, not to
+    /// nothing - that place is now the desk.
+    public static let defaultLanding: AppArea = .reviewDesk
+
+    /// The sidebar order. The desk leads as the default route; the five
+    /// engineering areas follow unchanged as 高级/诊断 routes (#148: legacy
+    /// screens stay reachable, the desk is not a parallel tab). `ForEach`
+    /// renders this, never `allCases`, so appending an area cannot reorder
+    /// what a person learned.
+    public static let navigationOrder: [AppArea] = [.reviewDesk, .workspace, .mapping, .importArchive, .exceptions, .settings]
+
     /// How a stored selection comes back: an unknown or missing value is the
-    /// workspace, never a blank window. A persisted id outliving a rename must
-    /// degrade to a place the person can navigate from, not to nothing.
+    /// default landing area, never a blank window.
     public static func restored(from stored: String?) -> AppArea {
-        guard let stored, let area = AppArea(rawValue: stored) else { return .workspace }
+        guard let stored, let area = AppArea(rawValue: stored) else { return Self.defaultLanding }
         return area
     }
 }
@@ -201,6 +220,61 @@ public func businessCopy(for code: String) -> DiagnosticCopy {
     case "provider_failed":
         DiagnosticCopy(rawCode: code, headline: "Provider 请求失败",
                        sentence: "这次映射请求在 Provider 侧失败，FormaCore 按文件记录了原因。")
+
+    // Import preflight codes, read wherever the 归档预览 explains why a row
+    // would not import. The plan is a dry run; none of these sentences is an
+    // attempt to fix anything by writing.
+    case "source_unauthorized":
+        DiagnosticCopy(rawCode: code, headline: "来源访问未授权",
+                       sentence: "Forma 没有这个文件夹的访问授权，需要重新授权后归档预览才会给出可行目标。")
+    case "source_unreadable":
+        DiagnosticCopy(rawCode: code, headline: "来源不可读",
+                       sentence: "文件当前无法读取（权限或格式问题），本构建不会为它规划写入。")
+    case "source_changed":
+        DiagnosticCopy(rawCode: code, headline: "来源已变化",
+                       sentence: "文件与上次扫描时不同，请重新扫描后再看归档目标。")
+    case "source_sha_mismatch":
+        DiagnosticCopy(rawCode: code, headline: "内容指纹不一致",
+                       sentence: "文件内容与登记指纹不符，需要先重新扫描建立当前快照。")
+    case "entry_not_eligible":
+        DiagnosticCopy(rawCode: code, headline: "条目不符合资格",
+                       sentence: "按资格规则这条记录不进入导入计划（仅模拟，不会写入）。")
+    case "entry_invalidated":
+        DiagnosticCopy(rawCode: code, headline: "条目已作废",
+                       sentence: "这条记录已被作废，不能按旧结论归档；请重新处理该文件。")
+    case "manifest_not_validated":
+        DiagnosticCopy(rawCode: code, headline: "清单未通过验证",
+                       sentence: "当前修订尚未全部通过验证，Forma 不规划导入；请先完成逐份审核。")
+    case "target_unresolved":
+        DiagnosticCopy(rawCode: code, headline: "归档位置未定",
+                       sentence: "目标目录模板还缺少占位符值，位置尚未确定。")
+    case "target_missing":
+        DiagnosticCopy(rawCode: code, headline: "目标不存在",
+                       sentence: "计划中的目标资料库或分组当前不存在。")
+    case "target_outside_authorization":
+        DiagnosticCopy(rawCode: code, headline: "目标超出授权",
+                       sentence: "目标位置不在已批准的授权范围内，Forma 拒绝该行的计划。")
+    case "target_not_writable":
+        DiagnosticCopy(rawCode: code, headline: "目标不可写",
+                       sentence: "目标位置本机不可写；本构建本就只做 Dry-Run。")
+    case "insufficient_space":
+        DiagnosticCopy(rawCode: code, headline: "空间不足",
+                       sentence: "目标位置剩余空间不足以容纳这个文件。")
+    case "capability_missing":
+        DiagnosticCopy(rawCode: code, headline: "能力缺失",
+                       sentence: "本机 DEVONthink 未提供该操作所需的能力，只有模拟可以继续。")
+    case "authorization_missing":
+        DiagnosticCopy(rawCode: code, headline: "缺少写入授权",
+                       sentence: "归档写入需要单独的授权，本构建没有也不会使用它。")
+    case "authorization_expired":
+        DiagnosticCopy(rawCode: code, headline: "写入授权已过期",
+                       sentence: "原授权已到期，需要重新批准才会规划执行。")
+    case "profile_mismatch":
+        DiagnosticCopy(rawCode: code, headline: "Profile 不匹配",
+                       sentence: "清单所用的 Profile 与计划目标不一致，需要重新映射。")
+    case "schema_mismatch":
+        DiagnosticCopy(rawCode: code, headline: "结构版本不匹配",
+                       sentence: "记录的结构版本与本构建不一致，Forma 停止为其规划。")
 
     // Validation groups and outcomes, shown wherever a report group is read.
     case "schema":

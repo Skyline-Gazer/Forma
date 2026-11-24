@@ -478,73 +478,249 @@ struct MappingInspector: View {
 /// The correction sheet, presented by the shell for whichever area launched
 /// it. Its bindings write only into the model's draft; FormaCore alone decides
 /// whether the citations recorded are enough for a new revision.
+///
+/// Business-facing per #144 P1: the field is named in Chinese, the category
+/// slot offers exactly the Profile's enum choices (never free text), the
+/// citable evidence rows read by provenance (文件名/来源目录/正文 · 页/段) and
+/// excerpt rather than by opaque registry id - the ids are recorded under the
+/// hood for FormaCore and surfaced only in the 诊断详情 expander. A refusal
+/// keeps the sheet open with its value and selections intact and names the
+/// bucket cause (缺少证据/证据过期/冲突/权限) beside the field.
 @MainActor
 struct CorrectionSheet: View {
     @ObservedObject var model: WorkspaceModel
     let draft: WorkspaceModel.CorrectionDraft
 
+    /// Refusal codes captured while THIS sheet was open. A notice left over
+    /// from an earlier field's refusal must not pre-fill a fresh sheet
+    /// (`onAppear` starts from no codes; only a later transition counts), and
+    /// a published success clears the list on its way through.
+    @State private var refusalCodes: [String] = []
+
+    private var policy: MetadataFieldPolicy? { model.selectedProfile?.fields[draft.field] }
+
+    /// The live draft's text. `draft` is the presented snapshot; `model.draft`
+    /// is what the bindings write, so reads go through the model with the
+    /// snapshot as the fallback - the only way a typed value is certain to
+    /// show up in its own field.
+    private var currentText: String { model.draft?.value ?? draft.value }
+    private var currentCitations: Set<String> { model.draft?.citations ?? draft.citations }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Correct \(draft.field.rawValue)").font(.headline)
-            if let policy = model.selectedProfile?.fields[draft.field] {
-                Text(policy.rule).font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 13) {
+            Text("确认「\(metadataFieldLabel(draft.field))」")
+                .font(.title3.bold())
+            if let policy {
+                Text(policy.rule)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
             }
-            TextField("New value", text: Binding(
-                get: { draft.value },
-                set: { model.draft?.value = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-            .accessibilityIdentifier("correction-value")
-            Text("An empty value clears the slot and needs no citation.")
+
+            valueEditor
+
+            Text("留空表示清空该字段，无需引用证据。")
                 .font(.caption2).foregroundStyle(.secondary)
+
             Divider()
-            Text("Cite the rows this decision rests on").font(.subheadline)
-            let rows = model.evidenceBySource[draft.sourceID] ?? []
-            if rows.isEmpty {
-                Text("No registered evidence for this file, so a value here will be refused as an opinion.")
-                    .font(.caption).foregroundStyle(.secondary)
+            Text("选择支持上述判断的来源内容")
+                .font(.subheadline.weight(.medium))
+            Text("只勾选实际包含该事实的证据行；系统仍会按 Profile 规则复核，不会替你确认。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            citationList
+            if !currentText.isEmpty && currentCitations.isEmpty {
+                Label("尚未勾选任何证据，保存会被系统拒绝。", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(rows, id: \.id) { record in
-                        Toggle(isOn: Binding(
-                            get: { draft.citations.contains(record.id) },
-                            set: { turning in
-                                if turning { model.draft?.citations.insert(record.id) }
-                                else { model.draft?.citations.remove(record.id) }
-                            }
-                        )) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("\(record.source.rawValue) · \(record.id)").font(.caption.monospaced())
-                                Text(record.excerpt ?? "No excerpt").font(.caption2).lineLimit(2)
-                            }
-                        }
-                        .toggleStyle(.checkbox)
-                        .accessibilityIdentifier("cite-\(record.id)")
-                    }
-                }
-            }
+
+            refusalFeedback
+
             Divider()
             HStack {
-                Button("Cancel") { model.cancelCorrection() }
+                Spacer()
+                Button("取消") { model.cancelCorrection() }
                     .accessibilityIdentifier("cancel-correction")
                 if model.recordingDraftID == draft.id {
                     // A disabled button alone says nothing about a click that
                     // was accepted: the press looks ignored, so the reviewer
                     // presses again. Keyed on this draft rather than on the
                     // model's phase, which another operation can hold.
-                    ProgressView().controlSize(.small)
-                    Text("Recording…").font(.caption).foregroundStyle(.secondary)
+                    ProgressView("正在验证…")
+                        .controlSize(.small)
                         .accessibilityIdentifier("correction-progress")
                 } else {
-                    Button("Record Correction") { model.applyCorrection() }
+                    Button("验证并保存") { model.applyCorrection() }
                         .keyboardShortcut(.defaultAction)
                         .disabled(model.phase.isBusy)
                         .accessibilityIdentifier("record-correction")
                 }
             }
         }
-        .padding(15)
-        .frame(width: 540, height: 480)
+        .padding(20)
+        .frame(width: 570, height: 520)
+        .onAppear { refusalCodes = [] }
+        .onChange(of: model.lastRefusalCodes) { _, codes in
+            refusalCodes = codes
+        }
+    }
+
+    /// The control matches the Profile's declared type: category and document
+    /// type are Profile enums, everything else is text. An enum slot can never
+    /// carry a value Forma did not offer - that is the #144 gate "available
+    /// choices exactly equal Profile categories".
+    @ViewBuilder private var valueEditor: some View {
+        switch policy?.valueType {
+        case .category:
+            Picker("文件分类", selection: Binding(
+                get: { currentText },
+                set: { model.draft?.value = $0 }
+            )) {
+                Text("请选择分类").tag("")
+                ForEach(model.selectedProfile?.categories ?? [], id: \.identifier) { category in
+                    Text(category.identifier)
+                        .help(category.meaning)
+                        .tag(category.identifier)
+                }
+            }
+            .accessibilityIdentifier("review-category-select")
+        case .documentType:
+            Picker("文件类型", selection: Binding(
+                get: { currentText },
+                set: { model.draft?.value = $0 }
+            )) {
+                Text("请选择类型").tag("")
+                ForEach(model.selectedProfile?.documentTypes ?? [], id: \.identifier) { type in
+                    Text(type.identifier).tag(type.identifier)
+                }
+            }
+            .accessibilityIdentifier("review-document-type-select")
+        default:
+            TextField("字段内容", text: Binding(
+                get: { currentText },
+                set: { model.draft?.value = $0 }
+            ))
+            .textFieldStyle(.roundedBorder)
+            .accessibilityIdentifier("correction-value")
+        }
+    }
+
+    /// Citable rows, grouped by provenance so the reviewer reads 文件名 /
+    /// 来源目录 / 正文摘录 instead of a flat id list. Unusable rows stay
+    /// visible but unchecked - their absence from a citation is information.
+    @ViewBuilder private var citationList: some View {
+        let rows = model.evidenceBySource[draft.sourceID] ?? []
+        let expired = rows.filter { model.currency(of: $0, for: draft.sourceID) == .expired }
+        if rows.isEmpty {
+            Text("这份文件还没有登记过证据；只填写内容而不勾选证据的判断会被 FormaCore 拒绝。")
+                .font(.caption).foregroundStyle(.secondary)
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    if !expired.isEmpty {
+                        // The rows on screen describe an older snapshot. They
+                        // are shown, marked, and not offered: a checked row
+                        // that cannot be cited is the trap this replaces.
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label(EvidenceCurrencyCopy.expiredSentence, systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                            Text(EvidenceCurrencyCopy.rereadHint)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Button(EvidenceCurrencyCopy.rereadAction) { model.rereadEvidence(for: draft.sourceID) }
+                                .controlSize(.small)
+                                .disabled(model.phase.isBusy)
+                                .accessibilityIdentifier("reread-evidence")
+                        }
+                    }
+                    ForEach(CitationGroup.groups(in: rows), id: \.key) { group in
+                        Text(group.key).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                        ForEach(group.rows, id: \.id) { record in
+                            let currency = model.currency(of: record, for: draft.sourceID)
+                            Toggle(isOn: Binding(
+                                get: { currentCitations.contains(record.id) },
+                                set: { turning in
+                                    if turning { model.draft?.citations.insert(record.id) }
+                                    else { model.draft?.citations.remove(record.id) }
+                                }
+                            )) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack(spacing: 6) {
+                                        Text("\(deskEvidenceSourceLabel(record.source)) · \(deskEvidenceLocatorLabel(record.locator))")
+                                            .font(.caption.weight(.semibold))
+                                        if currency == .expired {
+                                            Text(EvidenceCurrencyCopy.expiredBadge)
+                                                .font(.caption2)
+                                                .foregroundStyle(.orange)
+                                        }
+                                    }
+                                    Text(record.excerpt ?? "内容不可读取")
+                                        .font(.callout)
+                                        .lineLimit(3)
+                                        .textSelection(.enabled)
+                                }
+                            }
+                            .toggleStyle(.checkbox)
+                            .disabled(!record.isUsable || currency != .current)
+                            .accessibilityIdentifier("cite-\(record.id)")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The refusal, in the four actionable buckets, plus the raw codes in an
+    /// expander - the sentence tells the reviewer what to change; the code
+    /// stays for support. The old engineering notice remains in 诊断.
+    @ViewBuilder private var refusalFeedback: some View {
+        if !refusalCodes.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(refusalCodes, id: \.self) { code in
+                    Label(deskRefusalSentence(forCode: code), systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .accessibilityIdentifier("review-correction-error")
+                }
+                DisclosureGroup("诊断详情") {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(refusalCodes, id: \.self) { code in
+                            Text("FormaCore 代码：\(code)").font(.caption.monospaced())
+                        }
+                        Text("已勾选证据的内部 ID：\(currentCitations.sorted().joined(separator: " "))")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.leading, 6)
+                }
+                .font(.caption)
+                .accessibilityIdentifier("review-correction-diagnostics")
+            }
+        }
+    }
+
+    /// Evidence rows bucketed by the provenance label, in reading order.
+    struct CitationGroup {
+        let key: String
+        let rows: [EvidenceRecord]
+
+        static func groups(in records: [EvidenceRecord]) -> [CitationGroup] {
+            let order: [EvidenceSource] = [.filename, .path, .content, .sibling, .fsMetadata, .mcp]
+            var seen: [String] = []
+            var buckets: [String: [EvidenceRecord]] = [:]
+            for record in records {
+                let key = deskEvidenceSourceLabel(record.source)
+                if buckets[key] == nil { seen.append(key) }
+                buckets[key, default: []].append(record)
+            }
+            return seen.map { key in CitationGroup(key: key, rows: buckets[key] ?? []) }
+                .sorted { lhs, rhs in
+                    let li = order.firstIndex(where: { deskEvidenceSourceLabel($0) == lhs.key }) ?? 99
+                    let ri = order.firstIndex(where: { deskEvidenceSourceLabel($0) == rhs.key }) ?? 99
+                    return li < ri
+                }
+        }
     }
 }

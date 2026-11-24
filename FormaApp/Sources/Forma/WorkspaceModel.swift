@@ -28,6 +28,7 @@ final class WorkspaceModel: ObservableObject {
         case reconciling
         case loadingManifest
         case correcting
+        case readingEvidence
         case discoveringMCP
         case previewing
 
@@ -45,6 +46,7 @@ final class WorkspaceModel: ObservableObject {
             case .reconciling: "Reconciling stored revisions…"
             case .loadingManifest: "Reading the stored manifest…"
             case .correcting: "Recording the correction…"
+            case .readingEvidence: "Reading the file's evidence again…"
             case .discoveringMCP: "Discovering the MCP server…"
             case .previewing: "Building the request preview…"
             }
@@ -204,6 +206,14 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var leakedTerms: [String] = []
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var notice: String?
+    /// The codes of the last refused correction, published as data.
+    ///
+    /// The review screen used to recover them by parsing the sentence the
+    /// model wrote into `notice`. A sentence is not an interface: it forced
+    /// that notice to stay in one language and one shape, and left the desk
+    /// guessing at what the sentence had meant. The codes are the codes now,
+    /// and the notice can be written in the language the reader reads.
+    @Published private(set) var lastRefusalCodes: [String] = []
     @Published var error: FormaError?
 
     /// The manifest the shell must not lose.
@@ -1032,6 +1042,75 @@ final class WorkspaceModel: ObservableObject {
         return manifest?.entries.first { $0.sourceID == sourceID }?.snapshotRevision
     }
 
+    // MARK: - Evidence currency
+
+    /// The snapshot a citation has to describe under the manifest in hand.
+    ///
+    /// A citation is accepted when it describes the snapshot the manifest
+    /// entry is bound to, and refused when it describes an older one. The
+    /// review screen asks the same question before the reviewer ticks a row,
+    /// so a row that cannot be cited is never offered as if it could.
+    func citationBinding(for sourceID: UUID) -> EvidenceSnapshotBinding? {
+        guard let entry = rows.first(where: { $0.sourceID == sourceID })?.entry else { return nil }
+        return EvidenceSnapshotBinding(revision: entry.snapshotRevision, fingerprint: entry.snapshotFingerprint)
+    }
+
+    /// Whether the file has moved past the manifest in hand.
+    ///
+    /// A file that changed since the run is a different document: every row
+    /// read from the old one is out of date, including the rows the manifest
+    /// itself cites, and the correction has to be made against the new file.
+    func fileMovedSinceManifest(for sourceID: UUID) -> Bool {
+        guard let binding = citationBinding(for: sourceID),
+              let entry = listing?.entries.first(where: { $0.id == sourceID }) else { return false }
+        return Int(entry.snapshotRevision) != binding.revision
+            || entry.snapshotFingerprint != binding.fingerprint
+    }
+
+    /// Whether a registered row can still be cited for this source.
+    func currency(of record: EvidenceRecord, for sourceID: UUID) -> EvidenceCurrency {
+        guard let binding = citationBinding(for: sourceID) else { return .current }
+        if fileMovedSinceManifest(for: sourceID) { return .expired }
+        return EvidenceCurrency.currency(of: record, against: binding)
+    }
+
+    /// Re-reads a file's evidence and registers it under the snapshot it was
+    /// read from.
+    ///
+    /// This is the recovery the review screen offers when the rows on screen
+    /// describe an older snapshot: reading the file again produces rows for
+    /// the current one. A selection that named rows the re-read replaced is
+    /// dropped - keeping it would leave a checked row that cannot be cited.
+    func rereadEvidence(for sourceID: UUID) {
+        guard phase == .idle, let entry = listing?.entries.first(where: { $0.id == sourceID }) else {
+            notice = "这份文件不在当前清单里，请重新扫描后再试。"
+            return
+        }
+        phase = .readingEvidence
+        notice = nil
+        work = Task {
+            defer { finishWork() }
+            do {
+                let records = try await workspace.captureEvidence(for: entry)
+                guard !Task.isCancelled else { return }
+                merge(records)
+                invalidateEvidenceCache(for: [sourceID])
+                if let scope = selectedScope, let refreshed = try? workspace.listing(scope) {
+                    listing = refreshed
+                }
+                if let draft, draft.sourceID == sourceID {
+                    let current = Set(records.map(\.id))
+                    self.draft?.citations = draft.citations.filter { current.contains($0) }
+                }
+                notice = fileMovedSinceManifest(for: sourceID)
+                    ? "证据已按当前版本重新读取（\(records.count.formatted()) 行）；这份文件的内容已变化，需要重新识别后才能修订。"
+                    : "已重新读取证据（\(records.count.formatted()) 行）。请重新选择要引用的证据。"
+            } catch {
+                if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .unavailable) }
+            }
+        }
+    }
+
     /// Folds freshly read rows into the per-source view. Rows are unioned by
     /// id rather than replacing a source's list: a capture that returns only
     /// what it just extracted must not hide the rows an older revision cites,
@@ -1719,9 +1798,12 @@ final class WorkspaceModel: ObservableObject {
                 // undo it: what follows only refines the screen, and an error
                 // there used to conceal a correction that had succeeded.
                 let message = applied.violations.isEmpty
-                    ? "Correction recorded as revision \(applied.manifest.envelope.revision.formatted())."
-                    : "FormaCore refused this correction: \(applied.violations.map { $0.code }.joined(separator: " · ")). "
-                        + "Nothing was changed, and the attempt is on the exceptions list."
+                    ? "修订已保存为第 \(applied.manifest.envelope.revision.formatted()) 版。"
+                    : "本次修订未通过校验，内容未改动；这次尝试已记入诊断列表。"
+                // The codes travel as themselves. The sentence above says what
+                // happened in the reader's language; the codes are what the
+                // review screen turns into an actionable reason.
+                self.lastRefusalCodes = applied.violations.map(\.code)
                 // The published manifest is not re-fetched. "The current manifest
                 // for this scope and profile" is a different question - it can
                 // answer with another manifest that happens to be newer - and
@@ -1747,7 +1829,14 @@ final class WorkspaceModel: ObservableObject {
                 // running, and clearing whatever draft is current would throw
                 // away a decision being typed now. `self.` is load-bearing -
                 // the bare `draft` above is this click's unwrapped draft.
-                if self.draft?.id == draftID { self.draft = nil }
+                // A refused correction must leave the editor open with the
+                // user's value and cited rows intact. Closing the sheet on
+                // failure discards the only actionable context and forces the
+                // reviewer to re-enter the same information. Only a revision
+                // actually published by FormaCore dismisses the editor.
+                if applied.violations.isEmpty, self.draft?.id == draftID {
+                    self.draft = nil
+                }
                 refreshRows()
                 if let history = attempts {
                     correctionHistory = history
@@ -1984,6 +2073,30 @@ final class WorkspaceModel: ObservableObject {
         let id: UUID
         let term: String
         let role: String
+    }
+
+    // MARK: - Review Desk state (#146; additive)
+    //
+    // The desk's cursor and filter live on the shared model like the other
+    // areas' selections do: switching to 诊断 and back keeps reviewing the
+    // same file. Nothing here recomputes a value FormaCore owns; the queue
+    // only buckets the rows the mapping already published.
+
+    /// The file being reviewed in the desk queue.
+    @Published var deskFileSelection: UUID?
+
+    /// The desk's triage bucket (待处理 / 已验证 / 需关注).
+    @Published var deskTriage: DeskTriage = .pending
+
+    /// The revision a Save & Next armed at: the cursor may move only when the
+    /// manifest revision grows past this baseline (ReviewDeskFlow.advances).
+    /// A refused correction changes nothing, so the baseline simply stays.
+    @Published var deskBaselineRevision: Int?
+
+    /// The visible desk queue: current rows bucketed by the triage filter,
+    /// in manifest order.
+    var deskQueue: [MappingRow] {
+        rows.filter { FormaCore.deskTriage(for: $0.entry.state) == deskTriage }
     }
 }
 
