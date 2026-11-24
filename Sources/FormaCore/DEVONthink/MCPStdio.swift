@@ -235,6 +235,14 @@ actor MCPStdio {
     }
 
     func request(_ method: String, parameters: [String: MCPValue] = [:]) async throws -> MCPValue {
+        try await request(method, parameters: parameters, timeout: configuration.timeout)
+    }
+
+    /// The same call with a deadline for this request only. Production callers
+    /// use the configured budget above; this form lets a test expire one request
+    /// deliberately without also shrinking the budget of the request after it.
+    func request(_ method: String, parameters: [String: MCPValue] = [:],
+                 timeout: Duration) async throws -> MCPValue {
         guard !Task.isCancelled else { throw FormaError.cancelled }
         if let terminalError { throw terminalError }
         guard pending.count < 8, nextID < Int.max else { throw FormaError.unavailable }
@@ -247,7 +255,6 @@ actor MCPStdio {
                     continuation.resume(throwing: FormaError.cancelled)
                     return
                 }
-                let timeout = configuration.timeout
                 let deadline = Task { [weak self] in
                     do { try await Task.sleep(for: timeout) } catch { return }
                     await self?.fail(id, with: .timeout)
