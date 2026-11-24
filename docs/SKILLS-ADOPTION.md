@@ -10,8 +10,9 @@ neither document.
 ## 1. What the layer is, and what it is not
 
 - Machine-readable manifest: [`skills.lock.json`](../skills.lock.json) (pinned commit, licence, scope).
-- Installer/verifier: [`scripts/install_skills.sh`](../scripts/install_skills.sh) → `.agents/skills/<name>`,
-  which is git-ignored. Nothing is vendored into `FormaCore`, `FormaApp`, `Package.swift` or the app bundle.
+- Installer/verifier: [`scripts/install_skills.sh`](../scripts/install_skills.sh) → `.agents/skills/<name>/SKILL.md`,
+  with the skill subtree at its root, a copied MIT `LICENSE`, and `.forma-skill.json` provenance. The install
+  directory is git-ignored. Nothing is vendored into `FormaCore`, `FormaApp`, `Package.swift` or the app bundle.
 - Advisory only. Non-goals, restated from the manifest: no runtime or build dependency, no npm, no
   execution of any helper script shipped inside a skill; a skill never overrides Apple HIG, the pinned
   ADS revision, the macOS 14 minimum or Swift language mode 6; blanket iOS 27 / Swift 6.4 / newer-Xcode
@@ -85,26 +86,37 @@ sh scripts/install_skills.sh --skill swiftui-pro
 Executed on the DevBox (Linux) against real GitHub on 2026-11-23, exit 0:
 
 ```
-SKILL_OK: swiftui-expert-skill @ 62bd760f005093d1e2e4de5db156e456a5f96400 (licence MIT License) -> .agents/skills/swiftui-expert-skill, entry .agents/skills/swiftui-expert-skill/skills/swiftui-expert-skill/SKILL.md
-SKILL_OK: swiftui-pro @ f2920b63995263f57b3e198674e89a602efba6d2 (licence MIT License) -> .agents/skills/swiftui-pro, entry .agents/skills/swiftui-pro/swiftui-pro/SKILL.md
+SKILL_OK: swiftui-expert-skill @ 62bd760f005093d1e2e4de5db156e456a5f96400 (licence MIT License) -> .agents/skills/swiftui-expert-skill, entry .agents/skills/swiftui-expert-skill/SKILL.md
+SKILL_OK: swiftui-pro @ f2920b63995263f57b3e198674e89a602efba6d2 (licence MIT License) -> .agents/skills/swiftui-pro, entry .agents/skills/swiftui-pro/SKILL.md
 ```
 
 The installer fetches the pinned object by SHA (`git fetch --depth 1 origin <sha>`, detached) so it cannot
 float; it verifies HEAD == pinned, origin == upstream, `LICENSE` present and still carrying the MIT header and
-grant sentence, `SKILL.md` present at the recorded `skill_path`, and that the installed copy is unmodified.
-Observed fail-closed behaviour (exit 1, nothing pre-existing deleted): a lock whose SHA differs from the install →
-`pinned SHA mismatch …`; a well-formed but nonexistent upstream SHA → `upload-pack: not our ref` →
-`pinned commit … is not fetchable … (partial install removed)`, and the next run with a corrected lock
-reinstalls cleanly; a locally edited skill → `the installed copy was modified locally`.
+grant sentence, and `SKILL.md` present at the recorded upstream `skill_path`. It then copies only that skill
+subtree to the install root, copies the root licence to `LICENSE`, and writes deterministic
+`.forma-skill.json` provenance plus a content hash. A valid existing install is left untouched, so repeated
+runs are idempotent.
+
+`--check-only` requires the host-visible root layout and verifies provenance, licence and the full content
+hash. It deliberately fails an old upstream-root git checkout, a nested-only layout, a missing root
+`SKILL.md`, a modified file, or an unknown directory. Installation stages under `.agents/.install.*` and
+moves the verified result into place; a failure never leaves a partially valid-looking skill. A clean old
+upstream checkout at the pinned commit is migrated automatically; a modified or unknown directory is
+preserved and reported for manual review.
+
+Observed fail-closed behaviour: a lock whose SHA differs from the source → `pinned SHA mismatch …`; a
+well-formed but nonexistent upstream SHA → fetch failure with the partial source removed; a locally edited
+old install → preserved and refused; a missing root `SKILL.md` → `host discovery layout is invalid`.
 
 To change a pin: re-run the three provenance checks above against the new commit, edit `skills.lock.json`,
-`rm -rf .agents/skills/<name> && sh scripts/install_skills.sh`, and land it as its own reviewed PR. Never
+`sh scripts/install_skills.sh --check-only` (expect failure), then `sh scripts/install_skills.sh`, and land it as its own reviewed PR. Never
 `git pull` a floating head inside an installed skill.
 
-**Host recognition: NOT_VERIFIED.** Upstream ships its own discovery pointers (`package.json` `pi.skills`,
-`.claude-plugin`), so `.agents/skills/<name>/…` is a conventional layout, but no agent host in this
-environment was observed loading it. Confirming that Forma's development host actually reads
-`.agents/skills` is an Owner-side check, not a CI gate.
+**Host recognition: PASS for project-root discovery on omp/19.1.1; behavioral adoption NOT_VERIFIED.**
+The host discovers `.agents/skills/<name>/SKILL.md` non-recursively. `omp read skill://<name>` and
+`omp read skill://<name>/references/...` were verified against both installed skills. Installation and
+content reading are not proof that a model used a skill in a real task; behavioral adoption requires an
+actual task invocation and remains an Owner-side check, not a CI gate.
 
 ## 5. Adoption table: rule → Apple source → implementing owner → validation
 
