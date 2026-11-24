@@ -83,7 +83,7 @@ sh scripts/install_skills.sh --check-only # verify an existing install; writes n
 sh scripts/install_skills.sh --skill swiftui-pro
 ```
 
-Executed on the DevBox (Linux) against real GitHub on 2026-11-23, exit 0:
+Executed on the DevBox (Linux) against real GitHub on 2026-11-24, exit 0:
 
 ```
 SKILL_OK: swiftui-expert-skill @ 62bd760f005093d1e2e4de5db156e456a5f96400 (licence MIT License) -> .agents/skills/swiftui-expert-skill, entry .agents/skills/swiftui-expert-skill/SKILL.md
