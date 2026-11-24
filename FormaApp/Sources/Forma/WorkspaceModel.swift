@@ -1905,7 +1905,15 @@ final class WorkspaceModel: ObservableObject {
             return "发送目标尚未配置。"
         }
         let location = endpoint.egressMode == .local ? "本机服务" : "远程服务"
-        return "\(location) · \(endpoint.identity)"
+        return "\(provider.displayName) · \(modelID) · \(location) · \(endpoint.identity)"
+    }
+
+    func confirmProviderConfiguration(_ configuration: [String]) -> Bool {
+        guard configuration == providerConsentConfiguration else {
+            notice = "服务商设置已更改，请重新确认发送目标。"
+            return false
+        }
+        return true
     }
 
 

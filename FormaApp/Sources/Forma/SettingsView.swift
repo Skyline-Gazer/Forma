@@ -16,6 +16,7 @@ struct SettingsView: View {
     @ObservedObject var model: WorkspaceModel
     @State private var key = ""
     @State private var keySaved = false
+    @State private var keyTarget: EgressEndpoint?
 
     /// The preview pane shows this many bytes of the payload and says so; the
     /// byte count and digest always describe the whole request.
@@ -40,6 +41,7 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: credentialTarget) { _, _ in
             key = ""
+            keyTarget = nil
             keySaved = false
         }
     }
@@ -65,13 +67,16 @@ struct SettingsView: View {
             }
             TextField("每批请求文件数", value: $model.entryLimit, format: .number)
                 .accessibilityIdentifier("mapping-entry-limit")
-            SecureField("\(model.provider.displayName) 的 API 密钥", text: $key)
+            SecureField("\(model.provider.displayName) 的 API 密钥", text: Binding(
+                get: { keyTarget == credentialTarget ? key : "" },
+                set: { keyTarget = credentialTarget; key = $0 }
+            ))
             Button("保存 API 密钥到钥匙串") {
                 // The Keychain write left the main actor (#151 audit item 4),
                 // so the answer arrives on a later turn: the field's "saved"
                 // mark means the write returned successfully, not that the
                 // click happened.
-                let target = credentialTarget
+                guard let target = keyTarget, target == credentialTarget else { return }
                 let secret = key
                 key = ""
                 Task {
@@ -80,7 +85,7 @@ struct SettingsView: View {
                     if target == credentialTarget { keySaved = saved }
                 }
             }
-                .disabled(key.isEmpty || credentialTarget == nil)
+                .disabled(key.isEmpty || keyTarget == nil || keyTarget != credentialTarget)
                 .accessibilityIdentifier("save-api-key")
             if keySaved { Text("API 密钥已保存到钥匙串。").foregroundStyle(.secondary) }
             Text("Forma 将密钥保存在 macOS 钥匙串中，仅在发送请求时读取。")
