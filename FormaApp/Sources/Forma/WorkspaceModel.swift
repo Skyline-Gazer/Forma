@@ -1901,6 +1901,7 @@ final class WorkspaceModel: ObservableObject {
         if modelID == self.provider.defaultModel { modelID = provider.defaultModel }
         self.provider = provider
         allowCloud = false
+        reprocessEgress = false
         preview = nil
         leakedTerms = []
     }
