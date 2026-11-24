@@ -245,6 +245,12 @@ private func fake(_ script: String, timeout: Duration = .seconds(30), frameLimit
 }
 
 @Test func mcpTimeoutDiscardsLateReplyAndCloseRejectsFurtherRequests() async throws {
+    // The peer never answers the first request until the second arrives, so the
+    // first one expires whatever its deadline is; the short deadline is created
+    // deliberately on that request only. The second request is expected to
+    // succeed and keeps the suite's default budget: with a shared 2 s budget it
+    // raced the test process's scheduler under `swift test --parallel` instead
+    // of checking that the late reply is discarded and correlation holds.
     let transport = MCPStdio(configuration: fake(#"""
     next
     expect '"method":"timeout"'
@@ -254,8 +260,8 @@ private func fake(_ script: String, timeout: Duration = .seconds(30), frameLimit
     respond "$expired" '"late"'
     respond "$id" '"fresh"'
     keep_open
-    """#, timeout: .seconds(2)))
-    await #expect(throws: FormaError.timeout) { try await transport.request("timeout") }
+    """#))
+    await #expect(throws: FormaError.timeout) { try await transport.request("timeout", timeout: .seconds(2)) }
     let fresh = try await transport.request("valid")
     #expect(fresh == .string("fresh"))
     await transport.close()
