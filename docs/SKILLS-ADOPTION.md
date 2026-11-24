@@ -104,6 +104,11 @@ moves the verified result into place; a failure never leaves a partially valid-l
 upstream checkout at the pinned commit is migrated automatically; a modified or unknown directory is
 preserved and reported for manual review.
 
+When replacing an old install, the previous directory is moved to
+`.agents/.backup-<name>.<pid>` outside the temporary work tree. If the final move or
+restore fails, that path is reported instead of being deleted with the staging
+cleanup; a stale backup must be inspected and removed before retrying.
+
 Observed fail-closed behaviour: a lock whose SHA differs from the source → `pinned SHA mismatch …`; a
 well-formed but nonexistent upstream SHA → fetch failure with the partial source removed; a locally edited
 old install → preserved and refused; a missing root `SKILL.md` → `host discovery layout is invalid`.

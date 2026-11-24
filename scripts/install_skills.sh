@@ -336,13 +336,20 @@ install_skill() {
     verify_install "$stage" "$name" "$upstream" "$commit" "$skill_path" "$license_file" "$license_header" \
         || die "$name: staged install failed verification"
 
-    backup=$WORK/backup-$name
+    # Keep the old install outside the temporary work tree: if a replacement
+    # move fails, the cleanup trap must never delete the only recoverable copy.
+    backup=$BASE/.backup-$name.$$
+    if [ -e "$backup" ]; then
+        die "$name: stale backup $backup exists; inspect and remove it before retrying"
+    fi
     if [ -e "$dest" ]; then
         mv "$dest" "$backup" || die "$name: cannot move the old install aside"
     fi
     if ! mv "$stage" "$dest"; then
         if [ -e "$backup" ]; then
-            mv "$backup" "$dest" || true
+            if ! mv "$backup" "$dest"; then
+                die "$name: old install preserved at $backup; restore it manually"
+            fi
         fi
         die "$name: cannot move the verified install into place"
     fi
