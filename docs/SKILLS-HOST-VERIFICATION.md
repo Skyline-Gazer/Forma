@@ -2,8 +2,8 @@
 
 Status: **verification record only; no skill or product code is added by this PR.**
 Date: 2026-11-24. Host: `omp/19.1.1` on Linux DevBox. #161 has been merged into
-`dev`; the installer layout fix is proposed separately in PR #164. This document
-does not modify #161, #164 or any product code.
+`dev`; the installer layout fix was merged separately in PR #164. This document
+records verification of that change.
 
 ## 1. Scope
 
@@ -74,7 +74,7 @@ defect, not a provenance failure.
 
 ### 3.3 Installer fix: PASS
 
-The installer fix is proposed in PR #164 (`fix/skills-host-layout`). It copies
+The installer fix merged in PR #164 (`fix/skills-host-layout`). It copies
 only the locked `skill_path` subtree to the install root, copies the root MIT
 license, and writes deterministic `.forma-skill.json` provenance plus a content
 hash. It stages the result outside the host-visible directory and moves it into
@@ -128,8 +128,8 @@ part of the fix.
 
 ## 5. Rollout plan
 
-1. Review and merge the installer Bugfix PR #164 under normal CI/review; it is
-   separate from #161 and does not change the ADS pin or product code.
+1. The installer bugfix PR #164 was merged separately from #161. It leaves the
+   ADS pin and product code unchanged.
 2. In each active worktree, run `sh scripts/install_skills.sh` and
    `sh scripts/install_skills.sh --check-only`.
 3. Verify `omp read skill://<name>` and one reference path in that worktree.
@@ -139,7 +139,6 @@ part of the fix.
 5. If a future host does not support project-level discovery, record
    `SKILLS_HOST_VERIFICATION = BLOCKED` and do not modify global host settings
    without Owner authorization.
-6. This PR remains documentation only; it is not merged or closed by #164.
 
 ## 6. Boundaries
 
