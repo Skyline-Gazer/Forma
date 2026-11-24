@@ -82,14 +82,24 @@ struct ProviderTransport: Sendable {
         // Strict mode is what makes `additionalProperties: false` binding on the
         // provider side as well: a permissive format lets a model add identity
         // fields back in.
-        var format: [String: Any] = ["type": "json_schema", "schema": schema, "strict": true]
-        let endpoint: URL = EgressEndpoint.provider(request.provider).canonicalURL
+        var format: [String: Any] = ["type": "json_schema", "schema": schema]
+        let endpoint: URL
+        if request.provider.requiresConfiguredEndpoint {
+            // There is no built-in host to fall back to: a compatible server is
+            // only ever addressed through the exact URL the grant authorized,
+            // which `EgressEndpoint.target` resolved before this call.
+            guard let override = request.endpoint else { throw FormaError.incompatible }
+            endpoint = override
+        } else {
+            endpoint = EgressEndpoint.provider(request.provider).canonicalURL
+        }
         let body: [String: Any]
         let text = request.system.map { "\($0)\n\n" + request.payload } ?? request.payload
         switch request.provider {
         case .offline:
             throw FormaError.unavailable
         case .openAI:
+            format["strict"] = true
             format["name"] = request.name
             body = [
                 "model": request.model,
@@ -109,8 +119,29 @@ struct ProviderTransport: Sendable {
             ]
             if let system = request.system { message["system"] = system }
             body = message
+        case .openAICompatible:
+            // Chat Completions, not the Responses API: it is the interface
+            // compatible servers actually implement. The envelope is spelled
+            // here rather than reusing `format` because the JSON Schema
+            // structure nests under `json_schema` in this API - the shape is
+            // the protocol difference. Strict mode stays non-negotiable: it is
+            // what makes `additionalProperties: false` binding provider-side,
+            // and a server that cannot do it answers 400 on the probe, which
+            // is a capability answer, not a silent fallback to weaker output.
+            var messages: [[String: Any]] = []
+            if let system = request.system { messages.append(["role": "system", "content": system]) }
+            messages.append(["role": "user", "content": request.payload])
+            body = [
+                "model": request.model,
+                "messages": messages,
+                "response_format": [
+                    "type": "json_schema",
+                    "json_schema": ["name": request.name, "strict": true, "schema": schema],
+                ],
+                "max_tokens": request.maxOutputTokens,
+            ]
         }
-        var urlRequest = URLRequest(url: request.endpoint ?? endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
+        var urlRequest = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -122,6 +153,12 @@ struct ProviderTransport: Sendable {
         case .anthropic:
             urlRequest.setValue(key, forHTTPHeaderField: "x-api-key")
             urlRequest.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        case .openAICompatible:
+            // The OpenAI authorization scheme, and nothing else: no built-in
+            // anthropic-version header, since the server is not Anthropic and
+            // an unsolicited version header is one more fingerprint of Forma
+            // on a third-party host.
+            urlRequest.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         }
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
         return urlRequest
@@ -201,6 +238,23 @@ struct ProviderTransport: Sendable {
                 throw FormaError.invalidOutput
             }
             return text
+        case .openAICompatible:
+            // One choice, one message. A truncation (`length`) and a filtered
+            // answer (`content_filter`) stay distinct outcomes exactly as the
+            // native parsers above do them; a missing `finish_reason` is not
+            // something to interpret charitably.
+            guard let choices = envelope["choices"] as? [[String: Any]],
+                  choices.count == 1, let choice = choices.first else { throw FormaError.invalidResponse }
+            switch choice["finish_reason"] as? String {
+            case "length": throw FormaError.invalidOutput
+            case "content_filter": throw FormaError.refused
+            case "stop": break
+            default: throw FormaError.invalidResponse
+            }
+            guard let message = choice["message"] as? [String: Any] else { throw FormaError.invalidOutput }
+            if message["refusal"] is String { throw FormaError.refused }
+            guard let text = message["content"] as? String else { throw FormaError.invalidOutput }
+            return text
         }
     }
 
@@ -224,6 +278,11 @@ struct ProviderTransport: Sendable {
             return Usage(input: Self.count(values["input_tokens"]), output: Self.count(values["output_tokens"]),
                          cacheRead: Self.count(values["cache_read_input_tokens"]),
                          cacheCreation: Self.count(values["cache_creation_input_tokens"]))
+        case .openAICompatible:
+            // Chat Completions token names, not the Responses ones.
+            let details = values["prompt_tokens_details"] as? [String: Any]
+            return Usage(input: Self.count(values["prompt_tokens"]), output: Self.count(values["completion_tokens"]),
+                         cacheRead: Self.count(details?["cached_tokens"]), cacheCreation: nil)
         }
     }
 
@@ -253,17 +312,18 @@ struct ProviderTransport: Sendable {
     }
 
     /// The model id is sent in the body and written to the recorded diagnostics,
-    /// so it has to be unable to smuggle anything: the charset is the one both
-    /// providers actually use (`gpt-4o-mini`, `claude-sonnet-4-5`), the length
-    /// bound is generous, and a value that looks like a key is refused rather
-    /// than stored. Relaxing this needs a provider that ships ids outside that
+    /// so it has to be unable to smuggle anything: the charset is the one the
+    /// providers actually use (`gpt-4o-mini`, `claude-sonnet-4-5`, and the
+    /// `org/model` form compatible servers publish), the length bound is
+    /// generous, and a value that looks like a key is refused rather than
+    /// stored. Relaxing this needs a provider that ships ids outside that
     /// alphabet, not just a wish for fewer rejections.
     static func validModelID(_ model: String) -> Bool {
         let bytes = model.utf8
         return !bytes.isEmpty && bytes.count <= 128 && !model.lowercased().hasPrefix("sk-")
             && bytes.allSatisfy { byte in
                 switch byte {
-                case 45...46, 48...58, 65...90, 95, 97...122: true
+                case 45...47, 48...58, 65...90, 95, 97...122: true
                 default: false
                 }
             }

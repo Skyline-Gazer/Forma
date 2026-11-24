@@ -85,6 +85,7 @@ final class WorkspaceModel: ObservableObject {
         static let profile = "selectedMappingProfile"
         static let provider = "mappingProvider"
         static let model = "mappingModel"
+        static let customBaseURL = "mappingCustomBaseURL"
         static let plannerMode = "mappingPlannerMode"
         static let entryLimit = "mappingEntryLimit"
         static let salt = "mappingRedactionSalt"
@@ -294,7 +295,31 @@ final class WorkspaceModel: ObservableObject {
     }
 
     @Published var modelID: String {
-        didSet { defaults.set(modelID, forKey: Keys.model) }
+        didSet {
+            defaults.set(modelID, forKey: Keys.model)
+            if oldValue != modelID {
+                allowCloud = false
+                reprocessEgress = false
+                preview = nil
+            }
+        }
+    }
+
+    /// The OpenAI-compatible server's base URL. Persisted like the model id:
+    /// it is configuration, not consent. Every run derives its send target
+    /// from this exact string through `EgressEndpoint.target`, so the wire URL
+    /// can never be a host other than the one recorded in the grant, and the
+    /// grant can never name a host the user did not save.
+    @Published var customBaseURL: String {
+        didSet {
+            guard !oldValue.utf8.elementsEqual(customBaseURL.utf8) else { return }
+            defaults.set(customBaseURL, forKey: Keys.customBaseURL)
+            allowCloud = false
+            reprocessEgress = false
+            // A stale preview was consented against the old target; the
+            // identity the person approved changed with the URL.
+            preview = nil
+        }
     }
 
     @Published var entryLimit: Int {
@@ -512,6 +537,7 @@ final class WorkspaceModel: ObservableObject {
             ?? .openAI
         provider = storedProvider
         modelID = Self.store.string(forKey: Keys.model) ?? storedProvider.defaultModel
+        customBaseURL = Self.store.string(forKey: Keys.customBaseURL) ?? ""
         // `didSet` does not run for this assignment, so the floor is applied
         // here as well: a zero stored by an older build must not survive launch.
         entryLimit = max(1, (Self.store.object(forKey: Keys.entryLimit) as? Int)
@@ -1210,7 +1236,7 @@ final class WorkspaceModel: ObservableObject {
         // an offline draft must never be written as a model's work.
         let offline = plannerMode == .offline
         let provider: ProbeProvider = offline ? .offline : self.provider
-        let model = offline ? OfflinePlannerAnswerer.modelID : modelID
+        let model = offline ? OfflinePlannerAnswerer.modelID : modelID.trimmingCharacters(in: .whitespacesAndNewlines)
         // Nothing is sent in offline mode, so there is nothing to consent to.
         let consent = offline ? false : egress
         let limit = entryLimit
@@ -1220,15 +1246,30 @@ final class WorkspaceModel: ObservableObject {
         // gate re-checks it against every wire request. The preview digest is
         // recorded for auditing, but the binding is `.dataRange`: a run re-reads
         // file bodies, so the preview is explicitly not a byte-level receipt.
-        let grant: EgressAuthorization? = consent ? EgressAuthorization(
-            scope: EgressScope(provider: provider, model: model, endpoint: .provider(provider),
-                               mode: .cloud,
-                               categories: [.filePaths, .evidenceExcerpts, .projectContext,
-                                            .casePackExamples, .profileRules, .systemPrompt,
-                                            .repairInstructions],
-                               redactionVersion: MappingPrompt.redactionVersion(for: plan),
-                               identitySubstitution: plan.isIdentity),
-            previewDigest: preview?.value.digest, binding: .dataRange) : nil
+        // The factory resolves the send target too: for a configured endpoint
+        // the grant names the exact URL, and a missing or malformed Base URL
+        // fails here - before an engine exists - with the text that explains it.
+        let grant: EgressAuthorization?
+        if consent {
+            switch EgressAuthorization.mapping(
+                provider: provider, model: model, customBaseURL: customBaseURL,
+                previewDigest: preview?.value.digest,
+                redactionVersion: MappingPrompt.redactionVersion(for: plan),
+                identitySubstitution: plan.isIdentity) {
+            case .success(let built): grant = built
+            case .failure(let failure):
+                error = failure
+                if provider.requiresConfiguredEndpoint,
+                   case .failure = EgressEndpoint.target(provider: provider, customBaseURL: customBaseURL) {
+                    notice = "请先填写有效的 OpenAI-compatible Base URL（例如 http://127.0.0.1:11434/v1 或 https://host.example/v1）。"
+                } else {
+                    notice = "请检查模型 ID。模型 ID 不能为空，且须使用服务商支持的格式。"
+                }
+                return false
+            }
+        } else {
+            grant = nil
+        }
         guard let engine = engine(for: profile, authorization: grant) else { return false }
         allowCloud = false
         notice = nil
@@ -1857,12 +1898,34 @@ final class WorkspaceModel: ObservableObject {
     }
 
     // MARK: - Settings actions
+    var providerConsentConfiguration: [String] {
+        let endpoint = try? EgressEndpoint.target(provider: provider, customBaseURL: customBaseURL).get()
+        return [provider.rawValue, modelID, endpoint?.identity ?? ""]
+    }
+
+    var providerConsentDestination: String {
+        guard let endpoint = try? EgressEndpoint.target(provider: provider, customBaseURL: customBaseURL).get() else {
+            return "发送目标尚未配置。"
+        }
+        let location = endpoint.egressMode == .local ? "本机服务" : "远程服务"
+        return "\(provider.displayName) · \(modelID) · \(location) · \(endpoint.identity)"
+    }
+
+    func confirmProviderConfiguration(_ configuration: [String]) -> Bool {
+        guard configuration == providerConsentConfiguration else {
+            notice = "服务商设置已更改，请重新确认发送目标。"
+            return false
+        }
+        return true
+    }
+
 
     func selectProvider(_ provider: ProbeProvider) {
         guard provider != self.provider else { return }
         if modelID == self.provider.defaultModel { modelID = provider.defaultModel }
         self.provider = provider
         allowCloud = false
+        reprocessEgress = false
         preview = nil
         leakedTerms = []
     }
@@ -1879,12 +1942,13 @@ final class WorkspaceModel: ObservableObject {
     /// the field's own "saved" mark are published where views can see them.
     @discardableResult func saveKey(_ key: String) async -> Bool {
         let chosenProvider = provider
+        let chosenBaseURL = customBaseURL
         do {
             // The client is built inside the detached work rather than here:
             // it wraps the Keychain store and the egress authoriser, and none
             // of that belongs on the main actor for the length of one write.
             try await Self.offMain {
-                try ProviderMappingClient().saveKey(key, for: chosenProvider)
+                try ProviderProbe().saveKey(key, for: chosenProvider, customBaseURL: chosenBaseURL)
             }
             notice = "API key saved in Keychain for \(chosenProvider.displayName)."
             return true

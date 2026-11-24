@@ -25,6 +25,8 @@ struct ReviewDeskView: View {
 
     /// The egress confirmation before an AI run (state matrix row 3).
     @State private var aiConsentPresented = false
+    @State private var aiConsentConfiguration: [String] = []
+    @State private var aiConsentDisclosure = ""
     /// The last refusal FormaCore published for this desk session: the field
     /// it concerned and its codes, so the cause can sit beside the field
     /// rather than in a sidebar. Cleared when a revision is published or a
@@ -77,14 +79,15 @@ struct ReviewDeskView: View {
                        maxWidth: CGFloat(ShellLayout.deskDetail.max))
             }
         }
-        .confirmationDialog(EgressConsent.confirmationHeading,
+        .confirmationDialog("确认发送映射请求",
                             isPresented: $aiConsentPresented, titleVisibility: .visible) {
             Button(EgressConsent.confirmAction) { startAIUnderstanding() }
             Button(EgressConsent.cancelAction, role: .cancel) {}
         } message: {
             VStack(alignment: .leading, spacing: 4) {
-                Text("本次运行将发送（Provider：\(model.provider.displayName) · 模型：\(model.modelID)）：")
+                Text("本次运行将发送：")
                     .font(.caption.weight(.medium))
+                Text(aiConsentDisclosure).font(.caption)
                 ForEach(Array(EgressConsent.whatLeavesLines.enumerated()), id: \.offset) { _, line in
                     Text("· \(line)").font(.caption)
                 }
@@ -622,6 +625,8 @@ struct ReviewDeskView: View {
         case .aiUnderstanding:
             // Explicit disclosure BEFORE any AI run; nothing is dispatched
             // until the dialog's confirm action calls startAIUnderstanding().
+            aiConsentConfiguration = model.providerConsentConfiguration
+            aiConsentDisclosure = model.providerConsentDestination
             aiConsentPresented = true
         case .manualDraft: performManualDraft()
         case .reviewFiles:
@@ -637,6 +642,7 @@ struct ReviewDeskView: View {
     /// the AI answerer is chosen, and `egress: true` goes to FormaCore, whose
     /// own gate re-checks the authorization per request.
     private func startAIUnderstanding() {
+        guard model.confirmProviderConfiguration(aiConsentConfiguration) else { return }
         model.plannerMode = .ai
         _ = model.runMapping(sourceIDs: nil, egress: true)
     }

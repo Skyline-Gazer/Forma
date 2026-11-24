@@ -2,11 +2,16 @@ import FormaCore
 import SwiftUI
 
 struct ProbesView: View {
-    @AppStorage("openAIProbeModel") private var openAIModel = ProbeProvider.openAI.defaultModel
-    @AppStorage("anthropicProbeModel") private var anthropicModel = ProbeProvider.anthropic.defaultModel
-    @State private var provider: ProbeProvider = .openAI
+    /// The settings scene reads the application's one settings-and-run model,
+    /// so provider, model id and Base URL here are the exact values a mapping
+    /// run will use. The pre-P0 pane kept its own `@AppStorage` probe model
+    /// ids - a second spelling of "the model" that could and did drift from
+    /// what Settings showed. With no workspace open there is no configuration
+    /// to probe, and the pane says so instead of inventing one.
+    @ObservedObject var workspaceModel: WorkspaceModel
     @State private var key = ""
-    @State private var consent = false
+    @State private var keyConfiguration: [String]?
+    @State private var consentConfiguration: [String]?
     @State private var providerResult: ProviderProbeResult?
     @State private var providerError: FormaError?
     @State private var keySaved = false
@@ -23,7 +28,34 @@ struct ProbesView: View {
     @State private var mcpTask: Task<Void, Never>?
     private let probe = ProviderProbe()
 
-    private var model: Binding<String> { provider == .openAI ? $openAIModel : $anthropicModel }
+
+    private var provider: ProbeProvider { workspaceModel.provider }
+
+    private struct Configuration: Equatable {
+        let provider: ProbeProvider
+        let model: String
+        let baseURL: String
+    }
+
+    private var configuration: Configuration {
+        Configuration(provider: provider, model: workspaceModel.modelID,
+                      baseURL: workspaceModel.providerConsentConfiguration[2])
+    }
+
+    /// Writes go through `selectProvider`, not a raw assignment: switching
+    /// there resets consent and swaps a untouched default model id, which is
+    /// exactly the discipline a probe must inherit from Settings.
+    private var providerBinding: Binding<ProbeProvider> {
+        Binding(get: { provider }, set: { workspaceModel.selectProvider($0) })
+    }
+
+    private var modelBinding: Binding<String> {
+        $workspaceModel.modelID
+    }
+
+    private var customBaseURLBinding: Binding<String> {
+        $workspaceModel.customBaseURL
+    }
 
     var body: some View {
         Form {
@@ -63,25 +95,49 @@ struct ProbesView: View {
                 }
             }
             Section("AI 服务商探测") {
-                Picker("服务商", selection: $provider) {
+                Picker("服务商", selection: providerBinding) {
                     ForEach(ProbeProvider.networkCases, id: \.self) { provider in Text(provider.displayName).tag(provider) }
                 }
                 .disabled(providerTask != nil)
-                TextField("模型 ID", text: model)
+                TextField("模型 ID", text: modelBinding)
                     .disabled(providerTask != nil)
-                SecureField("API 密钥", text: $key)
+                if provider == .openAICompatible {
+                    TextField("Base URL（例如 http://127.0.0.1:11434/v1）", text: customBaseURLBinding)
+                        .disabled(providerTask != nil)
+                        .accessibilityIdentifier("probe-base-url")
+                }
+                let selected = workspaceModel.providerConsentConfiguration
+                SecureField("API 密钥", text: Binding(
+                    get: { keyConfiguration == selected ? key : "" },
+                    set: { keyConfiguration = selected; key = $0 }
+                ))
                 Button("将 API 密钥保存到钥匙串", action: saveKey).disabled(key.isEmpty)
                 if keySaved { Text("API 密钥已保存到钥匙串。").foregroundStyle(.secondary) }
                 Text(ProviderProbe.syntheticPrompt)
                     .font(.caption).textSelection(.enabled)
-                Toggle("向 \(provider.displayName) 发送合成探测请求", isOn: $consent)
+                Toggle("向 \(provider.displayName) 发送合成探测请求", isOn: Binding(
+                    get: { consentConfiguration == selected },
+                    set: { consentConfiguration = $0 ? selected : nil }
+                ))
+                if provider == .openAICompatible {
+                    Text("探测目标就是设置页填写的 Base URL 解析出的完整地址；两者不一致时不会发出请求。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Text("所选服务商将收到上面显示的合成文本和一份 JSON schema。启用前请先查看其 API 数据处理政策。")
                     .font(.caption).foregroundStyle(.secondary)
-                Link("API 数据政策", destination: provider == .openAI
-                     ? URL(string: "https://platform.openai.com/docs/guides/your-data")!
-                     : URL(string: "https://privacy.anthropic.com/")!)
+                switch provider {
+                case .openAI:
+                    Link("API 数据政策", destination: URL(string: "https://platform.openai.com/docs/guides/your-data")!)
+                case .anthropic:
+                    Link("API 数据政策", destination: URL(string: "https://privacy.anthropic.com/")!)
+                case .openAICompatible:
+                    Text("兼容服务器的数据政策由其运营方决定；发送前向运营方确认。")
+                        .font(.caption).foregroundStyle(.secondary)
+                case .offline:
+                    EmptyView()
+                }
                 Button("运行服务商探测", action: runProvider)
-                    .disabled(!consent || providerTask != nil)
+                    .disabled(consentConfiguration != selected || providerTask != nil)
                 if let providerError { Text(providerError.localizedDescription).foregroundStyle(.secondary) }
                 if let providerResult {
                     LabeledContent("结果", value: providerResult.error?.localizedDescription ?? "结构校验通过")
@@ -94,14 +150,13 @@ struct ProbesView: View {
                 }
             }
         }
-        .onAppear { providerResult = probe.lastResult(for: provider) }
         .formStyle(.grouped)
         .frame(minWidth: 470, idealWidth: 550, minHeight: 460, idealHeight: 610)
-        .onChange(of: provider) { _, _ in
-            consent = false
+        .onChange(of: configuration) { _, _ in
+            consentConfiguration = nil
             key = ""
             keySaved = false
-            providerResult = probe.lastResult(for: provider)
+            providerResult = nil
             providerError = nil
         }
         .onDisappear {
@@ -167,11 +222,15 @@ struct ProbesView: View {
     }
 
     private func saveKey() {
+        guard keyConfiguration == workspaceModel.providerConsentConfiguration else { return }
         providerError = nil
         keySaved = false
-        defer { key = "" }
+        defer {
+            key = ""
+            keyConfiguration = nil
+        }
         do {
-            try probe.saveKey(key, for: provider)
+            try probe.saveKey(key, for: provider, customBaseURL: workspaceModel.customBaseURL)
             keySaved = true
         } catch {
             let safe = error as? FormaError ?? .storage
@@ -182,15 +241,18 @@ struct ProbesView: View {
 
     private func runProvider() {
         let provider = provider
-        let model = model.wrappedValue
-        let allowed = consent
+        let model = modelBinding.wrappedValue
+        let customBaseURL = workspaceModel.customBaseURL
+        let configuration = configuration
+        guard consentConfiguration == workspaceModel.providerConsentConfiguration else { return }
         providerResult = nil
         providerError = nil
-        consent = false
+        consentConfiguration = nil
         providerTask = Task {
-            let result = await probe.run(provider: provider, model: model, allowCloud: allowed)
+            let result = await probe.run(provider: provider, model: model, allowCloud: true,
+                                         customBaseURL: customBaseURL)
             if let error = result.error { FormaDiagnostics.failure(.providerProbe, error) }
-            if !Task.isCancelled { providerResult = result }
+            if !Task.isCancelled, configuration == self.configuration { providerResult = result }
             providerTask = nil
         }
     }

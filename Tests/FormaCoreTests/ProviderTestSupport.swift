@@ -12,6 +12,7 @@ extension ProbeProvider {
         switch self {
         case .openAI: "gpt-4o"
         case .anthropic: "claude-sonnet-4-5"
+        case .openAICompatible: "custom-model"
         // Unreachable from the suites: they run `networkCases`. Stated rather
         // than defaulted so a future case cannot inherit a fake model name.
         case .offline: "offline-planner.v1"
@@ -22,6 +23,7 @@ extension ProbeProvider {
         switch self {
         case .openAI: "gpt-4o-2024-08-06"
         case .anthropic: "claude-sonnet-4-5-20250929"
+        case .openAICompatible: "custom-model-v1"
         case .offline: "offline-planner.v1"
         }
     }
@@ -47,6 +49,18 @@ extension ProbeProvider {
                 "content": [["type": "text", "text": text]],
                 "usage": ["input_tokens": 31, "output_tokens": 12, "cache_read_input_tokens": 7, "cache_creation_input_tokens": 3],
             ]
+        case .openAICompatible:
+            // Chat Completions envelope: one choice, assistant message, the
+            // `prompt_tokens` spelling. Deliberately without any Responses-API
+            // field, so a parser that read the wrong names fails here rather
+            // than at a real server.
+            [
+                "model": reportedModel,
+                "choices": [["finish_reason": "stop",
+                             "message": ["role": "assistant", "content": text]]],
+                "usage": ["prompt_tokens": 31, "completion_tokens": 12,
+                          "prompt_tokens_details": ["cached_tokens": 7]],
+            ]
         case .offline: [:]
         }
     }
@@ -60,15 +74,22 @@ func json(_ object: [String: Any]) -> Data {
 final class ProviderFixture {
     let provider: ProbeProvider
     let key: String
+    /// The base URL handed to `probe.run` for every provider. It is ignored
+    /// unless the provider requires a configured endpoint, so one fixture can
+    /// drive both built-in and compatible expectations.
+    let baseURL: String
     let keyStore: MemoryKeyStore
     let probe: ProviderProbe
     private let session: URLSession
     private let stub: HTTPStub
 
-    init(provider: ProbeProvider, hasKey: Bool = true, defaults: UserDefaults? = nil, response: (String) -> StubResponse) {
+    init(provider: ProbeProvider, hasKey: Bool = true, defaults: UserDefaults? = nil,
+         baseURL: String? = "http://127.0.0.1:8080/v1",
+         response: (String) -> StubResponse) {
         let key = "probe-test-\(UUID().uuidString)"
         self.provider = provider
         self.key = key
+        self.baseURL = baseURL ?? ""
         self.keyStore = MemoryKeyStore(keys: hasKey ? [provider: key] : [:])
         self.stub = HTTPStub(response: response(key))
         ProbeURLProtocol.register(stub, for: key)
@@ -86,7 +107,8 @@ final class ProviderFixture {
     var requests: [ObservedRequest] { stub.requests }
 
     func run(allowCloud: Bool = true) async -> ProviderProbeResult {
-        await probe.run(provider: provider, model: provider.configuredModel, allowCloud: allowCloud)
+        await probe.run(provider: provider, model: provider.configuredModel, allowCloud: allowCloud,
+                        customBaseURL: baseURL)
     }
 }
 

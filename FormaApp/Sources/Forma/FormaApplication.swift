@@ -18,7 +18,21 @@ struct FormaApplication: App {
         // every pane inside is flexible with declared bounds.
 
         Settings {
-            ProbesView()
+            ProviderSettingsRoot(state: delegate.state)
+        }
+    }
+}
+
+private struct ProviderSettingsRoot: View {
+    @ObservedObject var state: FormaApplicationState
+
+    var body: some View {
+        if let model = state.model {
+            ProbesView(workspaceModel: model)
+        } else if case .degraded(let error) = state.launch {
+            Text(error.localizedDescription)
+        } else {
+            Text("正在打开工作区。")
         }
     }
 }
@@ -64,6 +78,11 @@ final class FormaApplicationState: ObservableObject {
     }
 
     @Published private(set) var launch: Launch = .starting
+    /// The application's one settings-and-run model, installed by `start()`
+    /// before `launch` can be observed as ready. The window and the Settings
+    /// probe pane read this same object so provider, model id and Base URL
+    /// cannot describe two different configurations.
+    @Published private(set) var model: WorkspaceModel?
     @Published private(set) var recovery: ImportRecoveryOverview = .empty
     @Published private(set) var recoveryFailure: FormaError?
     /// Why the read-only recheck cannot run, in a stable code.
@@ -102,6 +121,11 @@ final class FormaApplicationState: ObservableObject {
             // then the operations stay `verify_required` and nothing retries.
             recoveryReviewReason = "no_authorized_scope"
         }
+        // The model goes in before the launch value becomes observable as
+        // ready: no view can then see `.ready` with a nil model, and the
+        // Settings probe pane reads the very object the window runs mapping
+        // from.
+        model = WorkspaceModel(workspace: workspace)
         launch = .ready(workspace)
     }
 
@@ -252,7 +276,7 @@ extension WorkspaceModel.PlannerMode {
 /// computes a value FormaCore owns.
 @MainActor
 private struct WorkspaceAreas: View {
-    @StateObject private var model: WorkspaceModel
+    @ObservedObject var model: WorkspaceModel
     @ObservedObject var state: FormaApplicationState
 
     @AppStorage("shell.selectedArea") private var storedArea: String = AppArea.defaultLanding.rawValue
@@ -260,9 +284,15 @@ private struct WorkspaceAreas: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var bundleImporting = false
     @State private var egressConfirmation = false
+    @State private var egressConfiguration: [String] = []
+    @State private var egressDisclosure = ""
 
     init(workspace: SourceWorkspace, state: FormaApplicationState) {
-        _model = StateObject(wrappedValue: WorkspaceModel(workspace: workspace))
+        // The state owns the one model - `start()` installs it before the
+        // launch value can read `.ready`, so this normally finds it. The
+        // fallback covers only a view built against a workspace the state
+        // never published; it is deliberately not a second long-lived model.
+        self.model = state.model ?? WorkspaceModel(workspace: workspace)
         self.state = state
     }
 
@@ -370,13 +400,16 @@ private struct WorkspaceAreas: View {
         .sheet(item: $model.draft) { draft in
             CorrectionSheet(model: model, draft: draft)
         }
-        .confirmationDialog(EgressConsent.confirmationHeading,
+        .confirmationDialog("确认发送重新处理请求",
                             isPresented: $egressConfirmation, titleVisibility: .visible) {
-            Button(EgressConsent.confirmAction) { model.reprocessEgress = true }
+            Button(EgressConsent.confirmAction) {
+                if model.confirmProviderConfiguration(egressConfiguration) { model.reprocessEgress = true }
+            }
             Button(EgressConsent.cancelAction, role: .cancel) {}
         } message: {
             VStack(alignment: .leading, spacing: 4) {
                 Text("本次运行将发送：").font(.caption.weight(.medium))
+                Text(egressDisclosure).font(.caption)
                 ForEach(Array(EgressConsent.whatLeavesLines.enumerated()), id: \.offset) { _, line in
                     Text("· \(line)").font(.caption)
                 }
@@ -598,6 +631,8 @@ private struct WorkspaceAreas: View {
             if model.reprocessEgress {
                 model.reprocessEgress = false
             } else {
+                egressConfiguration = model.providerConsentConfiguration
+                egressDisclosure = model.providerConsentDestination
                 egressConfirmation = true
             }
         } label: {

@@ -4,6 +4,14 @@ import Foundation
 public enum ProbeProvider: String, Codable, CaseIterable, Sendable {
     case openAI = "openai"
     case anthropic
+    /// An OpenAI-compatible Chat Completions server at a user-configured
+    /// endpoint. The wire protocol is the OpenAI one; the *host* is not, so
+    /// this is a separate provider rather than a spelling of `.openAI`: the
+    /// egress scope must name the exact configured target, structured output
+    /// is a per-endpoint capability that the probe establishes rather than an
+    /// inherited guarantee, and a Keychain credential for this endpoint never
+    /// shares an account with api.openai.com.
+    case openAICompatible = "openai-compatible"
     /// Not a provider: the deterministic planner that answers from the batch's
     /// own metadata. It exists as a case so a manifest built with it records
     /// `offline` instead of borrowing a model's name, and so no egress path can
@@ -12,7 +20,7 @@ public enum ProbeProvider: String, Codable, CaseIterable, Sendable {
 
     /// The providers a request may actually be sent to. The offline planner is
     /// excluded here by construction rather than filtered at each call site.
-    public static let networkCases: [ProbeProvider] = [.openAI, .anthropic]
+    public static let networkCases: [ProbeProvider] = [.openAI, .anthropic, .openAICompatible]
 
     public var isNetworkProvider: Bool { self != .offline }
 
@@ -20,6 +28,7 @@ public enum ProbeProvider: String, Codable, CaseIterable, Sendable {
         switch self {
         case .openAI: "OpenAI"
         case .anthropic: "Anthropic"
+        case .openAICompatible: "OpenAI-compatible"
         case .offline: "Offline planner (not AI)"
         }
     }
@@ -28,9 +37,18 @@ public enum ProbeProvider: String, Codable, CaseIterable, Sendable {
         switch self {
         case .openAI: "gpt-4o-mini"
         case .anthropic: "claude-haiku-4-5-20251001"
+        // A compatible endpoint publishes its own model names; inventing a
+        // default here would produce an un-actionable model-not-found on the
+        // first run, so the user enters one.
+        case .openAICompatible: ""
         case .offline: OfflinePlannerAnswerer.modelID
         }
     }
+
+    /// True exactly when the send target comes from user configuration rather
+    /// than a built-in host. Everything downstream (scope endpoint, Keychain
+    /// account policy, request override) keys off this, not off a URL guess.
+    public var requiresConfiguredEndpoint: Bool { self == .openAICompatible }
 }
 
 public struct ProviderProbeOutput: Equatable, Sendable {
@@ -87,10 +105,11 @@ public struct ProviderProbe: Sendable {
         self.telemetry = defaults.map(ProviderProbeTelemetry.init)
     }
 
-    public func saveKey(_ key: String, for provider: ProbeProvider) throws {
+    public func saveKey(_ key: String, for provider: ProbeProvider, customBaseURL: String? = nil) throws {
         let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard ProviderTransport.validKey(key) else { throw FormaError.credentialMissing }
-        try keyStore.save(key, for: provider)
+        let endpoint = try EgressEndpoint.target(provider: provider, customBaseURL: customBaseURL).get()
+        try keyStore.save(key, for: provider, endpoint: endpoint)
     }
 
     /// The latest network attempt's metrics, available without reading Keychain.
@@ -98,7 +117,8 @@ public struct ProviderProbe: Sendable {
         telemetry?.lastResult(for: provider)
     }
 
-    public func run(provider: ProbeProvider, model: String, allowCloud: Bool) async -> ProviderProbeResult {
+    public func run(provider: ProbeProvider, model: String, allowCloud: Bool,
+                    customBaseURL: String? = nil) async -> ProviderProbeResult {
         let start = ContinuousClock.now
         var result = ProviderProbeResult(provider: provider)
         var startedRequest = false
@@ -107,7 +127,8 @@ public struct ProviderProbe: Sendable {
             guard allowCloud else { throw FormaError.unauthorized }
             let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
             guard ProviderTransport.validModelID(model) else { throw FormaError.incompatible }
-            guard let key = try keyStore.load(for: provider), ProviderTransport.validKey(key) else {
+            let endpoint = try EgressEndpoint.target(provider: provider, customBaseURL: customBaseURL).get()
+            guard let key = try keyStore.load(for: provider, endpoint: endpoint), ProviderTransport.validKey(key) else {
                 result.modelID = model
                 throw FormaError.credentialMissing
             }
@@ -117,15 +138,15 @@ public struct ProviderProbe: Sendable {
             let schema = try JSONSerialization.data(withJSONObject: ProviderProbeOutput.schema)
             let request = try transport.makeRequest(ProviderTransport.StructuredRequest(
                 provider: provider, model: model, name: "forma_probe", system: nil,
-                payload: Self.syntheticPrompt, schema: schema, maxOutputTokens: 256
+                payload: Self.syntheticPrompt, schema: schema, maxOutputTokens: 256,
+                endpoint: provider.requiresConfiguredEndpoint ? endpoint.canonicalURL : nil
             ), key: key)
             // A probe sends a synthetic sentence, not document data. Its grant
             // is restricted to `.syntheticProbe` and still goes through the one
             // gate: consent alone is not an authorization.
             let semanticDigest = MappingPrompt.digest(payload: Data(Self.syntheticPrompt.utf8), system: "")
-            let endpoint = EgressEndpoint.provider(provider)
             let facts = EgressRequest(
-                provider: provider, model: model, endpoint: endpoint, mode: .cloud,
+                provider: provider, model: model, endpoint: endpoint, mode: endpoint.egressMode,
                 categories: [.syntheticProbe], redactionVersion: RedactionPlan.version,
                 identitySubstitution: true, semanticDigest: semanticDigest,
                 wireDigest: EgressWireIdentity.digest(of: request), kind: .firstAsk,
@@ -133,7 +154,8 @@ public struct ProviderProbe: Sendable {
                                                             plan: .none),
                 credentialPresent: true, endpointURL: request.url ?? endpoint.canonicalURL)
             let decision = EgressGate.decide(request: facts,
-                                             authorization: .probe(provider: provider, model: model),
+                                             authorization: .probe(provider: provider, model: model,
+                                                                  endpoint: endpoint),
                                              allowCloud: allowCloud, previewDigest: semanticDigest)
             guard let ticket = decision.ticket else { throw FormaError.unauthorized }
             startedRequest = true

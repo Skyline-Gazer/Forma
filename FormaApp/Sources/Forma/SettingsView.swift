@@ -16,10 +16,15 @@ struct SettingsView: View {
     @ObservedObject var model: WorkspaceModel
     @State private var key = ""
     @State private var keySaved = false
+    @State private var keyTarget: EgressEndpoint?
 
     /// The preview pane shows this many bytes of the payload and says so; the
     /// byte count and digest always describe the whole request.
     private static let previewCharacters = 4_000
+
+    private var credentialTarget: EgressEndpoint? {
+        try? EgressEndpoint.target(provider: model.provider, customBaseURL: model.customBaseURL).get()
+    }
 
     var body: some View {
         Form {
@@ -34,6 +39,11 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: credentialTarget) { _, _ in
+            key = ""
+            keyTarget = nil
+            keySaved = false
+        }
     }
 
     // MARK: - Provider
@@ -49,17 +59,33 @@ struct SettingsView: View {
             .accessibilityIdentifier("mapping-provider")
             TextField("模型 ID", text: $model.modelID)
                 .accessibilityIdentifier("mapping-model")
+            if model.provider.requiresConfiguredEndpoint {
+                TextField("Base URL（例如 http://127.0.0.1:11434/v1）", text: $model.customBaseURL)
+                    .accessibilityIdentifier("mapping-base-url")
+                Text("发送目标始终是这个地址：Forma 只向此处填写的完整 URL 发送请求，重定向一律拒绝。https 用于公网，http 仅允许 127.x、localhost 或 [::1] 回环。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             TextField("每批请求文件数", value: $model.entryLimit, format: .number)
                 .accessibilityIdentifier("mapping-entry-limit")
-            SecureField("\(model.provider.displayName) 的 API 密钥", text: $key)
+            SecureField("\(model.provider.displayName) 的 API 密钥", text: Binding(
+                get: { keyTarget == credentialTarget ? key : "" },
+                set: { keyTarget = credentialTarget; key = $0 }
+            ))
             Button("保存 API 密钥到钥匙串") {
                 // The Keychain write left the main actor (#151 audit item 4),
                 // so the answer arrives on a later turn: the field's "saved"
                 // mark means the write returned successfully, not that the
                 // click happened.
-                Task { keySaved = await model.saveKey(key) }
+                guard let target = keyTarget, target == credentialTarget else { return }
+                let secret = key
+                key = ""
+                Task {
+                    guard target == credentialTarget else { return }
+                    let saved = await model.saveKey(secret)
+                    if target == credentialTarget { keySaved = saved }
+                }
             }
-                .disabled(key.isEmpty)
+                .disabled(key.isEmpty || keyTarget == nil || keyTarget != credentialTarget)
                 .accessibilityIdentifier("save-api-key")
             if keySaved { Text("API 密钥已保存到钥匙串。").foregroundStyle(.secondary) }
             Text("Forma 将密钥保存在 macOS 钥匙串中，仅在发送请求时读取。")
@@ -73,15 +99,26 @@ struct SettingsView: View {
     /// shell's 外发许可 control uses; no full English sentence about leaving the
     /// machine is shown anywhere in a titlebar or a form row (owner failure #7).
     private var egressSection: some View {
-        Section("云端外发") {
-            Toggle("允许一次映射请求离开本机", isOn: $model.allowCloud)
+        let local = (try? EgressEndpoint.target(provider: model.provider, customBaseURL: model.customBaseURL).get())?.egressMode == .local
+        return Section(local ? "本机服务" : "云端外发") {
+            Toggle(local ? "允许向本机服务发送一次映射请求" : "允许一次映射请求离开本机", isOn: $model.allowCloud)
                 .accessibilityIdentifier("egress-consent")
             Text("默认关闭，重启后绝不恢复。没有它，FormaCore 的客户端会拒绝任何外发请求；一次运行即消耗本许可。")
                 .font(.caption).foregroundStyle(.secondary)
-            Link("API 数据处理政策",
-                 destination: model.provider == .openAI
-                    ? URL(string: "https://platform.openai.com/docs/guides/your-data")!
-                    : URL(string: "https://privacy.anthropic.com/")!)
+            // One link per the provider actually selected. A compatible server
+            // is whoever's machine it runs on: there is no Forma-known policy
+            // page to point at, so the row states the obligation instead.
+            switch model.provider {
+            case .openAI:
+                Link("API 数据处理政策", destination: URL(string: "https://platform.openai.com/docs/guides/your-data")!)
+            case .anthropic:
+                Link("API 数据处理政策", destination: URL(string: "https://privacy.anthropic.com/")!)
+            case .openAICompatible:
+                Text("请求将发往上面填写的 Base URL。数据处理政策由该服务的运营方决定。")
+                    .font(.caption).foregroundStyle(.secondary)
+            case .offline:
+                EmptyView()
+            }
         }
     }
 
