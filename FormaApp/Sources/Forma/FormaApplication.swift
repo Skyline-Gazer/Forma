@@ -1,5 +1,7 @@
+import AppKit
 import FormaCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 @main
 struct FormaApplication: App {
@@ -10,6 +12,10 @@ struct FormaApplication: App {
             FormaRoot(state: delegate.state)
         }
         .defaultSize(width: 1180, height: 700)
+        // No `windowResizability`, no fixed sizes: the window stays genuinely
+        // user-resizable (owner failure #1/#2 were nested split views forcing
+        // frame growth, not a missing constraint). One shell owns the columns;
+        // every pane inside is flexible with declared bounds.
 
         Settings {
             ProbesView()
@@ -176,46 +182,143 @@ private struct FormaRoot: View {
     }
 }
 
-/// The four workspace areas, all driven by one orchestration model so a scan, a
-/// context revision, a manifest and an export bundle stay the same objects in
-/// every tab instead of being recomputed per view.
+/// Column widths for the whole app. Every split in the window is bounded here,
+/// once, so no area can drag the frame wider than its own geometry (owner
+/// failure #2: three per-tab split views each insisted on their own minimums).
+struct AreaWidth {
+    let min: CGFloat
+    let ideal: CGFloat
+    let max: CGFloat
+
+    init(min: CGFloat, ideal: CGFloat, max: CGFloat) {
+        self.min = min
+        self.ideal = ideal
+        self.max = max
+    }
+
+    /// The shell's own budget, read from FormaCore.
+    ///
+    /// The numbers used to live here, where no test could see them. They live
+    /// in FormaCore now, because the window's minimum width is the sum of
+    /// these minimums and a budget nobody can assert is a budget nobody holds.
+    init(_ column: ShellColumnWidth) {
+        self.init(min: CGFloat(column.min), ideal: CGFloat(column.ideal), max: CGFloat(column.max))
+    }
+}
+
+extension TableColumnContent {
+    /// Applies the shell's declared width budget to one table column.
+    ///
+    /// Every column needs all three bounds. A column without a maximum
+    /// measures its content, and a long path then becomes a demand on the
+    /// window: the field measured a 1845-1941pt minimum window on a 1512pt
+    /// screen. The index is the column's position in the view, and the budget
+    /// is the one FormaCore declares for that table.
+    func shellWidth(_ table: ShellTable, _ index: Int) -> some TableColumnContent {
+        let columns = ShellLayout.columns(for: table)
+        guard index < columns.count else { return self }
+        let column = columns[index]
+        return width(min: CGFloat(column.min), ideal: CGFloat(column.ideal), max: CGFloat(column.max))
+    }
+}
+
+enum ShellGeometry {
+    static let sidebar = AreaWidth(ShellLayout.sidebar)
+    static let inspector = AreaWidth(ShellLayout.inspector)
+    static let workspaceLeading = AreaWidth(ShellLayout.leading(for: .workspace))
+    static let mappingLeading = AreaWidth(ShellLayout.leading(for: .mapping))
+    static let exceptionsLeading = AreaWidth(ShellLayout.leading(for: .exceptions))
+}
+
+extension View {
+    /// Applies one shell-declared width bound to a pane.
+    func areaWidth(_ width: AreaWidth) -> some View {
+        frame(minWidth: width.min, idealWidth: width.ideal, maxWidth: width.max)
+    }
+}
+
+extension WorkspaceModel.PlannerMode {
+    /// The persisted app mode as the command grammar's vocabulary.
+    var grammar: PlannerMode { PlannerMode(rawValue: rawValue) ?? .offline }
+}
+
+/// The one scene-owned shell: area navigation, the shared status surface, the
+/// per-area toolbar grammar, the contextual inspector, and the panels those
+/// commands open. All five areas are driven by one orchestration model so a
+/// scan, a context revision, a manifest and an export bundle stay the same
+/// objects in every area instead of being recomputed per view; nothing here
+/// computes a value FormaCore owns.
 @MainActor
 private struct WorkspaceAreas: View {
     @StateObject private var model: WorkspaceModel
     @ObservedObject var state: FormaApplicationState
+
+    @AppStorage("shell.selectedArea") private var storedArea: String = AppArea.workspace.rawValue
+    @AppStorage("shell.inspectorVisible") private var inspectorVisible = true
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var bundleImporting = false
+    @State private var egressConfirmation = false
 
     init(workspace: SourceWorkspace, state: FormaApplicationState) {
         _model = StateObject(wrappedValue: WorkspaceModel(workspace: workspace))
         self.state = state
     }
 
+    private var selection: AppArea { AppArea.restored(from: storedArea) }
+
+    /// The sidebar's selection binding: reads normalize a stale stored value to
+    /// a real area, writes persist the raw value.
+    private var selectionBinding: Binding<AppArea> {
+        Binding(
+            get: { AppArea.restored(from: storedArea) },
+            set: { storedArea = $0.rawValue }
+        )
+    }
+
+    private var commands: [ToolbarCommand] {
+        ShellCommands.commands(for: selection,
+                               phase: BusyState(isBusy: model.phase.isBusy),
+                               planner: model.plannerMode.grammar)
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            if state.recovery.requiresReview || state.recoveryFailure != nil {
-                ImportRecoveryBanner(state: state)
-                Divider()
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            List(selection: selectionBinding) {
+                ForEach(AppArea.allCases) { area in
+                    Label(area.title, systemImage: area.systemImage)
+                        .tag(area)
+                        .accessibilityIdentifier("area-\(area.rawValue)")
+                }
             }
-            TabView {
-                WorkspaceView(model: model)
-                    .tabItem { Label("Workspace", systemImage: "folder") }
-                    .accessibilityIdentifier("area-workspace")
-                MappingView(model: model)
-                    .tabItem { Label("Mapping", systemImage: "tablecells") }
-                    .accessibilityIdentifier("area-mapping")
-                ImportView(model: model)
-                    .tabItem { Label("Import", systemImage: "tray.and.arrow.down") }
-                    .accessibilityIdentifier("area-import")
-                ExceptionsView(model: model)
-                    .tabItem { Label("Exceptions", systemImage: "exclamationmark.triangle") }
-                    .accessibilityIdentifier("area-exceptions")
-                SettingsView(model: model)
-                    .tabItem { Label("Settings", systemImage: "slider.horizontal.3") }
-                    .accessibilityIdentifier("area-settings")
+            .navigationSplitViewColumnWidth(min: ShellGeometry.sidebar.min,
+                                            ideal: ShellGeometry.sidebar.ideal,
+                                            max: ShellGeometry.sidebar.max)
+            .accessibilityIdentifier("area-navigation")
+        } detail: {
+            VStack(spacing: 0) {
+                if state.recovery.requiresReview || state.recoveryFailure != nil {
+                    ImportRecoveryBanner(state: state)
+                    Divider()
+                }
+                statusStrip
+                areaContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityIdentifier("area-\(selection.rawValue)-content")
+            }
+            .navigationTitle(selection.title)
+            .inspector(isPresented: $inspectorVisible) {
+                inspectorContent
+                    .inspectorColumnWidth(min: ShellGeometry.inspector.min,
+                                          ideal: ShellGeometry.inspector.ideal,
+                                          max: ShellGeometry.inspector.max)
+                    .accessibilityIdentifier("shell-inspector")
             }
         }
-        // A tab unmount is a cancellation, not a completion: the scan row keeps
-        // `scanning` and the next launch reports it as interrupted. Quitting goes
-        // through the application delegate, which runs the registered shutdown.
+        .toolbar { toolbarContent }
+        // The shell is scene-owned, so this unmount means the window closed -
+        // unlike the old per-tab placement, it no longer cancels work on every
+        // switch between areas. Quitting still goes through the delegate, which
+        // runs the same registered cancellation.
         .onDisappear { model.cancelAll() }
         .task {
             state.registerShutdown { model.cancelAll() }
@@ -225,6 +328,299 @@ private struct WorkspaceAreas: View {
             Button("OK") { model.error = nil }
         } message: {
             Text(model.error?.localizedDescription ?? "")
+        }
+        .fileImporter(isPresented: $bundleImporting, allowedContentTypes: [.folder, .json]) { result in
+            switch result {
+            case .success(let url): model.loadBundle(from: url)
+            case .failure(let error): model.importRejected(error)
+            }
+        }
+        .sheet(item: $model.draft) { draft in
+            CorrectionSheet(model: model, draft: draft)
+        }
+        .confirmationDialog(EgressConsent.confirmationHeading,
+                            isPresented: $egressConfirmation, titleVisibility: .visible) {
+            Button(EgressConsent.confirmAction) { model.reprocessEgress = true }
+            Button(EgressConsent.cancelAction, role: .cancel) {}
+        } message: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("本次运行将发送：").font(.caption.weight(.medium))
+                ForEach(Array(EgressConsent.whatLeavesLines.enumerated()), id: \.offset) { _, line in
+                    Text("· \(line)").font(.caption)
+                }
+                Text(EgressConsent.whatStaysLine).font(.caption).foregroundStyle(.secondary)
+                Text(EgressConsent.defaultOffNote).font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .onChange(of: model.selectedScopeID) { _, _ in model.resetAreaSelections() }
+        .onChange(of: model.workspaceFileSelection) { _, _ in model.clearFileEvidence() }
+        .task(id: model.mappingFileSelection) {
+            model.mappingEvidenceSelection = nil
+            if let mappingFileSelection = model.mappingFileSelection {
+                await model.loadEvidence(for: mappingFileSelection)
+            }
+        }
+    }
+
+    // MARK: - Status surface
+
+    /// The one place busy state and the model's own notice are shown. Inline
+    /// hints that explain an empty pane stay with the pane; these two describe
+    /// the whole window and must not be duplicated per area.
+    @ViewBuilder private var statusStrip: some View {
+        if model.phase.isBusy || model.notice != nil {
+            HStack(spacing: 8) {
+                if model.phase.isBusy {
+                    ProgressView().controlSize(.small)
+                    Text(model.phase.label)
+                        .font(.callout)
+                }
+                if let notice = model.notice {
+                    Text(notice)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .lineLimit(2)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(.quaternary.opacity(0.4))
+            .accessibilityIdentifier("shell-status")
+            Divider()
+        }
+    }
+
+    // MARK: - Area and inspector content
+
+    @ViewBuilder private var areaContent: some View {
+        switch selection {
+        case .workspace:
+            WorkspaceView(model: model, leading: ShellGeometry.workspaceLeading)
+        case .mapping:
+            MappingView(model: model, leading: ShellGeometry.mappingLeading)
+        case .importArchive:
+            ImportView(model: model)
+        case .exceptions:
+            ExceptionsView(model: model, leading: ShellGeometry.exceptionsLeading)
+        case .settings:
+            SettingsView(model: model)
+        }
+    }
+
+    @ViewBuilder private var inspectorContent: some View {
+        switch selection {
+        case .workspace:
+            WorkspaceInspector(model: model)
+        case .mapping:
+            MappingInspector(model: model)
+        case .exceptions:
+            ExceptionsInspector(model: model)
+        case .importArchive, .settings:
+            ContentUnavailableView("此区域没有可检视的选中项", systemImage: "sidebar.right",
+                                   description: Text("在「工作区」「映射」或「诊断」中选择一条记录，详情会显示在这里。"))
+        }
+    }
+
+    // MARK: - Toolbar grammar
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            ForEach(commands) { command in
+                // A contextual fix belongs to the selection that needs it; every
+                // other command is always visible and only disabled.
+                if command.id != "reauthorize-source" || needsReauthorization {
+                    commandButton(command)
+                }
+            }
+            if selection == .workspace {
+                profilePicker
+            }
+            if selection == .exceptions {
+                egressControl
+            }
+            Button { inspectorVisible.toggle() } label: {
+                Label("详情", systemImage: "sidebar.right")
+            }
+            .help("显示或隐藏上下文详情")
+            .accessibilityIdentifier("toggle-inspector")
+        }
+    }
+
+    private func commandButton(_ command: ToolbarCommand) -> some View {
+        Group {
+            if let systemImage = command.systemImage {
+                Button(command.title, systemImage: systemImage) { perform(command) }
+            } else {
+                Button(command.title) { perform(command) }
+            }
+        }
+        .help(command.help)
+        .disabled(!command.isEnabled || contextualDisabled(command.id))
+        .accessibilityIdentifier(command.id)
+    }
+
+    // MARK: - Commands
+
+    private func perform(_ command: ToolbarCommand) {
+        switch command.id {
+        case "add-source": chooseSource()
+        case "reauthorize-source":
+            if let scope = model.selectedScope { chooseReauthorization(for: scope) }
+        case "scan-source": model.scan()
+        case "build-context": model.buildContext()
+        case "reconcile-manifest": model.reconcile()
+        case "cancel-work", "cancel-mapping", "cancel-reprocess": model.cancelWork()
+        case "run-mapping":
+            // Offline mode never sends anything, so the egress switch is
+            // irrelevant to it; AI mode still needs consent.
+            model.runMapping(egress: model.plannerMode == .ai && model.allowCloud)
+        case "assess-local": model.runMapping(egress: false)
+        case "export-manifest": chooseExportDirectory()
+        case "open-bundle": bundleImporting = true
+        case "revalidate-bundle": model.revalidate()
+        case "build-plan": model.buildImportPlan()
+        case "export-plan": choosePlanExportFolder()
+        case "reprocess-selected":
+            // The run says whether anything left the guard list. Clearing
+            // consent after a refusal - no context, no case pack, an engine
+            // that failed to build - would make the reviewer re-authorise
+            // bytes that were never touched.
+            if model.runMapping(sourceIDs: model.exceptionSelection, egress: model.reprocessEgress) {
+                model.reprocessEgress = false
+            }
+        case "clear-selection": model.exceptionSelection.removeAll()
+        default: break
+        }
+    }
+
+    /// The enablement facts the command grammar cannot know because they are
+    /// selection state, not phase: core's `isEnabled` is always honoured too,
+    /// so a command is enabled only when neither side objects.
+    private func contextualDisabled(_ id: String) -> Bool {
+        switch id {
+        case "scan-source": model.selectedScopeID == nil
+        case "build-context": model.selectedScopeID == nil || model.selectedProfile == nil
+        case "reconcile-manifest", "export-manifest", "build-plan": model.manifest == nil
+        case "run-mapping": !model.canMap || (model.plannerMode == .ai && !model.allowCloud)
+        case "assess-local": !model.canMap
+        case "revalidate-bundle": model.bundleURL == nil
+        case "export-plan": model.importPlan == nil
+        case "reprocess-selected": model.exceptionSelection.isEmpty || !model.canMap
+        case "clear-selection": model.exceptionSelection.isEmpty
+        default: false
+        }
+    }
+
+    // MARK: - Profile picker
+
+    /// A picker is never blank: an empty list or a stale restored selection
+    /// shows the placeholder as its own resolvable row, and the control says
+    /// so by being disabled (owner failure #5).
+    private var profilePickerSelection: Binding<String?> {
+        Binding(
+            get: {
+                guard model.profiles.contains(where: { $0.profileID == model.selectedProfileID }) else { return nil }
+                return model.selectedProfileID
+            },
+            set: { model.selectedProfileID = $0 }
+        )
+    }
+
+    private var profilePicker: some View {
+        let resolved = profilePickerSelection.wrappedValue
+        return Picker("资料库类型", selection: profilePickerSelection) {
+            if resolved == nil {
+                Text(ShellProfilePicker.placeholder).tag(String?.none)
+            }
+            ForEach(model.profiles, id: \.profileID) { profile in
+                Text(profile.displayName).tag(Optional(profile.profileID))
+            }
+        }
+        .frame(maxWidth: 240)
+        .disabled(!ShellProfilePicker.isEnabled(optionCount: model.profiles.count) || model.phase.isBusy)
+        .help(ShellProfilePicker.label(selected: resolved,
+                                       options: model.profiles.map { ($0.profileID, $0.displayName) }))
+        .accessibilityIdentifier("select-profile")
+    }
+
+    // MARK: - Egress permission (per reprocess run)
+
+    /// The old titlebar sentence becomes a short labeled control; turning it on
+    /// is a deliberate confirmation of what leaves the machine, and the flag
+    /// still lives and dies with one reprocess run.
+    private var egressControl: some View {
+        Button {
+            if model.reprocessEgress {
+                model.reprocessEgress = false
+            } else {
+                egressConfirmation = true
+            }
+        } label: {
+            Label("\(EgressConsent.shortLabel)·\(model.reprocessEgress ? "已开启" : "关闭")",
+                  systemImage: model.reprocessEgress ? "globe" : "lock.shield")
+        }
+        .help(model.reprocessEgress ? "本次重新处理已允许外发；点击立即关闭" : EgressConsent.defaultOffNote)
+        .disabled(model.phase.isBusy)
+        .accessibilityIdentifier("reprocess-egress")
+    }
+
+    // MARK: - Panels
+
+    private var needsReauthorization: Bool {
+        guard let scope = model.selectedScope else { return false }
+        return model.sourceStatus(for: scope.id)?.needsReauthorization == true
+    }
+
+    private func chooseSource() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose a source folder"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in await model.register(url) }
+        }
+    }
+
+    private func chooseReauthorization(for scope: SourceScope) {
+        let panel = NSOpenPanel()
+        panel.title = "Choose the folder for \(scope.displayName) again"
+        panel.message = "Forma renews access only when the folder is the same one."
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in await model.reauthorize(scope, url: url) }
+        }
+    }
+
+    private func chooseExportDirectory() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose a folder for the export bundle"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.prompt = "Export Here"
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in model.export(to: url) }
+        }
+    }
+
+    private func choosePlanExportFolder() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose a folder for the import plan"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.prompt = "Write Plan Here"
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            model.writeImportPlan(to: url)
         }
     }
 }
