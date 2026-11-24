@@ -822,7 +822,7 @@ final class WorkspaceModel: ObservableObject {
                     self.draft?.citations = draft.citations.filter { current.contains($0) }
                 }
                 notice = fileMovedSinceManifest(for: sourceID)
-                    ? "证据已按当前版本重新读取（\(records.count.formatted()) 行）；这份文件的内容已变化，需要重新识别后才能修订。"
+                    ? "证据已重新读取（\(records.count.formatted()) 行）。清单已更新到新的快照，这份文件需要重新识别后才能修订。"
                     : "已重新读取证据（\(records.count.formatted()) 行）。请重新选择要引用的证据。"
             } catch {
                 if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .unavailable) }
