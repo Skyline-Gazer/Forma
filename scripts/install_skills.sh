@@ -35,7 +35,9 @@ cleanup() {
         rm -rf -- "$WORK"
     fi
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 die() {
     echo "SKILL_INSTALL_FAIL: $*" >&2
@@ -78,6 +80,8 @@ lock, mode = json.load(open(sys.argv[1], encoding="utf-8")), sys.argv[2]
 if lock.get("schema") != 1 or not lock.get("skills"):
     sys.exit("skills.lock.json: unexpected schema or empty skills list")
 if mode == "install_dir":
+    if lock.get("install_dir") != ".agents/skills":
+        sys.exit("skills.lock.json: install_dir must be .agents/skills")
     print(lock["install_dir"])
     sys.exit(0)
 if mode != "records":
@@ -107,10 +111,8 @@ PY
 INSTALL_DIR=$(lock_query install_dir) || die "cannot read skills.lock.json"
 BASE=$(dirname "$ROOT/$INSTALL_DIR")
 
-MANIFEST=$(mktemp)
-trap 'rm -f "$MANIFEST"; cleanup' EXIT INT TERM
-lock_query records > "$MANIFEST" || die "cannot read skills.lock.json"
-[ -s "$MANIFEST" ] || die "skills.lock.json lists no skills"
+RECORDS=$(lock_query records) || die "cannot read skills.lock.json"
+[ -n "$RECORDS" ] || die "skills.lock.json lists no skills"
 
 verify_source() {
     src=$1 name=$2 upstream=$3 commit=$4 license_file=$5 license_header=$6 skill_path=$7
@@ -125,7 +127,7 @@ verify_source() {
     grep -q "Permission is hereby granted, free of charge" "$src/$license_file" || die "$name: $license_file lost the licence grant sentence"
     [ -f "$src/$skill_path/SKILL.md" ] || die "$name: SKILL.md not found at $skill_path — upstream layout changed"
     [ ! -L "$src/$skill_path/SKILL.md" ] || die "$name: SKILL.md at $skill_path is a symlink; the host needs a regular file"
-    dirty=$(git -C "$src" status --porcelain)
+    dirty=$(git -C "$src" status --porcelain --untracked-files=all --ignored) || die "$name: cannot verify local changes in $src"
     [ -z "$dirty" ] || die "$name: the source checkout was modified locally; restore or re-clone it"
 }
 
@@ -158,8 +160,11 @@ import hashlib, os, stat, sys
 root = os.path.abspath(sys.argv[1])
 digest = hashlib.sha256()
 for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-    dirnames[:] = sorted(name for name in dirnames if name != ".git")
-    for name in sorted(filenames):
+    links = [name for name in dirnames if os.path.islink(os.path.join(dirpath, name))]
+    dirnames[:] = sorted(set(dirnames) - set(links))
+    if ".git" in dirnames:
+        sys.exit("unexpected .git directory in skill tree")
+    for name in sorted(filenames + links):
         path = os.path.join(dirpath, name)
         rel = os.path.relpath(path, root).replace(os.sep, "/")
         if rel == ".forma-skill.json":
@@ -211,9 +216,9 @@ verify_install() {
 
     [ -d "$root" ] || { echo "SKILL_NOT_INSTALLED: $name (expected at $root)" >&2; return 1; }
     [ ! -d "$root/.git" ] || { echo "$name: $root is an upstream git checkout, not a host-visible install" >&2; return 1; }
-    [ -f "$root/SKILL.md" ] || { echo "$name: root SKILL.md missing; host discovery layout is invalid" >&2; return 1; }
+    [ ! -L "$root" ] && [ -f "$root/SKILL.md" ] || { echo "$name: root SKILL.md missing or install root is a symlink; host discovery layout is invalid" >&2; return 1; }
     [ ! -L "$root/SKILL.md" ] || { echo "$name: root SKILL.md is a symlink; use a regular file" >&2; return 1; }
-    [ -f "$root/LICENSE" ] || { echo "$name: root LICENSE missing" >&2; return 1; }
+    [ -f "$root/LICENSE" ] && [ ! -L "$root/LICENSE" ] || { echo "$name: root LICENSE is not a regular file" >&2; return 1; }
 
     python3 - "$root" "$name" "$upstream" "$commit" "$skill_path" "$license_file" "$license_header" <<'PY'
 import hashlib, json, os, re, stat, sys
@@ -256,8 +261,11 @@ if hashlib.sha256(license_bytes).hexdigest() != record.get("license_sha256"):
 
 digest = hashlib.sha256()
 for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-    dirnames[:] = sorted(d for d in dirnames if d != ".git")
-    for entry in sorted(filenames):
+    links = [entry for entry in dirnames if os.path.islink(os.path.join(dirpath, entry))]
+    dirnames[:] = sorted(set(dirnames) - set(links))
+    if ".git" in dirnames:
+        sys.exit("unexpected .git directory in installed skill")
+    for entry in sorted(filenames + links):
         path = os.path.join(dirpath, entry)
         rel = os.path.relpath(path, root).replace(os.sep, "/")
         if rel == ".forma-skill.json":
@@ -287,12 +295,67 @@ stage_skill() {
     mkdir -p "$stage" || die "$name: cannot create staging directory"
     cp -Rp "$src/$skill_path/." "$stage/" || die "$name: cannot copy skill subtree"
     [ -f "$stage/SKILL.md" ] || die "$name: copied skill has no root SKILL.md"
+    [ ! -L "$stage/LICENSE" ] && { [ ! -e "$stage/LICENSE" ] || [ -f "$stage/LICENSE" ]; } \
+        || die "$name: staged LICENSE is not a regular file"
     cp -p "$src/$license_file" "$stage/LICENSE" || die "$name: cannot copy license"
+}
+
+publish_skill() {
+    # A fixed transaction directory serializes publication for this skill and
+    # leaves an inspectable recovery path after interruption. rename() never
+    # nests a directory into an unexpected destination the way mv can.
+    python3 - "$@" <<'PY'
+import os, shutil, sys
+
+stage, dest, backup, legacy = sys.argv[1:5]
+previous = os.path.join(backup, "previous")
+
+def move_to_absent(source, target):
+    if os.path.lexists(target):
+        raise FileExistsError(f"destination already exists: {target}")
+    os.rename(source, target)
+
+try:
+    os.mkdir(backup, mode=0o700)
+except OSError as error:
+    sys.exit(f"cannot start install transaction at {backup}: {error}")
+
+try:
+    if legacy == "1":
+        if os.path.islink(dest) or not os.path.isdir(os.path.join(dest, ".git")):
+            raise OSError(f"legacy installation changed before replacement: {dest}")
+        move_to_absent(dest, previous)
+    move_to_absent(stage, dest)
+except OSError as error:
+    try:
+        if os.path.lexists(previous):
+            move_to_absent(previous, dest)
+        os.rmdir(backup)
+    except OSError as recovery_error:
+        sys.exit(f"replacement failed: {error}; recovery failed: {recovery_error}; inspect {backup}")
+    sys.exit(f"replacement failed: {error}")
+
+try:
+    if legacy == "1":
+        shutil.rmtree(previous)
+    os.rmdir(backup)
+except OSError as error:
+    sys.exit(f"verified install published; cannot finish backup cleanup at {backup}: {error}")
+PY
 }
 
 install_skill() {
     name=$1 upstream=$2 commit=$3 license_file=$4 license_header=$5 skill_path=$6
     dest=$ROOT/$INSTALL_DIR/$name
+    backup=$BASE/.backup-$name
+    for recovery in "$backup" "$backup".[0-9]*; do
+        if [ -e "$recovery" ] || [ -L "$recovery" ]; then
+            die "$name: outstanding install transaction at $recovery; inspect it before retrying"
+        fi
+    done
+    [ ! -L "$BASE" ] && [ ! -L "$ROOT/$INSTALL_DIR" ] && [ ! -L "$dest" ] \
+        || die "$name: refusing a symlink in the install path"
+    legacy=0
 
     if [ "$CHECK_ONLY" = 1 ]; then
         if [ ! -e "$dest" ]; then
@@ -315,6 +378,7 @@ install_skill() {
             # clean checkout of the pinned commit. Unknown or modified
             # directories are never deleted automatically.
             verify_source "$dest" "$name" "$upstream" "$commit" "$license_file" "$license_header" "$skill_path"
+            legacy=1
         else
             die "$name: $dest exists but is not a host-visible install; review it, then remove it and re-run"
         fi
@@ -335,25 +399,12 @@ install_skill() {
         || die "$name: cannot write provenance"
     verify_install "$stage" "$name" "$upstream" "$commit" "$skill_path" "$license_file" "$license_header" \
         || die "$name: staged install failed verification"
+    if [ "$legacy" = 1 ]; then
+        # Fetching and staging can take time. Refuse edits made in that window.
+        verify_source "$dest" "$name" "$upstream" "$commit" "$license_file" "$license_header" "$skill_path"
+    fi
 
-    # Keep the old install outside the temporary work tree: if a replacement
-    # move fails, the cleanup trap must never delete the only recoverable copy.
-    backup=$BASE/.backup-$name.$$
-    if [ -e "$backup" ]; then
-        die "$name: stale backup $backup exists; inspect and remove it before retrying"
-    fi
-    if [ -e "$dest" ]; then
-        mv "$dest" "$backup" || die "$name: cannot move the old install aside"
-    fi
-    if ! mv "$stage" "$dest"; then
-        if [ -e "$backup" ]; then
-            if ! mv "$backup" "$dest"; then
-                die "$name: old install preserved at $backup; restore it manually"
-            fi
-        fi
-        die "$name: cannot move the verified install into place"
-    fi
-    rm -rf -- "$backup"
+    publish_skill "$stage" "$dest" "$backup" "$legacy" || die "$name: cannot publish verified install"
     echo "SKILL_OK: $name @ $commit (licence ${license_header}) -> ${dest#"$ROOT"/}, entry ${dest#"$ROOT"/}/SKILL.md"
 }
 
@@ -365,6 +416,8 @@ while IFS="$TAB" read -r name upstream commit license_file license_header skill_
         continue
     fi
     install_skill "$name" "$upstream" "$commit" "$license_file" "$license_header" "$skill_path" || rc=1
-done < "$MANIFEST"
+done <<EOF
+$RECORDS
+EOF
 
 exit "$rc"
