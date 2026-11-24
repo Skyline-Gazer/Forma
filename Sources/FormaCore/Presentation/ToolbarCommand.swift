@@ -167,7 +167,12 @@ public enum ShellCommands {
 /// selected profile's name, or this placeholder when nothing resolvable is
 /// selected (no profiles, or a stale selection restored from defaults).
 public enum ShellProfilePicker {
-    public static let placeholder = "未选择 Profile"
+    /// The picker's own name for "nothing is selected".
+    ///
+    /// It names the same thing the label does. A picker labelled "Profile"
+    /// that reads "未选择 Profile" while the rest of the app calls the same
+    /// choice 资料库类型 asks the reader to know two words for one thing.
+    public static let placeholder = "未选择资料库类型"
 
     /// The label a picker must render for `selected` among `options`.
     /// Always non-empty; stale or nil selections resolve to the placeholder so

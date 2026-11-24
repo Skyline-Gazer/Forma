@@ -29,68 +29,68 @@ struct ProbesView: View {
         Form {
             Section("DEVONthink MCP") {
                 if let capabilities {
-                    LabeledContent("Server", value: "\(capabilities.serverName) \(capabilities.serverVersion)")
-                    LabeledContent("Protocol", value: capabilities.protocolVersion)
-                    LabeledContent("Tool descriptors", value: capabilities.tools.count.formatted())
-                    LabeledContent("get_record_parents", value: capabilities.hasRecordParents ? "Advertised" : "Unavailable")
+                    LabeledContent("服务器", value: "\(capabilities.serverName) \(capabilities.serverVersion)")
+                    LabeledContent("协议版本", value: capabilities.protocolVersion)
+                    LabeledContent("工具描述数量", value: capabilities.tools.count.formatted())
+                    LabeledContent("get_record_parents", value: capabilities.hasRecordParents ? "已发布" : "不可用")
                 }
                 if let mcpError { Text(mcpError.localizedDescription).foregroundStyle(.secondary) }
-                Button("Discover Official MCP", action: discover)
+                Button("发现官方 MCP", action: discover)
                     .disabled(mcpTask != nil)
-                Text("Discovery sends initialize and tools/list to the installed DEVONthink MCP server.")
+                Text("发现操作会向已安装的 DEVONthink MCP 服务器发送 initialize 和 tools/list。")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Isolated DEVONthink Test") {
-                TextField("Isolated database UUID", text: $isolatedDatabase)
-                TextField("Test record UUID", text: $isolatedRecord)
-                Toggle("These IDs belong to an authorized test database", isOn: $isolatedConsent)
-                Toggle("This DEVONthink session contains only test databases", isOn: $fieldsConsent)
-                Text("Field definitions apply to the entire DEVONthink session.")
+            Section("隔离的 DEVONthink 测试") {
+                TextField("隔离数据库 UUID", text: $isolatedDatabase)
+                TextField("测试记录 UUID", text: $isolatedRecord)
+                Toggle("这些 ID 属于已授权的测试数据库", isOn: $isolatedConsent)
+                Toggle("此 DEVONthink 会话仅包含测试数据库", isOn: $fieldsConsent)
+                Text("字段定义适用于整个 DEVONthink 会话。")
                     .font(.caption).foregroundStyle(.secondary)
-                Button("Run Isolated Read Check", action: runIsolatedCheck)
+                Button("运行隔离读取检查", action: runIsolatedCheck)
                     .disabled(!isolatedConsent || mcpTask != nil || UUID(uuidString: isolatedDatabase) == nil
                               || UUID(uuidString: isolatedRecord) == nil)
-                if let isolatedResult { LabeledContent("Database and record", value: isolatedResult) }
-                if let parentResult { LabeledContent("Parent groups", value: parentResult) }
+                if let isolatedResult { LabeledContent("数据库与记录", value: isolatedResult) }
+                if let parentResult { LabeledContent("父分组", value: parentResult) }
                 if let definitions {
-                    LabeledContent("Metadata definitions", value: "\(definitions.count) of \(DEVONthinkMetadataField.allCases.count)")
+                    LabeledContent("元数据定义", value: "\(definitions.count) / \(DEVONthinkMetadataField.allCases.count)")
                     ForEach(DEVONthinkMetadataField.allCases, id: \.self) { field in
                         let definition = definitions.first { $0.field == field }
                         LabeledContent(field.rawValue, value: definition.map {
-                            "\($0.title ?? "No label") · \($0.nativeType)\($0.isDisabled ? " · disabled" : "")"
-                        } ?? "Missing")
+                            "\($0.title ?? "无标签") · \($0.nativeType)\($0.isDisabled ? " · 已禁用" : "")"
+                        } ?? "缺失")
                     }
                 }
             }
-            Section("AI Provider Probe") {
-                Picker("Provider", selection: $provider) {
+            Section("AI 服务商探测") {
+                Picker("服务商", selection: $provider) {
                     ForEach(ProbeProvider.networkCases, id: \.self) { provider in Text(provider.displayName).tag(provider) }
                 }
                 .disabled(providerTask != nil)
-                TextField("Model ID", text: model)
+                TextField("模型 ID", text: model)
                     .disabled(providerTask != nil)
-                SecureField("API key", text: $key)
-                Button("Save API Key to Keychain", action: saveKey).disabled(key.isEmpty)
-                if keySaved { Text("API key saved in Keychain.").foregroundStyle(.secondary) }
+                SecureField("API 密钥", text: $key)
+                Button("将 API 密钥保存到钥匙串", action: saveKey).disabled(key.isEmpty)
+                if keySaved { Text("API 密钥已保存到钥匙串。").foregroundStyle(.secondary) }
                 Text(ProviderProbe.syntheticPrompt)
                     .font(.caption).textSelection(.enabled)
-                Toggle("Send the synthetic probe to \(provider.displayName)", isOn: $consent)
-                Text("The selected provider receives the displayed synthetic text and a JSON schema. See its API data-handling policy before enabling.")
+                Toggle("向 \(provider.displayName) 发送合成探测请求", isOn: $consent)
+                Text("所选服务商将收到上面显示的合成文本和一份 JSON schema。启用前请先查看其 API 数据处理政策。")
                     .font(.caption).foregroundStyle(.secondary)
-                Link("API data policy", destination: provider == .openAI
+                Link("API 数据政策", destination: provider == .openAI
                      ? URL(string: "https://platform.openai.com/docs/guides/your-data")!
                      : URL(string: "https://privacy.anthropic.com/")!)
-                Button("Run Provider Probe", action: runProvider)
+                Button("运行服务商探测", action: runProvider)
                     .disabled(!consent || providerTask != nil)
                 if let providerError { Text(providerError.localizedDescription).foregroundStyle(.secondary) }
                 if let providerResult {
-                    LabeledContent("Result", value: providerResult.error?.localizedDescription ?? "Schema validated")
-                    if let id = providerResult.modelID { LabeledContent("Returned model", value: id) }
-                    if let count = providerResult.inputTokens { LabeledContent("Input tokens", value: count.formatted()) }
-                    if let count = providerResult.outputTokens { LabeledContent("Output tokens", value: count.formatted()) }
-                    if let count = providerResult.cacheReadInputTokens { LabeledContent("Cache read tokens", value: count.formatted()) }
-                    if let count = providerResult.cacheCreationInputTokens { LabeledContent("Cache creation tokens", value: count.formatted()) }
-                    LabeledContent("Latency", value: "\(providerResult.latencyMilliseconds) ms")
+                    LabeledContent("结果", value: providerResult.error?.localizedDescription ?? "结构校验通过")
+                    if let id = providerResult.modelID { LabeledContent("返回的模型", value: id) }
+                    if let count = providerResult.inputTokens { LabeledContent("输入 token 数", value: count.formatted()) }
+                    if let count = providerResult.outputTokens { LabeledContent("输出 token 数", value: count.formatted()) }
+                    if let count = providerResult.cacheReadInputTokens { LabeledContent("缓存读取 token 数", value: count.formatted()) }
+                    if let count = providerResult.cacheCreationInputTokens { LabeledContent("缓存写入 token 数", value: count.formatted()) }
+                    LabeledContent("延迟", value: "\(providerResult.latencyMilliseconds) ms")
                 }
             }
         }
@@ -146,10 +146,10 @@ struct ProbesView: View {
                 let metadata = try await client.metadata(of: recordID, in: scope)
                 let missing = metadata.values.filter { $0 == .missing }.count
                 let null = metadata.values.filter { $0 == .null }.count
-                isolatedResult = "Scope verified · \(missing) missing · \(null) null"
+                isolatedResult = "范围已验证 · \(missing) 缺失 · \(null) 空值"
                 do {
                     let parents = try await client.parents(of: recordID, in: scope)
-                    parentResult = "\(parents.parents.count) verified"
+                    parentResult = "\(parents.parents.count) 已验证"
                 } catch {
                     parentResult = (error as? FormaError ?? .unavailable).localizedDescription
                 }

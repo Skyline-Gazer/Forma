@@ -81,14 +81,15 @@ struct WorkspaceView: View {
             TableColumn("Relative path") { file in
                 Text(file.relativePath).lineLimit(1).help(file.relativePath)
             }
+            .shellWidth(.workspaceFiles, 0)
             TableColumn("Project") { file in
                 Text(model.clusterLabel(for: file.id)).lineLimit(1).help(model.clusterLabel(for: file.id))
             }
-            .width(min: 130, ideal: 190)
+            .shellWidth(.workspaceFiles, 1)
             TableColumn("Size") { file in Text(size(file.sizeBytes)).monospacedDigit() }
-                .width(min: 72, ideal: 90)
+                .shellWidth(.workspaceFiles, 2)
             TableColumn("Status") { file in Text(status(file)) }
-                .width(min: 90, ideal: 115)
+                .shellWidth(.workspaceFiles, 3)
         }
     }
 
@@ -113,12 +114,13 @@ struct WorkspaceView: View {
                     TableColumn("Candidate") { row in
                         Text(row.title).lineLimit(1).help(row.title)
                     }
+                    .shellWidth(.workspaceCandidates, 0)
                     TableColumn("Files") { row in Text(row.fileCount.formatted()).monospacedDigit() }
-                        .width(min: 60, ideal: 70)
+                        .shellWidth(.workspaceCandidates, 1)
                     TableColumn("Basis") { row in Text(row.basis).lineLimit(1).help(row.basis) }
-                        .width(min: 140, ideal: 220)
+                        .shellWidth(.workspaceCandidates, 2)
                     TableColumn("Confidence") { row in Text(row.confidence) }
-                        .width(min: 80, ideal: 95)
+                        .shellWidth(.workspaceCandidates, 3)
                 }
             }
         } else {
