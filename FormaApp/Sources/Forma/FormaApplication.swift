@@ -284,6 +284,7 @@ private struct WorkspaceAreas: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var bundleImporting = false
     @State private var egressConfirmation = false
+    @State private var egressConfiguration: [String] = []
 
     init(workspace: SourceWorkspace, state: FormaApplicationState) {
         // The state owns the one model - `start()` installs it before the
@@ -398,13 +399,16 @@ private struct WorkspaceAreas: View {
         .sheet(item: $model.draft) { draft in
             CorrectionSheet(model: model, draft: draft)
         }
-        .confirmationDialog(EgressConsent.confirmationHeading,
+        .confirmationDialog("确认发送重新处理请求",
                             isPresented: $egressConfirmation, titleVisibility: .visible) {
-            Button(EgressConsent.confirmAction) { model.reprocessEgress = true }
+            Button(EgressConsent.confirmAction) {
+                if egressConfiguration == model.providerConsentConfiguration { model.reprocessEgress = true }
+            }
             Button(EgressConsent.cancelAction, role: .cancel) {}
         } message: {
             VStack(alignment: .leading, spacing: 4) {
                 Text("本次运行将发送：").font(.caption.weight(.medium))
+                Text(model.providerConsentDestination).font(.caption)
                 ForEach(Array(EgressConsent.whatLeavesLines.enumerated()), id: \.offset) { _, line in
                     Text("· \(line)").font(.caption)
                 }
@@ -626,6 +630,7 @@ private struct WorkspaceAreas: View {
             if model.reprocessEgress {
                 model.reprocessEgress = false
             } else {
+                egressConfiguration = model.providerConsentConfiguration
                 egressConfirmation = true
             }
         } label: {

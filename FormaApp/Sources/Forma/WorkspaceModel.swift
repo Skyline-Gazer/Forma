@@ -1259,8 +1259,11 @@ final class WorkspaceModel: ObservableObject {
             case .success(let built): grant = built
             case .failure(let failure):
                 error = failure
-                if provider.requiresConfiguredEndpoint {
+                if provider.requiresConfiguredEndpoint,
+                   case .failure = EgressEndpoint.target(provider: provider, customBaseURL: customBaseURL) {
                     notice = "请先填写有效的 OpenAI-compatible Base URL（例如 http://127.0.0.1:11434/v1 或 https://host.example/v1）。"
+                } else {
+                    notice = "请检查模型 ID。模型 ID 不能为空，且须使用服务商支持的格式。"
                 }
                 return false
             }
@@ -1895,6 +1898,16 @@ final class WorkspaceModel: ObservableObject {
     }
 
     // MARK: - Settings actions
+    var providerConsentConfiguration: [String] { [provider.rawValue, modelID, customBaseURL] }
+
+    var providerConsentDestination: String {
+        guard let endpoint = try? EgressEndpoint.target(provider: provider, customBaseURL: customBaseURL).get() else {
+            return "发送目标尚未配置。"
+        }
+        let location = endpoint.egressMode == .local ? "本机服务" : "远程服务"
+        return "\(location) · \(endpoint.identity)"
+    }
+
 
     func selectProvider(_ provider: ProbeProvider) {
         guard provider != self.provider else { return }

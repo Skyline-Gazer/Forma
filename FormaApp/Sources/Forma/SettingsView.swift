@@ -21,6 +21,10 @@ struct SettingsView: View {
     /// byte count and digest always describe the whole request.
     private static let previewCharacters = 4_000
 
+    private var credentialTarget: EgressEndpoint? {
+        try? EgressEndpoint.target(provider: model.provider, customBaseURL: model.customBaseURL).get()
+    }
+
     var body: some View {
         Form {
             providerSection
@@ -34,6 +38,10 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: credentialTarget) { _, _ in
+            key = ""
+            keySaved = false
+        }
     }
 
     // MARK: - Provider
@@ -63,9 +71,16 @@ struct SettingsView: View {
                 // so the answer arrives on a later turn: the field's "saved"
                 // mark means the write returned successfully, not that the
                 // click happened.
-                Task { keySaved = await model.saveKey(key) }
+                let target = credentialTarget
+                let secret = key
+                key = ""
+                Task {
+                    guard target == credentialTarget else { return }
+                    let saved = await model.saveKey(secret)
+                    if target == credentialTarget { keySaved = saved }
+                }
             }
-                .disabled(key.isEmpty)
+                .disabled(key.isEmpty || credentialTarget == nil)
                 .accessibilityIdentifier("save-api-key")
             if keySaved { Text("API 密钥已保存到钥匙串。").foregroundStyle(.secondary) }
             Text("Forma 将密钥保存在 macOS 钥匙串中，仅在发送请求时读取。")
