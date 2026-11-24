@@ -1095,7 +1095,7 @@ final class WorkspaceModel: ObservableObject {
                 guard !Task.isCancelled else { return }
                 merge(records)
                 invalidateEvidenceCache(for: [sourceID])
-                if let scope = selectedScope, let refreshed = try? workspace.listing(scope) {
+                if let scope = selectedScope, let refreshed = try? await workspace.listing(scope) {
                     listing = refreshed
                 }
                 if let draft, draft.sourceID == sourceID {
