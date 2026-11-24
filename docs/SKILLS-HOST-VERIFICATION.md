@@ -1,9 +1,9 @@
 # Skills Host Verification — Forma project-scoped SwiftUI skills
 
 Status: **verification record only; no skill or product code is added by this PR.**
-Date: 2026-11-24. Host: `omp/19.1.1` on Linux DevBox. Candidate under test: PR #155
-(`feat/d0-skills-ads-pin`), which is also contained in frozen integration candidate
-PR #161. This branch is cut from `dev` and does not modify #161.
+Date: 2026-11-24. Host: `omp/19.1.1` on Linux DevBox. #161 has been merged into
+`dev`; the installer layout fix is proposed separately in PR #164. This document
+does not modify #161, #164 or any product code.
 
 ## 1. Scope
 
@@ -58,37 +58,41 @@ fc62139e262bd364cbbcab9b9f97557cd3fd6d2d4f73c4fab039d562fc324643
 
 Both `LICENSE` files contain the MIT grant.
 
-### 3.2 Host discovery — as installed: FAIL (layout mismatch)
+### 3.2 Pre-fix host discovery: FAIL (layout mismatch)
 
-`omp read skill://swiftui-expert-skill` and `omp read skill://swiftui-pro` both
-returned `Unknown skill` from `wt/d0`, even though `--check-only` passed. The
-installer preserves the upstream repository tree, so the entry file is at:
+Before the installer fix, `omp read skill://swiftui-expert-skill` and
+`omp read skill://swiftui-pro` both returned `Unknown skill`, even though
+`--check-only` passed. The installer preserved the upstream repository tree:
 
 ```text
 .agents/skills/swiftui-expert-skill/skills/swiftui-expert-skill/SKILL.md
 .agents/skills/swiftui-pro/swiftui-pro/SKILL.md
 ```
 
-The host requires `<skill-name>/SKILL.md` directly. This is an install-layout
-adaptation gap, not a provenance failure.
+The host requires `<skill-name>/SKILL.md` directly. This was an install-layout
+defect, not a provenance failure.
 
-### 3.3 Minimal host-compatible layout: PASS
+### 3.3 Installer fix: PASS
 
-Temporary symlinks were added only inside the git-ignored `.agents` tree of
-`wt/d0`:
+The installer fix is proposed in PR #164 (`fix/skills-host-layout`). It copies
+only the locked `skill_path` subtree to the install root, copies the root MIT
+license, and writes deterministic `.forma-skill.json` provenance plus a content
+hash. It stages the result outside the host-visible directory and moves it into
+place only after verification. No symlink workaround is used.
 
-```sh
-cd .agents/skills/swiftui-expert-skill
-ln -s skills/swiftui-expert-skill/SKILL.md SKILL.md
-ln -s skills/swiftui-expert-skill/references references
-ln -s skills/swiftui-expert-skill/scripts scripts
+Verified on the fix branch:
 
-cd ../swiftui-pro
-ln -s swiftui-pro/SKILL.md SKILL.md
-ln -s swiftui-pro/references references
+```text
+SKILL_OK: swiftui-expert-skill @ 62bd760... (licence MIT License)
+  -> .agents/skills/swiftui-expert-skill, entry .agents/skills/swiftui-expert-skill/SKILL.md
+SKILL_OK: swiftui-pro @ f2920b639... (licence MIT License)
+  -> .agents/skills/swiftui-pro, entry .agents/skills/swiftui-pro/SKILL.md
 ```
 
-Results from `wt/d0`:
+Fresh install, legacy nested-install migration, idempotent reinstall, invalid
+layout rejection, and preservation of a dirty old install were exercised.
+
+Results after the fix:
 
 ```text
 omp read skill://swiftui-expert-skill
@@ -104,38 +108,38 @@ omp read skill://swiftui-pro/references/design.md
   -> # Design
 ```
 
-The symlinks were removed after the test. No host-global configuration was
-modified. No model generation was used; `omp read skill://...` is the host's own
-skill resolution path.
+No global host configuration was modified. No model generation was used;
+`omp read skill://...` is the host's own resolution path. Earlier temporary
+root-level symlinks were diagnostic only and have been removed; they are not
+part of the fix.
 
 ## 4. Interpretation
 
 | Claim | Status | Evidence |
 | --- | --- | --- |
 | Exact pins, licences, provenance | PASS | `--check-only`, upstream latest, MIT files |
-| Skill files installed in a project worktree | PASS (`wt/d0`) | installed trees + hashes |
-| Host discovers project skills **as installed** | FAIL | `Unknown skill` for both |
-| Host discovers project skills with minimal layout adaptation | PASS | `omp read` for both skills and references |
-| Host discovers skills in a worktree without `.agents` | NOT_APPLICABLE / expected absent | integration worktree has no `.agents` |
+| Skill files installed in a project worktree | PASS | root layout + provenance |
+| Host discovery as installed **before** fix | FAIL | `Unknown skill` for both |
+| Host discovery after installer fix | PASS | `omp read` for both |
+| Skill content read after fix | PASS | `SKILL.md` and reference files |
+| Host discovers skills in a worktree without `.agents` | NOT_APPLICABLE / expected absent | install per worktree |
 | Model actually used the skill in a task | NOT_VERIFIED | no task execution claimed |
 | Forma runtime/build dependency | NOT_PRESENT | advisory files only; not in Package.swift/app |
 
-## 5. Minimal adaptation plan (not implemented by this PR)
+## 5. Rollout plan
 
-1. Install per active worktree; `.agents/` is git-ignored and not shared.
-2. After installation, expose the entry layout the host expects:
-   - `<name>/SKILL.md` at the skill root;
-   - `references/`, `scripts/`, `assets/`, `agents/` accessible from that root.
-   Either flatten the installed skill directory or add relative symlinks as in
-   §3.3. Do not copy the pin into product code.
-3. Re-run `install_skills.sh --check-only` and `omp read skill://<name>` in the
-   worktree. Only a successful `omp read` plus a task-level use may be called
-   adopted. Installation alone is not adoption.
-4. If a future host does not support project-level discovery, record
+1. Review and merge the installer Bugfix PR #164 under normal CI/review; it is
+   separate from #161 and does not change the ADS pin or product code.
+2. In each active worktree, run `sh scripts/install_skills.sh` and
+   `sh scripts/install_skills.sh --check-only`.
+3. Verify `omp read skill://<name>` and one reference path in that worktree.
+4. Only a successful installation, host discovery and content read may be
+   called adopted. Behavioral adoption needs a real model task and remains
+   NOT_VERIFIED.
+5. If a future host does not support project-level discovery, record
    `SKILLS_HOST_VERIFICATION = BLOCKED` and do not modify global host settings
    without Owner authorization.
-5. Implement the installer layout change in a separate reviewed PR after Owner
-   approval. This PR only records the evidence.
+6. This PR remains documentation only; it is not merged or closed by #164.
 
 ## 6. Boundaries
 
