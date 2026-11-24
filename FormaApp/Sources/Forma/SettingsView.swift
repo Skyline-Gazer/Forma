@@ -79,8 +79,9 @@ struct SettingsView: View {
     /// shell's 外发许可 control uses; no full English sentence about leaving the
     /// machine is shown anywhere in a titlebar or a form row (owner failure #7).
     private var egressSection: some View {
-        Section("云端外发") {
-            Toggle("允许一次映射请求离开本机", isOn: $model.allowCloud)
+        let local = (try? EgressEndpoint.target(provider: model.provider, customBaseURL: model.customBaseURL).get())?.egressMode == .local
+        return Section(local ? "本机服务" : "云端外发") {
+            Toggle(local ? "允许向本机服务发送一次映射请求" : "允许一次映射请求离开本机", isOn: $model.allowCloud)
                 .accessibilityIdentifier("egress-consent")
             Text("默认关闭，重启后绝不恢复。没有它，FormaCore 的客户端会拒绝任何外发请求；一次运行即消耗本许可。")
                 .font(.caption).foregroundStyle(.secondary)
@@ -93,7 +94,7 @@ struct SettingsView: View {
             case .anthropic:
                 Link("API 数据处理政策", destination: URL(string: "https://privacy.anthropic.com/")!)
             case .openAICompatible:
-                Text("数据将离开本机前往上面填写的 Base URL。该服务器的数据处理政策由其运营方决定，发送前先向运营方确认。")
+                Text("请求将发往上面填写的 Base URL。数据处理政策由该服务的运营方决定。")
                     .font(.caption).foregroundStyle(.secondary)
             case .offline:
                 EmptyView()

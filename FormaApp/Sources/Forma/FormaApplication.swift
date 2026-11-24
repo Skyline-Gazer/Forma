@@ -18,11 +18,21 @@ struct FormaApplication: App {
         // every pane inside is flexible with declared bounds.
 
         Settings {
-            if let model = delegate.state.model {
-                ProbesView(workspaceModel: model)
-            } else {
-                Text("正在打开工作区。")
-            }
+            ProviderSettingsRoot(state: delegate.state)
+        }
+    }
+}
+
+private struct ProviderSettingsRoot: View {
+    @ObservedObject var state: FormaApplicationState
+
+    var body: some View {
+        if let model = state.model {
+            ProbesView(workspaceModel: model)
+        } else if case .degraded(let error) = state.launch {
+            Text(error.localizedDescription)
+        } else {
+            Text("正在打开工作区。")
         }
     }
 }
