@@ -39,26 +39,65 @@ public enum EgressMode: String, Codable, Sendable, Equatable {
     case local
 }
 
-/// The only endpoints a send may target. `ProviderTransport` hard-codes the two
-/// cloud hosts; recording them here makes an endpoint change a *scope mismatch*
-/// rather than an unnoticed edit in a URL literal.
+/// The only endpoints a send may target. The two built-in cloud hosts are
+/// hard-coded here; an OpenAI-compatible install records the *exact* resolved
+/// Chat Completions URL as `.custom`, so changing the server of an authorized
+/// workspace stays a *scope mismatch* rather than an unnoticed edit in a URL
+/// literal - the same property the built-ins were created to provide.
 public enum EgressEndpoint: Codable, Sendable, Equatable {
     case provider(ProbeProvider)
     case local(URL)
+    /// A fully resolved OpenAI-compatible Chat Completions URL, produced only
+    /// by `EgressEndpoint.target`. It never carries userinfo, query or
+    /// fragment, because `CustomProviderEndpoint` refuses those.
+    case custom(URL)
 
     public var canonicalURL: URL {
         switch self {
         case .provider(.openAI): return URL(string: "https://api.openai.com/v1/responses")!
-        case .provider(.anthropic): return URL(string: "https://api.anthropic.com/v1/messages")!
+        case .provider(.anthropic): return URL(string: "https://api.openai.com/v1/messages")!
+        // A stable, non-routable identity for a provider that must resolve a
+        // configured target first. It never reaches the wire: the transport
+        // refuses to build a request without the override, and a grant is only
+        // ever created for `.custom`, so this value can never match a scope.
+        case .provider(.openAICompatible): return URL(string: "forma://endpoint-unconfigured.invalid")!
         // A stable, non-routable identity for the offline planner: it never
         // appears in a request, and `ProviderTransport` refuses to build one.
         case .provider(.offline): return URL(string: "forma://offline-planner")!
-        case .local(let url): return url
+        case .local(let url), .custom(let url): return url
         }
     }
 
     /// A stable identity for the endpoint, used in digests and tickets.
     public var identity: String { canonicalURL.absoluteString }
+
+    /// The authority dimension a grant separates on. Loopback is not exempt
+    /// from authorization - it is a different, exact-target grant that does
+    /// not consume the cloud decision. A configured endpoint says how far the
+    /// data goes from its host literal, never from a DNS answer.
+    public var egressMode: EgressMode {
+        switch self {
+        case .local: return .local
+        case .custom(let url):
+            guard let host = url.host else { return .cloud }
+            return CustomProviderEndpoint.isLoopback(host: host) ? .local : .cloud
+        case .provider: return .cloud
+        }
+    }
+
+    /// Resolves the one send target of a provider from the stored base URL.
+    /// A missing or malformed custom endpoint fails here - before any grant,
+    /// request or network object exists - because "not configured" is far more
+    /// actionable than a later `endpoint_mismatch` denial nobody can explain.
+    public static func target(provider: ProbeProvider,
+                              customBaseURL: String?) -> Result<EgressEndpoint, FormaError> {
+        guard provider.requiresConfiguredEndpoint else { return .success(.provider(provider)) }
+        let trimmed = (customBaseURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = CustomProviderEndpoint.chatCompletionsURL(from: trimmed) else {
+            return .failure(.incompatible)
+        }
+        return .success(.custom(url))
+    }
 }
 
 /// What a payload is made of. A scope authorizes *categories*, not a UI toggle:
@@ -194,13 +233,39 @@ public struct EgressAuthorization: Codable, Sendable, Equatable {
 
     /// The restricted grant a connectivity probe uses. It carries no document
     /// categories at all: a probe can never authorize a mapping request.
-    public static func probe(provider: ProbeProvider, model: String) -> EgressAuthorization {
+    public static func probe(provider: ProbeProvider, model: String,
+                             endpoint: EgressEndpoint = .provider(provider)) -> EgressAuthorization {
         EgressAuthorization(
-            scope: EgressScope(provider: provider, model: model, endpoint: .provider(provider),
-                               mode: .cloud, categories: [.syntheticProbe],
+            scope: EgressScope(provider: provider, model: model, endpoint: endpoint,
+                               mode: endpoint.egressMode, categories: [.syntheticProbe],
                                redactionVersion: RedactionPlan.version,
                                identitySubstitution: true),
             binding: .exactPayload, allowsReviewRequiredContent: false)
+    }
+
+    /// The mapping grant Forma's consent UI builds, in one place so a probe
+    /// and a mapping run cannot drift into different notions of what was
+    /// approved. The endpoint comes from the *configured target*, not from a
+    /// provider constant: for a compatible server the exact URL is part of
+    /// what the person agreed to. Misconfiguration fails here, before any
+    /// request exists, with the error the UI is required to explain.
+    public static func mapping(provider: ProbeProvider, model: String, customBaseURL: String?,
+                               previewDigest: String?, redactionVersion: String,
+                               identitySubstitution: Bool) -> Result<EgressAuthorization, FormaError> {
+        let endpoint: EgressEndpoint
+        switch EgressEndpoint.target(provider: provider, customBaseURL: customBaseURL) {
+        case .failure(let error): return .failure(error)
+        case .success(let resolved): endpoint = resolved
+        }
+        return .success(EgressAuthorization(
+            scope: EgressScope(provider: provider, model: model, endpoint: endpoint,
+                               mode: endpoint.egressMode,
+                               categories: [.filePaths, .evidenceExcerpts, .projectContext,
+                                            .casePackExamples, .profileRules, .systemPrompt,
+                                            .repairInstructions],
+                               redactionVersion: redactionVersion,
+                               identitySubstitution: identitySubstitution),
+            previewDigest: previewDigest, binding: .dataRange))
     }
 }
 

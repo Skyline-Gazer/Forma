@@ -292,7 +292,19 @@ public struct ProviderMappingClient: Sendable {
         var identities: [EgressTicket] = []
         var denial: EgressDenial?
         var rateLimitAttempt = 0
-        let endpoint = EgressEndpoint.provider(provider)
+        // The grant - not a recomputed constant - names the send target. A
+        // custom OpenAI-compatible endpoint must reach the wire exactly as
+        // authorized, and native providers keep the built-in host identity
+        // because their scopes carry `.provider`. A compatible client without
+        // a grant gets no override, and the transport refuses to build a
+        // request from the unconfigured sentinel.
+        let endpoint = authorization?.scope.endpoint ?? EgressEndpoint.provider(provider)
+        let mode = authorization?.scope.mode ?? endpoint.egressMode
+        let endpointOverride: URL?
+        switch endpoint {
+        case .custom(let url): endpointOverride = url
+        default: endpointOverride = nil
+        }
         while true {
             // Cancellation or a revoked grant must never produce a补发 after a
             // rate limit: re-check before every wire request, not only at entry.
@@ -307,7 +319,7 @@ public struct ProviderMappingClient: Sendable {
                 request = try transport.makeRequest(ProviderTransport.StructuredRequest(
                     provider: provider, model: model, name: "forma_mapping", system: system,
                     payload: String(decoding: payload, as: UTF8.self), schema: schema,
-                    maxOutputTokens: Self.maximumOutputTokens
+                    maxOutputTokens: Self.maximumOutputTokens, endpoint: endpointOverride
                 ), key: key)
             } catch let error as FormaError {
                 return Sent(text: nil, usage: usage, requests: requests, rateLimitRetries: rateLimitRetries,
@@ -323,7 +335,7 @@ public struct ProviderMappingClient: Sendable {
             // is a digest of the provider body and wire metadata with credentials
             // reduced to "present". They are never the same value.
             let facts = EgressRequest(
-                provider: provider, model: model, endpoint: endpoint, mode: .cloud,
+                provider: provider, model: model, endpoint: endpoint, mode: mode,
                 categories: categories, redactionVersion: MappingPrompt.redactionVersion(for: redaction),
                 identitySubstitution: redaction.isIdentity, semanticDigest: semanticDigest,
                 wireDigest: EgressWireIdentity.digest(of: request), kind: wireKind,

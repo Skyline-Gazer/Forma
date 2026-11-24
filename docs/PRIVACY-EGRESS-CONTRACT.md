@@ -49,7 +49,7 @@ flowchart LR
 
 ## 3. Egress Scope
 
-`EgressContract.version = "egress.v1"`、`scopeVersion = "scope.v1"`。`EgressScope` 记录：provider、model、endpoint（`.provider` 或显式 `.local(URL)`）、mode（`.cloud`/`.local`）、允许的数据类别集合、redaction policy version、`identitySubstitution`、跨作用域占位符关联策略（`workspace-only`）、scope digest。
+`EgressContract.version = "egress.v1"`、`scopeVersion = "scope.v1"`。`EgressScope` 记录：provider、model、endpoint（`.provider`、显式 `.local(URL)`，或 OpenAI-compatible 的规范化 `.custom(URL)`）、mode（`.cloud`/`.local`）、允许的数据类别集合、redaction policy version、`identitySubstitution`、跨作用域占位符关联策略（`workspace-only`）、scope digest。
 
 `EgressAuthorization` 是**值**：在同意时由 preview 与设置快照构造一次，记录 `grantedAt`、`expiresAt`、`previewDigest`、`binding`、`allowsReviewRequiredContent`、`revoked`。它不是 UI 绑定；`revoking()` 返回撤销副本。
 
@@ -145,7 +145,7 @@ flowchart LR
 - 未做 TLS pinning，仅依赖系统信任链；未做文件扩展名/大小的发送前白名单。
 - Anthropic 请求体没有与 OpenAI `store:false` 等价的保留控制（既有差异，本轮未改变产品语义）。
 - 主导出 bundle（`manifest.json`、`validation-report.json`、`exceptions.json`）是本地工作记录，**不是**可分享副本；只有显式 `redaction:` 生成的 `redacted/manifest.json` 可分享。
-- 本地模式目前只有契约与测试；`ProviderTransport.makeRequest` 仍硬编码两个 cloud host，没有端到端 local server 接线。
+- 本地/配置端点接线已随 Provider P0 落地：`ProbeProvider.openAICompatible` 的发送目标由 `EgressEndpoint.target` 从用户 Base URL 单点解析（回环 http 允许，其余必须 https），见 `docs/ADR-PROVIDER-P0.md`。其余 provider 仍使用 `EgressEndpoint.canonicalURL` 的硬编码 cloud host；改 host 会变成 `.endpointMismatch`。对真实 compatible 服务器的端到端验证仍需显式出网授权，属 Mac 侧验收范围。
 - `ProviderProbe` 使用内置的 `.syntheticProbe` 受限 grant（无文档类别），不是用户预览授权；它仍走同一个 gate。
 
 ## 12. Deferred macOS Checks

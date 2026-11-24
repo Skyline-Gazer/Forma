@@ -49,6 +49,12 @@ struct SettingsView: View {
             .accessibilityIdentifier("mapping-provider")
             TextField("模型 ID", text: $model.modelID)
                 .accessibilityIdentifier("mapping-model")
+            if model.provider.requiresConfiguredEndpoint {
+                TextField("Base URL（例如 http://127.0.0.1:11434/v1）", text: $model.customBaseURL)
+                    .accessibilityIdentifier("mapping-base-url")
+                Text("发送目标始终是这个地址：Forma 只向此处填写的完整 URL 发送请求，重定向一律拒绝。https 用于公网，http 仅允许 127.x、localhost 或 [::1] 回环。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             TextField("每批请求文件数", value: $model.entryLimit, format: .number)
                 .accessibilityIdentifier("mapping-entry-limit")
             SecureField("\(model.provider.displayName) 的 API 密钥", text: $key)
@@ -78,10 +84,20 @@ struct SettingsView: View {
                 .accessibilityIdentifier("egress-consent")
             Text("默认关闭，重启后绝不恢复。没有它，FormaCore 的客户端会拒绝任何外发请求；一次运行即消耗本许可。")
                 .font(.caption).foregroundStyle(.secondary)
-            Link("API 数据处理政策",
-                 destination: model.provider == .openAI
-                    ? URL(string: "https://platform.openai.com/docs/guides/your-data")!
-                    : URL(string: "https://privacy.anthropic.com/")!)
+            // One link per the provider actually selected. A compatible server
+            // is whoever's machine it runs on: there is no Forma-known policy
+            // page to point at, so the row states the obligation instead.
+            switch model.provider {
+            case .openAI:
+                Link("API 数据处理政策", destination: URL(string: "https://platform.openai.com/docs/guides/your-data")!)
+            case .anthropic:
+                Link("API 数据处理政策", destination: URL(string: "https://privacy.anthropic.com/")!)
+            case .openAICompatible:
+                Text("数据将离开本机前往上面填写的 Base URL。该服务器的数据处理政策由其运营方决定，发送前先向运营方确认。")
+                    .font(.caption).foregroundStyle(.secondary)
+            case .offline:
+                EmptyView()
+            }
         }
     }
 

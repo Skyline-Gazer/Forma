@@ -18,7 +18,7 @@ struct FormaApplication: App {
         // every pane inside is flexible with declared bounds.
 
         Settings {
-            ProbesView()
+            ProbesView(state: delegate.state)
         }
     }
 }
@@ -64,6 +64,11 @@ final class FormaApplicationState: ObservableObject {
     }
 
     @Published private(set) var launch: Launch = .starting
+    /// The application's one settings-and-run model, installed by `start()`
+    /// before `launch` can be observed as ready. The window and the Settings
+    /// probe pane read this same object so provider, model id and Base URL
+    /// cannot describe two different configurations.
+    @Published private(set) var model: WorkspaceModel?
     @Published private(set) var recovery: ImportRecoveryOverview = .empty
     @Published private(set) var recoveryFailure: FormaError?
     /// Why the read-only recheck cannot run, in a stable code.
@@ -102,6 +107,11 @@ final class FormaApplicationState: ObservableObject {
             // then the operations stay `verify_required` and nothing retries.
             recoveryReviewReason = "no_authorized_scope"
         }
+        // The model goes in before the launch value becomes observable as
+        // ready: no view can then see `.ready` with a nil model, and the
+        // Settings probe pane reads the very object the window runs mapping
+        // from.
+        model = WorkspaceModel(workspace: workspace)
         launch = .ready(workspace)
     }
 
@@ -252,7 +262,7 @@ extension WorkspaceModel.PlannerMode {
 /// computes a value FormaCore owns.
 @MainActor
 private struct WorkspaceAreas: View {
-    @StateObject private var model: WorkspaceModel
+    @ObservedObject var model: WorkspaceModel
     @ObservedObject var state: FormaApplicationState
 
     @AppStorage("shell.selectedArea") private var storedArea: String = AppArea.defaultLanding.rawValue
@@ -262,7 +272,11 @@ private struct WorkspaceAreas: View {
     @State private var egressConfirmation = false
 
     init(workspace: SourceWorkspace, state: FormaApplicationState) {
-        _model = StateObject(wrappedValue: WorkspaceModel(workspace: workspace))
+        // The state owns the one model - `start()` installs it before the
+        // launch value can read `.ready`, so this normally finds it. The
+        // fallback covers only a view built against a workspace the state
+        // never published; it is deliberately not a second long-lived model.
+        self.model = state.model ?? WorkspaceModel(workspace: workspace)
         self.state = state
     }
 

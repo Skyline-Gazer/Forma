@@ -85,6 +85,7 @@ final class WorkspaceModel: ObservableObject {
         static let profile = "selectedMappingProfile"
         static let provider = "mappingProvider"
         static let model = "mappingModel"
+        static let customBaseURL = "mappingCustomBaseURL"
         static let plannerMode = "mappingPlannerMode"
         static let entryLimit = "mappingEntryLimit"
         static let salt = "mappingRedactionSalt"
@@ -295,6 +296,21 @@ final class WorkspaceModel: ObservableObject {
 
     @Published var modelID: String {
         didSet { defaults.set(modelID, forKey: Keys.model) }
+    }
+
+    /// The OpenAI-compatible server's base URL. Persisted like the model id:
+    /// it is configuration, not consent. Every run derives its send target
+    /// from this exact string through `EgressEndpoint.target`, so the wire URL
+    /// can never be a host other than the one recorded in the grant, and the
+    /// grant can never name a host the user did not save.
+    @Published var customBaseURL: String {
+        didSet {
+            guard oldValue != customBaseURL else { return }
+            defaults.set(customBaseURL, forKey: Keys.customBaseURL)
+            // A stale preview was consented against the old target; the
+            // identity the person approved changed with the URL.
+            preview = nil
+        }
     }
 
     @Published var entryLimit: Int {
@@ -512,6 +528,7 @@ final class WorkspaceModel: ObservableObject {
             ?? .openAI
         provider = storedProvider
         modelID = Self.store.string(forKey: Keys.model) ?? storedProvider.defaultModel
+        customBaseURL = Self.store.string(forKey: Keys.customBaseURL) ?? ""
         // `didSet` does not run for this assignment, so the floor is applied
         // here as well: a zero stored by an older build must not survive launch.
         entryLimit = max(1, (Self.store.object(forKey: Keys.entryLimit) as? Int)
@@ -1220,15 +1237,27 @@ final class WorkspaceModel: ObservableObject {
         // gate re-checks it against every wire request. The preview digest is
         // recorded for auditing, but the binding is `.dataRange`: a run re-reads
         // file bodies, so the preview is explicitly not a byte-level receipt.
-        let grant: EgressAuthorization? = consent ? EgressAuthorization(
-            scope: EgressScope(provider: provider, model: model, endpoint: .provider(provider),
-                               mode: .cloud,
-                               categories: [.filePaths, .evidenceExcerpts, .projectContext,
-                                            .casePackExamples, .profileRules, .systemPrompt,
-                                            .repairInstructions],
-                               redactionVersion: MappingPrompt.redactionVersion(for: plan),
-                               identitySubstitution: plan.isIdentity),
-            previewDigest: preview?.value.digest, binding: .dataRange) : nil
+        // The factory resolves the send target too: for a configured endpoint
+        // the grant names the exact URL, and a missing or malformed Base URL
+        // fails here - before an engine exists - with the text that explains it.
+        let grant: EgressAuthorization?
+        if consent {
+            switch EgressAuthorization.mapping(
+                provider: provider, model: model, customBaseURL: customBaseURL,
+                previewDigest: preview?.value.digest,
+                redactionVersion: MappingPrompt.redactionVersion(for: plan),
+                identitySubstitution: plan.isIdentity) {
+            case .success(let built): grant = built
+            case .failure(let failure):
+                error = failure
+                if provider.requiresConfiguredEndpoint {
+                    notice = "请先填写有效的 OpenAI-compatible Base URL（例如 http://127.0.0.1:11434/v1 或 https://host.example/v1）。"
+                }
+                return false
+            }
+        } else {
+            grant = nil
+        }
         guard let engine = engine(for: profile, authorization: grant) else { return false }
         allowCloud = false
         notice = nil

@@ -43,6 +43,7 @@ struct ProviderTests {
             #expect(body["max_output_tokens"] as? Int == 256)
             #expect(body["store"] as? Bool == false)
             format = try #require((body["text"] as? [String: Any])?["format"] as? [String: Any])
+            #expect(format["type"] as? String == "json_schema")
             #expect(format["name"] as? String == "forma_probe")
             #expect(format["strict"] as? Bool == true)
         case .anthropic:
@@ -52,8 +53,26 @@ struct ProviderTests {
             #expect(body["messages"] as? [[String: String]] == [["role": "user", "content": ProviderProbe.syntheticPrompt]])
             #expect(body["max_tokens"] as? Int == 256)
             format = try #require((body["output_config"] as? [String: Any])?["format"] as? [String: Any])
+            #expect(format["type"] as? String == "json_schema")
+        case .openAICompatible:
+            // The request goes to the fixture's loopback base, completed to
+            // the operation path - and to nothing else. Bearer auth, no
+            // anthropic version header, no Responses fields: each wrong
+            // spelling here is a different wire protocol.
+            #expect(observed.request.url?.absoluteString == "http://127.0.0.1:8080/v1/chat/completions")
+            #expect(observed.request.value(forHTTPHeaderField: "Authorization") == "Bearer \(fixture.key)")
+            #expect(observed.request.value(forHTTPHeaderField: "x-api-key") == nil)
+            #expect(observed.request.value(forHTTPHeaderField: "anthropic-version") == nil)
+            #expect(body["messages"] as? [[String: String]] == [["role": "user", "content": ProviderProbe.syntheticPrompt]])
+            #expect(body["max_tokens"] as? Int == 256)
+            #expect(body["store"] == nil, "the Responses API field must not ride along")
+            #expect(body["input"] == nil, "the Responses API field must not ride along")
+            let wrapper = try #require(body["response_format"] as? [String: Any])
+            #expect(wrapper["type"] as? String == "json_schema")
+            format = try #require(wrapper["json_schema"] as? [String: Any])
+            #expect(format["name"] as? String == "forma_probe")
+            #expect(format["strict"] as? Bool == true)
         }
-        #expect(format["type"] as? String == "json_schema")
         let schema = try #require(format["schema"] as? [String: Any])
         #expect(schema["type"] as? String == "object")
         #expect(schema["additionalProperties"] as? Bool == false)
@@ -108,6 +127,9 @@ struct ProviderTests {
             case .anthropic:
                 response["stop_reason"] = "refusal"
                 response["content"] = [["type": "text", "text": key]]
+            case .openAICompatible:
+                response["choices"] = [["finish_reason": "stop",
+                                        "message": ["role": "assistant", "content": NSNull(), "refusal": key]]]
             }
             return .response(body: json(response))
         }
@@ -127,6 +149,9 @@ struct ProviderTests {
                 response["incomplete_details"] = ["reason": "max_output_tokens"]
             case .anthropic:
                 response["stop_reason"] = "max_tokens"
+            case .openAICompatible:
+                response["choices"] = [["finish_reason": "length",
+                                        "message": ["role": "assistant", "content": "{}"]]]
             }
             return .response(body: json(response))
         }

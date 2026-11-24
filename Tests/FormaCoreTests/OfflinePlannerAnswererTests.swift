@@ -115,7 +115,7 @@ struct OfflinePlannerAnswererTests {
     func offlineEndpointIsNotRoutable() {
         let url = EgressEndpoint.provider(.offline).canonicalURL
         #expect(url.scheme == "forma")
-        #expect(ProbeProvider.networkCases == [.openAI, .anthropic])
+        #expect(ProbeProvider.networkCases == [.openAI, .anthropic, .openAICompatible])
         #expect(!ProbeProvider.networkCases.contains(.offline))
         #expect(ProbeProvider.offline.isNetworkProvider == false)
     }

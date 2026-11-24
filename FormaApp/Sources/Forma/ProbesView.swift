@@ -2,9 +2,13 @@ import FormaCore
 import SwiftUI
 
 struct ProbesView: View {
-    @AppStorage("openAIProbeModel") private var openAIModel = ProbeProvider.openAI.defaultModel
-    @AppStorage("anthropicProbeModel") private var anthropicModel = ProbeProvider.anthropic.defaultModel
-    @State private var provider: ProbeProvider = .openAI
+    /// The settings scene reads the application's one settings-and-run model,
+    /// so provider, model id and Base URL here are the exact values a mapping
+    /// run will use. The pre-P0 pane kept its own `@AppStorage` probe model
+    /// ids - a second spelling of "the model" that could and did drift from
+    /// what Settings showed. With no workspace open there is no configuration
+    /// to probe, and the pane says so instead of inventing one.
+    @ObservedObject var state: FormaApplicationState
     @State private var key = ""
     @State private var consent = false
     @State private var providerResult: ProviderProbeResult?
@@ -23,7 +27,24 @@ struct ProbesView: View {
     @State private var mcpTask: Task<Void, Never>?
     private let probe = ProviderProbe()
 
-    private var model: Binding<String> { provider == .openAI ? $openAIModel : $anthropicModel }
+    private var workspaceModel: WorkspaceModel? { state.model }
+
+    private var provider: ProbeProvider { workspaceModel?.provider ?? .openAI }
+
+    /// Writes go through `selectProvider`, not a raw assignment: switching
+    /// there resets consent and swaps a untouched default model id, which is
+    /// exactly the discipline a probe must inherit from Settings.
+    private var providerBinding: Binding<ProbeProvider> {
+        Binding(get: { provider }, set: { workspaceModel?.selectProvider($0) })
+    }
+
+    private var modelBinding: Binding<String> {
+        Binding(get: { workspaceModel?.modelID ?? "" }, set: { workspaceModel?.modelID = $0 })
+    }
+
+    private var customBaseURLBinding: Binding<String> {
+        Binding(get: { workspaceModel?.customBaseURL ?? "" }, set: { workspaceModel?.customBaseURL = $0 })
+    }
 
     var body: some View {
         Form {
@@ -63,23 +84,45 @@ struct ProbesView: View {
                 }
             }
             Section("AI 服务商探测") {
-                Picker("服务商", selection: $provider) {
+                if workspaceModel == nil {
+                    Text("打开项目后可探测：此处服务商、模型 ID 与 Base URL 均来自设置页的同一份配置。")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                Picker("服务商", selection: providerBinding) {
                     ForEach(ProbeProvider.networkCases, id: \.self) { provider in Text(provider.displayName).tag(provider) }
                 }
                 .disabled(providerTask != nil)
-                TextField("模型 ID", text: model)
+                TextField("模型 ID", text: modelBinding)
                     .disabled(providerTask != nil)
+                if provider == .openAICompatible {
+                    TextField("Base URL（例如 http://127.0.0.1:11434/v1）", text: customBaseURLBinding)
+                        .disabled(providerTask != nil)
+                        .accessibilityIdentifier("probe-base-url")
+                }
+                }
                 SecureField("API 密钥", text: $key)
                 Button("将 API 密钥保存到钥匙串", action: saveKey).disabled(key.isEmpty)
                 if keySaved { Text("API 密钥已保存到钥匙串。").foregroundStyle(.secondary) }
                 Text(ProviderProbe.syntheticPrompt)
                     .font(.caption).textSelection(.enabled)
                 Toggle("向 \(provider.displayName) 发送合成探测请求", isOn: $consent)
+                if provider == .openAICompatible {
+                    Text("探测目标就是设置页填写的 Base URL 解析出的完整地址；两者不一致时不会发出请求。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Text("所选服务商将收到上面显示的合成文本和一份 JSON schema。启用前请先查看其 API 数据处理政策。")
                     .font(.caption).foregroundStyle(.secondary)
-                Link("API 数据政策", destination: provider == .openAI
-                     ? URL(string: "https://platform.openai.com/docs/guides/your-data")!
-                     : URL(string: "https://privacy.anthropic.com/")!)
+                switch provider {
+                case .openAI:
+                    Link("API 数据政策", destination: URL(string: "https://platform.openai.com/docs/guides/your-data")!)
+                case .anthropic:
+                    Link("API 数据政策", destination: URL(string: "https://privacy.anthropic.com/")!)
+                case .openAICompatible:
+                    Text("兼容服务器的数据政策由其运营方决定；发送前向运营方确认。")
+                        .font(.caption).foregroundStyle(.secondary)
+                case .offline:
+                    EmptyView()
+                }
                 Button("运行服务商探测", action: runProvider)
                     .disabled(!consent || providerTask != nil)
                 if let providerError { Text(providerError.localizedDescription).foregroundStyle(.secondary) }
@@ -182,13 +225,15 @@ struct ProbesView: View {
 
     private func runProvider() {
         let provider = provider
-        let model = model.wrappedValue
+        let model = modelBinding.wrappedValue
+        let customBaseURL = workspaceModel?.customBaseURL ?? ""
         let allowed = consent
         providerResult = nil
         providerError = nil
         consent = false
         providerTask = Task {
-            let result = await probe.run(provider: provider, model: model, allowCloud: allowed)
+            let result = await probe.run(provider: provider, model: model, allowCloud: allowed,
+                                         customBaseURL: customBaseURL)
             if let error = result.error { FormaDiagnostics.failure(.providerProbe, error) }
             if !Task.isCancelled { providerResult = result }
             providerTask = nil
