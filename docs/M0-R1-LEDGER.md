@@ -89,15 +89,18 @@ initialize/tools/list、UUID、API、CasePack）保持原样。Profile 选择器
 | #157 | `feat/d1-app-shell` | 统一外壳、布局契约、文案统一 | `b24a594` | PASS | BLOCKED：复审代理额度耗尽 |
 | #159 | `feat/d2-nav-perf` | 导航性能与投影 + #157 同步 | `80f2479` | PASS | BLOCKED：本轮合并增量 |
 | #146 | `feat/ux-review-desk-v1` | 审核台 UX + 证据时效界面 | `d519332` | PASS | BLOCKED：复审代理额度耗尽 |
-| #161 | `feat/m0-r1-candidate` | M0-R1 集成候选（Draft） | `fbcb074` | PASS | BLOCKED：本轮集成增量 |
+| #161 | `feat/m0-r1-candidate` | M0-R1 集成候选（Draft） | `9b7a3f5` + #159 拓扑合并 | PASS @ `9b7a3f5`；最终 HEAD 见 PR | BLOCKED：本轮集成增量 |
 
 CI 全部在 macos-15 + Xcode 26.3 上运行并通过：`swift test`（FormaCore）、
 `swift build`（应用）、`scripts/build_app.sh`（打包）、`scripts/smoke_app.sh`
-（启动冒烟）、Benchmark smoke。候选构建的 CI run：`45319062225`；Benchmark run：
-`45319062067`。
+（启动冒烟）、Benchmark smoke。候选源码验证基线 `9b7a3f5` 的 CI run：
+`45320471982`；Benchmark run：`45320471966`；该次 FormaCore 为 **890 tests / 79
+suites**。后续仅补齐 #159 精确提交拓扑，无文件变化；最终 HEAD 的 CI 以 PR #161
+页面为准。
 
-两个独立复审代理均因模型 Token Plan 额度耗尽而未能完成本轮增量复审，状态如实记为
-BLOCKED；主 Agent 的源码走查不冒充独立复审。Owner 授权整合前应补齐独立复审。
+三个独立复审代理（证据、语义、Shell/性能/ADS）均因模型 Token Plan 额度耗尽而
+未能完成本轮增量复审，状态如实记为 BLOCKED；主 Agent 的源码走查不冒充独立复审。
+Owner 授权整合前应补齐独立复审。
 
 ## 3. 验证矩阵
 
@@ -111,7 +114,7 @@ BLOCKED；主 Agent 的源码走查不冒充独立复审。Owner 授权整合前
 | 重新读取并重新映射后一次修正成功 | PASS | `EvidenceCurrencyTests`（CI） |
 | 首次修正仍一次成功 | PASS | `FirstReadSnapshotBindingTests`（CI） |
 | macOS 构建、打包、启动冒烟 | PASS | CI（见 §2） |
-| 本轮增量独立复审 | BLOCKED | 两个复审代理均因 Token Plan 额度耗尽失败；主 Agent 走查不替代独立复审 |
+| 本轮增量独立复审 | BLOCKED | 三个复审代理均因 Token Plan 额度耗尽失败；主 Agent 走查不替代独立复审 |
 | 真实 macOS 窗口尺寸与审核台交互 | NOT_VERIFIED | 需 Mac 现场，见 #153 |
 | 真实模型调用效果 | BLOCKED | 未获外发授权与安全凭据；Mock/Fixture 结果不等于模型效果 |
 | 真实 DEVONthink 写入 | BLOCKED | 未授权；本轮无任何写入路径 |
@@ -129,6 +132,11 @@ BLOCKED；主 Agent 的源码走查不冒充独立复审。Owner 授权整合前
   同时保留 #159 的证据缓存失效。
 - CI 首次暴露的列宽辅助方法返回类型与宽度分级调用错误已按具体编译诊断修正；
   几何预算未改变。
+- 集成审计发现候选此前只包含 #159 的父提交 `3b85dac`，未包含其最终 HEAD
+  `80f2479`。有效文件差异已由候选中的 #157 改动覆盖；本次补做无文件变化的合并，
+  确保六个来源 PR 的精确 HEAD 全部是候选祖先。
+- 来源 PR 的有效 Diff 文件集合与候选一致；候选额外文件只有本台账。未发现冲突
+  标记或关键类型重复定义。ADS pin、Skill SHA/许可、表格列数与预算顺序均一致。
 
 ## 5. 未验证项与 Mac 现场入口
 
@@ -147,5 +155,5 @@ BLOCKED；主 Agent 的源码走查不冒充独立复审。Owner 授权整合前
 - #146 的强制推送一次：修正了提交信息中被写坏的一个汉字（`--force-with-lease`，
   仅重写自己刚推送的提交，未触及他人提交）。
 - 布局预算目前只约束几何；渲染表现与 Instruments 采样仍属 Mac 阶段。
-- 表中候选源码 HEAD `fbcb074` 是台账提交前已全绿的验证基线；本台账提交只改
-  文档，最终候选 HEAD 与按该 HEAD 重跑的 CI 以 PR #161 页面为准。
+- 表中候选源码 HEAD `9b7a3f5` 是补齐 #159 提交拓扑前已全绿的验证基线；本次拓扑
+  合并不改文件，最终候选 HEAD 与按该 HEAD 重跑的 CI 以 PR #161 页面为准。
