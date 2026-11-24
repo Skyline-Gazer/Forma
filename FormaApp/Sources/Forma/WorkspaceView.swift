@@ -295,7 +295,7 @@ struct WorkspaceInspector: View {
         return model.listing?.entries.first { $0.id == id }
     }
 
-    private var cluster: WorkspaceModel.ClusterRow? {
+    private var cluster: ClusterRow? {
         model.clusterRows.first { $0.id == model.workspaceClusterSelection }
     }
 
@@ -310,7 +310,7 @@ struct WorkspaceInspector: View {
         }
     }
 
-    private func clusterFiles(_ cluster: WorkspaceModel.ClusterRow) -> some View {
+    private func clusterFiles(_ cluster: ClusterRow) -> some View {
         let files = model.files(in: cluster)
         return ScrollView {
             VStack(alignment: .leading, spacing: 10) {

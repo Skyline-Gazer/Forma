@@ -53,31 +53,14 @@ final class WorkspaceModel: ObservableObject {
 
     // MARK: - Rows the areas display
 
-    struct MappingRow: Identifiable {
-        let sourceID: UUID
-        let entry: ManifestEntry
-        let source: SourceEntry?
-        let failure: FormaError?
-        let candidates: [ContextCandidate]
-        var id: UUID { sourceID }
-
-        /// FormaCore's own field value for a slot, or the honest absence.
-        func value(_ field: MetadataFieldID) -> String {
-            entry.metadata[field] ?? "No value"
-        }
-    }
-
-    struct ExceptionRow: Identifiable {
-        let sourceID: UUID
-        let relativePath: String
-        let state: DecisionState
-        let reason: String
-        let codes: [String]
-        let violations: [ValidationViolation]
-        var id: UUID { sourceID }
-
-        var codeList: String { codes.isEmpty ? "No violation code" : codes.joined(separator: " · ") }
-    }
+    // `MappingRow`, `ExceptionRow` and `ClusterRow` are FormaCore's presentation
+    // types (`Presentation/WorkspaceProjection.swift`), not nested app types.
+    // They moved because the work that builds them moved with them: the rows
+    // used to be rebuilt by `WorkspaceModel` inside a view body, which is code
+    // `swift test` cannot compile, so the guarantee #151 asks for - the indexed
+    // rebuild produces the same rows as the old per-render scan - could not be
+    // asserted anywhere. The app still owns when they are rebuilt; FormaCore
+    // owns how.
 
     struct RedactionTerm: Identifiable, Equatable {
         let id: UUID
@@ -138,13 +121,53 @@ final class WorkspaceModel: ObservableObject {
     /// Readiness of every registered root, refreshed with the listing. Advisory
     /// only: it decides what to show and which fix to offer, never what to write.
     @Published private(set) var sourceStatuses: [UUID: SourceScopeStatus] = [:]
-    @Published private(set) var listing: SourceListing?
+    /// The scanned listing. Assigning it rebuilds the identifier index, because
+    /// every row, cluster file list and selection lookup below asks this
+    /// collection a question - and doing that indexing here rather than in a
+    /// computed property is the whole of the #151 audit item "recomputed every
+    /// render".
+    @Published private(set) var listing: SourceListing? {
+        didSet {
+            // Equality, not "the scan id moved": a rescan that changed one
+            // file's snapshot keeps its scan id, its issue count and its
+            // state, and an index that trusted those would answer the changed
+            // file with the entry it replaced.
+            guard listing != oldValue else { return }
+            listingProjection = ListingProjection(entries: listing?.entries ?? [])
+        }
+    }
     @Published private(set) var profiles: [MappingProfile] = []
-    @Published private(set) var context: ProjectContext?
+    /// The stored project context. Assigning it rebuilds the candidate index
+    /// and the cluster panel's rows together, so neither is ever half-updated
+    /// relative to the other.
+    @Published private(set) var context: ProjectContext? {
+        didSet {
+            guard context?.revision != oldValue?.revision
+                    || context?.inputDigest != oldValue?.inputDigest else { return }
+            contextProjection = context.map(ContextProjection.init(context:))
+            clusterRows = contextProjection?.rows ?? []
+        }
+    }
     @Published private(set) var contextIsStale = false
+    /// The stored or produced manifest. Its derived tables are rebuilt by
+    /// `refreshRows()`, which every assignment site already calls; a `didSet`
+    /// here would compute the same rows twice per change and make the second
+    /// computation look like the one that matters.
     @Published private(set) var manifest: Manifest?
     @Published private(set) var rows: [MappingRow] = []
     @Published private(set) var exceptions: [ExceptionRow] = []
+    /// The panel's candidate table. It was a computed property that rebuilt
+    /// every row, plus the two category rows, on every body evaluation; the
+    /// Workspace table and the inspector both read it, so one render asked it
+    /// twice. It now changes only where `context` changes.
+    @Published private(set) var clusterRows: [ClusterRow] = []
+    /// Every violation code the blocked rows carry, sorted: the filter's option
+    /// list, which used to be a flatMap-set-sort inside the Exceptions body.
+    @Published private(set) var exceptionCodes: [String] = []
+    /// The blocked rows after the two filters. Stored rather than computed
+    /// because the table, the "Shown N of M" line and the reprocess scope count
+    /// all read it within one render, and each used to run the filter again.
+    @Published private(set) var visibleExceptions: [ExceptionRow] = []
     @Published private(set) var outcome: MappingRunOutcome?
     @Published private(set) var reconciliation: ManifestReconciler.Decision?
     @Published private(set) var evidenceBySource: [UUID: [EvidenceRecord]] = [:]
@@ -183,6 +206,19 @@ final class WorkspaceModel: ObservableObject {
     @Published private(set) var notice: String?
     @Published var error: FormaError?
 
+    /// The manifest the shell must not lose.
+    ///
+    /// Assigned by `reload()`, `runMapping`, `reconcile`, `loadBundle` and an
+    /// accepted correction, none of them navigation events; the mirror is kept
+    /// in step here because `refreshRows()` is the one thing every one of
+    /// those paths already calls, so a new assignment site cannot forget it.
+    /// Without it the shell's own record of "there is a manifest" would lag
+    /// the manifest, and the #151 invariant that a switch keeps it would be
+    /// asserted against a stale value.
+    private func mirrorManifestInShellState() {
+        shellState.manifestPresent = manifest != nil
+    }
+
     @Published var selectedScopeID: UUID? {
         didSet {
             guard oldValue != selectedScopeID else { return }
@@ -202,9 +238,16 @@ final class WorkspaceModel: ObservableObject {
             correctionHistory = []
             correctionHistoryState = .notRead
             draft = nil
-            clearFileEvidence()
+            invalidateEvidenceCache()
             refreshRows()
-            scheduleReload()
+            // Everything a source switch owes - the area's selections, the
+            // file detail and its read, the reload - is the effect list of one
+            // event, decided by `FormaCore`'s transition rule. It used to be a
+            // `didSet` body plus an `.onChange` in the shell doing the same
+            // reset, which is two places to keep in step and one of them a
+            // view; and it is *not* what an area switch does, which by the
+            // same rule gets nothing.
+            navigate(.scopeChanged(to: selectedScopeID))
         }
     }
 
@@ -218,7 +261,11 @@ final class WorkspaceModel: ObservableObject {
             // not another repair to perform.
             defaults.set(selectedProfileID, forKey: Keys.profile)
             engineCache = nil
-            scheduleReload()
+            // A profile change re-reads, and nothing else: the file and cluster
+            // selections still name files in the listing that has not changed,
+            // so dropping them here would be the kind of side effect #151
+            // spends its acceptance list telling navigation from work.
+            navigate(.profileChanged(to: selectedProfileID))
         }
     }
     /// Starts a reload, unless `restore()` is assembling launch state: two
@@ -266,8 +313,18 @@ final class WorkspaceModel: ObservableObject {
     @Published var workspaceClusterSelection: String?
     @Published var mappingFileSelection: UUID?
     @Published var mappingEvidenceSelection: String?
-    @Published var exceptionStateFilter: ExceptionFilterState = .all
-    @Published var exceptionCodeFilter: String?
+    @Published var exceptionStateFilter: ExceptionFilterState = .all {
+        didSet {
+            guard exceptionStateFilter != oldValue else { return }
+            refreshVisibleExceptions()
+        }
+    }
+    @Published var exceptionCodeFilter: String? {
+        didSet {
+            guard exceptionCodeFilter != oldValue else { return }
+            refreshVisibleExceptions()
+        }
+    }
     @Published var exceptionSelection: Set<UUID> = []
     /// Egress consent for the next reprocess only. It starts off, is read when
     /// the run fires and is cleared on acceptance, so no later action inherits
@@ -283,6 +340,20 @@ final class WorkspaceModel: ObservableObject {
         workspaceClusterSelection = nil
     }
 
+    /// Forgets the read cache for a listing that no longer exists.
+    ///
+    /// A scope switch already drops the listing, the context, the manifest and
+    /// the rows (and with them every answer the cache can be asked about), but
+    /// it has never dropped the evidence rows this session read - those stay
+    /// in `evidenceBySource`, and this change does not alter that. The cache
+    /// is emptied here for one reason: its keys are revisions of files in a
+    /// listing that is gone, so nothing will ever ask for them again, and a
+    /// session that visits a dozen sources would hold a dozen generations of
+    /// excerpts it cannot reach.
+    private func invalidateEvidenceCache() {
+        evidenceCache.invalidateAll()
+    }
+
     @Published var redactionSalt: String {
         didSet { defaults.set(redactionSalt, forKey: Keys.salt) }
     }
@@ -293,11 +364,115 @@ final class WorkspaceModel: ObservableObject {
 
     // MARK: - Handles
 
+    /// Runs one blocking, file-or-keychain-touching operation away from the
+    /// main actor and returns its result here.
+    ///
+    /// #151 audit item 4 was that these operations ran inside tasks that
+    /// *inherited* this model's `@MainActor` isolation: `Task { … }` written in
+    /// a main-actor class is a main-actor task, so a synchronous export or
+    /// bundle read blocked the shell while pretending to be background work.
+    /// Detaching is the smallest honest correction - the operation still
+    /// finishes before anything is published, and publishing still happens
+    /// only on this actor, so no view reads a value that is half-written.
+    private static func offMain<T: Sendable>(_ operation: @escaping @Sendable () throws -> T) async throws -> T {
+        try await Task.detached(priority: .userInitiated, operation: operation).value
+    }
+
+    // MARK: - Navigation state
+
+    /// The shell's navigation state, as `FormaCore` declares it.
+    ///
+    /// The scene keeps the *authority* for each value - `@AppStorage` for the
+    /// area, this model for the selections - and this copy is the audited
+    /// mirror: every navigation event updates it before the shell acts, so
+    /// what the tests in `ShellNavigationTests` assert about the transition
+    /// function is what the running app carries. `switchArea` and the window's
+    /// disappear are the only writers.
+    private(set) var shellState = ShellNavigationState()
+
+    /// The one interpreter of `FormaCore`'s navigation effects.
+    ///
+    /// `apply(_:to:)` says what an event may do; this is where the app agrees
+    /// to do it, and it is deliberately short: an area switch has no effects,
+    /// so there is nothing here it can reach. Adding a side effect to a switch
+    /// would mean adding a case here as well, and the test that pins the rule
+    /// would fail first.
+    ///
+    /// The cases call the methods the selections' `didSet` bodies already
+    /// call - `cancelAll`, `resetAreaSelections`, `scheduleReload` - so there
+    /// is one implementation of each behaviour, reached from one place, rather
+    /// than a second path that could drift away from the first.
+    func perform(_ effects: [ShellEffect]) {
+        for effect in effects {
+            switch effect {
+            case .cancelInFlightWork:
+                cancelAll()
+            case .resetAreaSelections:
+                resetAreaSelections()
+            case .clearFileEvidence:
+                clearFileEvidence()
+            case .reload:
+                scheduleReload()
+            }
+        }
+    }
+
+    /// Routes one shell event through the transition function, and then through
+    /// the effect interpreter, in that order.
+    ///
+    /// The event is *asked* what it may do rather than the view being told what
+    /// to skip: `onChange(of: storedArea)` used to be a place a fix could be
+    /// added by accident, and the issue's failure mode - a switch that starts
+    /// scanning, mapping or cancelling - was exactly such an accident, three
+    /// tabs deep. Here the only thing an area switch can produce is the
+    /// counter the transition function keeps and the signpost emitted below,
+    /// because `apply(.areaChanged, to:)` returns no effects for all five areas.
+    func navigate(_ event: ShellNavigationEvent) {
+        if case .areaChanged = event {
+            FormaPerf.record(PerfFact(stage: .areaSwitch))
+        }
+        let effects = apply(event, to: &shellState)
+        // Two ledgers, deliberately not merged. `shellState.counters` is the
+        // rule's own bookkeeping: what navigation *scheduled*. `workCounters`
+        // is recorded at the entry points that actually ran (`reloadOnce`,
+        // `scan`, a mapping run, a registry read), so what work *happened*.
+        // Counting one reload in both would make a trace read two reloads;
+        // keeping them apart is what lets the Mac recipe tell "the rule
+        // scheduled nothing and the counters agree" from "the rule scheduled
+        // nothing and something ran anyway", which is the difference between
+        // the fix and the appearance of the fix.
+        shellState.counters.record(effects: effects)
+        perform(effects)
+    }
+
     private let workspace: SourceWorkspace
     private let defaults = UserDefaults.standard
     /// The engine together with the identity it was built for. One value, so a
     /// cache and its validity key cannot be out of step with each other.
     private var engineCache: (key: String, engine: MappingEngine)?
+    // MARK: D2 presentation state
+    //
+    // Three stored values, each rebuilt at the point its input changes rather
+    // than at the point a view asks a question (#151 audit item 3). They are
+    // not `@Published`: nothing renders them directly, and publishing a cache
+    // would make the cache part of the invalidation storm it exists to remove.
+    /// The current listing keyed by identifier, plus one path-ordered copy.
+    private var listingProjection = ListingProjection(entries: [])
+    /// The current context's candidate membership, labels and panel rows.
+    private var contextProjection: ContextProjection?
+    /// Registry rows already read for a (source, snapshot revision).
+    private var evidenceCache = EvidenceCache()
+    /// How often the capture loop may tell the whole shell it made progress.
+    private let captureProgress = CaptureProgressCoalescing()
+    /// Whether a reload is running, and whether one is owed after it.
+    private var reloadCoalescing = ReloadCoalescing()
+    /// Work-start counters, recorded at the entry points themselves.
+    ///
+    /// Read by the trace recipe (`docs/NAV-PERF-MAC-TRACE.md`): a Mac run that
+    /// switches areas a hundred times must show `areaSwitches` at 100 and every
+    /// other tally unchanged, which is the GUI-side half of the invariant the
+    /// Core tests prove as a rule.
+    private(set) var workCounters = ShellWorkCounters()
     private var work: Task<Void, Never>?
     private var fileWork: Task<Void, Never>?
     /// Which read still owns `fileWork`. A cancelled task outlives its handle,
@@ -338,6 +513,18 @@ final class WorkspaceModel: ObservableObject {
         // Offline is the default because it is the only mode that works without
         // credentials; an existing choice is preserved verbatim.
         plannerMode = PlannerMode(rawValue: Self.store.string(forKey: Keys.plannerMode) ?? "") ?? .offline
+        // The navigation mirror starts on the area and the selections the
+        // window is about to open with, read straight from defaults rather
+        // than through `self.defaults`: a switch away from *that* area is the
+        // first event the counters will ever see, and a mirror seeded to the
+        // workspace would report the very first real switch - Workspace to
+        // Workspace, the case #151 names - as no switch at all, hiding the one
+        // measurement the issue asks for.
+        shellState = ShellNavigationState(
+            area: AppArea.restored(from: Self.store.string(forKey: "shell.selectedArea")),
+            scopeID: selectedScopeID,
+            profileID: selectedProfileID,
+            manifestPresent: false)
     }
 
     // MARK: - Derived values
@@ -371,74 +558,44 @@ final class WorkspaceModel: ObservableObject {
     func record(for id: String) -> EvidenceRecord? { recordsByID[id] }
 
     func clusterKeys(for sourceID: UUID) -> [String] {
-        context?.candidate(for: sourceID).map(\.projectKey) ?? []
+        contextProjection?.candidates(for: sourceID).map(\.projectKey) ?? []
     }
 
+    /// What the Project column shows for one file.
+    ///
+    /// The Workspace table asks for the same source twice per row - the cell
+    /// and its `help` - and used to answer both by filtering every candidate's
+    /// membership set and sorting the result. The text is now assembled once
+    /// per context revision, in `ContextProjection`, and a call here is one
+    /// dictionary probe. The three strings that are *not* a join - "No
+    /// context", "Unassigned", "Conflicted" - are still decided here, from the
+    /// same inputs FormaCore's own judgement uses, so nothing about the copy
+    /// changed.
     func clusterLabel(for sourceID: UUID) -> String {
-        guard let context else { return "No context" }
-        var labels = context.candidate(for: sourceID).map(\.projectKey)
-        if context.conflictedSourceIDs.contains(sourceID) { labels.append("Conflicted") }
-        if labels.isEmpty { return "Unassigned" }
-        return labels.sorted().joined(separator: " · ")
+        guard let contextProjection else { return "No context" }
+        return contextProjection.label(for: sourceID) ?? "Unassigned"
     }
 
-    func entry(with sourceID: UUID) -> SourceEntry? { listing?.entries.first { $0.id == sourceID } }
+    func entry(with sourceID: UUID) -> SourceEntry? { listingProjection.entry(sourceID) }
 
     func files(in candidateID: String) -> [SourceEntry] {
-        guard let candidate = context?.candidates.first(where: { $0.id == candidateID }),
-              let listing else { return [] }
-        return listing.entries
-            .filter { candidate.memberSourceIDs.contains($0.id) }
-            .sorted { $0.relativePath < $1.relativePath }
+        guard let contextProjection else { return [] }
+        return listingProjection.files(in: contextProjection.members(ofCandidate: candidateID))
     }
 
-    func files(in set: Set<UUID>) -> [SourceEntry] {
-        (listing?.entries ?? []).filter { set.contains($0.id) }.sorted { $0.relativePath < $1.relativePath }
-    }
+    func files(in set: Set<UUID>) -> [SourceEntry] { listingProjection.files(in: set) }
 
-    /// One row of the cluster panel: a FormaCore candidate, plus the two
-    /// categories FormaCore keeps separate so no file disappears from view.
-    struct ClusterRow: Identifiable {
-        enum Kind {
-            case candidate, unassigned, conflicted
-        }
-
-        let id: String
-        let kind: Kind
-        let title: String
-        let fileCount: Int
-        let basis: String
-        let confidence: String
-    }
-
-    static let unassignedRowID = "forma:unassigned"
-    static let conflictedRowID = "forma:conflicted"
-
-    var clusterRows: [ClusterRow] {
-        guard let context else { return [] }
-        var rows = context.candidates.map { candidate in
-            ClusterRow(id: candidate.id, kind: .candidate,
-                       title: candidate.displayName ?? candidate.projectKey,
-                       fileCount: candidate.memberSourceIDs.count,
-                       basis: candidate.basis.map(\.rawValue).joined(separator: " · "),
-                       confidence: candidate.confidence.rawValue)
-        }
-        rows.append(ClusterRow(id: Self.unassignedRowID, kind: .unassigned,
-                               title: "Unassigned · \(context.unassignedSourceIDs.count.formatted())",
-                               fileCount: context.unassignedSourceIDs.count,
-                               basis: "No candidate FormaCore could defend", confidence: "—"))
-        rows.append(ClusterRow(id: Self.conflictedRowID, kind: .conflicted,
-                               title: "Conflicted · \(context.conflictedSourceIDs.count.formatted())",
-                               fileCount: context.conflictedSourceIDs.count,
-                               basis: "Members disagree about the project", confidence: "—"))
-        return rows
-    }
-
+    /// The files in one cluster row.
+    ///
+    /// `ClusterRow` and its two category identifiers are `FormaCore`'s now, for
+    /// the same reason the other rows are: the text of the two category rows,
+    /// the row order and the membership sets are all asserted in
+    /// `WorkspaceProjectionTests` against the computation this replaced.
     func files(in row: ClusterRow) -> [SourceEntry] {
         switch row.kind {
         case .candidate: return files(in: row.id)
-        case .unassigned: return files(in: context?.unassignedSourceIDs ?? [])
-        case .conflicted: return files(in: context?.conflictedSourceIDs ?? [])
+        case .unassigned: return listingProjection.files(in: context?.unassignedSourceIDs ?? [])
+        case .conflicted: return listingProjection.files(in: context?.conflictedSourceIDs ?? [])
         }
     }
 
@@ -451,13 +608,18 @@ final class WorkspaceModel: ObservableObject {
         isRestoring = true
         defer { isRestoring = false }
         do {
-            profiles = try MappingProfile.shipped()
+            // #151 audit item 4: shipped resources are bundle files. Reading
+            // and decoding them here ran on the main actor during launch, in
+            // front of the window's first draw, and the profile list is what
+            // the rest of this function waits on. The read is detached; only
+            // the assignment - the part that publishes - returns here.
+            profiles = try await Self.offMain { try MappingProfile.shipped() }
         } catch {
             show(error, operation: .providerProbe, fallback: .unavailable)
         }
         if selectedProfile == nil { selectedProfileID = profiles.first?.profileID }
         do {
-            casePack = try CasePack.shipped()
+            casePack = try await Self.offMain { try CasePack.shipped() }
         } catch {
             show(error, operation: .providerProbe, fallback: .unavailable)
         }
@@ -479,7 +641,41 @@ final class WorkspaceModel: ObservableObject {
     /// Reloads the listing plus whatever FormaCore has stored for this
     /// scope/profile pair: the current context revision, the latest manifest and
     /// the reconciliation verdict after a rescan.
+    ///
+    /// #151 audit item 5 is fixed here rather than in `scheduleReload`: the
+    /// guard against the launch burst of reloads already existed, but two
+    /// *overlapping* reloads - scope and profile changed in quick succession -
+    /// each read the listing, the context and the manifest, and each published
+    /// on its own return, with the losing pass throwing away work it had
+    /// already paid for at its `guard`. This wrapper runs one pass, remembers
+    /// that the selection moved while it ran, and runs a second pass afterwards
+    /// that sees the current selection. Nothing is dropped, and it is a
+    /// coalescer rather than a debounce, so the last change is never starved.
+    ///
+    /// The item-4 half of the audit is *not* here: the store reads already run
+    /// on FormaCore's actor, and `ContextBuilder.inputDigest` is a hash over
+    /// entries already in memory, not a file. Detaching that would have been a
+    /// change with no measured cause, and it is listed as measured-later in
+    /// `docs/NAV-PERF-MAC-TRACE.md`.
     func reload() async {
+        guard reloadCoalescing.request() else { return }
+        while true {
+            await reloadOnce()
+            let owed = reloadCoalescing.complete()
+            if Task.isCancelled {
+                reloadCoalescing.cancel()
+                return
+            }
+            if !owed { return }
+            PerfTrace.emit(.progressCoalesced, count: reloadCoalescing.coalesced)
+        }
+    }
+
+    private func reloadOnce() async {
+        // Counted here rather than in `scheduleReload()`: the coalescer may
+        // turn two requests into one pass, and the ledger that the trace
+        // recipe reads has to say how many passes the store actually served.
+        workCounters.record(.reload)
         await refreshSourceStatuses()
         guard let scope = selectedScope else {
             listing = nil
@@ -489,7 +685,9 @@ final class WorkspaceModel: ObservableObject {
             return
         }
         do {
+            let stage = FormaPerf.begin(.reloadListing)
             let result = try await workspace.listing(scope)
+            FormaPerf.end(.reloadListing, stage)
             guard scope.id == selectedScopeID else { return }
             listing = result
         } catch {
@@ -504,11 +702,15 @@ final class WorkspaceModel: ObservableObject {
             // "nobody attempted anything".
             correctionHistoryState = .notRead
             let digest = ContextBuilder.inputDigest(scopeID: scope.id, profile: profile, entries: listing?.entries ?? [])
+            let stage = FormaPerf.begin(.reloadContext)
             let stored = try await workspace.storedContext(scope: scope, profile: profile, inputDigest: digest)
+            FormaPerf.end(.reloadContext, stage)
             guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
             context = stored
             contextIsStale = false
+            let manifestStage = FormaPerf.begin(.reloadManifest)
             let current = try await workspace.currentManifest(scope: scope, profile: profile)
+            FormaPerf.end(.reloadManifest, manifestStage)
             guard scope.id == selectedScopeID, profile.profileID == selectedProfileID else { return }
             if let current {
                 manifest = current
@@ -594,6 +796,7 @@ final class WorkspaceModel: ObservableObject {
 
     func scan() {
         guard phase == .idle, let scope = selectedScope else { return }
+        workCounters.record(.scan)
         fileEvidence = nil
         phase = .scanning
         notice = nil
@@ -621,6 +824,7 @@ final class WorkspaceModel: ObservableObject {
     /// supports. FormaCore writes the invalidation; this only reports it.
     func reconcile() {
         guard phase == .idle, let scope = selectedScope, let profile = selectedProfile else { return }
+        workCounters.record(.reconcile)
         phase = .reconciling
         work = Task {
             defer { finishWork() }
@@ -657,6 +861,7 @@ final class WorkspaceModel: ObservableObject {
             notice = "Choose a source and a profile first."
             return
         }
+        workCounters.record(.buildContext)
         phase = .buildingContext
         work = Task {
             defer { finishWork() }
@@ -707,6 +912,14 @@ final class WorkspaceModel: ObservableObject {
                 if let rows = try? await workspace.evidenceRegistry(for: entry.id),
                    generation == fileRead {
                     merge(rows)
+                    // Opening the file for a *forced* re-read is the path that
+                    // registers rows (`workspace.evidence(for:)` snapshots it
+                    // first), so the set this merge published may be newer
+                    // than anything the read cache holds for this revision.
+                    // Dropping the source's keys costs one later registry read
+                    // and buys the guarantee the chips cite what the store
+                    // actually holds.
+                    invalidateEvidenceCache(for: [entry.id])
                 }
             } catch {
                 if !Task.isCancelled, generation == fileRead {
@@ -740,16 +953,83 @@ final class WorkspaceModel: ObservableObject {
     /// Loads the registry rows one manifest entry cites so a field chip can show
     /// its excerpt and locator, including after a restart.
     ///
-    /// Read every time rather than once per source: the rows a source has are
-    /// replaced by FormaCore on each re-read and by every mapping run, so a
-    /// "already loaded" marker would be a cache with no invalidation, and the
-    /// chip would keep showing the excerpt the correction no longer cites.
+    /// The read is now keyed by (source, snapshot revision) instead of being
+    /// performed on every appearance, which is what #151's first audit line
+    /// measured: `MappingView` re-read the registry each time the selection
+    /// landed on a file, the read published two dictionaries, and every panel
+    /// and the shell's own chrome re-rendered for rows the session already
+    /// held.
+    ///
+    /// This replaces a comment that argued the opposite. It said a "already
+    /// loaded" marker "would be a cache with no invalidation, and the chip
+    /// would keep showing the excerpt the correction no longer cites". That was
+    /// true of the marker it described, and it is still true of an unvalidated
+    /// one. What makes this one safe is that it is not a marker: the key is the
+    /// revision FormaCore's own rows are stamped with, every write path in this
+    /// model calls `invalidate(sourceID:)` for the sources it touched, and a
+    /// read that returns after such an invalidation is dropped rather than
+    /// published (`EvidenceCache.publish`). `EvidenceCacheTests` pins all of
+    /// that, including the capture-during-a-read race.
     func loadEvidence(for sourceID: UUID) async {
+        guard let revision = evidenceRevision(for: sourceID) else {
+            // No revision to key on: the file is not in this listing and no
+            // manifest row cites it, so nothing here can say which snapshot the
+            // rows would be read against. Read without caching rather than
+            // invent a revision that a later, real one would collide with.
+            PerfTrace.emit(.evidenceLoad, count: 0)
+            do {
+                merge(try await workspace.evidenceRegistry(for: sourceID))
+            } catch {
+                if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .unavailable) }
+            }
+            return
+        }
+        let key = EvidenceCacheKey(sourceID: sourceID, snapshotRevision: revision)
+        let claim = evidenceCache.claim(key)
+        if case .cached = claim {
+            PerfTrace.emit(.evidenceCacheHit, count: evidenceCache.hits, shortCircuited: true)
+            return
+        }
+        if case .coalesced = claim {
+            // Another appearance of the same file already has the read running.
+            // Its merge will publish for both; starting a second one is the
+            // "duplicate work" #151 lists, and two merges of one batch is a
+            // publish storm over a set of rows that has not changed.
+            PerfTrace.emit(.evidenceLoadCoalesced, count: evidenceCache.coalesced, shortCircuited: true)
+            return
+        }
+        guard case .read(let ticket) = claim else { return }
+        workCounters.record(.evidenceLoad)
+        PerfTrace.emit(.evidenceLoad, count: evidenceCache.misses)
+        let stage = FormaPerf.begin(.evidenceLoad)
         do {
-            merge(try await workspace.evidenceRegistry(for: sourceID))
+            let rows = try await workspace.evidenceRegistry(for: sourceID)
+            FormaPerf.end(.evidenceLoad, stage)
+            guard evidenceCache.publish(rows, against: ticket) else {
+                // Something registered or corrected rows for this source while
+                // this read was in flight. Publishing what this read saw would
+                // be publishing a set that is already known to be behind, so it
+                // is dropped: the capture path merged its own rows, and the
+                // next appearance re-reads against the new key.
+                PerfTrace.emit(.evidenceLoadStale, count: evidenceCache.stale, shortCircuited: true)
+                return
+            }
+            merge(rows)
         } catch {
+            evidenceCache.abandon(ticket)
             if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .unavailable) }
         }
+    }
+
+    /// The snapshot revision a source's registry rows are keyed against.
+    ///
+    /// The listing is the authority while it is open, because it is what a
+    /// mapping run and an extraction read. An imported bundle has no listing,
+    /// so its manifest rows carry the revision instead; both are FormaCore's
+    /// own numbers, never a count derived from how many rows are held.
+    private func evidenceRevision(for sourceID: UUID) -> Int? {
+        if let entry = listingProjection.entry(sourceID) { return Int(exactly: entry.snapshotRevision) }
+        return manifest?.entries.first { $0.sourceID == sourceID }?.snapshotRevision
     }
 
     /// Folds freshly read rows into the per-source view. Rows are unioned by
@@ -760,24 +1040,50 @@ final class WorkspaceModel: ObservableObject {
     /// the store itself keeps the first content for an id (`insertEvidence`
     /// ignores a collision), so this is about which read reached the session
     /// last, not about two copies of one stored row disagreeing.
+    ///
+    /// The folding writes each published dictionary once. It used to assign
+    /// `evidenceBySource` per source and `recordsByID` per row inside the loop,
+    /// and both are `@Published` on the model every panel observes: a
+    /// thousand-row registration was two thousand model-wide invalidations for
+    /// one batch, which is the second audit line's "publishes what every panel
+    /// observes" in its purest form. Same result, two publishes.
     private func merge(_ records: [EvidenceRecord]) {
         guard !records.isEmpty else { return }
         // Only the sources this batch touched are rebuilt. Order between two
         // reads cannot matter: `MappingStore.insertEvidence` writes with
         // `INSERT OR IGNORE` over an id that hashes the source, snapshot
         // revision, source and locator, so one id has one stored content.
+        var bySource = evidenceBySource
+        var index = recordsByID
         for sourceID in Set(records.map(\.sourceID)) {
             var byID: [String: EvidenceRecord] = [:]
-            for record in evidenceBySource[sourceID] ?? [] where record.sourceID == sourceID {
+            for record in bySource[sourceID] ?? [] where record.sourceID == sourceID {
                 byID[record.id] = record
             }
             for record in records where record.sourceID == sourceID {
                 byID[record.id] = record
             }
             let rows = byID.values.sorted { $0.id < $1.id }
-            evidenceBySource[sourceID] = rows
-            for row in rows { recordsByID[row.id] = row }
+            bySource[sourceID] = rows
+            for row in rows { index[row.id] = row }
         }
+        evidenceBySource = bySource
+        recordsByID = index
+    }
+
+    /// Drops the read cache for sources whose rows may have just changed.
+    ///
+    /// Every path that can register a row calls this after its own merge: the
+    /// capture batch of a mapping run, a forced re-read of one file, an
+    /// accepted correction, and a bundle load that merges rows from another
+    /// machine's store. Without it a chip could resolve a citation against the
+    /// set read before the write, which is the failure mode the original
+    /// no-cache comment named.
+    private func invalidateEvidenceCache(for sourceIDs: some Sequence<UUID>) {
+        let touched = Set(sourceIDs)
+        guard !touched.isEmpty else { return }
+        for sourceID in touched { evidenceCache.invalidate(sourceID: sourceID) }
+        PerfTrace.emit(.evidenceLoad, count: evidenceCache.invalidations)
     }
 
     // MARK: - Mapping run
@@ -795,6 +1101,7 @@ final class WorkspaceModel: ObservableObject {
     @discardableResult
     func runMapping(sourceIDs: Set<UUID>? = nil, egress: Bool) -> Bool {
         guard phase == .idle else { return false }
+        workCounters.record(.mapping)
         guard let scope = selectedScope, let profile = selectedProfile, let listing else {
             error = .unavailable
             notice = "Choose a source before mapping."
@@ -862,9 +1169,21 @@ final class WorkspaceModel: ObservableObject {
             }
             var captured: [UUID: [EvidenceRecord]] = [:]
             var unread: [UUID: FormaError] = [:]
+            // #151 audit item 2, the one this loop was: one `phase` write per
+            // file, each an `objectWillChange` for a model every panel and the
+            // shell's own status strip observe. Six files is six invalidations
+            // and stays six here; a thousand-file listing was a thousand
+            // whole-shell passes to draw a number nobody can read between two
+            // frames. `CaptureProgressCoalescing` is a count-based bucket, not
+            // a timer, so the same fixture publishes the same number of times
+            // in CI and on a Mac, and the first and last file always speak.
+            var published = 0
             for (index, entry) in targets.enumerated() {
                 if Task.isCancelled { break }
-                self.phase = .capturingEvidence(done: index, total: targets.count)
+                if captureProgress.shouldPublish(index: index, total: targets.count) {
+                    self.phase = .capturingEvidence(done: index, total: targets.count)
+                    published += 1
+                }
                 do {
                     captured[entry.id] = try await self.workspace.captureEvidence(for: entry)
                 } catch {
@@ -873,6 +1192,9 @@ final class WorkspaceModel: ObservableObject {
                     // the validator records that as its own reason.
                     unread[entry.id] = error as? FormaError ?? .unavailable
                 }
+            }
+            if targets.count > published {
+                PerfTrace.emit(.progressCoalesced, count: targets.count - published, shortCircuited: true)
             }
             self.evidenceFailures = unread
             if Task.isCancelled {
@@ -906,6 +1228,11 @@ final class WorkspaceModel: ObservableObject {
             }
             guard !Task.isCancelled, scope.id == self.selectedScopeID,
                   profile.profileID == self.selectedProfileID else { return }
+            // The capture registered rows for these sources at their current
+            // revision. Any read that was in flight when it happened is now
+            // known to be behind, and the key this revision maps to must be
+            // re-read rather than answered from the set held before the write.
+            invalidateEvidenceCache(for: captured.keys)
             let currentTargets: [SourceEntry]
             let currentEvidence: [UUID: [EvidenceRecord]]
             switch binding {
@@ -999,7 +1326,23 @@ final class WorkspaceModel: ObservableObject {
     ///
     /// Cancellation is not completion: the scan row keeps `scanning` and the next
     /// launch reports it as interrupted. Nothing here records success.
+    ///
+    /// The counter is the half that matters for #151. The audit's failure was
+    /// that `cancelAll` sat in a view that unmounted on every tab switch, so
+    /// switching areas stopped work nobody asked to stop. D1 moved the call to
+    /// the scene-owned shell; this is what a trace reads to prove the move
+    /// held: `cancellations` must stay at zero across a run of area switches
+    /// and rise only when the window closes or a Cancel button is pressed.
     func cancelAll() {
+        workCounters.record(.cancel)
+        // A cancelled capture stops wherever it was: rows were registered for
+        // the files it had reached and not for the rest, and the batch it
+        // would have merged never runs. The read cache cannot tell which keys
+        // it read from before that point, so it is emptied rather than trusted;
+        // `ReloadCoalescing` likewise forgets a pass that was owed, because the
+        // person asked for the work to stop, not for it to be re-run later.
+        reloadCoalescing.cancel()
+        invalidateEvidenceCache()
         work?.cancel()
         fileWork?.cancel()
         auxWork?.cancel()
@@ -1037,16 +1380,24 @@ final class WorkspaceModel: ObservableObject {
     }
 
     /// Writes the plan as JSON so it can be attached to a review without the app.
-    func writeImportPlan(to directory: URL) {
+    ///
+    /// Encoding and write are the slow half of this click and used to run on
+    /// the main actor; the notice that names the file is what has to happen
+    /// here. The guard stays before the suspension, so a second click while a
+    /// write is running still sees the plan it was asked for.
+    func writeImportPlan(to directory: URL) async {
         guard let plan = importPlan else {
             notice = "Build the import plan first."
             return
         }
         do {
-            let data = try FormaJSON.encoder(pretty: true).encode(plan)
-            let url = directory.appendingPathComponent("import-plan-r\(plan.manifestRevision).json")
-            try data.write(to: url, options: .atomic)
-            notice = "Wrote \(url.lastPathComponent): a dry-run plan that lists local file names, "
+            let name: String = try await Self.offMain {
+                let data = try FormaJSON.encoder(pretty: true).encode(plan)
+                let url = directory.appendingPathComponent("import-plan-r\(plan.manifestRevision).json")
+                try data.write(to: url, options: .atomic)
+                return url.lastPathComponent
+            }
+            notice = "Wrote \(name): a dry-run plan that lists local file names, "
                 + "so treat it as private data rather than a sanitized artifact."
         } catch {
             show(error as? FormaError ?? .storage, operation: .readEvidence, fallback: .storage)
@@ -1058,6 +1409,7 @@ final class WorkspaceModel: ObservableObject {
             if manifest == nil { notice = "There is no manifest to export yet." }
             return
         }
+        workCounters.record(.export)
         let plan = redactionTerms.isEmpty ? nil : redaction
         let sourceIDs = Set(manifest.entries.map(\.sourceID))
         phase = .exporting
@@ -1071,8 +1423,22 @@ final class WorkspaceModel: ObservableObject {
                 // after the "Exported N files" notice was dismissed.
                 let grouped = try await workspace.registeredEvidence(for: sourceIDs)
                 let records = grouped.values.flatMap { $0 }
-                let summary = try ManifestExport.export(manifest: manifest, evidence: records,
-                                                        to: directory, redaction: plan)
+                guard !Task.isCancelled else { return }
+                // #151 audit item 4: `ManifestExport.export` creates the bundle
+                // directory, writes the manifest, every evidence file and the
+                // archive, then reads them back. It is synchronous because the
+                // validator is a pure function over bytes; running it here, on
+                // the main actor, inside a task that inherited this model's
+                // isolation, is what made Export stall the whole shell. The
+                // work is detached, and only the summary - the value that is
+                // published - returns to this actor.
+                let stage = FormaPerf.begin(.export)
+                let summary = try await Self.offMain {
+                    try ManifestExport.export(manifest: manifest, evidence: records,
+                                              to: directory, redaction: plan)
+                }
+                FormaPerf.end(.export, stage)
+                PerfTrace.emit(.export, count: summary.files.count)
                 guard !Task.isCancelled else { return }
                 exportSummary = summary
                 bundleURL = directory.appendingPathComponent(summary.manifestID, isDirectory: true)
@@ -1096,24 +1462,18 @@ final class WorkspaceModel: ObservableObject {
         guard phase == .idle else { return }
         let boundScope = selectedScopeID
         let boundProfile = selectedProfileID
-        let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-        let bundle = isDirectory ? url : url.deletingLastPathComponent()
-        let manifestURL = isDirectory ? bundle.appendingPathComponent(ManifestExport.manifestFile) : url
-        guard FileManager.default.fileExists(atPath: manifestURL.path) else {
-            error = .unavailable
-            notice = "\(bundle.path) has no \(ManifestExport.manifestFile), so it is not a Forma export bundle."
-            return
-        }
+        // #151 audit item 4, in its plainest form: a stat call and a
+        // `Data(contentsOf:)` for the manifest and for every evidence row, on
+        // the main actor, in the click handler, before the task that was
+        // supposed to be the background work even started. Which bundle it is,
+        // whether the manifest exists and what the bytes decode to are all
+        // answered off-actor now; this actor publishes, and only after its own
+        // cancellation checks.
         phase = .loadingManifest
         work = Task {
             defer { finishWork() }
             do {
-                let loaded = try FormaJSON.decode(Manifest.self, from: Data(contentsOf: manifestURL))
-                var loadedRecords: [EvidenceRecord] = []
-                let evidenceURL = bundle.appendingPathComponent(ManifestExport.evidenceFile)
-                if FileManager.default.fileExists(atPath: evidenceURL.path) {
-                    loadedRecords = try FormaJSON.decode([EvidenceRecord].self, from: Data(contentsOf: evidenceURL))
-                }
+                let loaded = try await Self.offMain { try Self.readBundle(at: url) }
                 // The bundle's entries are combined with the current listing
                 // when rows are rebuilt, so this is only meaningful while the
                 // source selected at the click is still selected: a switch
@@ -1121,8 +1481,13 @@ final class WorkspaceModel: ObservableObject {
                 // source's rows and present the mixture as one table.
                 guard !Task.isCancelled, selectedScopeID == boundScope,
                       selectedProfileID == boundProfile else { return }
-                self.merge(loadedRecords)
-                self.manifest = loaded
+                self.merge(loaded.records)
+                // Rows from another machine's store are now in this session's
+                // view, and the cache holds registry sets read before they
+                // arrived: keys whose rows may have just grown are dropped
+                // rather than trusted.
+                invalidateEvidenceCache(for: loaded.records.map(\.sourceID))
+                self.manifest = loaded.manifest
                 self.outcome = nil
                 // A loaded bundle carries no local attempt history: those rows
                 // live in the store of whoever exported it, and showing this
@@ -1130,18 +1495,75 @@ final class WorkspaceModel: ObservableObject {
                 // attribute decisions to the wrong reviewer.
                 self.correctionHistory = []
                 self.correctionHistoryState = .offlineBundle
-                self.bundleURL = bundle
+                self.bundleURL = loaded.bundle
                 self.revalidation = nil
-                self.notice = "Loaded revision \(loaded.envelope.revision.formatted()) from \(bundle.path) · "
-                    + "\(loaded.entries.count.formatted()) entries · \(loadedRecords.count.formatted()) evidence rows offline."
+                self.notice = "Loaded revision \(loaded.manifest.envelope.revision.formatted()) from \(loaded.bundle.path) · "
+                    + "\(loaded.manifest.entries.count.formatted()) entries · "
+                    + "\(loaded.records.count.formatted()) evidence rows offline."
                 self.refreshRows()
-            } catch {
-                if !Task.isCancelled {
+            } catch let failure as BundleReadFailure {
+                guard !Task.isCancelled else { return }
+                switch failure.reason {
+                case .noManifest:
+                    error = .unavailable
+                    notice = "\(failure.bundle.path) has no \(ManifestExport.manifestFile), so it is not a Forma export bundle."
+                case .undecodable:
                     FormaDiagnostics.failure(.readEvidence, .unavailable)
-                    self.error = .unavailable
-                    self.notice = "\(manifestURL.lastPathComponent) is not a Forma manifest FormaCore can decode."
+                    error = .unavailable
+                    notice = "\(failure.manifestURL.lastPathComponent) is not a Forma manifest FormaCore can decode."
                 }
+            } catch {
+                if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .unavailable) }
             }
+        }
+    }
+
+    /// What a bundle read produced, gathered away from the main actor.
+    private struct BundleContents: Sendable {
+        let bundle: URL
+        let manifestURL: URL
+        let manifest: Manifest
+        let records: [EvidenceRecord]
+    }
+
+    /// A folder that holds no manifest, or bytes that are not one, reported
+    /// with the paths the notice shows. Kept apart from `FormaError` because
+    /// the message is a statement about a folder rather than a code FormaCore
+    /// returns, and because a read that happens off the main actor has to
+    /// carry its own explanation back rather than reach for `self`.
+    private struct BundleReadFailure: Error, Sendable {
+        enum Reason: Sendable {
+            case noManifest
+            case undecodable
+        }
+
+        let reason: Reason
+        let bundle: URL
+        let manifestURL: URL
+    }
+
+    /// Reads a bundle's manifest and evidence rows from disk.
+    ///
+    /// Runs on a detached priority: these are the two largest synchronous
+    /// reads the app performs, and the listing they describe can be a
+    /// thousand entries with one evidence file per citation.
+    private nonisolated static func readBundle(at url: URL) throws -> BundleContents {
+        let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+        let bundle = isDirectory ? url : url.deletingLastPathComponent()
+        let manifestURL = isDirectory ? bundle.appendingPathComponent(ManifestExport.manifestFile) : url
+        guard FileManager.default.fileExists(atPath: manifestURL.path) else {
+            throw BundleReadFailure(reason: .noManifest, bundle: bundle, manifestURL: manifestURL)
+        }
+        do {
+            let manifest = try FormaJSON.decode(Manifest.self, from: Data(contentsOf: manifestURL))
+            var records: [EvidenceRecord] = []
+            let evidenceURL = bundle.appendingPathComponent(ManifestExport.evidenceFile)
+            if FileManager.default.fileExists(atPath: evidenceURL.path) {
+                records = try FormaJSON.decode([EvidenceRecord].self, from: Data(contentsOf: evidenceURL))
+            }
+            return BundleContents(bundle: bundle, manifestURL: manifestURL, manifest: manifest, records: records)
+        } catch {
+            throw BundleReadFailure(reason: .undecodable, bundle: bundle, manifestURL: manifestURL)
         }
     }
     /// Reports why the file picker returned no bundle. The wording is the
@@ -1159,11 +1581,19 @@ final class WorkspaceModel: ObservableObject {
             notice = "No bundle is selected: export a manifest or open a bundle first."
             return
         }
+        workCounters.record(.revalidate)
         phase = .revalidating
         work = Task {
             defer { finishWork() }
             do {
-                let result = try ManifestExport.revalidate(at: bundleURL)
+                // #151 audit item 4, the same shape as `export(to:)`: reading
+                // the bundle back and verifying every digest is file I/O with
+                // a signature check per file, and it ran on the main actor
+                // because this task inherited the model's isolation.
+                let stage = FormaPerf.begin(.revalidate)
+                let result = try await Self.offMain { try ManifestExport.revalidate(at: bundleURL) }
+                FormaPerf.end(.revalidate, stage)
+                PerfTrace.emit(.revalidate, count: result.violations.count)
                 // The conclusion describes the bundle the click named. If a
                 // different bundle was opened while this one was being checked,
                 // hanging this verdict on it would report a file nobody asked
@@ -1304,6 +1734,14 @@ final class WorkspaceModel: ObservableObject {
                 guard !Task.isCancelled, scope.id == selectedScopeID,
                       profile.profileID == selectedProfileID else { return }
                 self.manifest = applied.manifest
+                // A correction can carry evidence FormaCore registered for the
+                // field it re-decided, and it writes a new manifest revision
+                // whose rows cite ids this session may not have read yet. The
+                // chip that opens next must resolve against the registry as it
+                // is now, which is the exact failure the old no-cache comment
+                // described; this line is the invalidation that lets the cache
+                // exist.
+                invalidateEvidenceCache(for: [draft.sourceID])
                 // Close the sheet this click came from, and only that one: the
                 // reviewer may have opened another field while this write was
                 // running, and clearing whatever draft is current would throw
@@ -1342,11 +1780,24 @@ final class WorkspaceModel: ObservableObject {
 
     /// Saves the key through FormaCore's own Keychain store and reports whether
     /// it was stored. An invalid key is FormaCore's `credentialMissing`.
-    @discardableResult func saveKey(_ key: String) -> Bool {
-        let client = ProviderMappingClient()
+    /// Stores the provider key in the Keychain.
+    ///
+    /// Made `async` for #151 audit item 4: a SecItem write is an XPC round
+    /// trip to a system daemon, and it used to block the main actor for the
+    /// length of it - the one thing a Settings pane should never do while the
+    /// shell is redrawing behind it. The caller stays on the main actor; only
+    /// the write is detached, and the answer comes back here so the notice and
+    /// the field's own "saved" mark are published where views can see them.
+    @discardableResult func saveKey(_ key: String) async -> Bool {
+        let chosenProvider = provider
         do {
-            try client.saveKey(key, for: provider)
-            notice = "API key saved in Keychain for \(provider.displayName)."
+            // The client is built inside the detached work rather than here:
+            // it wraps the Keychain store and the egress authoriser, and none
+            // of that belongs on the main actor for the length of one write.
+            try await Self.offMain {
+                try ProviderMappingClient().saveKey(key, for: chosenProvider)
+            }
+            notice = "API key saved in Keychain for \(chosenProvider.displayName)."
             return true
         } catch {
             let safe = error as? FormaError ?? .storage
@@ -1472,40 +1923,48 @@ final class WorkspaceModel: ObservableObject {
         // invalidates it, and a stale plan is worse than none: it would show a
         // target and a verdict for records that no longer exist in this shape.
         importPlan = nil
+        let stage = FormaPerf.begin(.refreshRows)
+        defer { FormaPerf.end(.refreshRows, stage) }
         guard let manifest else {
             rows = []
             exceptions = []
+            exceptionCodes = []
+            visibleExceptions = []
+            mirrorManifestInShellState()
+            PerfTrace.emit(.refreshRows, count: 0)
             return
         }
-        let failures = outcome?.failures ?? [:]
-        rows = manifest.entries.map { entry in
-            MappingRow(sourceID: entry.sourceID, entry: entry, source: self.entry(with: entry.sourceID),
-                       failure: failures[entry.sourceID],
-                       candidates: context?.candidate(for: entry.sourceID) ?? [])
-        }
-        exceptions = Self.exceptionRows(manifest)
+        // #151 audit item 3. This used to map every manifest entry through
+        // `self.entry(with:)`, a linear scan of the listing - a thousand
+        // entries therefore cost about half a million comparisons per rebuild,
+        // on the main actor, and the rebuild runs after every run, correction,
+        // reconciliation and bundle load. The candidate lookup per entry was a
+        // second scan of the same size. Both are dictionary probes now, and
+        // the shapes they produce are `FormaCore`'s, asserted equal to the
+        // old computation in `WorkspaceProjectionTests`.
+        rows = WorkspaceProjection.mappingRows(manifest: manifest,
+                                              failures: outcome?.failures ?? [:],
+                                              listing: listingProjection,
+                                              context: contextProjection)
+        exceptions = WorkspaceProjection.exceptionRows(manifest: manifest)
+        exceptionCodes = WorkspaceProjection.exceptionCodes(rows: exceptions)
+        refreshVisibleExceptions()
+        mirrorManifestInShellState()
+        PerfTrace.emit(.refreshRows, count: rows.count)
     }
 
-    /// The same rows FormaCore writes into `exceptions.json`: one per blocked
-    /// entry, with the reason the program recorded and the violation codes that
-    /// name its own cause. `ManifestExport.Exceptions` builds these internally
-    /// from a manifest, so the interface reads the identical fields from it.
-    private static func exceptionRows(_ manifest: Manifest) -> [ExceptionRow] {
-        let byPath = Dictionary(grouping: manifest.report.allViolations) { $0.instancePath }
-        return manifest.entries
-            .filter { $0.state == .hold || $0.state == .unknown || $0.state == .invalidated }
-            .sorted { $0.relativePath < $1.relativePath }
-            .map { entry in
-                let violations = byPath[entry.relativePath] ?? []
-                let conflicting = entry.fields.first { $0.status == .conflict }?.field
-                let reason = entry.invalidatedReason
-                    ?? conflicting.map { "conflict:\($0.rawValue)" }
-                    ?? "evidence_incomplete"
-                return ExceptionRow(sourceID: entry.sourceID, relativePath: entry.relativePath,
-                                    state: entry.state, reason: reason,
-                                    codes: Array(Set(violations.map(\.code))).sorted(),
-                                    violations: violations)
-            }
+    /// Applies the two Exceptions filters to the stored rows.
+    ///
+    /// The view used to run the same filter on every body evaluation, next to
+    /// a code list it also recomputed each time; both now read stored values
+    /// that change only when the rows or the filters do. The filter itself is
+    /// `WorkspaceProjection.filteredExceptions`, so the rule the panel follows
+    /// is the rule the test asserts.
+    private func refreshVisibleExceptions() {
+        visibleExceptions = WorkspaceProjection.filteredExceptions(
+            exceptions,
+            state: exceptionStateFilter.state,
+            code: exceptionCodeFilter)
     }
 
     private func finishWork() {

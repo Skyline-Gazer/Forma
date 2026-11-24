@@ -52,7 +52,13 @@ struct SettingsView: View {
             TextField("每批请求文件数", value: $model.entryLimit, format: .number)
                 .accessibilityIdentifier("mapping-entry-limit")
             SecureField("\(model.provider.displayName) 的 API 密钥", text: $key)
-            Button("保存 API 密钥到钥匙串") { keySaved = model.saveKey(key) }
+            Button("保存 API 密钥到钥匙串") {
+                // The Keychain write left the main actor (#151 audit item 4),
+                // so the answer arrives on a later turn: the field's "saved"
+                // mark means the write returned successfully, not that the
+                // click happened.
+                Task { keySaved = await model.saveKey(key) }
+            }
                 .disabled(key.isEmpty)
                 .accessibilityIdentifier("save-api-key")
             if keySaved { Text("API 密钥已保存到钥匙串。").foregroundStyle(.secondary) }

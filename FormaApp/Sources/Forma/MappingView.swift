@@ -295,7 +295,7 @@ struct MappingView: View {
 struct MappingInspector: View {
     @ObservedObject var model: WorkspaceModel
 
-    private var row: WorkspaceModel.MappingRow? {
+    private var row: MappingRow? {
         model.rows.first { $0.sourceID == model.mappingFileSelection }
     }
 
@@ -353,7 +353,7 @@ struct MappingInspector: View {
         }
     }
 
-    @ViewBuilder private func slotRow(_ row: WorkspaceModel.MappingRow, _ field: MetadataFieldID) -> some View {
+    @ViewBuilder private func slotRow(_ row: MappingRow, _ field: MetadataFieldID) -> some View {
         let outcome = row.entry.outcome(for: field)
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
@@ -445,7 +445,7 @@ struct MappingInspector: View {
         return "\(record.source.rawValue) · \(String(id.dropFirst(3).prefix(6)))"
     }
 
-    private func clusterText(_ row: WorkspaceModel.MappingRow) -> String {
+    private func clusterText(_ row: MappingRow) -> String {
         guard !row.candidates.isEmpty else { return model.context == nil ? "No context" : "Unassigned" }
         return row.candidates
             .map { "\($0.projectKey) (\($0.confidence.rawValue))" }
