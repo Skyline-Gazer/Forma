@@ -43,15 +43,19 @@ struct ShellLayoutTests {
         }
     }
 
-    @Test("the workspace's two tables share the width instead of each demanding their own")
+    @Test("the workspace's tables scroll their columns; the pane contributes only the usable floor")
     func workspaceTablesStack() {
+        // #172 (F2): a Table owns its horizontal scroller, so neither the
+        // max column sum nor the sum of both tables reaches the window - the
+        // pane declares scrollableTableMinWidth below it, and the uniform
+        // areaContentMinWidth above keeps the outer minimum identical per area.
         let files = ShellLayout.columns(for: .workspaceFiles).reduce(0) { $0 + $1.min }
         let candidates = ShellLayout.columns(for: .workspaceCandidates).reduce(0) { $0 + $1.min }
-        let expected = ShellLayout.leading(for: .workspace).min + max(files, candidates)
+        let expected = ShellLayout.leading(for: .workspace).min + ShellLayout.scrollableTableMinWidth
         #expect(ShellLayout.minimumContentWidth(for: .workspace) == expected)
         #expect(ShellLayout.minimumContentWidth(for: .workspace)
-                < ShellLayout.leading(for: .workspace).min + files + candidates,
-                "the two tables are stacked, so their minimums compete for the same width")
+                < ShellLayout.leading(for: .workspace).min + max(files, candidates),
+                "the column sums must not become the pane's demand: 360/340pt tables fit a 640pt floor only because the Table scrolls")
     }
 
     @Test("the review desk's own panes fit the budget")
