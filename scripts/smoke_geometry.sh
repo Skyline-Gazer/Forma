@@ -92,6 +92,9 @@ on run
             --    includes the title bar).
             set {w0, h0} to size of win
             log "launch size: " & w0 & "x" & h0
+            -- U's point: the launch assert stays hard (1180 default must
+            -- hold), but only AFTER the re-apply schedule; if it fails here
+            -- the log shows the actual proposal so the mechanism is readable.
             if w0 < 1176 or w0 > 1184 then
                 error "launch width " & w0 & "pt is not the configured 1180pt default (a content-fit launch like the old 1104/1689 fails here)"
             end if

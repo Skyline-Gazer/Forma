@@ -245,22 +245,37 @@ private struct FormaRoot: View {
 /// first-launch content size behind an explicit flag so a returning user's
 /// restored frame is never touched.
 private struct WindowConfigurator: NSViewRepresentable {
+    /// The two facts the hosting layer cannot deliver from the scene on the
+    /// macOS 26 SDK (#172 probes R/S/T): a static content minimum that
+    /// survives subtree swaps without re-solving (AppKit `contentMinSize`,
+    /// assigned once - no SwiftUI constraint churn, no trap), and a
+    /// first-launch content size, re-asserted once after the .starting ->
+    /// .ready swap because the swap re-proposes the content's fitting width
+    /// (1689pt in CI). Both write through the AppKit window, never through
+    /// the SwiftUI layout. A returning user's restored frame is skipped via
+    /// the latched flag; only a drag inside the 4.5s first-launch window can
+    /// be overruled, once, by design.
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
+        DispatchQueue.main.async { [weak view] in
+            guard let window = view?.window else { return }
             window.contentMinSize = NSSize(width: CGFloat(ShellLayout.windowMinWidth),
                                            height: CGFloat(ShellLayout.windowMinHeight))
-            let key = "shell.windowFirstSizeApplied"
-            if !UserDefaults.standard.bool(forKey: key) {
-                UserDefaults.standard.set(true, forKey: key)
-                window.setContentSize(NSSize(width: CGFloat(ShellLayout.windowIdealWidth),
-                                             height: CGFloat(ShellLayout.windowIdealHeight)))
+            guard !UserDefaults.standard.bool(forKey: Self.key) else { return }
+            let size = NSSize(width: CGFloat(ShellLayout.windowIdealWidth),
+                              height: CGFloat(ShellLayout.windowIdealHeight))
+            window.setContentSize(size)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
+                window.setContentSize(size)
+                UserDefaults.standard.set(true, forKey: Self.key)
             }
         }
         return view
     }
+
     func updateNSView(_ view: NSView, context: Context) {}
+
+    private static let key = "shell.windowFirstSizeApplied"
 }
 
 /// Column widths for the whole app. Every split in the window is bounded here,
