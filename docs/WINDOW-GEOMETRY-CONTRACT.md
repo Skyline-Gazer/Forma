@@ -84,9 +84,14 @@ passes vacuously:
   height 700 + title bar (chrome measured from the launch, not hardcoded);
 - resize to 760 × 500 clamps to 1012 ±2 × (620 + chrome) ±2 - the uniform
   floor, not any area's ideal;
-- every area navigation is *verified* (sidebar row selected AND the pane's
-  `area-<raw>-content` marker mounted) before its 1180 ±2 invariance counts,
-  and fewer than 6 verified areas fail the run;
+- every area navigation is *verified*: the sidebar element labelled
+  `area-<raw>` (probe AA inventoried them as AXStaticText under an
+  AXOutline - the hosting bridge does not surface row-level identifiers,
+  so the label is the click target) is clicked, and the run only counts the
+  area once `area-<raw>-content` appears in the window's accessibility
+  tree - the content subtree carries that identifier on every element it
+  contains, which doubles as the proof of which pane is mounted. Fewer than
+  6 verified areas fail the run;
 - the window must GROW to a requested 1400x900 (the "user-controlled" half
   of #153 - a window pinned to its content proposal fails here);
 - the mapping area (the 1104 regression's home) is re-selected and re-clamped
