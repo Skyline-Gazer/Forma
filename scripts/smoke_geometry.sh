@@ -107,6 +107,45 @@ on run
             --    regression launch green; the band is now the default +/- the
             --    tolerance that matters (AX width == content width, height
             --    includes the title bar).
+            -- PROBE AA (diagnostic, remove on ship): what does the macOS 26
+            -- hosting bridge actually expose for the sidebar? Every walk
+            -- dialect so far failed blind; this inventory names the roles,
+            -- children paths and identifier attributes once, factually.
+            set topRoles to {}
+            tell application "System Events"
+                repeat with el in (every UI element of win)
+                    set end of topRoles to (role of el as text)
+                end repeat
+                log "top roles: " & (topRoles as text)
+                set ec to entire contents of win
+                log "entire-contents count: " & (count of ec)
+                set idDump to ""
+                set n to 0
+                repeat with el in ec
+                    try
+                        if exists attribute "AXIdentifier" of el then
+                            set idv to value of attribute "AXIdentifier" of el
+                            if idv is not "" then
+                                set idDump to idDump & (role of el as text) & "=" & idv & "; "
+                                set n to n + 1
+                            end if
+                        end if
+                    end try
+                end repeat
+                log "identifier-carrying elements (" & n & "): " & idDump
+                -- also dump the split group path System Events sees
+                try
+                    log "splitter groups: " & (count of splitter groups of win)
+                    set sg to splitter group 1 of win
+                    log "sg children roles: "
+                    repeat with el in (every UI element of sg)
+                        log "   sg child: " & (role of el as text)
+                    end repeat
+                on error emsg
+                    log "splitter path error: " & emsg
+                end try
+            end tell
+
             set {w0, h0} to size of win
             log "launch size: " & w0 & "x" & h0
             if w0 < 1176 or w0 > 1184 then
