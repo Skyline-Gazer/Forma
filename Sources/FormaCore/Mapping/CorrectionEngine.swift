@@ -209,9 +209,18 @@ public struct CorrectionEngine: Sendable {
             let listingSnapshot = listingEntry.map {
                 (revision: Int($0.snapshotRevision), fingerprint: $0.snapshotFingerprint)
             }
-            let manifestIsCurrent = listingSnapshot.map {
-                $0.revision == manifestSnapshot.revision && $0.fingerprint == manifestSnapshot.fingerprint
-            } ?? true
+            // The snapshot under correction is the file the reviewer is looking at.
+            // While a listing exists it owns that answer: the file has a generation
+            // the manifest may not have caught up with, and a row that matches only
+            // the manifest's binding then describes the superseded document - the
+            // row the reviewer must not cite, exactly as before. A row re-read from
+            // the current file matches the listing and is citable; publishing the
+            // correction rebinds the entry to that same generation (the validator
+            // rebuilds every entry from the current entries), so nothing is
+            // retrofitted onto an old revision and history is never rewritten.
+            // Without a listing - an imported bundle - the manifest is the whole
+            // record and the gate is as strict as it has ever been.
+            let reviewSnapshot = listingSnapshot ?? manifestSnapshot
             // Three refusals wear different faces and the review screen has to
             // say which one happened: a citation that names no row the program
             // holds anywhere is missing evidence; a row that exists but
@@ -251,13 +260,16 @@ public struct CorrectionEngine: Sendable {
                     unusableCitation = true
                     continue
                 }
-                // The same binding the validator insists on: a row from an
-                // older snapshot describes a file that is no longer the one in
-                // front of the reviewer, and accepting it would let a
-                // correction cite evidence the manifest cannot resolve.
-                guard record.snapshotFingerprint == manifestSnapshot.fingerprint,
-                      record.snapshotRevision == manifestSnapshot.revision,
-                      manifestIsCurrent else {
+                // The same binding the validator insists on, taken one step
+                // further: a row must describe the snapshot the reviewer is
+                // correcting. A row from an older snapshot describes a file
+                // that is no longer the one in front of the reviewer, and
+                // accepting it would let a correction cite evidence the
+                // manifest cannot resolve; a row re-read from the current file
+                // is exactly the evidence the recovery asks for, whether or
+                // not the manifest has rebound yet.
+                guard record.snapshotFingerprint == reviewSnapshot.fingerprint,
+                      record.snapshotRevision == reviewSnapshot.revision else {
                     staleCitation = true
                     continue
                 }

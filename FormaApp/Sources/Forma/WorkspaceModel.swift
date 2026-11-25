@@ -1039,7 +1039,11 @@ final class WorkspaceModel: ObservableObject {
         PerfTrace.emit(.evidenceLoad, count: evidenceCache.misses)
         let stage = FormaPerf.begin(.evidenceLoad)
         do {
-            let rows = try await workspace.evidenceRegistry(for: sourceID)
+            // The cache key already names one revision; read exactly those
+            // rows. Asking the registry for every revision and caching the
+            // unfiltered set under one revision's key was how a re-read left
+            // superseded rows on screen after a restart.
+            let rows = try await workspace.evidenceRegistry(for: sourceID, snapshotRevision: revision)
             FormaPerf.end(.evidenceLoad, stage)
             guard evidenceCache.publish(rows, against: ticket) else {
                 // Something registered or corrected rows for this source while
@@ -1070,13 +1074,27 @@ final class WorkspaceModel: ObservableObject {
 
     // MARK: - Evidence currency
 
-    /// The snapshot a citation has to describe under the manifest in hand.
+    /// The snapshot a citation has to describe for the file under review.
     ///
-    /// A citation is accepted when it describes the snapshot the manifest
-    /// entry is bound to, and refused when it describes an older one. The
-    /// review screen asks the same question before the reviewer ticks a row,
-    /// so a row that cannot be cited is never offered as if it could.
+    /// The listing entry is the authority while the workspace is open: it is
+    /// the file in front of the reviewer now, and a re-read stamps its rows
+    /// with it. The manifest's own binding answers only when there is no
+    /// listing - an imported bundle - and there the two can never disagree,
+    /// because nothing is being rescanned under it. The review screen asks the
+    /// same question before the reviewer ticks a row, so a row that cannot be
+    /// cited is never offered as if it could, and a row that describes the
+    /// current file is never offered as expired.
     func citationBinding(for sourceID: UUID) -> EvidenceSnapshotBinding? {
+        if let entry = listing?.entries.first(where: { $0.id == sourceID }) {
+            return EvidenceSnapshotBinding(revision: Int(entry.snapshotRevision),
+                                           fingerprint: entry.snapshotFingerprint)
+        }
+        return manifestBinding(for: sourceID)
+    }
+
+    /// The snapshot the manifest in hand is bound to, independent of any
+    /// rescanned listing.
+    private func manifestBinding(for sourceID: UUID) -> EvidenceSnapshotBinding? {
         guard let entry = rows.first(where: { $0.sourceID == sourceID })?.entry else { return nil }
         return EvidenceSnapshotBinding(revision: entry.snapshotRevision, fingerprint: entry.snapshotFingerprint)
     }
@@ -1086,8 +1104,10 @@ final class WorkspaceModel: ObservableObject {
     /// A file that changed since the run is a different document: every row
     /// read from the old one is out of date, including the rows the manifest
     /// itself cites, and the correction has to be made against the new file.
+    /// The re-read that produces the new rows is the recovery; this flag says
+    /// the banner is warranted, not that no row can ever be cited.
     func fileMovedSinceManifest(for sourceID: UUID) -> Bool {
-        guard let binding = citationBinding(for: sourceID),
+        guard let binding = manifestBinding(for: sourceID),
               let entry = listing?.entries.first(where: { $0.id == sourceID }) else { return false }
         return Int(entry.snapshotRevision) != binding.revision
             || entry.snapshotFingerprint != binding.fingerprint
@@ -1096,7 +1116,6 @@ final class WorkspaceModel: ObservableObject {
     /// Whether a registered row can still be cited for this source.
     func currency(of record: EvidenceRecord, for sourceID: UUID) -> EvidenceCurrency {
         guard let binding = citationBinding(for: sourceID) else { return .current }
-        if fileMovedSinceManifest(for: sourceID) { return .expired }
         return EvidenceCurrency.currency(of: record, against: binding)
     }
 
@@ -1129,7 +1148,7 @@ final class WorkspaceModel: ObservableObject {
                     self.draft?.citations = draft.citations.filter { current.contains($0) }
                 }
                 notice = fileMovedSinceManifest(for: sourceID)
-                    ? "证据已重新读取（\(records.count.formatted()) 行）。清单已更新到新的快照，这份文件需要重新识别后才能修订。"
+                    ? "证据已重新读取（\(records.count.formatted()) 行）。这份文件自清单生成后已变化：引用以上当前证据保存修订，FormaCore 会据这些行发布绑定到新快照的修订。"
                     : "已重新读取证据（\(records.count.formatted()) 行）。请重新选择要引用的证据。"
             } catch {
                 if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .unavailable) }
