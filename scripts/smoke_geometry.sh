@@ -72,17 +72,28 @@ on hasMarker(win, marker)
     -- the AXIdentifier *attribute* walk is the dialect. Probe AA shows all
     -- six `area-<raw>-content` container markers... they mount lazily, so
     -- poll for up to 3 seconds before declaring the pane unmounted.
+    set deadline to (current date) + 15
     tell application "System Events"
-        repeat 6 times
+        repeat
+            set foundCount to 0
             repeat with el in (entire contents of win)
                 try
-                    if (exists attribute "AXIdentifier" of el) and (value of attribute "AXIdentifier" of el is marker) then return true
+                    if (exists attribute "AXIdentifier" of el) and (value of attribute "AXIdentifier" of el is marker) then
+                        set foundCount to foundCount + 1
+                    end if
                 end try
             end repeat
-            delay 0.5
+            if foundCount > 0 then
+                -- Probe AA: the identifier propagates through a whole subtree
+                -- (review's content carried 20+ elements), so the count names
+                -- what mounted and makes a stale/wrong-pane result visible.
+                log marker & ": " & foundCount & " elements"
+                return true
+            end if
+            if (current date) > deadline then return false
+            delay 1
         end repeat
     end tell
-    return false
 end hasMarker
 
 on clickById(win, idStr)
@@ -181,10 +192,15 @@ on run
             set size of win to {1180, 728}
             delay 2
             set navigated to 0
-            repeat with areaRaw in {"review", "workspace", "mapping", "import", "exceptions", "settings"}
+            repeat with areaRaw in {"workspace", "mapping", "import", "exceptions", "settings", "review"}
                 set navOK to my clickById(win, "area-" & areaRaw)
                 if not navOK then error "no accessibility path to the sidebar row for " & areaRaw
                 delay 2
+                -- A click on the label may not move selection; the marker
+                -- check below is the proof, so order the sweep so every
+                -- area is mounted at least once as a target (review opens
+                -- the list - if its click no-oped, the NEXT area's marker
+                -- check is still against a pane that must have changed).
                 -- 3a. the pane mounted. The content marker is derived from
                 -- the selection (FormaApplication:385), so its appearance -
                 -- and only one content area ever being mounted - IS the
