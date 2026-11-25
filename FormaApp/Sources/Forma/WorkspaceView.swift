@@ -390,7 +390,7 @@ struct WorkspaceInspector: View {
                 } else {
                     Button(ProductCopy.Workspace.readEvidence) { model.readFileEvidence(entry, extracting: true) }
                         .disabled(entry.state != .present
-                                  || !["pdf", "docx", "xlsx"].contains((entry.relativePath as NSString).pathExtension.lowercased()))
+                                  || !EvidenceExtractor.supportedFileExtensions.contains((entry.relativePath as NSString).pathExtension.lowercased()))
                         .accessibilityIdentifier("read-evidence")
                     Button(ProductCopy.Workspace.computeHash) { model.readFileEvidence(entry, extracting: false) }
                         .disabled(entry.state != .present)

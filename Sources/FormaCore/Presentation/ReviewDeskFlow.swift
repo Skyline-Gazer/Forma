@@ -94,7 +94,7 @@ public enum DeskGuidance {
     public static let aiNeedsConsent = "AI 路径会把脱敏后的证据摘录分批发送。在你确认外发许可之前，Forma 不会发出任何数据。"
     public static let keyMissingHint = "本机没有可用的 API 密钥时，AI 理解会逐文件失败；请先在设置中保存密钥。"
     public static let manualDraftNotice = "手动草稿由离线规划器生成，不是 AI 理解：字段全部留待人工确认，不计为已验证。"
-    public static let recoverySnapshot = "部分文件内容已变化，旧快照的审核结论不再有效：请重新扫描并识别项目后继续。"
+    public static let recoverySnapshot = "部分文件内容已变化，旧快照的审核结论不再有效：重新扫描后，变化过的文件可在证据卡中「重新读取证据」，再引用当前证据保存修订。"
     public static let providerError = "有文件在 Provider 侧失败。可以安全重试，已完成的审核结果不会丢失。"
     public static let noPretendResult = "没有密钥或外发许可时，Forma 不产出任何「AI 结果」；本页不做模拟推断。"
     public static let dryRunOnly = "归档预览只做 Dry-Run：显示目标目录与阻断原因，不会执行任何写入。"
@@ -305,6 +305,7 @@ public func deskEvidenceLocatorLabel(_ locator: EvidenceLocator?) -> String {
     case .pdf(let page, let range): "第 \(page) 页 · 字符 \(range.lowerBound)–\(range.upperBound)"
     case .docx(_, let paragraph, let range): "段落 \(paragraph) · 字符 \(range.lowerBound)–\(range.upperBound)"
     case .xlsx(let sheet, let cell): "工作表 \(sheet) · 单元格 \(cell)"
+    case .text(let range): "字符 \(range.lowerBound)–\(range.upperBound)"
     case nil: "目录与文件名"
     default: "正文摘录"
     }
