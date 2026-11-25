@@ -160,28 +160,32 @@ on run
             -- .starting ProgressView pane (window up, sized correctly);
             -- sidebar and content markers exist only once the scan
             -- completes and .ready mounts.
-            if not my waitMarker(win, "area-review-content", 5, 3) then
-                -- Decisive: no resize has happened yet. Dump the world at
-                -- the failure point: title (launch state), liveness, and
-                -- every identifier the walk can currently see.
-                set winTitle to title of win
-                set alive to my appAlive()
+            set gateOK to false
+            set readyN to -1
+            repeat 5 times
                 set idDump to ""
                 set n to 0
-                tell application "System Events"
-                    repeat with el in (entire contents of win)
-                        try
-                            if (exists attribute "AXIdentifier" of el) then
-                                set idv to value of attribute "AXIdentifier" of el
-                                if idv is not "" then
-                                    set idDump to idDump & idv & "; "
-                                    set n to n + 1
-                                end if
+                repeat with el in (entire contents of win)
+                    try
+                        if (exists attribute "AXIdentifier" of el) then
+                            set idv to value of attribute "AXIdentifier" of el
+                            if idv is not "" then
+                                set idDump to idDump & idv & "; "
+                                set n to n + 1
+                                if (idv as text) is "area-review-content" then set gateOK to true
                             end if
-                        end try
-                    end repeat
-                end tell
-                error "gate: title=" & winTitle & " alive=" & alive & " identifiers(" & n & ")=" & idDump
+                        end if
+                    end try
+                end repeat
+                set readyN to n
+                if gateOK then exit repeat
+                delay 3
+            end repeat
+            log "inline gate: identifiers=" & readyN & " ok=" & gateOK
+            if not gateOK then
+                set winTitle to title of win
+                set alive to my appAlive()
+                error "gate: title=" & winTitle & " alive=" & alive & " identifiers(" & readyN & ")=" & idDump
             end if
             set size of win to {1180, 728}
             delay 2
