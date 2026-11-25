@@ -67,9 +67,9 @@ sleep 2  # let the WindowConfigurator's async first-size land before measuring
 
 osascript - <<'OSA'
 on hasMarker(win, marker)
-    -- `whose identifier is` only reaches direct children, and the pane sits
-    -- deep in the split view, so walk the tree once per area and try each
-    -- element's identifier. Elements without one are skipped.
+    -- `whose identifier is` only reaches direct children and System Events'
+    -- UI element class has no identifier *property* (WindowGate finding 1),
+    -- so walk the tree and read the AXIdentifier *attribute* per element.
     tell application "System Events"
         repeat with el in (entire contents of win)
             try
@@ -79,6 +79,23 @@ on hasMarker(win, marker)
     end tell
     return false
 end hasMarker
+
+on clickById(win, idStr)
+    -- Structure-independent: the sidebar row carries AXIdentifier
+    -- `area-<raw>` wherever the split view nests it; clicking that exact
+    -- element is the navigation. Returns false when no element carries it.
+    tell application "System Events"
+        repeat with el in (entire contents of win)
+            try
+                if (exists attribute "AXIdentifier" of el) and (value of attribute "AXIdentifier" of el is idStr) then
+                    click el
+                    return true
+                end if
+            end try
+        end repeat
+    end tell
+    return false
+end clickById
 
 on run
     tell application "System Events"
@@ -143,28 +160,15 @@ on run
             delay 2
             set navigated to 0
             repeat with areaRaw in {"review", "workspace", "mapping", "import", "exceptions", "settings"}
-                set navOK to false
-                try
-                    set navRow to first row of table 1 of scroll area 1 of splitter group 1 of win whose identifier is "area-" & areaRaw
-                    select navRow
-                    set navOK to true
-                end try
-                if not navOK then
-                    try
-                        click (first UI element of win whose identifier is "area-" & areaRaw)
-                        set navOK to true
-                    end try
-                end if
+                set navOK to my clickById(win, "area-" & areaRaw)
                 if not navOK then error "no accessibility path to the sidebar row for " & areaRaw
                 delay 2
-                -- 3a. the pane mounted.
+                -- 3a. the pane mounted. The content marker is derived from
+                -- the selection (FormaApplication:385), so its appearance -
+                -- and only one content area ever being mounted - IS the
+                -- proof the sidebar selection took effect.
                 if not my hasMarker(win, "area-" & areaRaw & "-content") then
                     error "area " & areaRaw & " never mounted its content marker"
-                end if
-                -- 3b. the selected row really is this area.
-                set sel to first row of table 1 of scroll area 1 of splitter group 1 of win whose identifier is "area-" & areaRaw
-                if selected of sel is not true then
-                    error "sidebar still does not report " & areaRaw & " selected"
                 end if
                 set navigated to navigated + 1
                 set {wA, hA} to size of win
@@ -183,12 +187,9 @@ on run
             --    settings; clamping there would pin nothing #172-relevant).
             set size of win to {1180, 728}
             delay 1
-            try
-                set navRow to first row of table 1 of scroll area 1 of splitter group 1 of win whose identifier is "area-mapping"
-                select navRow
-            on error
-                click (first UI element of win whose identifier is "area-mapping")
-            end try
+            if not my clickById(win, "area-mapping") then
+                error "re-navigating to mapping failed before the clamp (no sidebar path)"
+            end if
             delay 2
             if not my hasMarker(win, "area-mapping-content") then
                 error "re-navigating to mapping failed before the clamp"
