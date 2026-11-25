@@ -12,6 +12,7 @@ struct FormaApplication: App {
             FormaRoot(state: delegate.state)
         }
         .defaultSize(width: 1180, height: 700)
+        .windowResizability(.contentMinSize)
         // No `windowResizability`, no fixed sizes: the window stays genuinely
         // user-resizable (owner failure #1/#2 were nested split views forcing
         // frame growth, not a missing constraint). One shell owns the columns;
