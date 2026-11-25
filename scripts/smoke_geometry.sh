@@ -41,6 +41,8 @@ trap cleanup EXIT
 cleanup
 sleep 1
 
+defaults delete io.github.skyline-gazer.forma 2>/dev/null || true
+rm -rf "$HOME/Library/Saved Application State/io.github.skyline-gazer.forma.savedState"
 open "$APP"
 
 # Wait for the window rather than trusting a fixed delay: the hosted runner's

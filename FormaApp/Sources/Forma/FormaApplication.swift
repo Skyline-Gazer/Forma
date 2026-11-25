@@ -227,10 +227,7 @@ private struct FormaRoot: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(minWidth: CGFloat(ShellLayout.windowMinWidth),
-               idealWidth: CGFloat(ShellLayout.windowIdealWidth), maxWidth: .infinity,
-               minHeight: CGFloat(ShellLayout.windowMinHeight),
-               idealHeight: CGFloat(ShellLayout.windowIdealHeight), maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
