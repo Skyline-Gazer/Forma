@@ -24,7 +24,6 @@ struct FormaApplication: App {
         // so no business view dictates the window and switching areas
         // cannot resize it (failure #2 stays fixed: this is still one shell,
         // not per-area split views).
-        .windowResizability(.contentMinSize)
 
         Settings {
             ProviderSettingsRoot(state: delegate.state)
