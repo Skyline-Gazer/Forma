@@ -106,3 +106,23 @@ jobs:
           "$BIN/FormaResourceCheck" artifact/Forma.app
       - name: Launch and observe
         run: sh scripts/smoke_app.sh artifact/Forma.app
+
+  # The APFS fixture tool is shell, so `swift test` never touches it. Only a job
+  # that runs the real commands can prove build/stamp/compare/clean behave on a
+  # writable APFS volume: the first version passed review while failing on its
+  # very first `build` and while polluting the tree it was meant to fingerprint.
+  apfs-tool:
+    name: M11 APFS fixture tool smoke
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Volume check
+        # `diskutil info <dir>` can fail on a runner ("Could not find disk"), so
+        # the device is resolved through `df` first.
+        run: |
+          df -P "$RUNNER_TEMP"
+          dev=$(df -P "$RUNNER_TEMP" | awk 'NR==2 {print $1}')
+          diskutil info "$dev" | grep -E 'File System Personality|Read-Only'
+      - name: Run the fixture tool harness
+        run: bash scripts/test_m11_apfs_fixture.sh
