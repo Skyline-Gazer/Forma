@@ -203,6 +203,12 @@ public enum ShellLayout {
     /// height demand (workspace's stacked tables, ~300pt) stays under it,
     /// so the declared value is the effective one everywhere.
     public static let windowMinWidth: Double = sidebar.min + areaContentMinWidth + inspector.min
+    /// The frame the root proposes at launch (#172 probes J/K: a root frame
+    /// with only minWidth collapsed `.defaultSize` - the window launched at
+    /// the minimum, 1024x674 in CI). The ideal is the scene's configured
+    /// default; the minimum stays identical across launch states.
+    public static let windowIdealWidth: Double = 1180
+    public static let windowIdealHeight: Double = 700
     public static let windowMinHeight: Double = 620
 
     /// The narrowest usable width of a table pane.

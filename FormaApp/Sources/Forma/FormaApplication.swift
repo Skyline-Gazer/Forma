@@ -227,8 +227,10 @@ private struct FormaRoot: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(minWidth: CGFloat(ShellLayout.windowMinWidth), maxWidth: .infinity,
-               minHeight: CGFloat(ShellLayout.windowMinHeight), maxHeight: .infinity)
+        .frame(minWidth: CGFloat(ShellLayout.windowMinWidth),
+               idealWidth: CGFloat(ShellLayout.windowIdealWidth), maxWidth: .infinity,
+               minHeight: CGFloat(ShellLayout.windowMinHeight),
+               idealHeight: CGFloat(ShellLayout.windowIdealHeight), maxHeight: .infinity)
     }
 }
 
@@ -361,8 +363,7 @@ private struct WorkspaceAreas: View {
                 }
                 statusStrip
                 areaContent
-                    .frame(minWidth: ShellGeometry.contentFloor,
-                           maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityIdentifier("area-\(selection.rawValue)-content")
                     // Panel appearance is instrumented as its own event because
                     // it is the moment that used to cost a registry read: a
