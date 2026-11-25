@@ -198,13 +198,13 @@ private struct FormaRoot: View {
     var body: some View {
         switch state.launch {
         case .starting:
-            ProgressView("Opening workspace…")
+            ProgressView(ProductCopy.Shell.openingWorkspace)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready(let workspace):
             WorkspaceAreas(workspace: workspace, state: state)
         case .degraded(let error):
             ContentUnavailableView(
-                "Workspace unavailable",
+                ProductCopy.Shell.workspaceUnavailable,
                 systemImage: "externaldrive.badge.exclamationmark",
                 description: Text(error.localizedDescription))
         }
@@ -387,7 +387,7 @@ private struct WorkspaceAreas: View {
             await model.restore()
         }
         .alert("Forma", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
-            Button("OK") { model.error = nil }
+            Button(ProductCopy.Shell.ok) { model.error = nil }
         } message: {
             Text(model.error?.localizedDescription ?? "")
         }
@@ -653,7 +653,7 @@ private struct WorkspaceAreas: View {
 
     private func chooseSource() {
         let panel = NSOpenPanel()
-        panel.title = "Choose a source folder"
+        panel.title = ProductCopy.Shell.chooseSourceFolder
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -665,8 +665,8 @@ private struct WorkspaceAreas: View {
 
     private func chooseReauthorization(for scope: SourceScope) {
         let panel = NSOpenPanel()
-        panel.title = "Choose the folder for \(scope.displayName) again"
-        panel.message = "Forma renews access only when the folder is the same one."
+        panel.title = ProductCopy.Shell.reauthorizeFolder(name: scope.displayName)
+        panel.message = ProductCopy.Workspace.renewsAccess
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -678,10 +678,10 @@ private struct WorkspaceAreas: View {
 
     private func chooseExportDirectory() {
         let panel = NSOpenPanel()
-        panel.title = "Choose a folder for the export bundle"
+        panel.title = ProductCopy.Shell.chooseExportFolder
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
-        panel.prompt = "Export Here"
+        panel.prompt = ProductCopy.Shell.exportHere
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             Task { @MainActor in model.export(to: url) }
@@ -690,11 +690,11 @@ private struct WorkspaceAreas: View {
 
     private func choosePlanExportFolder() {
         let panel = NSOpenPanel()
-        panel.title = "Choose a folder for the import plan"
+        panel.title = ProductCopy.Shell.choosePlanFolder
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
-        panel.prompt = "Write Plan Here"
+        panel.prompt = ProductCopy.Shell.writePlanHere
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             // The encode and the write are off the main actor now (#151 audit
@@ -718,18 +718,19 @@ private struct ImportRecoveryBanner: View {
                 .foregroundStyle(.orange)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Interrupted import operations")
+                Text(ProductCopy.Shell.interruptedImports)
                     .font(.headline)
                 Text(summary)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 if let failure = state.recoveryFailure {
-                    Text("Recovery sweep failed: \(failure.localizedDescription)")
+                    Text(ProductCopy.Shell.recoverySweepFailed(detail: failure.localizedDescription))
                         .font(.callout)
                         .foregroundStyle(.red)
                 }
                 if let scope = state.recoveryScope {
-                    Text("Read scope: \(scope.databaseName) · \(scope.groupPath.joined(separator: "/"))")
+                    Text(ProductCopy.Shell.readScopeLine(name: scope.databaseName,
+                                                     path: scope.groupPath.joined(separator: "/")))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -745,10 +746,10 @@ private struct ImportRecoveryBanner: View {
                 }
             }
             Spacer()
-            Button("Read Scope…") { configuringScope = true }
+            Button(ProductCopy.Shell.readScope) { configuringScope = true }
                 .disabled(state.recovery.requiresReview == false)
                 .accessibilityIdentifier("configure-recovery-scope")
-            Button("Recheck read-only") {
+            Button(ProductCopy.Shell.recheckReadOnly) {
                 Task { await state.requestRecoveryRecheck() }
             }
             .disabled(state.recovery.requiresReview == false
@@ -770,8 +771,11 @@ private struct ImportRecoveryBanner: View {
             guard let count = counts[outcome], count > 0 else { return nil }
             return "\(count) \(outcome.rawValue)"
         }
-        let verdict = report.isConclusive ? "conclusive" : "inconclusive"
-        return "Read-only check \(verdict): " + (parts.isEmpty ? "nothing reviewed" : parts.joined(separator: " · "))
+        let verdict = report.isConclusive
+        return ProductCopy.Shell.reviewVerdict(
+            conclusive: verdict,
+            parts: parts.isEmpty ? ProductCopy.Shell.nothingReviewed
+                                 : parts.joined(separator: " · "))
     }
 
     private var summary: String {
@@ -780,28 +784,28 @@ private struct ImportRecoveryBanner: View {
             guard let count = counts[entryState], count > 0 else { return nil }
             return "\(count) \(label(entryState))"
         }
-        return parts.isEmpty ? "No pending operation." : parts.joined(separator: " · ")
+        return parts.isEmpty ? ProductCopy.Shell.nothingPending : parts.joined(separator: " · ")
     }
 
     private func label(_ entryState: ImportRecoveryEntry.State) -> String {
         switch entryState {
-        case .notStarted: return "not started"
-        case .intentRecorded: return "intent recorded, no record"
-        case .recordCreated: return "record created, fields pending"
-        case .metadataAnswered: return "fields written, readback pending"
-        case .outcomeUnknown: return "outcome unknown"
-        case .settled: return "settled"
+        case .notStarted: return ProductCopy.Shell.notStarted
+        case .intentRecorded: return ProductCopy.Shell.intentRecorded
+        case .recordCreated: return ProductCopy.Shell.recordCreated
+        case .metadataAnswered: return ProductCopy.Shell.metadataAnswered
+        case .outcomeUnknown: return ProductCopy.Shell.outcomeUnknown
+        case .settled: return ProductCopy.Shell.settled
         }
     }
 
     private func reviewExplanation(_ reason: String) -> String {
         switch reason {
         case "no_authorized_scope":
-            return "A read-only recheck needs a confirmed read scope. Until one is confirmed these operations stay VERIFY_REQUIRED and are never retried automatically."
+            return ProductCopy.Shell.needsScopeExplanation
         case "nothing_to_review":
-            return "Nothing is waiting for a readback."
+            return ProductCopy.Shell.nothingAwaitingReadback
         case "workspace_unavailable":
-            return "The workspace or ledger could not be opened; no recheck is attempted."
+            return ProductCopy.Shell.workspaceUnopenable
         default:
             return reason
         }
@@ -830,26 +834,26 @@ private struct RecoveryScopeSheet: View {
         case .none, .ready:
             return nil
         case .missingFields:
-            return "Enter a database UUID, a name and at least one group component."
+            return ProductCopy.Shell.recoveryScopeHint
         case .invalidUUID:
-            return "The database UUID is not a valid UUID."
+            return ProductCopy.Shell.invalidDatabaseUUID
         }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Read-only recovery scope")
+            Text(ProductCopy.Shell.recoveryScopeTitle)
                 .font(.headline)
-            Text("Forma will read the records of interrupted operations in this database and group. It never writes and never retries an import.")
+            Text(ProductCopy.Shell.readOnlyScopeStatement)
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            TextField("Database UUID", text: $draft.databaseID)
+            TextField(ProductCopy.Shell.databaseUUID, text: $draft.databaseID)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("recovery-database-id")
-            TextField("Database name (label only)", text: $draft.databaseName)
+            TextField(ProductCopy.Shell.databaseNameLabel, text: $draft.databaseName)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("recovery-database-name")
-            TextField("Group path, e.g. Forma_I1B2/r1", text: $draft.groupPath)
+            TextField(ProductCopy.Shell.groupPathPlaceholder, text: $draft.groupPath)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("recovery-group-path")
             if let errorText {
@@ -860,11 +864,11 @@ private struct RecoveryScopeSheet: View {
             }
             HStack {
                 Spacer()
-                Button("Cancel") {
+                Button(ProductCopy.Shell.cancel) {
                     draft.reset()
                     dismiss()
                 }
-                Button("Confirm read-only scope") {
+                Button(ProductCopy.Shell.confirmReadOnlyScope) {
                     draft.attemptConfirmation()
                     // Dismiss and commit only on a valid submission. Checking the
                     // application's `recoveryScope` here would also dismiss after a
