@@ -1007,11 +1007,21 @@ final class WorkspaceModel: ObservableObject {
     /// published (`EvidenceCache.publish`). `EvidenceCacheTests` pins all of
     /// that, including the capture-during-a-read race.
     func loadEvidence(for sourceID: UUID) async {
-        guard let revision = evidenceRevision(for: sourceID) else {
+        // F4 (M0-R2 consolidated review): a manifest that still cites an
+        // older generation must stay readable after a restart. The listing
+        // revision answers "what is on disk now"; the manifest revision is
+        // what the citations on screen were taken against. Read both, each
+        // under its own cache key - a keyed read must never widen to the
+        // unfiltered registry (that is what left superseded rows on screen),
+        // but "all rows for one revision" is exactly what an old citation
+        // needs.
+        let revisions = evidenceRevisions(for: sourceID)
+        if revisions.isEmpty {
             // No revision to key on: the file is not in this listing and no
-            // manifest row cites it, so nothing here can say which snapshot the
-            // rows would be read against. Read without caching rather than
-            // invent a revision that a later, real one would collide with.
+            // manifest row cites it, so nothing here can say which snapshot
+            // the rows would be read against. Read without caching rather
+            // than invent a revision that a later, real one would collide
+            // with.
             PerfTrace.emit(.evidenceLoad, count: 0)
             do {
                 merge(try await workspace.evidenceRegistry(for: sourceID))
@@ -1020,6 +1030,27 @@ final class WorkspaceModel: ObservableObject {
             }
             return
         }
+        for revision in revisions {
+            await loadEvidence(for: sourceID, revision: revision)
+        }
+    }
+
+    /// The generations worth loading for a source: the listing's current
+    /// snapshot and, when the manifest binds another one, that as well.
+    private func evidenceRevisions(for sourceID: UUID) -> [Int] {
+        var out: [Int] = []
+        if let entry = listingProjection.entry(sourceID),
+           let rev = Int(exactly: entry.snapshotRevision) {
+            out.append(rev)
+        }
+        if let bound = manifest?.entries.first(where: { $0.sourceID == sourceID })?.snapshotRevision,
+           !out.contains(bound) {
+            out.append(bound)
+        }
+        return out
+    }
+
+    private func loadEvidence(for sourceID: UUID, revision: Int) async {
         let key = EvidenceCacheKey(sourceID: sourceID, snapshotRevision: revision)
         let claim = evidenceCache.claim(key)
         if case .cached = claim {
