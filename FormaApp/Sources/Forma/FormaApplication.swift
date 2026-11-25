@@ -12,10 +12,19 @@ struct FormaApplication: App {
             FormaRoot(state: delegate.state)
         }
         .defaultSize(width: 1180, height: 700)
-        // No `windowResizability`, no fixed sizes: the window stays genuinely
-        // user-resizable (owner failure #1/#2 were nested split views forcing
-        // frame growth, not a missing constraint). One shell owns the columns;
-        // every pane inside is flexible with declared bounds.
+        // The window's floor is the shell's declared minimum, not the content's
+        // preferred size. Under the default policy the window could not be
+        // dragged below the mounted content's fitting (ideal) width, so every
+        // area's ideal demanded - 168 sidebar + 320 inspector + the area's
+        // own 616-1177 - became the *minimum*: 1665pt at the Review Desk on a
+        // 1512pt display (owner report, M0-R1 physical acceptance: "页面大小
+        // 不能调整，是固定死的"). `.contentMinSize` ties the floor to the
+        // minimum instead - bounded panes, truncating cells, and locally
+        // scrolling tables hold that minimum at one uniform, small number,
+        // so no business view dictates the window and switching areas
+        // cannot resize it (failure #2 stays fixed: this is still one shell,
+        // not per-area split views).
+        .windowResizability(.contentMinSize)
 
         Settings {
             ProviderSettingsRoot(state: delegate.state)
@@ -196,19 +205,59 @@ private struct FormaRoot: View {
     @ObservedObject var state: FormaApplicationState
 
     var body: some View {
-        switch state.launch {
-        case .starting:
-            ProgressView("Opening workspace…")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .ready(let workspace):
-            WorkspaceAreas(workspace: workspace, state: state)
-        case .degraded(let error):
-            ContentUnavailableView(
-                "Workspace unavailable",
-                systemImage: "externaldrive.badge.exclamationmark",
-                description: Text(error.localizedDescription))
+        // One minimum for every launch state. The scan completes seconds
+        // after launch and swaps `.starting` for the shell; if the two
+        // propose different content minimums, AppKit re-solves the window's
+        // constraints mid-display-cycle and the process traps there (the
+        // #174 stack, reproduced in CI by this slice's first revision -
+        // see ShellLayout.windowMinWidth's comment). Declaring the shell's
+        // steady-state minimum here makes the swap constraint-neutral.
+        Group {
+            switch state.launch {
+            case .starting:
+                ProgressView("Opening workspace…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .ready(let workspace):
+                WorkspaceAreas(workspace: workspace, state: state)
+            case .degraded(let error):
+                ContentUnavailableView(
+                    "Workspace unavailable",
+                    systemImage: "externaldrive.badge.exclamationmark",
+                    description: Text(error.localizedDescription))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
+        .frame(minWidth: CGFloat(ShellLayout.windowMinWidth), maxWidth: .infinity,
+               minHeight: CGFloat(ShellLayout.windowMinHeight), maxHeight: .infinity)
+        .background(WindowConfigurator())
     }
+}
+
+/// The two window facts the SwiftUI scene cannot express on the macOS 26
+/// hosting layer (probes J/K/M/O/P in #172): a content min frame makes the
+/// window open AT that min - `.defaultSize` is swallowed - while removing it
+/// re-opens the #153 content-fit launch (1689pt in CI). Set both facts once
+/// at the AppKit level: a static content minimum, which never re-solves when
+/// the mounted subtree swaps (that mid-cycle re-solve was the trap), and a
+/// first-launch content size behind an explicit flag so a returning user's
+/// restored frame is never touched.
+private struct WindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.contentMinSize = NSSize(width: CGFloat(ShellLayout.windowMinWidth),
+                                           height: CGFloat(ShellLayout.windowMinHeight))
+            let key = "shell.windowFirstSizeApplied"
+            if !UserDefaults.standard.bool(forKey: key) {
+                UserDefaults.standard.set(true, forKey: key)
+                window.setContentSize(NSSize(width: CGFloat(ShellLayout.windowIdealWidth),
+                                             height: CGFloat(ShellLayout.windowIdealHeight)))
+            }
+        }
+        return view
+    }
+    func updateNSView(_ view: NSView, context: Context) {}
 }
 
 /// Column widths for the whole app. Every split in the window is bounded here,
@@ -254,6 +303,17 @@ enum ShellGeometry {
     static let workspaceLeading = AreaWidth(ShellLayout.leading(for: .workspace))
     static let mappingLeading = AreaWidth(ShellLayout.leading(for: .mapping))
     static let exceptionsLeading = AreaWidth(ShellLayout.leading(for: .exceptions))
+    /// The one content floor every area declares, so the window's minimum is
+    /// the same number no matter which area is mounted. Tables deliberately
+    /// do not add their own: a `Table` scrolls its columns inside the pane,
+    /// and only this floor reaches the window (see ShellLayout's
+    /// `scrollableTableMinWidth` for the modelled demand).
+    /// The uniform per-area content contract (#172). Declared and tested,
+    /// NEVER applied as a frame on the swap boundary: probes D/J in #172
+    /// showed `areaContent.frame(minWidth:)` is exactly what re-solves the
+    /// window constraints at the .starting -> .ready swap and traps. The
+    /// window minimum is carried by the root frame and window.contentMinSize.
+    static let contentFloor = CGFloat(ShellLayout.areaContentMinWidth)
 }
 
 extension View {

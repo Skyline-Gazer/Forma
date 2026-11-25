@@ -39,8 +39,12 @@ struct ExceptionsView: View {
                                        description: Text(emptyReason))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
+                // The blocked-entry table scrolls its own column minimums
+                // (446pt) inside this pane, never at the window - see
+                // `MappingView` for the full #153/#172 mechanism.
                 rowTable
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity,
+                           maxHeight: .infinity, alignment: .topLeading)
             }
         }
         .onChange(of: model.exceptionStateFilter) { _, _ in model.exceptionSelection.removeAll() }
