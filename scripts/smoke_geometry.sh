@@ -41,6 +41,12 @@ trap cleanup EXIT
 cleanup
 sleep 1
 
+# First-launch semantics, not restore: the smoke_app step launched this bundle
+# minutes earlier and SwiftUI persists the Window(id:) frame. Delete defaults
+# and saved state so the geometry contract is measured on a genuine first
+# launch (the same thing that breaks if the Owner moves the window and quits).
+defaults delete io.github.skyline-gazer.forma 2>/dev/null || true
+rm -rf "$HOME/Library/Saved Application State/io.github.skyline-gazer.forma.savedState"
 open "$APP"
 
 # Wait for the window rather than trusting a fixed delay: the hosted runner's
@@ -56,6 +62,8 @@ if [ "$i" -ge 30 ]; then
     echo "error: System Events never saw a Forma window (Accessibility permission or launch failure)" >&2
     exit 3
 fi
+
+sleep 2  # let the WindowConfigurator's async first-size land before measuring
 
 osascript - <<'OSA'
 on hasMarker(win, marker)

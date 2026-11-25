@@ -229,7 +229,35 @@ private struct FormaRoot: View {
         }
         .frame(minWidth: CGFloat(ShellLayout.windowMinWidth), maxWidth: .infinity,
                minHeight: CGFloat(ShellLayout.windowMinHeight), maxHeight: .infinity)
+        .background(WindowConfigurator())
     }
+}
+
+/// The two window facts the SwiftUI scene cannot express on the macOS 26
+/// hosting layer (probes J/K/M/O/P in #172): a content min frame makes the
+/// window open AT that min - `.defaultSize` is swallowed - while removing it
+/// re-opens the #153 content-fit launch (1689pt in CI). Set both facts once
+/// at the AppKit level: a static content minimum, which never re-solves when
+/// the mounted subtree swaps (that mid-cycle re-solve was the trap), and a
+/// first-launch content size behind an explicit flag so a returning user's
+/// restored frame is never touched.
+private struct WindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.contentMinSize = NSSize(width: CGFloat(ShellLayout.windowMinWidth),
+                                           height: CGFloat(ShellLayout.windowMinHeight))
+            let key = "shell.windowFirstSizeApplied"
+            if !UserDefaults.standard.bool(forKey: key) {
+                UserDefaults.standard.set(true, forKey: key)
+                window.setContentSize(NSSize(width: CGFloat(ShellLayout.windowIdealWidth),
+                                             height: CGFloat(ShellLayout.windowIdealHeight)))
+            }
+        }
+        return view
+    }
+    func updateNSView(_ view: NSView, context: Context) {}
 }
 
 /// Column widths for the whole app. Every split in the window is bounded here,
