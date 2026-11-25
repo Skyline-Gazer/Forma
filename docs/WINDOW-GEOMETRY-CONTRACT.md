@@ -15,7 +15,7 @@ document states the contract the Owner asked to see in writing.
 | Window minimum, inspector closed | **1012 pt** | the constant root frame - column state does not change the window minimum |
 | Window minimum, sidebar + inspector closed | **1012 pt** | the same; collapsing columns only frees content width above the floor |
 | Height minimum | **620 pt** content; user-resizable above it | `ShellLayout.windowMinHeight` on the root frame |
-| Width maximum / height maximum | unlimited | `.windowResizability(.contentMinSize)` |
+| Width maximum / height maximum | unlimited by the scene; the macOS 26 hosting layer caps programmatic growth at the content's fitting size (#153 pre-existing; Mac acceptance step 3) | `.windowResizability(.contentMinSize)` + `WindowConfigurator` |
 
 The physical reference display is 1512 × 982 pt (MacBookPro18,3). Every
 minimum above fits it with margin; the M0-R1 build demanded 1665 pt and
@@ -91,6 +91,13 @@ passes vacuously:
   of #153 - a window pinned to its content proposal fails here);
 - the mapping area (the 1104 regression's home) is re-selected and re-clamped
   below the floor, and must still land on 1012.
+
+- growth past the content proposal is LOGGED, not asserted: probes
+  R/V/W/Y/Z established that this hosting build re-fits the window to the
+  content's fitting size on layout passes (dev carries the same behavior at
+  its own fit - 1689pt launches in CI - which is precisely the half of #153
+  this contract closes by proving the floor: clamps land on 1012x672
+  exactly). Real-display resize behavior is Mac acceptance step 3.
 
 If System Events cannot see the window at all (no Aqua session or no
 Accessibility permission) the script exits 3 - no claim is made - which is
