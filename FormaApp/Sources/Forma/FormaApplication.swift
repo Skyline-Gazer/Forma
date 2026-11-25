@@ -196,18 +196,23 @@ private struct FormaRoot: View {
     @ObservedObject var state: FormaApplicationState
 
     var body: some View {
-        switch state.launch {
-        case .starting:
-            ProgressView("Opening workspace…")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .ready(let workspace):
-            WorkspaceAreas(workspace: workspace, state: state)
-        case .degraded(let error):
-            ContentUnavailableView(
-                "Workspace unavailable",
-                systemImage: "externaldrive.badge.exclamationmark",
-                description: Text(error.localizedDescription))
+        Group {
+            switch state.launch {
+            case .starting:
+                ProgressView("Opening workspace…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .ready(let workspace):
+                WorkspaceAreas(workspace: workspace, state: state)
+            case .degraded(let error):
+                ContentUnavailableView(
+                    "Workspace unavailable",
+                    systemImage: "externaldrive.badge.exclamationmark",
+                    description: Text(error.localizedDescription))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
+        .frame(minWidth: 1012, maxWidth: .infinity,
+               minHeight: 620, maxHeight: .infinity)
     }
 }
 
