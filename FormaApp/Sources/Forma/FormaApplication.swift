@@ -24,7 +24,6 @@ struct FormaApplication: App {
         // so no business view dictates the window and switching areas
         // cannot resize it (failure #2 stays fixed: this is still one shell,
         // not per-area split views).
-        .windowResizability(.contentMinSize)
 
         Settings {
             ProviderSettingsRoot(state: delegate.state)
@@ -361,8 +360,7 @@ private struct WorkspaceAreas: View {
                 }
                 statusStrip
                 areaContent
-                    .frame(minWidth: ShellGeometry.contentFloor,
-                           maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityIdentifier("area-\(selection.rawValue)-content")
                     // Panel appearance is instrumented as its own event because
                     // it is the moment that used to cost a registry read: a
