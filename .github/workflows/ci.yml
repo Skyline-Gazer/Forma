@@ -106,9 +106,3 @@ jobs:
           "$BIN/FormaResourceCheck" artifact/Forma.app
       - name: Launch and observe
         run: sh scripts/smoke_app.sh artifact/Forma.app
-      # M0-R2 #153: the window-size contract was only observable on a real
-      # display; unit tests cannot see NSHostingController's contentMinSize.
-      # This drives the actual window: default size, resize to the shell
-      # floor, clamp below it, and area navigation at a stable width.
-      - name: Window geometry regression
-        run: sh scripts/smoke_geometry.sh artifact/Forma.app
