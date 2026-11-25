@@ -35,7 +35,7 @@ struct ExceptionsView: View {
             filterPanel
                 .areaWidth(leading)
             if model.exceptions.isEmpty {
-                ContentUnavailableView("No exceptions", systemImage: "checkmark.seal",
+                ContentUnavailableView(ProductCopy.ReviewVocabulary.noExceptions, systemImage: "checkmark.seal",
                                        description: Text(emptyReason))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -66,15 +66,15 @@ struct ExceptionsView: View {
 
     private var filterPanel: some View {
         List {
-            Section("Filter") {
-                Picker("State", selection: $model.exceptionStateFilter) {
+            Section(ProductCopy.ReviewVocabulary.filter) {
+                Picker(ProductCopy.ReviewVocabulary.state, selection: $model.exceptionStateFilter) {
                     ForEach(ExceptionFilterState.allCases) { filter in
                         Text(filter.title).tag(filter)
                     }
                 }
                 .accessibilityIdentifier("exception-state-filter")
-                Picker("Violation code", selection: $model.exceptionCodeFilter) {
-                    Text("全部原因").tag(String?.none)
+                Picker(ProductCopy.ReviewVocabulary.violationCode, selection: $model.exceptionCodeFilter) {
+                    Text(ProductCopy.ReviewVocabulary.allReasons).tag(String?.none)
                     ForEach(codes, id: \.self) { code in
                         // Business copy in the list, raw code in the help and in
                         // the row's 诊断 detail - never the other way round
@@ -86,17 +86,18 @@ struct ExceptionsView: View {
                 }
                 .accessibilityIdentifier("exception-code-filter")
                 .disabled(codes.isEmpty)
-                LabeledContent("Shown", value: "\(rows.count.formatted()) of \(model.exceptions.count.formatted())")
-                LabeledContent("Selected", value: model.exceptionSelection.count.formatted())
+                LabeledContent(ProductCopy.ReviewVocabulary.shown,
+                               value: ProductCopy.ReviewVocabulary.countPair(rows.count, model.exceptions.count))
+                LabeledContent(ProductCopy.ReviewVocabulary.selected, value: model.exceptionSelection.count.formatted())
             }
             if let report = model.manifest?.report {
-                Section("Revision counts") {
-                    LabeledContent("Entries", value: report.counts.entries.formatted())
-                    LabeledContent("Validated", value: report.counts.validated.formatted())
-                    LabeledContent("Hold", value: report.counts.hold.formatted())
-                    LabeledContent("Unknown", value: report.counts.unknown.formatted())
-                    LabeledContent("Invalidated", value: report.counts.invalidated.formatted())
-                    LabeledContent("Eligible", value: report.counts.eligible.formatted())
+                Section(ProductCopy.ReviewVocabulary.revisionCounts) {
+                    LabeledContent(ProductCopy.ReviewVocabulary.entries, value: report.counts.entries.formatted())
+                    LabeledContent(ProductCopy.ReviewVocabulary.validated, value: report.counts.validated.formatted())
+                    LabeledContent(ProductCopy.ReviewVocabulary.hold, value: report.counts.hold.formatted())
+                    LabeledContent(ProductCopy.ReviewVocabulary.unknown, value: report.counts.unknown.formatted())
+                    LabeledContent(ProductCopy.ReviewVocabulary.invalidated, value: report.counts.invalidated.formatted())
+                    LabeledContent(ProductCopy.ReviewVocabulary.eligible, value: report.counts.eligible.formatted())
                     ForEach(report.groups, id: \.group) { group in
                         LabeledContent(businessCopy(for: group.group.rawValue).headline,
                                        value: "\(businessCopy(for: group.status.rawValue).headline) · \(group.violations.count.formatted())")
@@ -105,7 +106,7 @@ struct ExceptionsView: View {
                     }
                 }
             }
-            Section("Reprocessing") {
+            Section(ProductCopy.ReviewVocabulary.reprocessing) {
                 // This describes what the toolbar control will do, so it reads
                 // the same per-run flag the confirmation sets - not the
                 // Settings-level one, which a different action may have set and
@@ -116,9 +117,9 @@ struct ExceptionsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if !model.exceptionSelection.isEmpty {
-                    LabeledContent("Files in scope", value: model.files(in: model.exceptionSelection).count.formatted())
+                    LabeledContent(ProductCopy.ReviewVocabulary.filesInScope, value: model.files(in: model.exceptionSelection).count.formatted())
                 }
-                Text("A reprocessed run covers only the selected files, so this revision's manifest lists those entries.")
+                Text(ProductCopy.ReviewVocabulary.reprocessedScopeNote)
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -128,32 +129,32 @@ struct ExceptionsView: View {
 
     private var rowTable: some View {
         Table(rows, selection: $model.exceptionSelection) {
-            TableColumn("Relative path") { row in
+            TableColumn(ProductCopy.ReviewVocabulary.relativePath) { row in
                 Text(row.relativePath).lineLimit(1).help(row.relativePath)
             }
             .width(min: rowWidths[0].cgMin, ideal: rowWidths[0].cgIdeal, max: rowWidths[0].cgMax)
-            TableColumn("State") { row in
+            TableColumn(ProductCopy.ReviewVocabulary.state) { row in
                 let copy = businessCopy(for: row.state.rawValue)
                 Text(copy.headline)
                     .help(copy.sentence)
                     .accessibilityIdentifier("diagnostic-raw-\(row.state.rawValue)")
             }
             .width(min: rowWidths[1].cgMin, ideal: rowWidths[1].cgIdeal, max: rowWidths[1].cgMax)
-            TableColumn("Reason") { row in
+            TableColumn(ProductCopy.ReviewVocabulary.reason) { row in
                 Text(businessCopy(for: row.reason).headline)
                     .lineLimit(1)
                     .help(businessCopy(for: row.reason).sentence + "\n" + row.reason)
                     .accessibilityIdentifier("diagnostic-raw-\(row.reason)")
             }
             .width(min: rowWidths[2].cgMin, ideal: rowWidths[2].cgIdeal, max: rowWidths[2].cgMax)
-            TableColumn("Codes") { row in
+            TableColumn(ProductCopy.ReviewVocabulary.codes) { row in
                 Text(row.codes.map { businessCopy(for: $0).headline }.joined(separator: " · "))
                     .lineLimit(1)
                     .help(row.codes.map { "\(businessCopy(for: $0).headline)（\($0)）" }.joined(separator: " · "))
                     .accessibilityIdentifier("diagnostic-codes-\(row.sourceID.uuidString)")
             }
             .width(min: rowWidths[3].cgMin, ideal: rowWidths[3].cgIdeal, max: rowWidths[3].cgMax)
-            TableColumn("Violations") { row in
+            TableColumn(ProductCopy.ReviewVocabulary.violations) { row in
                 Text(row.violations.count.formatted()).monospacedDigit()
             }
             .width(min: rowWidths[4].cgMin, ideal: rowWidths[4].cgIdeal, max: rowWidths[4].cgMax)
@@ -179,14 +180,15 @@ struct ExceptionsInspector: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(row.relativePath).font(.headline).textSelection(.enabled)
                     let stateCopy = businessCopy(for: row.state.rawValue)
-                    LabeledContent("Decision state", value: stateCopy.headline)
+                    LabeledContent(ProductCopy.ReviewVocabulary.decisionState, value: stateCopy.headline)
                         .help(stateCopy.sentence)
                     let reasonCopy = businessCopy(for: row.reason)
-                    LabeledContent("Recorded reason", value: reasonCopy.headline)
+                    LabeledContent(ProductCopy.ReviewVocabulary.recordedReason, value: reasonCopy.headline)
                         .help(reasonCopy.sentence + "\n" + row.reason)
-                    LabeledContent("Source identifier", value: row.sourceID.uuidString.lowercased())
+                    LabeledContent(ProductCopy.ReviewVocabulary.sourceIdentifier, value: row.sourceID.uuidString.lowercased())
                     if let entry = model.manifest?.entry(for: row.sourceID) {
-                        LabeledContent("Snapshot", value: "revision \(entry.snapshotRevision.formatted()) · \(entry.snapshotFingerprint)")
+                        LabeledContent(ProductCopy.ReviewVocabulary.snapshot,
+                                       value: "\(ProductCopy.Workspace.revisionLabel) \(entry.snapshotRevision.formatted()) · \(entry.snapshotFingerprint)")
                             .font(.caption)
                         ForEach(MetadataFieldID.allCases, id: \.self) { field in
                             if let outcome = entry.outcome(for: field), outcome.status != .evidenced {
@@ -197,9 +199,9 @@ struct ExceptionsInspector: View {
                         }
                     }
                     Divider()
-                    Text("Violations").font(.subheadline)
+                    Text(ProductCopy.ReviewVocabulary.violations).font(.subheadline)
                     if row.violations.isEmpty {
-                        Text("FormaCore recorded no violation for this path.")
+                        Text(ProductCopy.ReviewVocabulary.noViolationsForPath)
                             .font(.caption).foregroundStyle(.secondary)
                     } else {
                         ForEach(row.violations.indices, id: \.self) { index in
@@ -228,12 +230,12 @@ struct ExceptionsInspector: View {
                 .padding(15)
             }
         } else if selected.isEmpty {
-            ContentUnavailableView("Select an exception", systemImage: "exclamationmark.triangle",
+            ContentUnavailableView(ProductCopy.ReviewVocabulary.selectException, systemImage: "exclamationmark.triangle",
                                    description: Text("在「诊断」表格中选择一行。"))
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("\(selected.count.formatted()) files selected").font(.headline)
+                    Text(ProductCopy.ReviewVocabulary.filesSelected(selected.count)).font(.headline)
                     ForEach(selected) { row in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(row.relativePath).font(.caption)

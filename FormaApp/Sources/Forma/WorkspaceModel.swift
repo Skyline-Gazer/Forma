@@ -36,19 +36,20 @@ final class WorkspaceModel: ObservableObject {
 
         var label: String {
             switch self {
-            case .idle: "Idle"
-            case .scanning: "Scanning…"
-            case .buildingContext: "Building project context…"
-            case .capturingEvidence(let done, let total): "Registering evidence \(done.formatted()) of \(total.formatted())…"
-            case .mapping: "Mapping with the provider…"
-            case .exporting: "Writing the export bundle…"
-            case .revalidating: "Revalidating the bundle…"
-            case .reconciling: "Reconciling stored revisions…"
-            case .loadingManifest: "Reading the stored manifest…"
-            case .correcting: "Recording the correction…"
-            case .readingEvidence: "Reading the file's evidence again…"
-            case .discoveringMCP: "Discovering the MCP server…"
-            case .previewing: "Building the request preview…"
+            case .idle: ProductCopy.Work.idle
+            case .scanning: ProductCopy.Work.scanning
+            case .buildingContext: ProductCopy.Work.buildingContext
+            case .capturingEvidence(let done, let total):
+                ProductCopy.Work.capturingEvidence(done: done, total: total)
+            case .mapping: ProductCopy.Work.mapping
+            case .exporting: ProductCopy.Work.exporting
+            case .revalidating: ProductCopy.Work.revalidating
+            case .reconciling: ProductCopy.Work.reconciling
+            case .loadingManifest: ProductCopy.Work.loadingManifest
+            case .correcting: ProductCopy.Work.correcting
+            case .readingEvidence: ProductCopy.Work.readingEvidence
+            case .discoveringMCP: ProductCopy.Work.discoveringMCP
+            case .previewing: ProductCopy.Work.previewing
             }
         }
     }
@@ -608,8 +609,8 @@ final class WorkspaceModel: ObservableObject {
     /// same inputs FormaCore's own judgement uses, so nothing about the copy
     /// changed.
     func clusterLabel(for sourceID: UUID) -> String {
-        guard let contextProjection else { return "No context" }
-        return contextProjection.label(for: sourceID) ?? "Unassigned"
+        guard let contextProjection else { return ProductCopy.ReviewVocabulary.noContext }
+        return contextProjection.label(for: sourceID) ?? ProductCopy.ReviewVocabulary.unassigned
     }
 
     func entry(with sourceID: UUID) -> SourceEntry? { listingProjection.entry(sourceID) }
@@ -812,15 +813,15 @@ final class WorkspaceModel: ObservableObject {
         do {
             switch try await workspace.reauthorize(scope: scope, with: url) {
             case .updated:
-                notice = "Access to \(scope.displayName) was renewed."
+                notice = ProductCopy.Notice.accessRenewed(scope: scope.displayName)
                 await reload()
             case .identityMismatch:
                 // Not an error: a different folder is a new source, and saying so
                 // is the only way the person can choose.
-                notice = "That folder is not the source this entry was registered from. "
-                    + "Add it as a new source instead."
+                notice = ProductCopy.Notice.folderNotRegisteredSource(
+                    pathHint: ProductCopy.Notice.addAsNewSource)
             case .unknownScope:
-                notice = "That source is no longer registered."
+                notice = ProductCopy.Notice.sourceNoLongerRegistered
                 scopes = (try? await workspace.scopes()) ?? scopes
             case .unusable(let error):
                 show(error, operation: .registerSource, fallback: .invalidSource)
@@ -844,8 +845,8 @@ final class WorkspaceModel: ObservableObject {
                 listing = updated
                 refreshStaleness()
                 notice = updated.isComplete
-                    ? "Scan complete · \(updated.entries.count.formatted()) files · build a context before mapping."
-                    : "Scan finished incomplete · FormaCore reported \(updated.issues.count.formatted()) issues."
+                    ? ProductCopy.Notice.scanComplete(files: updated.entries.count)
+                    : ProductCopy.Notice.scanIncomplete(issues: updated.issues.count)
             } catch {
                 if let saved = try? await workspace.listing(scope), scope.id == self.selectedScopeID {
                     listing = saved
@@ -879,12 +880,13 @@ final class WorkspaceModel: ObservableObject {
                     refreshRows()
                 }
                 guard let decision else {
-                    notice = "No stored manifest for this profile, so nothing to reconcile."
+                    notice = ProductCopy.Notice.noStoredManifestToReconcile
                     return
                 }
                 notice = decision.invalidatedSourceIDs.isEmpty
-                    ? "Nothing invalidated · \(decision.reason)"
-                    : "\(decision.invalidatedSourceIDs.count.formatted()) entries invalidated · \(decision.reason) · the rest stay usable"
+                    ? ProductCopy.Notice.reconciledNone(reason: decision.reason)
+                    : ProductCopy.Notice.reconciled(count: decision.invalidatedSourceIDs.count,
+                                                    reason: decision.reason)
             } catch {
                 if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .unavailable) }
             }
@@ -894,7 +896,7 @@ final class WorkspaceModel: ObservableObject {
     func buildContext() {
         guard phase == .idle, let scope = selectedScope, let profile = selectedProfile else {
             error = .unavailable
-            notice = "Choose a source and a profile first."
+            notice = ProductCopy.Notice.chooseSourceAndProfileFirst
             return
         }
         workCounters.record(.buildContext)
@@ -907,9 +909,10 @@ final class WorkspaceModel: ObservableObject {
                       profile.profileID == self.selectedProfileID else { return }
                 context = built
                 contextIsStale = false
-                notice = "Context revision \(built.revision.formatted()) · \(built.candidates.count.formatted()) candidates · "
-                    + "\(built.unassignedSourceIDs.count.formatted()) unassigned · "
-                    + "\(built.conflictedSourceIDs.count.formatted()) conflicted."
+                notice = ProductCopy.Notice.contextBuilt(
+                    revision: built.revision, candidates: built.candidates.count,
+                    unassigned: built.unassignedSourceIDs.count,
+                    conflicted: built.conflictedSourceIDs.count)
             } catch {
                 if !Task.isCancelled { show(error, operation: .providerProbe, fallback: .unavailable) }
             }
@@ -1209,24 +1212,24 @@ final class WorkspaceModel: ObservableObject {
         workCounters.record(.mapping)
         guard let scope = selectedScope, let profile = selectedProfile, let listing else {
             error = .unavailable
-            notice = "Choose a source before mapping."
+            notice = ProductCopy.Notice.chooseSourceBeforeMapping
             return false
         }
         guard let context else {
             error = .unavailable
-            notice = "Build a project context first: FormaCore will not map files without one."
+            notice = ProductCopy.Notice.buildContextBeforeMapping
             return false
         }
         guard let casePack else {
             error = .unavailable
-            notice = "The shipped CasePack could not be loaded, so no request can be built."
+            notice = ProductCopy.Notice.casePackLoadFailed(what: ProductCopy.Notice.casePackRequest)
             return false
         }
         let targets: [SourceEntry]
         if let sourceIDs {
             targets = listing.entries.filter { sourceIDs.contains($0.id) }
             if targets.isEmpty {
-                notice = "The selected files are no longer in this listing."
+                notice = ProductCopy.Notice.selectedFilesNoLongerListed
                 return false
             }
         } else {
@@ -1322,7 +1325,7 @@ final class WorkspaceModel: ObservableObject {
                 // when this line executes, and a suspension here would let the
                 // notice describe a panel somebody else had already started
                 // work in.
-                notice = "Cancelled during evidence capture · no provider request was made."
+                notice = ProductCopy.Notice.cancelledDuringCapture
                 try? await self.workspace.finishMappingRun(id: run.id, state: .cancelled, batches: 0,
                                                            error: .cancelled)
                 return
@@ -1358,7 +1361,7 @@ final class WorkspaceModel: ObservableObject {
             switch binding {
             case .listingChanged(let currentListing):
                 self.listing = currentListing
-                self.notice = "The source list changed during evidence capture. Review the files before mapping again."
+                self.notice = ProductCopy.Notice.listingChangedDuringCapture
                 return
             case .contextStale(let currentListing):
                 // The stale-snapshot half of the reviewer's feedback: this is
@@ -1366,7 +1369,7 @@ final class WorkspaceModel: ObservableObject {
                 // project context, not another scan of the same files.
                 self.listing = currentListing
                 self.contextIsStale = true
-                self.notice = "The source structure changed. Build a fresh project context before mapping."
+                self.notice = ProductCopy.Notice.structureChangedRebuildContext
                 return
             case .bound(let entries, let evidence, let failures, let currentListing):
                 currentTargets = entries
@@ -1399,9 +1402,7 @@ final class WorkspaceModel: ObservableObject {
                 // "Cancelled" imply nothing was learned. It is written before
                 // the store call so no other action can claim the channel in
                 // between.
-                notice = "Run cancelled after \(result.batches.formatted()) batches. Answers that had already "
-                    + "returned are recorded in the run history but not published: a revision is written only by "
-                    + "a run that finished, and this one's would have replaced the complete revision with a partial one."
+                notice = ProductCopy.Notice.runCancelled(batches: result.batches)
                 try? await self.workspace.finishMappingRun(id: run.id, state: .cancelled,
                                                             batches: result.batches, error: .cancelled)
                 return
@@ -1412,7 +1413,7 @@ final class WorkspaceModel: ObservableObject {
             } catch {
                 if scope.id == self.selectedScopeID, profile.profileID == self.selectedProfileID {
                     self.show(error, operation: .providerProbe, fallback: .invalidOutput)
-                    notice = "FormaCore kept this result in memory only: the revision was not stored."
+                    notice = ProductCopy.Notice.resultHeldInMemory
                 }
             }
             // FormaCore's own vocabulary: a run that returned completed. The
@@ -1424,11 +1425,10 @@ final class WorkspaceModel: ObservableObject {
             self.manifest = stored
             self.outcome = result
             self.reconciliation = nil
-            self.notice = "Run \(run.id.uuidString.lowercased()) · \(result.batches.formatted()) batches · "
-                + "\(result.requests.formatted()) provider requests · "
-                + "\(result.failures.count.formatted()) file failures · "
-                + "\(result.refusedReferences.formatted()) refused references · "
-                + "\(unread.count.formatted()) files FormaCore could not read."
+            self.notice = ProductCopy.Notice.runFinished(
+                runID: run.id.uuidString.lowercased(), batches: result.batches,
+                requests: result.requests, failures: result.failures.count,
+                refused: result.refusedReferences, unread: unread.count)
             self.refreshRows()
         }
         return true
@@ -1487,7 +1487,7 @@ final class WorkspaceModel: ObservableObject {
         guard phase == .idle else { return }
         guard let manifest, let profile = selectedProfile else {
             importPlan = nil
-            notice = "An import plan needs a manifest and a profile."
+            notice = ProductCopy.Notice.importPlanNeedsManifestProfile
             return
         }
         importPlan = ImportPlanner.plan(
@@ -1507,7 +1507,7 @@ final class WorkspaceModel: ObservableObject {
     /// write is running still sees the plan it was asked for.
     func writeImportPlan(to directory: URL) async {
         guard let plan = importPlan else {
-            notice = "Build the import plan first."
+            notice = ProductCopy.Notice.buildImportPlanFirst
             return
         }
         do {
@@ -1517,8 +1517,7 @@ final class WorkspaceModel: ObservableObject {
                 try data.write(to: url, options: .atomic)
                 return url.lastPathComponent
             }
-            notice = "Wrote \(name): a dry-run plan that lists local file names, "
-                + "so treat it as private data rather than a sanitized artifact."
+            notice = ProductCopy.Notice.planWritten(name: name)
         } catch {
             show(error as? FormaError ?? .storage, operation: .readEvidence, fallback: .storage)
         }
@@ -1526,7 +1525,7 @@ final class WorkspaceModel: ObservableObject {
 
     func export(to directory: URL) {
         guard phase == .idle, let manifest else {
-            if manifest == nil { notice = "There is no manifest to export yet." }
+            if manifest == nil { notice = ProductCopy.Notice.nothingToExport }
             return
         }
         workCounters.record(.export)
@@ -1567,9 +1566,7 @@ final class WorkspaceModel: ObservableObject {
                 // revalidated, where absent ids surface as `evidence_not_found`.
                 // An export cannot assert that from its own return value, which
                 // counts files and a revision.
-                let files = summary.files.count.formatted()
-                let revision = summary.revision.formatted()
-                notice = "Exported \(files) files for revision \(revision)."
+                notice = ProductCopy.Notice.exported(files: summary.files.count, revision: summary.revision)
             } catch {
                 if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .storage) }
             }
@@ -1617,20 +1614,22 @@ final class WorkspaceModel: ObservableObject {
                 self.correctionHistoryState = .offlineBundle
                 self.bundleURL = loaded.bundle
                 self.revalidation = nil
-                self.notice = "Loaded revision \(loaded.manifest.envelope.revision.formatted()) from \(loaded.bundle.path) · "
-                    + "\(loaded.manifest.entries.count.formatted()) entries · "
-                    + "\(loaded.records.count.formatted()) evidence rows offline."
+                self.notice = ProductCopy.Notice.bundleLoaded(
+                    revision: loaded.manifest.envelope.revision, path: loaded.bundle.path,
+                    entries: loaded.manifest.entries.count, rows: loaded.records.count)
                 self.refreshRows()
             } catch let failure as BundleReadFailure {
                 guard !Task.isCancelled else { return }
                 switch failure.reason {
                 case .noManifest:
                     error = .unavailable
-                    notice = "\(failure.bundle.path) has no \(ManifestExport.manifestFile), so it is not a Forma export bundle."
+                    notice = ProductCopy.Notice.bundleFolderMissingManifest(
+                        path: failure.bundle.path, manifestFile: ManifestExport.manifestFile)
                 case .undecodable:
                     FormaDiagnostics.failure(.readEvidence, .unavailable)
                     error = .unavailable
-                    notice = "\(failure.manifestURL.lastPathComponent) is not a Forma manifest FormaCore can decode."
+                    notice = ProductCopy.Notice.bundleManifestUndecodable(
+                        name: failure.manifestURL.lastPathComponent)
                 }
             } catch {
                 if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .unavailable) }
@@ -1698,7 +1697,7 @@ final class WorkspaceModel: ObservableObject {
         guard phase == .idle else { return }
         guard let bundleURL else {
             error = .unavailable
-            notice = "No bundle is selected: export a manifest or open a bundle first."
+            notice = ProductCopy.Notice.selectBundleFirst
             return
         }
         workCounters.record(.revalidate)
@@ -1721,8 +1720,8 @@ final class WorkspaceModel: ObservableObject {
                 guard !Task.isCancelled, self.bundleURL == bundleURL else { return }
                 revalidation = result
                 notice = result.artifactConsistent
-                    ? "Bundle is self-consistent · revision \(result.revision.formatted())."
-                    : "Bundle has \(result.violations.count.formatted()) violations · revision \(result.revision.formatted())."
+                    ? ProductCopy.Notice.bundleConsistent(revision: result.revision)
+                    : ProductCopy.Notice.bundleViolations(count: result.violations.count, revision: result.revision)
             } catch {
                 if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .unavailable) }
             }
@@ -1814,7 +1813,7 @@ final class WorkspaceModel: ObservableObject {
               manifest.envelope.profileID == profile.profileID,
               manifest.envelope.profileVersion == profile.profileVersion else {
             self.draft = nil
-            notice = "That correction was opened against a different source or profile. Close the sheet and open it again."
+            notice = ProductCopy.Notice.correctionOtherSource
             return
         }
         let trimmed = draft.value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1950,7 +1949,7 @@ final class WorkspaceModel: ObservableObject {
             try await Self.offMain {
                 try ProviderProbe().saveKey(key, for: chosenProvider, customBaseURL: chosenBaseURL)
             }
-            notice = "API key saved in Keychain for \(chosenProvider.displayName)."
+            notice = ProductCopy.Notice.keySaved(provider: chosenProvider.displayName)
             return true
         } catch {
             let safe = error as? FormaError ?? .storage
@@ -1977,7 +1976,7 @@ final class WorkspaceModel: ObservableObject {
         guard let scope = selectedScope, let profile = selectedProfile, let context, let casePack,
               let listing else {
             error = .unavailable
-            notice = "A preview needs a source, a profile and a stored project context."
+            notice = ProductCopy.Notice.needsContextForPreview
             return
         }
         let limit = entryLimit
@@ -1999,7 +1998,7 @@ final class WorkspaceModel: ObservableObject {
                     return
                 }
                 guard let batch = batches.first else {
-                    notice = "This listing has no file to preview."
+                    notice = ProductCopy.Notice.listingHasNoFiles
                     return
                 }
                 let value = try ProviderMappingClient.preview(profile: profile, context: context,
@@ -2054,7 +2053,7 @@ final class WorkspaceModel: ObservableObject {
         if let engineCache, engineCache.key == key { return engineCache.engine }
         guard let casePack else {
             error = .unavailable
-            notice = "The shipped CasePack could not be loaded, so no engine can be built."
+            notice = ProductCopy.Notice.casePackLoadFailed(what: ProductCopy.Notice.casePackEngine)
             return nil
         }
         let answerer: any MappingAnswering
