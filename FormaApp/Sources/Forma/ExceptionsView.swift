@@ -41,14 +41,10 @@ struct ExceptionsView: View {
             } else {
                 // The pane scrolls the blocked-entry table's own minimum,
                 // never the window (see `MappingView` for the #153 mechanism).
-                ScrollView(.horizontal) {
-                    rowTable
-                        .frame(minWidth: ShellGeometry.tableFloor(.exceptionRows),
-                               idealWidth: ShellGeometry.tableFloor(.exceptionRows),
-                               maxWidth: .infinity,
-                               maxHeight: .infinity, alignment: .topLeading)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                rowTable
+                    .frame(minWidth: ShellGeometry.tableFloor(.exceptionRows),
+                           maxWidth: .infinity,
+                           maxHeight: .infinity, alignment: .topLeading)
             }
         }
         .onChange(of: model.exceptionStateFilter) { _, _ in model.exceptionSelection.removeAll() }
