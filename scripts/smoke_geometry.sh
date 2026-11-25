@@ -63,7 +63,7 @@ if [ "$i" -ge 30 ]; then
     exit 3
 fi
 
-sleep 2  # let the WindowConfigurator's async first-size land before measuring
+sleep 14  # re-assertions land at +8/+12 after window load; the swap completes 3.7-7s after launch  # configurator re-asserts at +5/+8s after window load  # let the WindowConfigurator's async first-size land before measuring
 
 osascript - <<'OSA'
 on hasMarker(win, marker)
@@ -93,7 +93,7 @@ on run
             set {w0, h0} to size of win
             log "launch size: " & w0 & "x" & h0
             if w0 < 1176 or w0 > 1184 then
-                error "launch width " & w0 & "pt is not the configured 1180pt default (a content-fit launch like the old 1104/1689 fails here)"
+                error "launch width " & w0 & "pt (height " & h0 & ") is not the configured 1180pt default (a content-fit launch like the old 1104/1689 fails here)"
             end if
             -- Height: the hosting layer proposes its own content height at
             -- the first layout pass, so the contract is a floor, not an
@@ -111,7 +111,7 @@ on run
             set {w1, h1} to size of win
             log "after resize to 760x500: " & w1 & "x" & h1
             if w1 < 1011 or w1 > 1015 then
-                error "minimum width is not the uniform 1012pt floor; got " & w1 & "pt"
+                error "minimum width is not the uniform 1012pt floor; got " & w1 & "x" & h1
             end if
             if h1 < 640 then
                 error "clamped height " & h1 & "pt fell below the 620pt floor plus chrome"
@@ -123,7 +123,7 @@ on run
             set {wg, hg} to size of win
             log "after resize to 1400x900: " & wg & "x" & hg
             if wg < 1390 then
-                error "window refused to grow in width: " & wg & "pt"
+                error "window refused to grow in width: " & wg & "x" & hg
             end if
             if hg < 850 then
                 error "window refused to grow in height: " & hg & "pt"
