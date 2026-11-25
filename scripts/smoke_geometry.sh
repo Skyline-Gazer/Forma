@@ -41,6 +41,12 @@ trap cleanup EXIT
 cleanup
 sleep 1
 
+# First-launch semantics, not restore: the smoke_app step launched this bundle
+# minutes earlier and SwiftUI persists the Window(id:) frame. Delete defaults
+# and saved state so the geometry contract is measured on a genuine first
+# launch (the same thing that breaks if the Owner moves the window and quits).
+defaults delete io.github.skyline-gazer.forma 2>/dev/null || true
+rm -rf "$HOME/Library/Saved Application State/io.github.skyline-gazer.forma.savedState"
 open "$APP"
 
 # Wait for the window rather than trusting a fixed delay: the hosted runner's
