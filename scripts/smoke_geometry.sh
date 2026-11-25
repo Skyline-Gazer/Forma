@@ -63,7 +63,7 @@ if [ "$i" -ge 30 ]; then
     exit 3
 fi
 
-sleep 2  # let the WindowConfigurator's async first-size land before measuring
+sleep 6  # WindowConfigurator runs after the first layout pass; give it time
 
 osascript - <<'OSA'
 on hasMarker(win, marker)
