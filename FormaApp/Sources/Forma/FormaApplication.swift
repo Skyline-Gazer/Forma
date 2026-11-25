@@ -259,6 +259,22 @@ private struct WindowConfigurator: NSViewRepresentable {
             guard let window = view?.window else { return }
             window.contentMinSize = NSSize(width: CGFloat(ShellLayout.windowMinWidth),
                                            height: CGFloat(ShellLayout.windowMinHeight))
+            // Z: Y proved the window re-fits to the content proposal on
+            // every layout pass - that is NSHostingView/Controller's
+            // `sizingOptions` preferred-content-size tracking (V targeted
+            // only contentViewController and changed nothing; the SwiftUI
+            // Window scene's host view is the actual tracker). Clear it on
+            // every object that truthfully implements the setter; if none
+            // does, the mechanism is not sizingOptions and the ship cut is
+            // final.
+            let sel = NSSelectorFromString("setSizingOptions:")
+            for candidate in [window.contentViewController as AnyObject?,
+                              window.contentViewController?.view as AnyObject?,
+                              window.contentView as AnyObject?] {
+                guard let target = candidate,
+                      type(of: target).instancesRespond(to: sel) else { continue }
+                target.setValue(0, forKey: "sizingOptions")
+            }
             NotificationCenter.default.addObserver(
                 forName: NSWindow.didResizeNotification, object: window, queue: .main) { note in
                 guard let resized = note.object as? NSWindow else { return }
