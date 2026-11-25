@@ -66,6 +66,10 @@ fi
 sleep 2  # let the WindowConfigurator's async first-size land before measuring
 
 osascript - <<'OSA'
+on appAlive()
+    do shell script "pgrep -x Forma > /dev/null && echo yes || echo no"
+end appAlive
+
 on hasMarker(win, marker)
     -- `whose identifier is` only reaches direct children and System Events'
     -- UI element class has no identifier *property* (WindowGate finding 1);
@@ -153,11 +157,54 @@ on run
                 error "launch height " & h0 & "pt is below the declared 620pt floor plus chrome"
             end if
 
-            -- 2. Below the floor: clamp AT the uniform minimum, never at an
+            -- AA's dump proved this tree exposes its identifiers when the
+            -- window is untouched; every subsequent failure correlated with
+            -- the resize phase. So the navigation sweep and the landing-pane
+            -- readiness gate now run FIRST, before any resize can invalidate
+            -- the accessibility subtree or the app itself, and liveness is
+            -- asserted between phases so a death is named, not misread as a
+            -- missing element.
+            -- Phase 2. Readiness: the checks above ran against the
+            -- .starting ProgressView pane (window up, sized correctly);
+            -- sidebar and content markers exist only once the scan
+            -- completes and .ready mounts.
+            if not my hasMarker(win, "area-review-content") then
+                error "workspace did not finish loading - the landing pane never mounted its marker"
+            end if
+            set size of win to {1180, 728}
+            delay 2
+            if (my appAlive()) is not "yes" then error "Forma died during the launch-size checks"
+            set navigated to 0
+            repeat with areaRaw in {"workspace", "mapping", "import", "exceptions", "settings", "review"}
+                set navOK to my clickById(win, "area-" & areaRaw)
+                if not navOK then error "no accessibility path to the sidebar row for " & areaRaw
+                delay 2
+                -- The marker is the proof of selection (a label click that
+                -- no-oped cannot fake a different pane's marker): the
+                -- content identifier is derived from
+                -- the selection (FormaApplication:385), so its appearance -
+                -- and only one content area ever being mounted - IS the
+                -- proof the sidebar selection took effect.
+                if not my hasMarker(win, "area-" & areaRaw & "-content") then
+                    error "area " & areaRaw & " never mounted its content marker"
+                end if
+                set navigated to navigated + 1
+                set {wA, hA} to size of win
+                log "after navigating to " & areaRaw & ": " & wA & "x" & hA
+                if wA < 1178 or wA > 1182 then
+                    error "switching to " & areaRaw & " resized the window from 1180 to " & wA & "pt"
+                end if
+            end repeat
+            if navigated < 6 then
+                error "only " & navigated & " of 6 areas were navigated; the geometry contract is unproven"
+            end if
+
+            -- Phase 3a. Below the floor: clamp AT the uniform minimum, never at an
             --    area's content ideal. 1012x620 is ShellLayout.windowMinWidth
             --    x windowMinHeight (sidebar 132 + content 640 + inspector 240).
             set size of win to {760, 500}
             delay 2
+            if (my appAlive()) is not "yes" then error "Forma died on the below-floor resize (new crash signature - capture a fresh stack probe)"
             set {w1, h1} to size of win
             log "after resize to 760x500: " & w1 & "x" & h1
             if w1 < 1011 or w1 > 1015 then
@@ -181,53 +228,7 @@ on run
             set {wg, hg} to size of win
             log "growth observation (Mac acceptance compares): 1400x900 requested -> " & wg & "x" & hg
 
-            -- 3. A stable supported size, then every area. Navigation is
-            --    verified two ways: the sidebar row really changed, and the
-            --    pane's own content marker mounted - a failed navigation can
-            --    no longer pass vacuously (WindowGate finding: the first
-            --    revision discarded both lookup errors). The width assertion
-            --    is the #153 contract itself: switching areas must not resize
-            --    a window that was comfortably above the floor, and any area
-            --    whose content demanded 1104 again would fail the clamp at 3b.
-            -- Readiness gate: the checks above run against the .starting
-            -- ProgressView pane (the window is up and sized); the sidebar
-            -- and content markers only exist once the scan completes and
-            -- .ready mounts. Poll for the landing pane before navigating,
-            -- or a click lands on nothing in a still-loading app.
-            if not my hasMarker(win, "area-review-content") then
-                error "workspace did not finish loading - the landing pane never mounted its marker"
-            end if
-            set size of win to {1180, 728}
-            delay 2
-            set navigated to 0
-            repeat with areaRaw in {"workspace", "mapping", "import", "exceptions", "settings", "review"}
-                set navOK to my clickById(win, "area-" & areaRaw)
-                if not navOK then error "no accessibility path to the sidebar row for " & areaRaw
-                delay 2
-                -- A click on the label may not move selection; the marker
-                -- check below is the proof, so order the sweep so every
-                -- area is mounted at least once as a target (review opens
-                -- the list - if its click no-oped, the NEXT area's marker
-                -- check is still against a pane that must have changed).
-                -- 3a. the pane mounted. The content marker is derived from
-                -- the selection (FormaApplication:385), so its appearance -
-                -- and only one content area ever being mounted - IS the
-                -- proof the sidebar selection took effect.
-                if not my hasMarker(win, "area-" & areaRaw & "-content") then
-                    error "area " & areaRaw & " never mounted its content marker"
-                end if
-                set navigated to navigated + 1
-                set {wA, hA} to size of win
-                log "after navigating to " & areaRaw & ": " & wA & "x" & hA
-                if wA < 1178 or wA > 1182 then
-                    error "switching to " & areaRaw & " resized the window from 1180 to " & wA & "pt"
-                end if
-            end repeat
-            if navigated < 6 then
-                error "only " & navigated & " of 6 areas were navigated; the geometry contract is unproven"
-            end if
-
-            -- 4. Below-floor clamp must hold on the area that used to raise
+            -- Phase 4. Below-floor clamp must hold on the area that used to raise
             --    the demand: mapping is the 1104 regression's home, so it is
             --    re-selected before the clamp (the loop above ends on
             --    settings; clamping there would pin nothing #172-relevant).
