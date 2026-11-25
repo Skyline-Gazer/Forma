@@ -317,7 +317,9 @@ public enum ProductCopy {
             "来源结构已变化。请重新构建项目上下文后再映射。"
         public static let cancelledDuringCapture = "证据读取时被取消 · 没有发出任何 Provider 请求。"
         public static let noStoredManifestToReconcile = "该资料库类型没有已存储的清单，无需核对。"
-        public static let casePackLoadFailed = "随附的案例包无法加载，因此无法构建\(what)。"
+        public static func casePackLoadFailed(what: String) -> String {
+            "随附的案例包无法加载，因此无法构建\(what)。"
+        }
         public static let casePackEngine = "引擎"
         public static let casePackRequest = "请求"
         public static let listingHasNoFiles = "当前清单没有可预览的文件。"
