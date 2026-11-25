@@ -240,14 +240,24 @@ struct M0R2RereadRecoveryEndToEndTests {
         })
         #expect(newRow.id != oldRow.id,
                 "the re-read rows describe the new snapshot under new ids")
-        #expect(newRow.snapshotRevision == Int(moved.snapshotRevision)
-                && newRow.snapshotFingerprint == moved.snapshotFingerprint,
-                "the re-read rows are stamped with the current file snapshot")
+        // publishEvidence appends the snapshot revision the moment the body
+        // read makes the new hash known, so the rows describe the post-read
+        // entry - exactly what the desk's refreshed listing shows beside them
+        // (rereadEvidence lists again after capture; bindCapturedTargets
+        // exists in the core for the same reason). The pre-capture scan entry
+        // lags one body-read behind, by design.
+        let authoritative = try #require((try workspace.listing(scope)).entries.first)
+        #expect(newRow.snapshotRevision == Int(authoritative.snapshotRevision)
+                && newRow.snapshotFingerprint == authoritative.snapshotFingerprint,
+                "the re-read rows are stamped with the snapshot the listing now reports")
 
         // A repeated re-read of an unchanged file must not mint a second
         // generation: same rows, same ids - this is the accumulation the
         // physical acceptance measured as 4 rows becoming 8 and growing.
-        let again = try await workspace.captureEvidence(for: [moved])
+        // The desk re-reads against the refreshed listing, so the entry it
+        // hands the core is the one the core last published (the fingerprint
+        // guard in publishEvidence refuses stale entries outright).
+        let again = try await workspace.captureEvidence(for: [authoritative])
         let againRow = try #require(again[moved.id]?.first {
             $0.source == .path && $0.isUsable && ($0.excerpt ?? "").contains("示例项目_2026")
         })
@@ -264,8 +274,8 @@ struct M0R2RereadRecoveryEndToEndTests {
                 "the recovery correction must publish: \(applied.violations.map(\.code))")
         #expect(applied.manifest.envelope.revision == stored.envelope.revision + 1)
         let published = try #require(applied.manifest.entries.first)
-        #expect(Int(published.snapshotRevision) == Int(moved.snapshotRevision)
-                && published.snapshotFingerprint == moved.snapshotFingerprint,
+        #expect(Int(published.snapshotRevision) == Int(authoritative.snapshotRevision)
+                && published.snapshotFingerprint == authoritative.snapshotFingerprint,
                 "the new revision is bound to the snapshot the reviewer corrected")
 
         // The previous revision is still the one that was saved - history is
@@ -277,7 +287,7 @@ struct M0R2RereadRecoveryEndToEndTests {
         // citable rows, and exactly the same four of them.
         let second = try SourceWorkspace(databaseURL: fixture.database)
         let current = try await second.evidenceRegistry(for: moved.id,
-                                                        snapshotRevision: Int(moved.snapshotRevision))
+                                                        snapshotRevision: Int(authoritative.snapshotRevision))
         #expect(Set(current.map(\.id)) == Set((recaptured[moved.id] ?? []).map(\.id)),
                 "persistence must retain the evidence-generation semantics")
     }
