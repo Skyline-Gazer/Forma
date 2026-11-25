@@ -68,32 +68,54 @@ sleep 2  # let the WindowConfigurator's async first-size land before measuring
 osascript - <<'OSA'
 on hasMarker(win, marker)
     -- `whose identifier is` only reaches direct children and System Events'
-    -- UI element class has no identifier *property* (WindowGate finding 1),
-    -- so walk the tree and read the AXIdentifier *attribute* per element.
+    -- UI element class has no identifier *property* (WindowGate finding 1);
+    -- the AXIdentifier *attribute* walk is the dialect. Probe AA shows all
+    -- six `area-<raw>-content` container markers... they mount lazily, so
+    -- poll for up to 3 seconds before declaring the pane unmounted.
     tell application "System Events"
-        repeat with el in (entire contents of win)
-            try
-                if (exists attribute "AXIdentifier" of el) and (value of attribute "AXIdentifier" of el is marker) then return true
-            end try
+        repeat 6 times
+            repeat with el in (entire contents of win)
+                try
+                    if (exists attribute "AXIdentifier" of el) and (value of attribute "AXIdentifier" of el is marker) then return true
+                end try
+            end repeat
+            delay 0.5
         end repeat
     end tell
     return false
 end hasMarker
 
 on clickById(win, idStr)
-    -- Structure-independent: the sidebar row carries AXIdentifier
-    -- `area-<raw>` wherever the split view nests it; clicking that exact
-    -- element is the navigation. Returns false when no element carries it.
+    -- Probe AA (run 45652782170) inventoried the real tree: the sidebar is
+    -- an AXOutline and the area identifiers are carried by its AXStaticText
+    -- labels - the walk dialect is correct, so a miss is a transient tree
+    -- (lazy mount), never a structural absence. Scan the full contents once,
+    -- collect candidates, retry up to 3 times before declaring the row
+    -- absent. The scan counts are logged so any future dialect regression
+    -- names itself instead of failing blind.
+    set scanned to 0
+    set hits to {}
     tell application "System Events"
-        repeat with el in (entire contents of win)
-            try
-                if (exists attribute "AXIdentifier" of el) and (value of attribute "AXIdentifier" of el is idStr) then
-                    click el
-                    return true
-                end if
-            end try
+        repeat 3 times
+            set ec to entire contents of win
+            set scanned to count of ec
+            set hits to {}
+            repeat with el in ec
+                try
+                    if (exists attribute "AXIdentifier" of el) and (value of attribute "AXIdentifier" of el is idStr) then
+                        set end of hits to el
+                    end if
+                end try
+            end repeat
+            if (count of hits) > 0 then exit repeat
         end repeat
+        delay 0.5
+        if (count of hits) > 0 then
+            click (item 1 of hits)
+            return true
+        end if
     end tell
+    log "clickById " & idStr & ": scanned " & scanned & " elements, 0 matches after 3 passes"
     return false
 end clickById
 
