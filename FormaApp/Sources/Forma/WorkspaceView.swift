@@ -67,18 +67,17 @@ struct WorkspaceView: View {
             // fill the viewport and the person decides how much the candidate
             // list gets (owner failure #3). The two tables stay stacked - they
             // compete for one width instead of adding up (`workspaceTablesStack`)
-            // - and each table's own column minimum is scrolled inside its
-            // lane, never presented to the window (#153: Workspace measured a
-            // 1645pt minimum because the table's fitting size was the floor).
+            // - and below the declared column minimum each Table shows its own
+            // horizontal scroller, a demand the window never sees (#153:
+            // Workspace measured a 1645pt minimum because the table's fitting
+            // size was the floor). Do not wrap these in ScrollView(.horizontal):
+            // Table owns its scroll, and embedding it traps at layout (M0-R2
+            // launch smoke SIGTRAP, probe run 45588044825).
             VSplitView {
-                ScrollView(.horizontal) {
-                    fileTable(listing)
-                        .frame(minWidth: ShellGeometry.tableFloor(.workspaceFiles),
-                               idealWidth: ShellGeometry.tableFloor(.workspaceFiles),
-                               maxWidth: .infinity,
-                               maxHeight: .infinity, alignment: .topLeading)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                fileTable(listing)
+                    .frame(minWidth: ShellGeometry.tableFloor(.workspaceFiles),
+                           maxWidth: .infinity,
+                           maxHeight: .infinity, alignment: .topLeading)
                 if clustersVisible {
                     clusterPanel
                         .frame(minHeight: 96, idealHeight: 176, maxHeight: 320)
@@ -124,25 +123,21 @@ struct WorkspaceView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
-                ScrollView(.horizontal) {
-                    Table(model.clusterRows, selection: $model.workspaceClusterSelection) {
-                        TableColumn("Candidate") { row in
-                            Text(row.title).lineLimit(1).help(row.title)
-                        }
-                        .width(min: candidateWidths[0].cgMin, ideal: candidateWidths[0].cgIdeal, max: candidateWidths[0].cgMax)
-                        TableColumn("Files") { row in Text(row.fileCount.formatted()).monospacedDigit() }
-                            .width(min: candidateWidths[1].cgMin, ideal: candidateWidths[1].cgIdeal, max: candidateWidths[1].cgMax)
-                        TableColumn("Basis") { row in Text(row.basis).lineLimit(1).help(row.basis) }
-                            .width(min: candidateWidths[2].cgMin, ideal: candidateWidths[2].cgIdeal, max: candidateWidths[2].cgMax)
-                        TableColumn("Confidence") { row in Text(row.confidence) }
-                            .width(min: candidateWidths[3].cgMin, ideal: candidateWidths[3].cgIdeal, max: candidateWidths[3].cgMax)
+                Table(model.clusterRows, selection: $model.workspaceClusterSelection) {
+                    TableColumn("Candidate") { row in
+                        Text(row.title).lineLimit(1).help(row.title)
                     }
-                    .frame(minWidth: ShellGeometry.tableFloor(.workspaceCandidates),
-                           idealWidth: ShellGeometry.tableFloor(.workspaceCandidates),
-                           maxWidth: .infinity,
-                           maxHeight: .infinity, alignment: .topLeading)
+                    .width(min: candidateWidths[0].cgMin, ideal: candidateWidths[0].cgIdeal, max: candidateWidths[0].cgMax)
+                    TableColumn("Files") { row in Text(row.fileCount.formatted()).monospacedDigit() }
+                        .width(min: candidateWidths[1].cgMin, ideal: candidateWidths[1].cgIdeal, max: candidateWidths[1].cgMax)
+                    TableColumn("Basis") { row in Text(row.basis).lineLimit(1).help(row.basis) }
+                        .width(min: candidateWidths[2].cgMin, ideal: candidateWidths[2].cgIdeal, max: candidateWidths[2].cgMax)
+                    TableColumn("Confidence") { row in Text(row.confidence) }
+                        .width(min: candidateWidths[3].cgMin, ideal: candidateWidths[3].cgIdeal, max: candidateWidths[3].cgMax)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: ShellGeometry.tableFloor(.workspaceCandidates),
+                       maxWidth: .infinity,
+                       maxHeight: .infinity, alignment: .topLeading)
             }
         } else {
             HStack(spacing: 8) {

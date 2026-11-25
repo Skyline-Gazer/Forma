@@ -30,14 +30,10 @@ struct MappingView: View {
                 // is narrower still, so the table's width never reaches the
                 // window as a demand (#153: the result table's size was the
                 // 1335pt minimum the Owner could not resize past).
-                ScrollView(.horizontal) {
-                    fileTable
-                        .frame(minWidth: ShellGeometry.tableFloor(.mappingRows),
-                               idealWidth: ShellGeometry.tableFloor(.mappingRows),
-                               maxWidth: .infinity,
-                               maxHeight: .infinity, alignment: .topLeading)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                fileTable
+                    .frame(minWidth: ShellGeometry.tableFloor(.mappingRows),
+                           maxWidth: .infinity,
+                           maxHeight: .infinity, alignment: .topLeading)
             }
         }
     }
