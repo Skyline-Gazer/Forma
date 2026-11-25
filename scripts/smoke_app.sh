@@ -58,7 +58,8 @@ cleanup() {
 }
 
 attempt=1
-while [ "$attempt" -le 3 ]; do
+alive=1
+while [ "$attempt" -le 5 ]; do
 echo "== launch $APP attempt $attempt (probe: SWIFT_BACKTRACE on)"
 SWIFT_BACKTRACE=enable=yes,demangle=yes,silent-off-interpose=1 "$EXE" >/tmp/forma-smoke-stderr.log 2>&1 &
 pid=$!
@@ -70,9 +71,7 @@ for _ in $(seq 1 30); do
 done
 if [ "$break_after_probe" = "0" ]; then
     echo "attempt $attempt: survived 6s"
-    if [ "$attempt" -lt 3 ]; then attempt=$((attempt+1)); cleanup "$pid"; continue; fi
-    cleanup "$pid"
-    break
+    attempt=$((attempt+1)); cleanup "$pid"; continue
 fi
 echo "error: attempt $attempt app exited during observation" >&2
 cat /tmp/forma-smoke-stderr.log 2>/dev/null || true
@@ -89,6 +88,7 @@ sleep 10
 cleanup "$pid"
 exit 1
 done
+echo "PROBE VERDICT: alive=$alive attempts=$((attempt-1))"
 
 if [ -z "$pid" ]; then
     echo "error: the app did not start" >&2
