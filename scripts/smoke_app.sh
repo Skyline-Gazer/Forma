@@ -87,6 +87,19 @@ while [ "$i" -lt "$steps" ]; do
 done
 
 echo "alive after ${OBSERVE_SECONDS}s: yes"
+# probe: keep observing 10s past the window; dump stderr and crash reports
+# unconditionally so the trap (if any) is visible either way.
+for _ in $(seq 1 20); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.5
+done
+if ! kill -0 "$pid" 2>/dev/null; then
+    echo "PROBE: app died AFTER the observation window"
+fi
+echo "== captured stderr (probe, always)"
+cat /tmp/forma-smoke-stderr.log 2>/dev/null || true
+sleep 12
+collect_crash
 cleanup "$pid"
 
 if pgrep -f "$EXE" >/dev/null 2>&1; then
