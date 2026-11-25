@@ -138,6 +138,18 @@ public struct ImportRecoveryReviewResult: Sendable, Equatable {
         case unverifiable = "unverifiable"
         /// The operation addresses a database or group this check may not read.
         case outsideScope = "outside_scope"
+
+        /// What the banner sentence shows. The rawValue stays machine (logs,
+        /// tooltips); the user reads these words (#175, CopyGate finding 5 -
+        /// the entry `label(_:)` sibling was already translated).
+        public var productLabel: String {
+            switch self {
+            case .verified: "已验证"
+            case .differs: "有差异"
+            case .unverifiable: "无法核实"
+            case .outsideScope: "超出范围"
+            }
+        }
     }
 
     public let keyDigest: String

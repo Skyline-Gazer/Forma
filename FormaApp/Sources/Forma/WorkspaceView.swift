@@ -29,8 +29,8 @@ struct WorkspaceView: View {
                 mainPane(listing)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
-                ContentUnavailableView("Choose a source", systemImage: "folder",
-                                       description: Text(model.notice ?? "Add a local or OneDrive folder to scan its files."))
+                ContentUnavailableView(ProductCopy.Workspace.chooseSource, systemImage: "folder",
+                                       description: Text(model.notice ?? ProductCopy.Workspace.chooseSourceHint))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -46,8 +46,8 @@ struct WorkspaceView: View {
                    status.needsReauthorization || status.availability == .identityChanged {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
-                        .help("This source needs attention.")
-                        .accessibilityLabel("Source needs attention")
+                        .help(ProductCopy.Workspace.sourceAttentionHint)
+                        .accessibilityLabel(ProductCopy.Workspace.sourceNeedsAttention)
                 }
             }
             .tag(scope.id)
@@ -82,17 +82,17 @@ struct WorkspaceView: View {
     private func fileTable(_ listing: SourceListing) -> some View {
         let widths = ShellLayout.columns(for: .workspaceFiles)
         return Table(listing.entries, selection: $model.workspaceFileSelection) {
-            TableColumn("Relative path") { file in
+            TableColumn(ProductCopy.Workspace.relativePath) { file in
                 Text(file.relativePath).lineLimit(1).help(file.relativePath)
             }
             .width(min: widths[0].cgMin, ideal: widths[0].cgIdeal, max: widths[0].cgMax)
-            TableColumn("Project") { file in
+            TableColumn(ProductCopy.Workspace.project) { file in
                 Text(model.clusterLabel(for: file.id)).lineLimit(1).help(model.clusterLabel(for: file.id))
             }
             .width(min: widths[1].cgMin, ideal: widths[1].cgIdeal, max: widths[1].cgMax)
-            TableColumn("Size") { file in Text(size(file.sizeBytes)).monospacedDigit() }
+            TableColumn(ProductCopy.Workspace.size) { file in Text(size(file.sizeBytes)).monospacedDigit() }
                 .width(min: widths[2].cgMin, ideal: widths[2].cgIdeal, max: widths[2].cgMax)
-            TableColumn("Status") { file in Text(status(file)) }
+            TableColumn(ProductCopy.Workspace.status) { file in Text(status(file)) }
                 .width(min: widths[3].cgMin, ideal: widths[3].cgIdeal, max: widths[3].cgMax)
         }
     }
@@ -101,12 +101,12 @@ struct WorkspaceView: View {
         if let context = model.context {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
-                    Text("Project candidates · revision \(context.revision.formatted())")
+                    Text(ProductCopy.Workspace.candidatesRevision(revision: context.revision))
                         .font(.caption).foregroundStyle(.secondary)
-                    Text("built \(context.builtAt.formatted())")
+                    Text("\(ProductCopy.Workspace.builtAt) \(context.builtAt.formatted())")
                         .font(.caption2).foregroundStyle(.secondary)
                     if model.contextIsStale {
-                        Text("Context inputs changed · build it again before mapping")
+                        Text(ProductCopy.Workspace.contextInputsChanged)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -115,22 +115,22 @@ struct WorkspaceView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
                 Table(model.clusterRows, selection: $model.workspaceClusterSelection) {
-                    TableColumn("Candidate") { row in
+                    TableColumn(ProductCopy.Workspace.candidate) { row in
                         Text(row.title).lineLimit(1).help(row.title)
                     }
                     .width(min: candidateWidths[0].cgMin, ideal: candidateWidths[0].cgIdeal, max: candidateWidths[0].cgMax)
-                    TableColumn("Files") { row in Text(row.fileCount.formatted()).monospacedDigit() }
+                    TableColumn(ProductCopy.Workspace.filesCount) { row in Text(row.fileCount.formatted()).monospacedDigit() }
                         .width(min: candidateWidths[1].cgMin, ideal: candidateWidths[1].cgIdeal, max: candidateWidths[1].cgMax)
-                    TableColumn("Basis") { row in Text(row.basis).lineLimit(1).help(row.basis) }
+                    TableColumn(ProductCopy.Workspace.basis) { row in Text(row.basis).lineLimit(1).help(row.basis) }
                         .width(min: candidateWidths[2].cgMin, ideal: candidateWidths[2].cgIdeal, max: candidateWidths[2].cgMax)
-                    TableColumn("Confidence") { row in Text(row.confidence) }
+                    TableColumn(ProductCopy.Workspace.confidence) { row in Text(row.confidence) }
                         .width(min: candidateWidths[3].cgMin, ideal: candidateWidths[3].cgIdeal, max: candidateWidths[3].cgMax)
                 }
             }
         } else {
             HStack(spacing: 8) {
                 Image(systemName: "square.3.layers.3d")
-                Text(model.notice ?? "No project context yet. Choose a profile, scan the source, then build a context; FormaCore will not map files without one.")
+                Text(model.notice ?? ProductCopy.Workspace.noContextYet)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -156,24 +156,25 @@ struct WorkspaceView: View {
     private func scanSummary(_ listing: SourceListing) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(model.phase == .scanning ? "Scanning…" : scanStatus(listing.state))
+                Text(model.phase == .scanning ? ProductCopy.Work.scanning : scanStatus(listing.state))
                 if !listing.issues.isEmpty {
-                    Menu("\(listing.issues.count) issues") {
+                    Menu("\(listing.issues.count) \(ProductCopy.Workspace.issues)") {
                         ForEach(listing.issues.indices.prefix(25), id: \.self) { index in
                             let issue = listing.issues[index]
-                            Text("\(issue.relativePath): \(String(describing: issue.reason))")
+                            Text("\(issue.relativePath): \(issue.reason.productLabel)")
+                                .help(issue.reason.rawValue)
                         }
-                        if listing.issues.count > 25 { Text("Showing first 25 issues") }
+                        if listing.issues.count > 25 { Text(ProductCopy.Workspace.showingFirst25Issues) }
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
                 }
                 Spacer()
                 if let stats = listing.statistics {
-                    Text("\(stats.fileCount.formatted()) files · \(stats.directoryCount.formatted()) folders · \(size(stats.sizeBytes))")
-                    Menu("File types") {
+                    Text("\(stats.fileCount.formatted()) \(ProductCopy.Workspace.filesUnit) · \(stats.directoryCount.formatted()) \(ProductCopy.Workspace.foldersUnit) · \(size(stats.sizeBytes))")
+                    Menu(ProductCopy.Workspace.fileTypes) {
                         ForEach(stats.extensions.keys.sorted(), id: \.self) { ext in
-                            Text("\(ext.isEmpty ? "No extension" : ext): \(stats.extensions[ext, default: 0])")
+                            Text("\(ext.isEmpty ? ProductCopy.Workspace.noExtension : ext): \(stats.extensions[ext, default: 0])")
                         }
                     }
                     .menuStyle(.borderlessButton)
@@ -183,7 +184,10 @@ struct WorkspaceView: View {
             }
             if let profile = model.selectedProfile {
                 HStack {
-                    Text("Profile \(profile.versionKey) · target \(profile.target.kind.rawValue) · \(profile.categories.count.formatted()) categories · execution \(profile.grantsExecution ? "granted" : "never granted")")
+                    Text(ProductCopy.Workspace.profileLine(versionKey: profile.versionKey,
+                                                           target: profile.target.kind.rawValue,
+                                                           categories: profile.categories.count,
+                                                           granted: profile.grantsExecution))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -198,12 +202,12 @@ struct WorkspaceView: View {
 
     private func scanStatus(_ state: SourceScanState) -> String {
         switch state {
-        case .notScanned: "Ready to scan"
-        case .scanning: "Scanning…"
-        case .complete: "Scan complete"
-        case .incomplete: "Incomplete scan · rescan to recover"
-        case .cancelled: "Scan cancelled · rescan to recover"
-        case .interrupted: "Scan interrupted · rescan to recover"
+        case .notScanned: ProductCopy.Workspace.readyToScan
+        case .scanning: ProductCopy.Work.scanning
+        case .complete: ProductCopy.Workspace.scanComplete
+        case .incomplete: ProductCopy.Workspace.incompleteScan
+        case .cancelled: ProductCopy.Workspace.scanCancelled
+        case .interrupted: ProductCopy.Workspace.scanInterrupted
         }
     }
 
@@ -234,10 +238,10 @@ struct WorkspaceView: View {
             }
             Spacer()
             if status.needsReauthorization, let scope = model.selectedScope {
-                Button("Reauthorize…") {
+                Button(ProductCopy.Workspace.reauthorize) {
                     let panel = NSOpenPanel()
-                    panel.title = "Choose the folder for \(scope.displayName) again"
-                    panel.message = "Forma renews access only when the folder is the same one."
+                    panel.title = ProductCopy.Shell.reauthorizeFolder(name: scope.displayName)
+                    panel.message = ProductCopy.Workspace.renewsAccess
                     panel.canChooseFiles = false
                     panel.canChooseDirectories = true
                     panel.allowsMultipleSelection = false
@@ -256,32 +260,33 @@ struct WorkspaceView: View {
 
     private func sourceUnavailableTitle(_ availability: SourceRootAvailability) -> String {
         switch availability {
-        case .accessible: return "Source available"
-        case .bookmarkStale: return "Access needs renewing"
-        case .permissionDenied: return "Access was revoked"
-        case .missing: return "Folder not found"
-        case .hydrationPending: return "Not downloaded yet"
-        case .identityChanged: return "This folder is different now"
-        case .unavailable: return "Source unavailable"
+        case .accessible: return ProductCopy.Workspace.sourceAvailable
+        case .bookmarkStale: return ProductCopy.Workspace.accessNeedsRenewing
+        case .permissionDenied: return ProductCopy.Workspace.accessRevoked
+        case .missing: return ProductCopy.Workspace.folderNotFound
+        case .hydrationPending: return ProductCopy.Workspace.notDownloadedYet
+        case .identityChanged: return ProductCopy.Workspace.folderDifferentNow
+        case .unavailable: return ProductCopy.Workspace.sourceUnavailable
         }
     }
 
     private func sourceUnavailableDetail(_ status: SourceScopeStatus) -> String {
         switch status.availability {
         case .accessible:
-            return "This source can be read."
+            return ProductCopy.Workspace.sourceReadable
         case .bookmarkStale:
-            return "The stored permission for \(status.lastKnownPath) is no longer valid. Choose the same folder again to renew it."
+            return ProductCopy.Workspace.bookmarkStaleDetail(path: status.lastKnownPath)
         case .permissionDenied:
-            return "macOS no longer allows Forma to read \(status.lastKnownPath). Files were not marked missing; renew access to continue."
+            return ProductCopy.Workspace.accessRevokedDetail(path: status.lastKnownPath)
         case .missing:
-            return "\(status.lastKnownPath) is gone. Scans stay incomplete until it is back, so nothing is marked missing by accident."
+            return ProductCopy.Workspace.folderGoneDetail(path: status.lastKnownPath)
         case .hydrationPending:
-            return "The provider has not downloaded this folder's contents yet. Metadata can still be read."
+            return ProductCopy.Workspace.cloudNotDownloaded
         case .identityChanged:
-            return "The folder at \(status.lastKnownPath) is not the one this source was registered from. Add it as a new source instead."
+            return ProductCopy.Notice.folderNotRegistered(
+                path: status.lastKnownPath, pathHint: ProductCopy.Notice.addAsNewSource)
         case .unavailable:
-            return "Forma could not determine the state of \(status.lastKnownPath)."
+            return ProductCopy.Workspace.stateUnknownDetail(path: status.lastKnownPath)
         }
     }
 }
@@ -319,10 +324,10 @@ struct WorkspaceInspector: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 Text(cluster.title).font(.headline)
-                LabeledContent("Files", value: files.count.formatted())
-                LabeledContent("Basis", value: cluster.basis)
-                LabeledContent("Confidence", value: cluster.confidence)
-                Text("Cluster membership is FormaCore's. Unassigned and conflicted files stay visible and gain no project by guessing.")
+                LabeledContent(ProductCopy.Workspace.filesCount, value: files.count.formatted())
+                LabeledContent(ProductCopy.Workspace.basis, value: cluster.basis)
+                LabeledContent(ProductCopy.Workspace.confidence, value: cluster.confidence)
+                Text(ProductCopy.Workspace.clusterMembershipNote)
                     .font(.caption).foregroundStyle(.secondary)
                 Divider()
                 ForEach(files) { file in
@@ -333,7 +338,7 @@ struct WorkspaceInspector: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if files.isEmpty {
-                    Text("FormaCore reported no file in this category for the current listing.")
+                    Text(ProductCopy.Workspace.noFilesInCategory)
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -348,12 +353,12 @@ struct WorkspaceInspector: View {
                 Text(entry.relativePath)
                     .font(.headline)
                     .textSelection(.enabled)
-                LabeledContent("Status", value: status(entry))
-                LabeledContent("Storage", value: providerName(entry.provider))
-                LabeledContent("Size", value: size(entry.sizeBytes))
-                LabeledContent("Source version", value: entry.sourceVersion.formatted())
-                LabeledContent("Snapshot revision", value: entry.snapshotRevision.formatted())
-                LabeledContent("Project", value: model.clusterLabel(for: entry.id))
+                LabeledContent(ProductCopy.Workspace.status, value: status(entry))
+                LabeledContent(ProductCopy.Workspace.storage, value: providerName(entry.provider))
+                LabeledContent(ProductCopy.Workspace.size, value: size(entry.sizeBytes))
+                LabeledContent(ProductCopy.Workspace.sourceVersion, value: entry.sourceVersion.formatted())
+                LabeledContent(ProductCopy.Workspace.snapshotRevision, value: entry.snapshotRevision.formatted())
+                LabeledContent(ProductCopy.Workspace.project, value: model.clusterLabel(for: entry.id))
                 if let sha = entry.sha256 {
                     Text("SHA-256").font(.caption).foregroundStyle(.secondary)
                     Text(sha).font(.caption.monospaced()).textSelection(.enabled)
@@ -369,14 +374,14 @@ struct WorkspaceInspector: View {
                 // finished - and the run it actually named could only be
                 // stopped from the toolbar.
                 if model.fileReadInFlight {
-                    Button("Cancel evidence read") { model.cancelFileRead() }
+                    Button(ProductCopy.Workspace.cancelEvidenceRead) { model.cancelFileRead() }
                     ProgressView().controlSize(.small)
                 } else {
-                    Button("Read Evidence") { model.readFileEvidence(entry, extracting: true) }
+                    Button(ProductCopy.Workspace.readEvidence) { model.readFileEvidence(entry, extracting: true) }
                         .disabled(entry.state != .present
                                   || !["pdf", "docx", "xlsx"].contains((entry.relativePath as NSString).pathExtension.lowercased()))
                         .accessibilityIdentifier("read-evidence")
-                    Button("Compute SHA-256") { model.readFileEvidence(entry, extracting: false) }
+                    Button(ProductCopy.Workspace.computeHash) { model.readFileEvidence(entry, extracting: false) }
                         .disabled(entry.state != .present)
                 }
                 if let evidence = model.fileEvidence {
@@ -409,19 +414,19 @@ struct WorkspaceInspector: View {
             }
             if let text = item.text { Text(text).textSelection(.enabled) }
             if let formula = item.formula {
-                Text("Formula: \(formula)").font(.caption.monospaced()).textSelection(.enabled)
-                Text(item.cachedValue.map { "Cached: \($0)" } ?? "No cached value").font(.caption)
+                Text(ProductCopy.Workspace.formulaLine(formula)).font(.caption.monospaced()).textSelection(.enabled)
+                Text(item.cachedValue.map { ProductCopy.Workspace.cachedLine($0) } ?? ProductCopy.Workspace.noCachedValue).font(.caption)
             }
         }
     }
 
     private func providerName(_ provider: SourceProvider) -> String {
         switch provider {
-        case .local: "Local"
+        case .local: ProductCopy.Workspace.local
         case .oneDrive: "OneDrive"
-        case .fileProvider: "File Provider"
+        case .fileProvider: ProductCopy.Workspace.fileProvider
         case .iCloud: "iCloud"
-        case .unknown: "Unknown"
+        case .unknown: ProductCopy.Workspace.unknown
         }
     }
 
@@ -436,10 +441,10 @@ struct WorkspaceInspector: View {
 // they share the same words.
 private func wsFileStatus(_ file: SourceEntry) -> String {
     switch file.state {
-    case .present: file.hydrationPending ? "Cloud placeholder" : "Present"
-    case .missing: "Missing"
-    case .symlink: "Symbolic link"
-    case .held: "Needs review"
+    case .present: file.hydrationPending ? ProductCopy.Workspace.cloudPlaceholder : ProductCopy.Workspace.present
+    case .missing: ProductCopy.Workspace.missing
+    case .symlink: ProductCopy.Workspace.symbolicLink
+    case .held: ProductCopy.Workspace.needsReview
     }
 }
 

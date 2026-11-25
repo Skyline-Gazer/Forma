@@ -31,15 +31,15 @@ struct ImportView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Import plan")
+            Text(ProductCopy.Archive.importPlan)
                 .font(.title2.weight(.semibold))
             // The most important sentence in this pane: this build cannot write.
-            Label("Dry run only. This build has no import path to DEVONthink, so no record can be written.",
+            Label(ProductCopy.Archive.dryRunBanner,
                   systemImage: "hand.raised.fill")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .accessibilityIdentifier("import-dry-run-notice")
-            Label("The plan lists local file names; treat an export as private data, not as a sanitized artifact.",
+            Label(ProductCopy.Archive.privacyNote,
                   systemImage: "lock.doc")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -55,7 +55,7 @@ struct ImportView: View {
         VStack(alignment: .leading, spacing: 12) {
             summary(plan)
             if plan.rows.isEmpty {
-                Text("This manifest has no records to plan.")
+                Text(ProductCopy.Archive.noRecordsToPlan)
                     .foregroundStyle(.secondary)
             } else {
                 List(plan.rows, id: \.sourceID) { row in
@@ -70,12 +70,12 @@ struct ImportView: View {
     private func summary(_ plan: ImportPlan) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 16) {
-                stat("Records", "\(plan.rows.count)")
-                stat("Blocked", "\(plan.blocked)", tint: .red)
-                stat("Deferred", "\(plan.deferred)", tint: .orange)
-                stat("Ready", "\(plan.passes)", tint: .green)
+                stat(ProductCopy.Archive.records, "\(plan.rows.count)")
+                stat(ProductCopy.Archive.blocked, "\(plan.blocked)", tint: .red)
+                stat(ProductCopy.Archive.deferred, "\(plan.deferred)", tint: .orange)
+                stat(ProductCopy.Archive.ready, "\(plan.passes)", tint: .green)
                 Spacer()
-                Text("revision \(plan.manifestRevision) · \(plan.profileID)")
+                Text("\(ProductCopy.Workspace.revisionLabel) \(plan.manifestRevision) · \(plan.profileID)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -98,11 +98,11 @@ struct ImportView: View {
     }
 
     private func observationText(_ plan: ImportPlan) -> String {
-        var parts = ["Source facts: \(plan.observation)"]
+        var parts = [ProductCopy.Archive.sourceFacts(plan.observation)]
         if !plan.targetObserved {
-            parts.append("the target group was never observed, so it is reported as unresolved rather than missing")
+            parts.append(ProductCopy.Archive.targetNeverObserved)
         }
-        parts.append("no content digest was recorded, so this plan makes no statement about file bytes")
+        parts.append(ProductCopy.Archive.noContentDigest)
         return parts.joined(separator: " · ")
     }
 
@@ -124,17 +124,17 @@ struct ImportView: View {
                 verdictBadge(row.verdict)
             }
             HStack(spacing: 8) {
-                Text(row.groupPath.isEmpty ? "no target group" : row.groupPath.joined(separator: " / "))
+                Text(row.groupPath.isEmpty ? ProductCopy.Archive.noTargetGroup : row.groupPath.joined(separator: " / "))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if !row.targetResolved {
-                    Text("unresolved")
+                    Text(ProductCopy.Archive.unresolved)
                         .font(.caption2)
                         .padding(.horizontal, 5)
                         .background(.quaternary, in: Capsule())
                 }
                 if row.hydrationPending {
-                    Text("not downloaded")
+                    Text(ProductCopy.Workspace.notDownloadedYet)
                         .font(.caption2)
                         .padding(.horizontal, 5)
                         .background(.quaternary, in: Capsule())
@@ -156,9 +156,9 @@ struct ImportView: View {
         let label: String
         let tint: Color
         switch verdict {
-        case .pass: label = "ready"; tint = .green
-        case .blocked: label = "blocked"; tint = .red
-        case .deferred: label = "deferred"; tint = .orange
+        case .pass: label = ProductCopy.Archive.ready; tint = .green
+        case .blocked: label = ProductCopy.Archive.blocked; tint = .red
+        case .deferred: label = ProductCopy.Archive.deferred; tint = .orange
         }
         return Text(label)
             .font(.caption.weight(.medium))
