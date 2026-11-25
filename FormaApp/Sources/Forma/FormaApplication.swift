@@ -227,8 +227,11 @@ private struct FormaRoot: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(minWidth: CGFloat(ShellLayout.windowMinWidth), maxWidth: .infinity,
-               minHeight: CGFloat(ShellLayout.windowMinHeight), maxHeight: .infinity)
+        // No size frame here: probe R showed the hosting layer treats a
+        // definite frame as the window's fitting size and snaps the window
+        // back to it after every user resize (1400x900 became 1024x676).
+        // The minimum lives at the AppKit level in WindowConfigurator, which
+        // sets it once and never re-solves it when the subtree swaps.
         .background(WindowConfigurator())
     }
 }
