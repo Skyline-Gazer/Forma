@@ -246,7 +246,7 @@ struct M0R2RereadRecoveryEndToEndTests {
         // (rereadEvidence lists again after capture; bindCapturedTargets
         // exists in the core for the same reason). The pre-capture scan entry
         // lags one body-read behind, by design.
-        let authoritative = try #require((try workspace.listing(scope)).entries.first)
+        let authoritative = try #require((try await workspace.listing(scope)).entries.first)
         #expect(newRow.snapshotRevision == Int(authoritative.snapshotRevision)
                 && newRow.snapshotFingerprint == authoritative.snapshotFingerprint,
                 "the re-read rows are stamped with the snapshot the listing now reports")
