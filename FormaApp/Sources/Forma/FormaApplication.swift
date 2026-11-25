@@ -275,10 +275,10 @@ private struct WindowConfigurator: NSViewRepresentable {
             // fitting size; re-assert at the swap's outer edge and once
             // after it, then latch. A person who drags in this window wins
             // from the next session on - the flag is set regardless.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
                 window.setContentSize(size)
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
                 window.setContentSize(size)
                 UserDefaults.standard.set(true, forKey: Self.key)
             }
