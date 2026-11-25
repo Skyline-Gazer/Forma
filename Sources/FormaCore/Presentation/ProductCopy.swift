@@ -77,7 +77,6 @@ public enum ProductCopy {
                                        categories: Int, granted: Bool) -> String {
             "资料库 \(versionKey) · 目标 \(target) · \(categories.formatted()) 个类别 · 执行授权\(granted ? "已授予" : "从未授予")"
         }
-        public static let projectCandidates = "项目候选"
         public static let revisionLabel = "修订"
         public static let builtAt = "构建于"
         public static let contextInputsChanged = "上下文输入已变化 · 映射前请重新构建"
@@ -100,7 +99,6 @@ public enum ProductCopy {
         public static let sourceReadable = "该来源可以读取。"
         public static let sourceAttentionHint = "该来源需要关注。"
         public static let renewsAccess = "只有当文件夹仍是同一个时，Forma 才会续期访问授权。"
-        public static let sourceAvailableRead = "来源仍然可读。"
         public static let snapshotRevision = "快照修订"
         public static let sourceVersion = "来源版本"
         public static let storage = "存储"
@@ -290,14 +288,58 @@ public enum ProductCopy {
     /// What the shell says when work finishes or refuses, in one place, so
     /// the status strip and the panels never paraphrase FormaCore's outcome.
     public enum Notice {
+        // The ordinary workflow's status strip: scan -> reconcile -> context ->
+        // run -> load -> export. The physical acceptance found these still
+        // reading "Scan complete · 6 files" under an otherwise Chinese shell
+        // (#175, CopyGate finding 1). Counts stay monospaced numerals; the
+        // separator the desk already uses stays too.
+        public static func scanComplete(files: Int) -> String {
+            "扫描完成 · \(files.formatted()) 个文件 · 可开始构建上下文。"
+        }
+        public static func scanIncomplete(issues: Int) -> String {
+            "扫描未完整 · FormaCore 报告 \(issues.formatted()) 个问题。"
+        }
+        public static func reconciledNone(reason: String) -> String {
+            "没有条目失效 · \(reason)"
+        }
+        public static func reconciled(count: Int, reason: String) -> String {
+            "\(count.formatted()) 个条目已失效 · \(reason) · 其余仍可用"
+        }
+        public static func contextBuilt(revision: Int, candidates: Int,
+                                        unassigned: Int, conflicted: Int) -> String {
+            "上下文修订 \(revision.formatted()) · \(candidates.formatted()) 个候选 · "
+                + "\(unassigned.formatted()) 个未归属 · "
+                + "\(conflicted.formatted()) 个冲突。"
+        }
+        public static func runFinished(runID: String, batches: Int, requests: Int,
+                                       failures: Int, refused: Int, unread: Int) -> String {
+            "运行 \(runID) · \(batches.formatted()) 个批次 · "
+                + "\(requests.formatted()) 次供应商请求 · "
+                + "\(failures.formatted()) 个文件失败 · "
+                + "\(refused.formatted()) 条引用被拒 · "
+                + "\(unread.formatted()) 个文件 FormaCore 无法读取。"
+        }
+        public static func bundleLoaded(revision: Int, path: String,
+                                        entries: Int, rows: Int) -> String {
+            "已加载修订 \(revision.formatted())（来自 \(path)）· "
+                + "\(entries.formatted()) 个条目 · "
+                + "\(rows.formatted()) 行证据可离线查看。"
+        }
+        public static func bundleFolderMissingManifest(path: String, manifestFile: String) -> String {
+            "\(path) 中没有 \(manifestFile)，它不是 Forma 导出包。"
+        }
+        public static func bundleManifestUndecodable(name: String) -> String {
+            "\(name) 不是 FormaCore 能解析的 Forma 清单。"
+        }
+        public static let selectBundleFirst = "尚未选择导出包：请先导出清单或打开一个包。"
+        public static func keySaved(provider: String) -> String {
+            "已为 \(provider) 将 API 密钥存入钥匙串。"
+        }
         public static func exported(files: Int, revision: Int) -> String {
             "已导出 \(files.formatted()) 个文件（修订 \(revision.formatted())）。"
         }
         public static func bundleConsistent(revision: Int) -> String {
             "归档包自洽 · 修订 \(revision.formatted())。"
-        }
-        public static func bundleChecked(files: Int, revision: Int) -> String {
-            "已校验归档包：\(files.formatted()) 个文件，修订 \(revision.formatted())。"
         }
         public static let nothingToExport = "还没有可导出的清单。"
         public static let needsContextForPreview = "预览需要来源、资料库类型和已存储的项目上下文。"
@@ -306,6 +348,9 @@ public enum ProductCopy {
         public static let addAsNewSource = "请改为把它添加为新的来源。"
         public static let sourceNoLongerRegistered = "这个来源已经不在登记清单里了。"
         public static let selectedFilesNoLongerListed = "所选文件已不在当前清单中。"
+        public static func folderNotRegistered(path: String, pathHint: String) -> String {
+            "「\(path)」不是该条目登记时所在的来源。\(pathHint)"
+        }
         public static func folderNotRegisteredSource(pathHint: String) -> String {
             "这个文件夹不是该条目登记时所在的来源。\(pathHint)"
         }

@@ -66,11 +66,11 @@ struct MappingView: View {
                     LabeledContent("Batches", value: outcome.batches.formatted())
                     LabeledContent("Provider requests", value: outcome.requests.formatted())
                     LabeledContent("Refused references", value: outcome.refusedReferences.formatted())
-                    LabeledContent("Returned model", value: outcome.modelID ?? "Not reported")
-                    LabeledContent("Input tokens", value: outcome.usage.input.map { $0.formatted() } ?? "Not reported")
-                    LabeledContent("Output tokens", value: outcome.usage.output.map { $0.formatted() } ?? "Not reported")
-                    LabeledContent("Cache read tokens", value: outcome.usage.cacheRead.map { $0.formatted() } ?? "Not reported")
-                    LabeledContent("Cache write tokens", value: outcome.usage.cacheCreation.map { $0.formatted() } ?? "Not reported")
+                    LabeledContent("Returned model", value: outcome.modelID ?? ProductCopy.ReviewVocabulary.notReported)
+                    LabeledContent("Input tokens", value: outcome.usage.input.map { $0.formatted() } ?? ProductCopy.ReviewVocabulary.notReported)
+                    LabeledContent("Output tokens", value: outcome.usage.output.map { $0.formatted() } ?? ProductCopy.ReviewVocabulary.notReported)
+                    LabeledContent("Cache read tokens", value: outcome.usage.cacheRead.map { $0.formatted() } ?? ProductCopy.ReviewVocabulary.notReported)
+                    LabeledContent("Cache write tokens", value: outcome.usage.cacheCreation.map { $0.formatted() } ?? ProductCopy.ReviewVocabulary.notReported)
                     LabeledContent("Files with a provider failure", value: outcome.failures.count.formatted())
                     LabeledContent("Files FormaCore could not read", value: model.evidenceFailures.count.formatted())
                 } else {
@@ -85,7 +85,7 @@ struct MappingView: View {
                     LabeledContent("Profile", value: "\(manifest.envelope.profileID) · \(manifest.envelope.profileVersion)")
                     LabeledContent("CasePack", value: "\(manifest.envelope.casePackID) · \(manifest.envelope.casePackVersion)")
                     LabeledContent("Provider", value: manifest.envelope.modelProvider)
-                    LabeledContent("Model", value: manifest.envelope.modelID ?? "Not reported")
+                    LabeledContent("Model", value: manifest.envelope.modelID ?? ProductCopy.ReviewVocabulary.notReported)
                     LabeledContent("Context revision", value: manifest.envelope.contextRevision.formatted())
                     LabeledContent("Prompt version", value: manifest.envelope.promptVersion)
                     LabeledContent("Extractor version", value: manifest.envelope.extractorVersion)
@@ -217,7 +217,7 @@ struct MappingView: View {
             }
             Section(ProductCopy.ReviewVocabulary.modelSettings) {
                 LabeledContent("Provider", value: model.provider.displayName)
-                LabeledContent("Model", value: model.modelID)
+                LabeledContent("模型", value: model.modelID)
                 LabeledContent(ProductCopy.ReviewVocabulary.filesPerBatch, value: model.entryLimit.formatted())
                 LabeledContent(EgressConsent.shortLabel,
                                value: model.allowCloud ? "本次运行已获同意" : "关闭")

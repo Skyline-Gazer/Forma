@@ -66,6 +66,61 @@ struct ProductCopyTests {
         #expect(ProductCopy.Notice.runCancelled(batches: 3).contains("3"))
     }
 
+    @Test("the ordinary-workflow status strip is Chinese and keeps its counts")
+    func ordinaryWorkflowNotices() {
+        // #175 / CopyGate finding 1: the scan -> context -> run -> load path
+        // is what a person sees every session; none of it may stay English.
+        for value in [ProductCopy.Notice.scanComplete(files: 6),
+                      ProductCopy.Notice.scanIncomplete(issues: 2),
+                      ProductCopy.Notice.reconciled(count: 3, reason: "source_changed"),
+                      ProductCopy.Notice.contextBuilt(revision: 4, candidates: 9,
+                                                      unassigned: 2, conflicted: 1),
+                      ProductCopy.Notice.runFinished(runID: "abc", batches: 3,
+                                                     requests: 5, failures: 1,
+                                                     refused: 2, unread: 4),
+                      ProductCopy.Notice.bundleLoaded(revision: 4, path: "/x.bundle",
+                                                      entries: 40, rows: 12),
+                      ProductCopy.Notice.selectBundleFirst,
+                      ProductCopy.Notice.keySaved(provider: "OpenAI")] {
+            #expect(containsChinese(value), "\(value)")
+        }
+        #expect(ProductCopy.Notice.scanComplete(files: 6).contains("6"))
+        #expect(ProductCopy.Notice.runFinished(runID: "abc", batches: 3, requests: 5,
+                                               failures: 1, refused: 2, unread: 4)
+                    .contains("abc"))
+        #expect(ProductCopy.Notice.keySaved(provider: "OpenAI").contains("OpenAI"),
+                "provider names stay machine")
+        // Rejection notices keep the path or filename that identifies the bundle.
+        #expect(ProductCopy.Notice.bundleFolderMissingManifest(path: "/tmp/b",
+                                                               manifestFile: "manifest.json")
+                    .contains("manifest.json"))
+        #expect(ProductCopy.Notice.bundleManifestUndecodable(name: "manifest.json")
+                    .contains("manifest.json"))
+        // CopyGate finding 4: the identity-changed detail names the folder.
+        #expect(ProductCopy.Notice.folderNotRegistered(path: "/old/place",
+                                                       pathHint: "H")
+                    .contains("/old/place"))
+    }
+
+    @Test("FormaError sentences are Chinese while codes stay machine")
+    func errorDescriptions() {
+        // CopyGate finding 2: the alert content was English under Chinese chrome.
+        for error in [FormaError.unavailable, .cancelled, .timeout, .network,
+                      .credentialMissing, .hydrationPending, .refused, .invalidOutput] {
+            #expect(containsChinese(error.errorDescription ?? ""), "\(error)")
+        }
+        #expect(FormaError.remoteStatus(429).errorDescription?.contains("429") == true)
+    }
+
+    @Test("recovery outcome labels translate but keep raw codes")
+    func recoveryOutcomes() {
+        // CopyGate finding 5: the banner reads 已验证 now; rawValue persists for logs.
+        #expect(ImportRecoveryReviewResult.Outcome.verified.productLabel == "已验证")
+        #expect(ImportRecoveryReviewResult.Outcome.outsideScope.productLabel == "超出范围")
+        #expect(ImportRecoveryReviewResult.Outcome.outsideScope.rawValue == "outside_scope")
+        #expect(ImportRecoveryReviewResult.Outcome.unverifiable.rawValue == "unverifiable")
+    }
+
     @Test("machine codes and provider names are never translated")
     func machineVocabularySurvives() {
         // The recovery prose quotes the stable code; the copy keeps it.

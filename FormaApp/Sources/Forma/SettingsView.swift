@@ -168,7 +168,7 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             } else {
-                Text(model.notice ?? "尚未生成预览。生成预览需要一个已扫描的来源、一个档案和一个已保存的项目上下文。")
+                Text(model.notice ?? "尚未生成预览。生成预览需要一个已扫描的来源、一个资料库类型和一个已保存的项目上下文。")
                     .font(.caption).foregroundStyle(.secondary)
             }
             LabeledContent("已脱敏角色", value: model.roleInventory.isEmpty ? "未定义词条" : "见下方清单")
@@ -229,7 +229,7 @@ struct SettingsView: View {
                                value: model.redactionTerms.first.flatMap { model.redaction.placeholder(for: $0.term) }
                                     ?? "添加一个非空词条即可查看示例")
                     .font(.caption.monospaced())
-                Text("档案中模型必须看到的反例数：\(profile.counterExamples.count.formatted())")
+                Text("资料库类型中模型必须看到的反例数：\(profile.counterExamples.count.formatted())")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -284,7 +284,7 @@ struct SettingsView: View {
                 Text(model.notice ?? "无法从应用包中读取随附的 CasePack。")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Text("案例是 FormaCore 自带的示例与反例。引擎按档案和版本选择它们；此处不会编辑它们。")
+            Text("案例是 FormaCore 自带的示例与反例。引擎按资料库类型和版本选择它们；此处不会编辑它们。")
                 .font(.caption2).foregroundStyle(.secondary)
         }
     }
@@ -292,7 +292,7 @@ struct SettingsView: View {
     // MARK: - Profile
 
     private var profileSection: some View {
-        Section("档案") {
+        Section("资料库类型") {
             Picker("档案", selection: Binding(
                 get: {
                     guard model.profiles.contains(where: { $0.profileID == model.selectedProfileID }) else { return nil }

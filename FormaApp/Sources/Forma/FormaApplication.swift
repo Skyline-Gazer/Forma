@@ -736,6 +736,7 @@ private struct ImportRecoveryBanner: View {
                 }
                 if let review = state.recoveryReview {
                     Text(reviewSummary(review))
+                        .help(reportCodes(review))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -765,11 +766,21 @@ private struct ImportRecoveryBanner: View {
         }
     }
 
+    /// Machine codes for the tooltip: the banner speaks Chinese, the ledger
+    /// stays English (#175).
+    private func reportCodes(_ report: ImportRecoveryReviewReport) -> String {
+        ImportRecoveryReviewResult.Outcome.allCases
+            .compactMap { outcome in
+                guard let count = report.counts[outcome], count > 0 else { return nil }
+                return "\(outcome.rawValue)=\(count)"
+            }.joined(separator: " ")
+    }
+
     private func reviewSummary(_ report: ImportRecoveryReviewReport) -> String {
         let counts = report.counts
         let parts = ImportRecoveryReviewResult.Outcome.allCases.compactMap { outcome -> String? in
             guard let count = counts[outcome], count > 0 else { return nil }
-            return "\(count) \(outcome.rawValue)"
+            return "\(count) \(outcome.productLabel)"
         }
         let verdict = report.isConclusive
         return ProductCopy.Shell.reviewVerdict(

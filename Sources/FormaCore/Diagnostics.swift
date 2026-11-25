@@ -28,25 +28,29 @@ public enum FormaError: Error, LocalizedError, Sendable, Equatable {
         }
     }
 
+    /// The one place a failure becomes a sentence the user reads (CopyGate
+    /// finding 2: the alert button was translated and its content was not).
+    /// Machine identifiers stay machine: HTTP codes, provider names and the
+    /// probe vocabulary are the diagnostics the SPEC carves out.
     public var errorDescription: String? {
         switch self {
-        case .unavailable: "The requested resource is unavailable."
-        case .cancelled: "The operation was cancelled."
-        case .invalidResponse: "The service returned an invalid response."
-        case .timeout: "The operation timed out."
-        case .disconnected: "The service disconnected."
-        case .unauthorized: "This operation requires explicit authorization."
-        case .incompatible: "The detected service capability is incompatible."
-        case .credentialMissing: "Save an API key in Keychain before running the probe."
-        case .credentialLocked: "Unlock the login keychain to read the saved API key."
-        case .storage: "Forma could not access its local storage."
-        case .invalidSource: "The selected source cannot be safely accessed."
-        case .sourceChanged: "The source changed. Scan it again before reading."
-        case .hydrationPending: "The file content is not available locally."
-        case .network: "Forma could not reach the service."
-        case .remoteStatus(let status): "The service returned HTTP \(status)."
-        case .refused: "The model refused the probe."
-        case .invalidOutput: "The model output did not satisfy the probe schema."
+        case .unavailable: "请求的资源当前不可用。"
+        case .cancelled: "操作已取消。"
+        case .invalidResponse: "服务返回了无效响应。"
+        case .timeout: "操作超时。"
+        case .disconnected: "服务连接已断开。"
+        case .unauthorized: "此操作需要明确授权。"
+        case .incompatible: "检测到的服务能力不兼容。"
+        case .credentialMissing: "请先在钥匙串中保存 API 密钥，再运行探测。"
+        case .credentialLocked: "请解锁登录钥匙串以读取已保存的 API 密钥。"
+        case .storage: "Forma 无法访问本地存储。"
+        case .invalidSource: "所选来源无法安全访问。"
+        case .sourceChanged: "来源已变化，请重新扫描后再读取。"
+        case .hydrationPending: "文件内容尚未在本地就绪。"
+        case .network: "Forma 无法连接服务。"
+        case .remoteStatus(let status): "服务返回 HTTP \(status)。"
+        case .refused: "模型拒绝了该探测。"
+        case .invalidOutput: "模型输出不满足探测的 schema。"
         }
     }
 }

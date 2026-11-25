@@ -282,8 +282,8 @@ struct WorkspaceView: View {
         case .hydrationPending:
             return ProductCopy.Workspace.cloudNotDownloaded
         case .identityChanged:
-            return ProductCopy.Notice.folderNotRegisteredSource(
-                pathHint: ProductCopy.Notice.addAsNewSource)
+            return ProductCopy.Notice.folderNotRegistered(
+                path: status.lastKnownPath, pathHint: ProductCopy.Notice.addAsNewSource)
         case .unavailable:
             return ProductCopy.Workspace.stateUnknownDetail(path: status.lastKnownPath)
         }

@@ -845,8 +845,8 @@ final class WorkspaceModel: ObservableObject {
                 listing = updated
                 refreshStaleness()
                 notice = updated.isComplete
-                    ? "Scan complete · \(updated.entries.count.formatted()) files · build a context before mapping."
-                    : "Scan finished incomplete · FormaCore reported \(updated.issues.count.formatted()) issues."
+                    ? ProductCopy.Notice.scanComplete(files: updated.entries.count)
+                    : ProductCopy.Notice.scanIncomplete(issues: updated.issues.count)
             } catch {
                 if let saved = try? await workspace.listing(scope), scope.id == self.selectedScopeID {
                     listing = saved
@@ -884,8 +884,9 @@ final class WorkspaceModel: ObservableObject {
                     return
                 }
                 notice = decision.invalidatedSourceIDs.isEmpty
-                    ? "Nothing invalidated · \(decision.reason)"
-                    : "\(decision.invalidatedSourceIDs.count.formatted()) entries invalidated · \(decision.reason) · the rest stay usable"
+                    ? ProductCopy.Notice.reconciledNone(reason: decision.reason)
+                    : ProductCopy.Notice.reconciled(count: decision.invalidatedSourceIDs.count,
+                                                    reason: decision.reason)
             } catch {
                 if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .unavailable) }
             }
@@ -908,9 +909,10 @@ final class WorkspaceModel: ObservableObject {
                       profile.profileID == self.selectedProfileID else { return }
                 context = built
                 contextIsStale = false
-                notice = "Context revision \(built.revision.formatted()) · \(built.candidates.count.formatted()) candidates · "
-                    + "\(built.unassignedSourceIDs.count.formatted()) unassigned · "
-                    + "\(built.conflictedSourceIDs.count.formatted()) conflicted."
+                notice = ProductCopy.Notice.contextBuilt(
+                    revision: built.revision, candidates: built.candidates.count,
+                    unassigned: built.unassignedSourceIDs.count,
+                    conflicted: built.conflictedSourceIDs.count)
             } catch {
                 if !Task.isCancelled { show(error, operation: .providerProbe, fallback: .unavailable) }
             }
@@ -1423,11 +1425,10 @@ final class WorkspaceModel: ObservableObject {
             self.manifest = stored
             self.outcome = result
             self.reconciliation = nil
-            self.notice = "Run \(run.id.uuidString.lowercased()) · \(result.batches.formatted()) batches · "
-                + "\(result.requests.formatted()) provider requests · "
-                + "\(result.failures.count.formatted()) file failures · "
-                + "\(result.refusedReferences.formatted()) refused references · "
-                + "\(unread.count.formatted()) files FormaCore could not read."
+            self.notice = ProductCopy.Notice.runFinished(
+                runID: run.id.uuidString.lowercased(), batches: result.batches,
+                requests: result.requests, failures: result.failures.count,
+                refused: result.refusedReferences, unread: unread.count)
             self.refreshRows()
         }
         return true
@@ -1613,20 +1614,22 @@ final class WorkspaceModel: ObservableObject {
                 self.correctionHistoryState = .offlineBundle
                 self.bundleURL = loaded.bundle
                 self.revalidation = nil
-                self.notice = "Loaded revision \(loaded.manifest.envelope.revision.formatted()) from \(loaded.bundle.path) · "
-                    + "\(loaded.manifest.entries.count.formatted()) entries · "
-                    + "\(loaded.records.count.formatted()) evidence rows offline."
+                self.notice = ProductCopy.Notice.bundleLoaded(
+                    revision: loaded.manifest.envelope.revision, path: loaded.bundle.path,
+                    entries: loaded.manifest.entries.count, rows: loaded.records.count)
                 self.refreshRows()
             } catch let failure as BundleReadFailure {
                 guard !Task.isCancelled else { return }
                 switch failure.reason {
                 case .noManifest:
                     error = .unavailable
-                    notice = "\(failure.bundle.path) has no \(ManifestExport.manifestFile), so it is not a Forma export bundle."
+                    notice = ProductCopy.Notice.bundleFolderMissingManifest(
+                        path: failure.bundle.path, manifestFile: ManifestExport.manifestFile)
                 case .undecodable:
                     FormaDiagnostics.failure(.readEvidence, .unavailable)
                     error = .unavailable
-                    notice = "\(failure.manifestURL.lastPathComponent) is not a Forma manifest FormaCore can decode."
+                    notice = ProductCopy.Notice.bundleManifestUndecodable(
+                        name: failure.manifestURL.lastPathComponent)
                 }
             } catch {
                 if !Task.isCancelled { show(error, operation: .readEvidence, fallback: .unavailable) }
@@ -1694,7 +1697,7 @@ final class WorkspaceModel: ObservableObject {
         guard phase == .idle else { return }
         guard let bundleURL else {
             error = .unavailable
-            notice = "No bundle is selected: export a manifest or open a bundle first."
+            notice = ProductCopy.Notice.selectBundleFirst
             return
         }
         workCounters.record(.revalidate)
@@ -1946,7 +1949,7 @@ final class WorkspaceModel: ObservableObject {
             try await Self.offMain {
                 try ProviderProbe().saveKey(key, for: chosenProvider, customBaseURL: chosenBaseURL)
             }
-            notice = "API key saved in Keychain for \(chosenProvider.displayName)."
+            notice = ProductCopy.Notice.keySaved(provider: chosenProvider.displayName)
             return true
         } catch {
             let safe = error as? FormaError ?? .storage
