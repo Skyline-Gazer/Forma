@@ -76,9 +76,10 @@ while [ "$i" -lt "$steps" ]; do
         echo "error: the app exited during the first ${OBSERVE_SECONDS}s" >&2
         echo "== captured stderr (probe)"
         cat /tmp/forma-smoke-stderr.log 2>/dev/null || true
-        echo "== exit status"
-        wait "$pid" 2>/dev/null; echo "raw wait rc: $?"
-        sleep 10
+        rc=0
+        ( set +e; wait "$pid" 2>/dev/null; rc=$?; exit $rc ) || rc=$?
+        echo "raw wait rc: $rc"
+        sleep 20
         collect_crash
         exit 1
     fi
