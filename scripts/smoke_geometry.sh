@@ -70,67 +70,59 @@ on appAlive()
     do shell script "pgrep -x Forma > /dev/null && echo yes || echo no"
 end appAlive
 
-on hasMarker(win, marker)
-    -- `whose identifier is` only reaches direct children and System Events'
-    -- UI element class has no identifier *property* (WindowGate finding 1);
-    -- the AXIdentifier *attribute* walk is the dialect. Probe AA shows all
-    -- six `area-<raw>-content` container markers... they mount lazily, so
-    -- poll for up to 3 seconds before declaring the pane unmounted.
-    set deadline to (current date) + 15
+on idSnapshot(win)
+    -- Probe AA vs the gate runs, one mechanism explains everything: the
+    -- FIRST `entire contents` walk of an untouched window sees all 32
+    -- identifiers; the polling version - dozens of whole-tree walks in 15
+    -- seconds - sees ZERO even with the app alive and sized right. Each
+    -- walk re-triggers SwiftUI accessibility re-rendering, and the storm
+    -- starves subsequent reads. So: one walk per check, snapshot the
+    -- identifier list, reuse it; poll at human-reasonable intervals.
+    set outList to {}
     tell application "System Events"
-        repeat
-            set foundCount to 0
-            repeat with el in (entire contents of win)
-                try
-                    if (exists attribute "AXIdentifier" of el) and (value of attribute "AXIdentifier" of el is marker) then
-                        set foundCount to foundCount + 1
-                    end if
-                end try
-            end repeat
-            if foundCount > 0 then
-                -- Probe AA: the identifier propagates through a whole subtree
-                -- (review's content carried 20+ elements), so the count names
-                -- what mounted and makes a stale/wrong-pane result visible.
-                log marker & ": " & foundCount & " elements"
-                return true
-            end if
-            if (current date) > deadline then return false
-            delay 1
+        repeat with el in (entire contents of win)
+            try
+                if (exists attribute "AXIdentifier" of el) then
+                    set end of outList to (value of attribute "AXIdentifier" of el as text)
+                end if
+            end try
         end repeat
     end tell
+    return outList
+end idSnapshot
+
+on hasMarker(snap, marker)
+    repeat with v in snap
+        if (v as text) is marker then return true
+    end repeat
+    return false
 end hasMarker
 
+on waitMarker(win, marker, tries, gap)
+    repeat tries times
+        if my hasMarker(my idSnapshot(win), marker) then return true
+        delay gap
+    end repeat
+    return false
+end waitMarker
+
 on clickById(win, idStr)
-    -- Probe AA (run 45652782170) inventoried the real tree: the sidebar is
-    -- an AXOutline and the area identifiers are carried by its AXStaticText
-    -- labels - the walk dialect is correct, so a miss is a transient tree
-    -- (lazy mount), never a structural absence. Scan the full contents once,
-    -- collect candidates, retry up to 3 times before declaring the row
-    -- absent. The scan counts are logged so any future dialect regression
-    -- names itself instead of failing blind.
-    set scanned to 0
-    set hits to {}
-    tell application "System Events"
-        repeat 3 times
-            set ec to entire contents of win
-            set scanned to count of ec
-            set hits to {}
-            repeat with el in ec
+    -- Single walk per attempt; probe AA inventoried the six AXStaticText
+    -- labels, so the dialect is settled and retries only guard mount
+    -- timing. 3 attempts, spaced.
+    repeat 3 times
+        tell application "System Events"
+            repeat with el in (entire contents of win)
                 try
                     if (exists attribute "AXIdentifier" of el) and (value of attribute "AXIdentifier" of el is idStr) then
-                        set end of hits to el
+                        click el
+                        return true
                     end if
                 end try
             end repeat
-            if (count of hits) > 0 then exit repeat
-        end repeat
-        delay 0.5
-        if (count of hits) > 0 then
-            click (item 1 of hits)
-            return true
-        end if
-    end tell
-    log "clickById " & idStr & ": scanned " & scanned & " elements, 0 matches after 3 passes"
+        end tell
+        delay 2
+    end repeat
     return false
 end clickById
 
@@ -168,7 +160,7 @@ on run
             -- .starting ProgressView pane (window up, sized correctly);
             -- sidebar and content markers exist only once the scan
             -- completes and .ready mounts.
-            if not my hasMarker(win, "area-review-content") then
+            if not my waitMarker(win, "area-review-content", 5, 3) then
                 -- Decisive: no resize has happened yet. Dump the world at
                 -- the failure point: title (launch state), liveness, and
                 -- every identifier the walk can currently see.
@@ -205,7 +197,7 @@ on run
                 -- the selection (FormaApplication:385), so its appearance -
                 -- and only one content area ever being mounted - IS the
                 -- proof the sidebar selection took effect.
-                if not my hasMarker(win, "area-" & areaRaw & "-content") then
+                if not my waitMarker(win, "area-" & areaRaw & "-content", 4, 2) then
                     error "area " & areaRaw & " never mounted its content marker"
                 end if
                 set navigated to navigated + 1
@@ -258,7 +250,7 @@ on run
                 error "re-navigating to mapping failed before the clamp (no sidebar path)"
             end if
             delay 2
-            if not my hasMarker(win, "area-mapping-content") then
+            if not my waitMarker(win, "area-mapping-content", 4, 2) then
                 error "re-navigating to mapping failed before the clamp"
             end if
             set size of win to {760, 500}
