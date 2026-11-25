@@ -361,8 +361,7 @@ private struct WorkspaceAreas: View {
                 }
                 statusStrip
                 areaContent
-                    .frame(minWidth: ShellGeometry.contentFloor,
-                           maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityIdentifier("area-\(selection.rawValue)-content")
                     // Panel appearance is instrumented as its own event because
                     // it is the moment that used to cost a registry read: a
