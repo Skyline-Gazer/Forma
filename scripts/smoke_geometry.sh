@@ -189,6 +189,14 @@ on run
             --    is the #153 contract itself: switching areas must not resize
             --    a window that was comfortably above the floor, and any area
             --    whose content demanded 1104 again would fail the clamp at 3b.
+            -- Readiness gate: the checks above run against the .starting
+            -- ProgressView pane (the window is up and sized); the sidebar
+            -- and content markers only exist once the scan completes and
+            -- .ready mounts. Poll for the landing pane before navigating,
+            -- or a click lands on nothing in a still-loading app.
+            if not my hasMarker(win, "area-review-content") then
+                error "workspace did not finish loading - the landing pane never mounted its marker"
+            end if
             set size of win to {1180, 728}
             delay 2
             set navigated to 0
