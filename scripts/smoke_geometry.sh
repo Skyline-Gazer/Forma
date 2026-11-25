@@ -169,7 +169,27 @@ on run
             -- sidebar and content markers exist only once the scan
             -- completes and .ready mounts.
             if not my hasMarker(win, "area-review-content") then
-                error "workspace did not finish loading - the landing pane never mounted its marker"
+                -- Decisive: no resize has happened yet. Dump the world at
+                -- the failure point: title (launch state), liveness, and
+                -- every identifier the walk can currently see.
+                set winTitle to title of win
+                set alive to my appAlive()
+                set idDump to ""
+                set n to 0
+                tell application "System Events"
+                    repeat with el in (entire contents of win)
+                        try
+                            if (exists attribute "AXIdentifier" of el) then
+                                set idv to value of attribute "AXIdentifier" of el
+                                if idv is not "" then
+                                    set idDump to idDump & idv & "; "
+                                    set n to n + 1
+                                end if
+                            end if
+                        end try
+                    end repeat
+                end tell
+                error "gate: title=" & winTitle & " alive=" & alive & " identifiers(" & n & ")=" & idDump
             end if
             set size of win to {1180, 728}
             delay 2
