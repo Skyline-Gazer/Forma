@@ -57,15 +57,39 @@ cleanup() {
     kill -9 "$pid" 2>/dev/null || true
 }
 
-echo "== launch $APP"
-open -n "$APP"
-
-pid=""
-for _ in $(seq 1 100); do
-    pid=$(pgrep -f "$EXE" | head -1 || true)
-    [ -n "$pid" ] && break
+attempt=1
+alive=1
+while [ "$attempt" -le 5 ]; do
+echo "== launch $APP attempt $attempt (probe: SWIFT_BACKTRACE on)"
+SWIFT_BACKTRACE=enable=yes,demangle=yes "$EXE" >/tmp/forma-smoke-stderr.log 2>&1 &
+pid=$!
+sleep 1
+break_after_probe=0
+for _ in $(seq 1 30); do
+    kill -0 "$pid" 2>/dev/null || { break_after_probe=1; break; }
     sleep 0.2
 done
+if [ "$break_after_probe" = "0" ]; then
+    echo "attempt $attempt: survived 6s"
+    attempt=$((attempt+1)); cleanup "$pid"; continue
+fi
+wait "$pid" 2>/dev/null; rc=$?
+echo "error: attempt $attempt app exited during observation (rc=$rc)" >&2
+cat /tmp/forma-smoke-stderr.log 2>/dev/null || true
+echo "== DiagnosticReports (user)"
+ls -la "$HOME/Library/Logs/DiagnosticReports" 2>/dev/null | tail -5
+latest=$(ls -t "$HOME/Library/Logs/DiagnosticReports"/*.ips 2>/dev/null | head -1)
+[ -n "$latest" ] && head -c 3500 "$latest"
+echo "== DiagnosticReports (system)"
+latest2=$(ls -t /Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
+[ -n "$latest2" ] && head -c 3500 "$latest2"
+echo "== unified log tail"
+log show --last 2m --predicate 'process == "Forma"' --style compact 2>/dev/null | tail -30 || true
+sleep 10
+cleanup "$pid"
+exit 1
+done
+echo "PROBE VERDICT: alive=$alive attempts=$((attempt-1))"
 
 if [ -z "$pid" ]; then
     echo "error: the app did not start" >&2
@@ -79,6 +103,12 @@ i=0
 while [ "$i" -lt "$steps" ]; do
     if ! kill -0 "$pid" 2>/dev/null; then
         echo "error: the app exited during the first ${OBSERVE_SECONDS}s" >&2
+        echo "== captured stderr (probe)"
+        cat /tmp/forma-smoke-stderr.log 2>/dev/null || true
+        rc=0
+        ( set +e; wait "$pid" 2>/dev/null; rc=$?; exit $rc ) || rc=$?
+        echo "raw wait rc: $rc"
+        sleep 20
         collect_crash
         exit 1
     fi
@@ -87,6 +117,19 @@ while [ "$i" -lt "$steps" ]; do
 done
 
 echo "alive after ${OBSERVE_SECONDS}s: yes"
+# probe: keep observing 10s past the window; dump stderr and crash reports
+# unconditionally so the trap (if any) is visible either way.
+for _ in $(seq 1 20); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.5
+done
+if ! kill -0 "$pid" 2>/dev/null; then
+    echo "PROBE: app died AFTER the observation window"
+fi
+echo "== captured stderr (probe, always)"
+cat /tmp/forma-smoke-stderr.log 2>/dev/null || true
+sleep 12
+collect_crash
 cleanup "$pid"
 
 if pgrep -f "$EXE" >/dev/null 2>&1; then
