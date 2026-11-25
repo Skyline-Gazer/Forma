@@ -1092,17 +1092,6 @@ final class WorkspaceModel: ObservableObject {
         }
     }
 
-    /// The snapshot revision a source's registry rows are keyed against.
-    ///
-    /// The listing is the authority while it is open, because it is what a
-    /// mapping run and an extraction read. An imported bundle has no listing,
-    /// so its manifest rows carry the revision instead; both are FormaCore's
-    /// own numbers, never a count derived from how many rows are held.
-    private func evidenceRevision(for sourceID: UUID) -> Int? {
-        if let entry = listingProjection.entry(sourceID) { return Int(exactly: entry.snapshotRevision) }
-        return manifest?.entries.first { $0.sourceID == sourceID }?.snapshotRevision
-    }
-
     // MARK: - Evidence currency
 
     /// The snapshot a citation has to describe for the file under review.
