@@ -12,10 +12,19 @@ struct FormaApplication: App {
             FormaRoot(state: delegate.state)
         }
         .defaultSize(width: 1180, height: 700)
-        // No `windowResizability`, no fixed sizes: the window stays genuinely
-        // user-resizable (owner failure #1/#2 were nested split views forcing
-        // frame growth, not a missing constraint). One shell owns the columns;
-        // every pane inside is flexible with declared bounds.
+        // The window's floor is the shell's declared minimum, not the content's
+        // preferred size. Under the default policy the window could not be
+        // dragged below the mounted content's fitting (ideal) width, so every
+        // area's ideal demanded - 168 sidebar + 320 inspector + the area's
+        // own 616-1177 - became the *minimum*: 1665pt at the Review Desk on a
+        // 1512pt display (owner report, M0-R1 physical acceptance: "页面大小
+        // 不能调整，是固定死的"). `.contentMinSize` ties the floor to the
+        // minimum instead - bounded panes, truncating cells, and locally
+        // scrolling tables hold that minimum at one uniform, small number,
+        // so no business view dictates the window and switching areas
+        // cannot resize it (failure #2 stays fixed: this is still one shell,
+        // not per-area split views).
+        .windowResizability(.contentMinSize)
 
         Settings {
             ProviderSettingsRoot(state: delegate.state)
@@ -254,6 +263,14 @@ enum ShellGeometry {
     static let workspaceLeading = AreaWidth(ShellLayout.leading(for: .workspace))
     static let mappingLeading = AreaWidth(ShellLayout.leading(for: .mapping))
     static let exceptionsLeading = AreaWidth(ShellLayout.leading(for: .exceptions))
+    /// The one content floor every area declares, so the window's minimum is
+    /// the same number no matter which area is mounted.
+    static let contentFloor = CGFloat(ShellLayout.areaContentMinWidth)
+    /// The narrowest width at which each table still shows all its columns;
+    /// below it the table scrolls inside its pane, not the window outside it.
+    static func tableFloor(_ table: ShellTable) -> CGFloat {
+        CGFloat(ShellLayout.tableMinimumWidth(table))
+    }
 }
 
 extension View {
@@ -334,7 +351,8 @@ private struct WorkspaceAreas: View {
                 }
                 statusStrip
                 areaContent
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minWidth: ShellGeometry.contentFloor,
+                           maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityIdentifier("area-\(selection.rawValue)-content")
                     // Panel appearance is instrumented as its own event because
                     // it is the moment that used to cost a registry read: a

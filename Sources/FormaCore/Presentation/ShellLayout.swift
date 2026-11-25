@@ -168,6 +168,26 @@ public enum ShellLayout {
         }
     }
 
+    /// The narrowest table-column sum a pane may still show completely.
+    public static func tableMinimumWidth(_ table: ShellTable) -> Double {
+        columns(for: table).reduce(0) { $0 + $1.min }
+    }
+
+    /// One uniform floor for every area's own content.
+    ///
+    /// The window's minimum must not depend on which area happens to be
+    /// mounted, or switching areas resizes the outer window - the second half
+    /// of the physical acceptance failure (Archive at 1280pt jumped to 1645pt
+    /// on entering Workspace). Every area therefore declares the same
+    /// `minWidth` at the shell's content root, and the area's own views hold
+    /// that promise: tables scroll horizontally inside the pane rather than
+    /// pushing the floor up, and no pane's fitting width is consulted for the
+    /// window minimum, because the scene resizability is `.contentMinSize`.
+    /// 132 sidebar + 640 floor + 240 inspector = 1012pt with every column
+    /// open - below the 1104pt the Owner had observed for the *smallest* area
+    /// - and the floor alone (sidebar and inspector closed) is 640pt.
+    public static let areaContentMinWidth: Double = 640
+
     /// The minimum width the area's own content needs.
     ///
     /// An area with a leading pane pays for that pane beside its table; an

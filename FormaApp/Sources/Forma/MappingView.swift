@@ -25,8 +25,19 @@ struct MappingView: View {
                                        description: Text(emptyReason))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                fileTable
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                // The table holds every column's declared minimum as its own
+                // minimum; the pane scrolls that horizontally when the window
+                // is narrower still, so the table's width never reaches the
+                // window as a demand (#153: the result table's size was the
+                // 1335pt minimum the Owner could not resize past).
+                ScrollView(.horizontal) {
+                    fileTable
+                        .frame(minWidth: ShellGeometry.tableFloor(.mappingRows),
+                               idealWidth: ShellGeometry.tableFloor(.mappingRows),
+                               maxWidth: .infinity,
+                               maxHeight: .infinity, alignment: .topLeading)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
     }

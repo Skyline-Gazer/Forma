@@ -72,4 +72,35 @@ struct ShellLayoutTests {
         #expect(ShellWidthClass.classify(contentWidth: ShellLayout.wideContentWidth) == .wide)
         #expect(ShellWidthClass.classify(contentWidth: 10_000) == .wide)
     }
+
+    /// M0-R2 (#153): under the default window policy the window's floor was
+    /// the mounted content's *fitting* width, and it changed with the area -
+    /// 1665pt at the Review Desk, 1645 at Workspace, on a 1512pt display.
+    /// The scene now declares `.contentMinSize` and every area promises one
+    /// uniform content floor; this is the arithmetic that promise has to hold.
+    @Test("the shell declares one uniform window floor, and it fits the narrowest display in the field")
+    func uniformWindowFloor() {
+        let floor = ShellLayout.areaContentMinWidth
+        // The floor must dominate every area's own hard demand, or switching
+        // areas silently raises the window above the floor again. With the
+        // tables scrolling inside their panes, the largest non-scrolling
+        // demand is the desk's two panes.
+        #expect(floor >= ShellLayout.deskMinimumContentWidth,
+                "the floor is the one number; a bigger area demand splits it again")
+        // Sidebar and inspector open (the launch state): below the 1104pt the
+        // Owner saw for the *smallest* area, and below the 1180pt default.
+        let everyColumn = ShellLayout.sidebar.min + floor + ShellLayout.inspector.min
+        #expect(everyColumn <= 1104,
+                "the window floor with every column open was 1104pt in the field; it must be below it")
+        // The documented supported minimum: sidebar and inspector closed.
+        #expect(floor <= 660,
+                "the bare window minimum is the floor itself; it must stay a usable small window")
+        // Tables may exceed the floor - that width belongs to a local
+        // horizontal scroll inside the pane, never to the window.
+        for table in ShellTable.allCases {
+            let width = ShellLayout.tableMinimumWidth(table)
+            #expect(width > 0)
+            #expect(width == ShellLayout.columns(for: table).reduce(0) { $0 + $1.min })
+        }
+    }
 }
