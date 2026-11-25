@@ -227,8 +227,10 @@ private struct FormaRoot: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(minWidth: CGFloat(ShellLayout.windowMinWidth), maxWidth: .infinity,
-               minHeight: CGFloat(ShellLayout.windowMinHeight), maxHeight: .infinity)
+        // Probe X: no size frame on the root. R/V/W proved the frame gives
+        // the hosting layer a definite fitting proposal (1024x676) that
+        // clamps every user grow; the floor lives entirely in AppKit
+        // (contentMinSize, assigned once, swap-immune - J/Q/R).
         .background(WindowConfigurator())
     }
 }
@@ -242,28 +244,21 @@ private struct FormaRoot: View {
 /// first-launch content size behind an explicit flag so a returning user's
 /// restored frame is never touched.
 private struct WindowConfigurator: NSViewRepresentable {
+    /// The three facts the macOS 26 hosting layer will not deliver from the
+    /// scene alone (#172 probes R/S/U/V/W/X): the static minimum
+    /// (`contentMinSize`, assigned once so the .starting -> .ready swap
+    /// re-solves nothing - the trap mechanism), an unbounded maximum (the
+    /// hosting layer pins `maxSize` to the content's fitting size, which is
+    /// the #153 family: grow requests land on the fit, 1024x676 for the
+    /// framed tree), and a first-launch content size (`.defaultSize` loses
+    /// to the content proposal; re-asserted after the swap window and
+    /// latched so a returning user's restored frame is never touched).
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
+        DispatchQueue.main.async { [weak view] in
+            guard let window = view?.window else { return }
             window.contentMinSize = NSSize(width: CGFloat(ShellLayout.windowMinWidth),
                                            height: CGFloat(ShellLayout.windowMinHeight))
-            // The #153 family is NSHostingController tracking the content's
-            // fitting size as the WINDOW's size: every layout pass re-sizes
-            // the window to its proposal (launch = fit, user resizes snap
-            // back - probe R saw 1400x900 collapse to 1024x676 even though
-            // `.windowResizability(.contentMinSize)` should decouple them).
-            // `sizingOptions` is that tracking; clearing it hands size to the
-            // window (defaultSize + AppKit minimum + the person's resizes).
-            // Guarded: absent on an unexpected hosting class, the scene
-            // behaves as before (probe R), never worse.
-            // Probe V: the contentViewController setter path was inert.
-            // R/S/U numbers say SwiftUI pins the WINDOW's maxSize to the
-            // content's fitting size (grow request 1400x900 clamped to
-            // exactly the 1024x676 fit, while minSize 1012 held). Clear it
-            // whenever the window reports a resize - didResize only fires on
-            // an actual size change, and relaxing a maximum is not one, so
-            // the observer cannot feed itself.
             NotificationCenter.default.addObserver(
                 forName: NSWindow.didResizeNotification, object: window, queue: .main) { note in
                 guard let resized = note.object as? NSWindow else { return }
@@ -272,16 +267,27 @@ private struct WindowConfigurator: NSViewRepresentable {
                     resized.maxSize = unbounded
                 }
             }
-            let key = "shell.windowFirstSizeApplied"
-            if !UserDefaults.standard.bool(forKey: key) {
-                UserDefaults.standard.set(true, forKey: key)
-                window.setContentSize(NSSize(width: CGFloat(ShellLayout.windowIdealWidth),
-                                             height: CGFloat(ShellLayout.windowIdealHeight)))
+            guard !UserDefaults.standard.bool(forKey: Self.key) else { return }
+            let size = NSSize(width: CGFloat(ShellLayout.windowIdealWidth),
+                              height: CGFloat(ShellLayout.windowIdealHeight))
+            window.setContentSize(size)
+            // The scan completes 4-7s after launch and re-proposes the
+            // fitting size; re-assert at the swap's outer edge and once
+            // after it, then latch. A person who drags in this window wins
+            // from the next session on - the flag is set regardless.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                window.setContentSize(size)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+                window.setContentSize(size)
+                UserDefaults.standard.set(true, forKey: Self.key)
             }
         }
         return view
     }
     func updateNSView(_ view: NSView, context: Context) {}
+
+    private static let key = "shell.windowFirstSizeApplied"
 }
 
 /// Column widths for the whole app. Every split in the window is bounded here,
