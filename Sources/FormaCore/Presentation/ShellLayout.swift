@@ -188,6 +188,33 @@ public enum ShellLayout {
     /// - and the floor alone (sidebar and inspector closed) is 640pt.
     public static let areaContentMinWidth: Double = 640
 
+    /// The window's own minimum, declared once at the root so the launch
+    /// state swap cannot re-assign the content minimum mid-display-cycle.
+    /// Under `.contentMinSize` that re-assignment is what trapped in
+    /// `NSDisplayCycleFlush -> -[NSWindow updateConstraintsIfNeeded]` five
+    /// seconds after every M0-R2 launch (CI probe 45596086983, and the same
+    /// stack the Owner's .ips recorded, #174): the `.starting` placeholder
+    /// proposed a zero minimum and the mounted shell proposed 1012x620 the
+    /// moment the scan finished. With this frame on the switch, every
+    /// launch state proposes the identical minimum, and the uniform
+    /// `areaContentMinWidth` keeps every *area* subtree at or below it -
+    /// the two together are what make the floor constant in time as well
+    /// as in space. Height: chrome (~80pt) plus the largest area-internal
+    /// height demand (workspace's stacked tables, ~300pt) stays under it,
+    /// so the declared value is the effective one everywhere.
+    public static let windowMinWidth: Double = sidebar.min + areaContentMinWidth + inspector.min
+    public static let windowMinHeight: Double = 620
+
+    /// The narrowest usable width of a table pane.
+    ///
+    /// A `Table` owns a horizontal scroller: below the sum of its column
+    /// minimums it scrolls its columns inside the pane instead of pushing
+    /// the pane (and through it the window) wider. The window therefore
+    /// never sees `tableMinimumWidth` as a demand - it sees this usable
+    /// floor, which every area fits beside its leading pane, so the single
+    /// `areaContentMinWidth` stays the one authority.
+    public static let scrollableTableMinWidth: Double = 280
+
     /// The minimum width the area's own content needs.
     ///
     /// An area with a leading pane pays for that pane beside its table; an
@@ -203,14 +230,13 @@ public enum ShellLayout {
         case .settings:
             return 340
         default:
-            guard let table = table(for: area) else { return leading.min }
-            // The workspace stacks its two tables vertically, so they compete
-            // for the same width instead of adding up.
-            let tableWidth = area == .workspace
-                ? max(columns(for: .workspaceFiles).reduce(0) { $0 + $1.min },
-                       columns(for: .workspaceCandidates).reduce(0) { $0 + $1.min })
-                : columns(for: table).reduce(0) { $0 + $1.min }
-            return leading.min + tableWidth
+            guard table(for: area) != nil else { return leading.min }
+            // The table contributes its usable floor, never the column sum:
+            // the column budgets are what the table's own scroller scrolls
+            // through, not what the window must provide (#172: mapping's
+            // 542pt column sum beside its 190pt panel forced a 1104pt
+            // window minimum, area-dependent and data-dependent).
+            return leading.min + scrollableTableMinWidth
         }
     }
 

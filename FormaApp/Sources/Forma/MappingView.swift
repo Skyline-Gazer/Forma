@@ -25,14 +25,17 @@ struct MappingView: View {
                                        description: Text(emptyReason))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // The table holds every column's declared minimum as its own
-                // minimum; the pane scrolls that horizontally when the window
-                // is narrower still, so the table's width never reaches the
-                // window as a demand (#153: the result table's size was the
-                // 1335pt minimum the Owner could not resize past).
+                // #153: the result table's column minimums sum to 542pt. The
+                // Table owns a horizontal scroller - below the sum it scrolls
+                // its columns inside this pane, so the table's width never
+                // reaches the window as a demand (it was the 1335pt minimum
+                // the Owner could not resize past). Do not add a minWidth
+                // frame here: it would raise the pane - and the window with
+                // it - to 190+542+chrome = 1104pt, the area-dependent floor
+                // #172 exists to remove, and do not wrap the Table in a
+                // ScrollView: it already scrolls, and nesting it traps.
                 fileTable
-                    .frame(minWidth: ShellGeometry.tableFloor(.mappingRows),
-                           maxWidth: .infinity,
+                    .frame(maxWidth: .infinity,
                            maxHeight: .infinity, alignment: .topLeading)
             }
         }

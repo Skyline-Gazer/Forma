@@ -81,10 +81,17 @@ struct ShellLayoutTests {
     @Test("the shell declares one uniform window floor, and it fits the narrowest display in the field")
     func uniformWindowFloor() {
         let floor = ShellLayout.areaContentMinWidth
-        // The floor must dominate every area's own hard demand, or switching
-        // areas silently raises the window above the floor again. With the
-        // tables scrolling inside their panes, the largest non-scrolling
-        // demand is the desk's two panes.
+        // The decisive property: no area's own content demand may exceed the
+        // uniform floor, or mounting that area raises the window above the
+        // floor again - which is exactly how mapping's 542pt column sum beside
+        // its 190pt panel once forced a 1104pt minimum (#172). With tables
+        // scrolling their columns inside the pane, every table area now pays
+        // only the usable table floor, so this must hold for every area.
+        for area in AppArea.allCases {
+            #expect(ShellLayout.minimumContentWidth(for: area) <= floor,
+                    "\(area) demands more than the uniform floor; switching to it would resize the window")
+        }
+        // The floor must dominate the desk's two panes too.
         #expect(floor >= ShellLayout.deskMinimumContentWidth,
                 "the floor is the one number; a bigger area demand splits it again")
         // Sidebar and inspector open (the launch state): below the 1104pt the
@@ -95,12 +102,13 @@ struct ShellLayoutTests {
         // The documented supported minimum: sidebar and inspector closed.
         #expect(floor <= 660,
                 "the bare window minimum is the floor itself; it must stay a usable small window")
-        // Tables may exceed the floor - that width belongs to a local
-        // horizontal scroll inside the pane, never to the window.
+        // Tables may exceed the floor - that width belongs to the table's own
+        // horizontal scroller inside the pane, never to the window. The
+        // column sums stay declared budgets, not window demands.
         for table in ShellTable.allCases {
             let width = ShellLayout.tableMinimumWidth(table)
             #expect(width > 0)
-            #expect(width == ShellLayout.columns(for: table).reduce(0) { $0 + $1.min })
+            #expect(width >= ShellLayout.scrollableTableMinWidth)
         }
     }
 }

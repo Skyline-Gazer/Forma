@@ -70,13 +70,13 @@ struct WorkspaceView: View {
             // - and below the declared column minimum each Table shows its own
             // horizontal scroller, a demand the window never sees (#153:
             // Workspace measured a 1645pt minimum because the table's fitting
-            // size was the floor). Do not wrap these in ScrollView(.horizontal):
-            // Table owns its scroll, and embedding it traps at layout (M0-R2
-            // launch smoke SIGTRAP, probe run 45588044825).
+            // size was the floor). Do not wrap these in ScrollView(.horizontal)
+            // and do not put a minWidth frame on them: the table already
+            // scrolls, and a framed minimum here would raise this pane's
+            // demand above the uniform floor (#172).
             VSplitView {
                 fileTable(listing)
-                    .frame(minWidth: ShellGeometry.tableFloor(.workspaceFiles),
-                           maxWidth: .infinity,
+                    .frame(maxWidth: .infinity,
                            maxHeight: .infinity, alignment: .topLeading)
                 if clustersVisible {
                     clusterPanel
@@ -135,8 +135,7 @@ struct WorkspaceView: View {
                     TableColumn("Confidence") { row in Text(row.confidence) }
                         .width(min: candidateWidths[3].cgMin, ideal: candidateWidths[3].cgIdeal, max: candidateWidths[3].cgMax)
                 }
-                .frame(minWidth: ShellGeometry.tableFloor(.workspaceCandidates),
-                       maxWidth: .infinity,
+                .frame(maxWidth: .infinity,
                        maxHeight: .infinity, alignment: .topLeading)
             }
         } else {

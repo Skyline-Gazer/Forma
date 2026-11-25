@@ -205,18 +205,31 @@ private struct FormaRoot: View {
     @ObservedObject var state: FormaApplicationState
 
     var body: some View {
-        switch state.launch {
-        case .starting:
-            ProgressView("Opening workspace…")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .ready(let workspace):
-            WorkspaceAreas(workspace: workspace, state: state)
-        case .degraded(let error):
-            ContentUnavailableView(
-                "Workspace unavailable",
-                systemImage: "externaldrive.badge.exclamationmark",
-                description: Text(error.localizedDescription))
+        // One minimum for every launch state. The scan completes seconds
+        // after launch and swaps `.starting` for the shell; if the two
+        // propose different content minimums, AppKit re-solves the window's
+        // constraints mid-display-cycle and the process traps there (the
+        // #174 stack, reproduced in CI by this slice's first revision -
+        // see ShellLayout.windowMinWidth's comment). Declaring the shell's
+        // steady-state minimum here makes the swap constraint-neutral.
+        Group {
+            switch state.launch {
+            case .starting:
+                ProgressView("Opening workspace…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .ready(let workspace):
+                WorkspaceAreas(workspace: workspace, state: state)
+            case .degraded(let error):
+                ContentUnavailableView(
+                    "Workspace unavailable",
+                    systemImage: "externaldrive.badge.exclamationmark",
+                    description: Text(error.localizedDescription))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
+        .frame(minWidth: CGFloat(ShellLayout.windowMinWidth),
+               minHeight: CGFloat(ShellLayout.windowMinHeight),
+               maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -264,13 +277,11 @@ enum ShellGeometry {
     static let mappingLeading = AreaWidth(ShellLayout.leading(for: .mapping))
     static let exceptionsLeading = AreaWidth(ShellLayout.leading(for: .exceptions))
     /// The one content floor every area declares, so the window's minimum is
-    /// the same number no matter which area is mounted.
+    /// the same number no matter which area is mounted. Tables deliberately
+    /// do not add their own: a `Table` scrolls its columns inside the pane,
+    /// and only this floor reaches the window (see ShellLayout's
+    /// `scrollableTableMinWidth` for the modelled demand).
     static let contentFloor = CGFloat(ShellLayout.areaContentMinWidth)
-    /// The narrowest width at which each table still shows all its columns;
-    /// below it the table scrolls inside its pane, not the window outside it.
-    static func tableFloor(_ table: ShellTable) -> CGFloat {
-        CGFloat(ShellLayout.tableMinimumWidth(table))
-    }
 }
 
 extension View {

@@ -39,11 +39,11 @@ struct ExceptionsView: View {
                                        description: Text(emptyReason))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // The pane scrolls the blocked-entry table's own minimum,
-                // never the window (see `MappingView` for the #153 mechanism).
+                // The blocked-entry table scrolls its own column minimums
+                // (446pt) inside this pane, never at the window - see
+                // `MappingView` for the full #153/#172 mechanism.
                 rowTable
-                    .frame(minWidth: ShellGeometry.tableFloor(.exceptionRows),
-                           maxWidth: .infinity,
+                    .frame(maxWidth: .infinity,
                            maxHeight: .infinity, alignment: .topLeading)
             }
         }
