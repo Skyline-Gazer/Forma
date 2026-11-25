@@ -57,10 +57,38 @@ cleanup() {
     kill -9 "$pid" 2>/dev/null || true
 }
 
-echo "== launch $APP (probe: direct exec, stderr captured)"
-"$EXE" >/tmp/forma-smoke-stderr.log 2>&1 &
+attempt=1
+while [ "$attempt" -le 3 ]; do
+echo "== launch $APP attempt $attempt (probe: SWIFT_BACKTRACE on)"
+SWIFT_BACKTRACE=enable=yes,demangle=yes,silent-off-interpose=1 "$EXE" >/tmp/forma-smoke-stderr.log 2>&1 &
 pid=$!
 sleep 1
+break_after_probe=0
+for _ in $(seq 1 30); do
+    kill -0 "$pid" 2>/dev/null || { break_after_probe=1; break; }
+    sleep 0.2
+done
+if [ "$break_after_probe" = "0" ]; then
+    echo "attempt $attempt: survived 6s"
+    if [ "$attempt" -lt 3 ]; then attempt=$((attempt+1)); cleanup "$pid"; continue; fi
+    cleanup "$pid"
+    break
+fi
+echo "error: attempt $attempt app exited during observation" >&2
+cat /tmp/forma-smoke-stderr.log 2>/dev/null || true
+echo "== DiagnosticReports (user)"
+ls -la "$HOME/Library/Logs/DiagnosticReports" 2>/dev/null | tail -5
+latest=$(ls -t "$HOME/Library/Logs/DiagnosticReports"/*.ips 2>/dev/null | head -1)
+[ -n "$latest" ] && head -c 3500 "$latest"
+echo "== DiagnosticReports (system)"
+latest2=$(ls -t /Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
+[ -n "$latest2" ] && head -c 3500 "$latest2"
+echo "== unified log tail"
+log show --last 2m --predicate 'process == "Forma"' --style compact 2>/dev/null | tail -30 || true
+sleep 10
+cleanup "$pid"
+exit 1
+done
 
 if [ -z "$pid" ]; then
     echo "error: the app did not start" >&2
