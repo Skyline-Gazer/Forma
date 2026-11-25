@@ -257,9 +257,20 @@ private struct WindowConfigurator: NSViewRepresentable {
             // window (defaultSize + AppKit minimum + the person's resizes).
             // Guarded: absent on an unexpected hosting class, the scene
             // behaves as before (probe R), never worse.
-            if let controller = window.contentViewController,
-               controller.responds(to: NSSelectorFromString("setSizingOptions:")) {
-                controller.setValue(0, forKey: "sizingOptions")
+            // Probe V: the contentViewController setter path was inert.
+            // R/S/U numbers say SwiftUI pins the WINDOW's maxSize to the
+            // content's fitting size (grow request 1400x900 clamped to
+            // exactly the 1024x676 fit, while minSize 1012 held). Clear it
+            // whenever the window reports a resize - didResize only fires on
+            // an actual size change, and relaxing a maximum is not one, so
+            // the observer cannot feed itself.
+            NotificationCenter.default.addObserver(
+                forName: NSWindow.didResizeNotification, object: window, queue: .main) { note in
+                guard let resized = note.object as? NSWindow else { return }
+                let unbounded = NSSize(width: 100_000, height: 100_000)
+                if resized.maxSize.width < 99_000 || resized.maxSize.height < 99_000 {
+                    resized.maxSize = unbounded
+                }
             }
             let key = "shell.windowFirstSizeApplied"
             if !UserDefaults.standard.bool(forKey: key) {
