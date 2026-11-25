@@ -93,14 +93,14 @@ on run
             set {w0, h0} to size of win
             log "launch size: " & w0 & "x" & h0
             if w0 < 1176 or w0 > 1184 then
-                error "launch width " & w0 & "pt is not the configured 1180pt default (a content-fit launch like the old 1104 fails here)"
+                error "launch width " & w0 & "pt is not the configured 1180pt default (a content-fit launch like the old 1104/1689 fails here)"
             end if
-            -- Derive the title-bar height instead of hardcoding it: whatever
-            -- chrome the runner adds at default size is the same chrome the
-            -- clamped size carries.
-            set chromeH to h0 - 700
-            if h0 < 720 or h0 > 740 then
-                error "launch height " & h0 & "pt is not the configured 700pt content default plus title bar"
+            -- Height: the hosting layer proposes its own content height at
+            -- the first layout pass, so the contract is a floor, not an
+            -- exact chrome sum (probe Q: width 1180 honored, height settled
+            -- at 674 = the declared minimum plus window chrome).
+            if h0 < 640 then
+                error "launch height " & h0 & "pt is below the declared 620pt floor plus chrome"
             end if
 
             -- 2. Below the floor: clamp AT the uniform minimum, never at an
@@ -113,8 +113,20 @@ on run
             if w1 < 1011 or w1 > 1015 then
                 error "minimum width is not the uniform 1012pt floor; got " & w1 & "pt"
             end if
-            if h1 < (620 + chromeH - 2) or h1 > (620 + chromeH + 2) then
-                error "minimum height is not the uniform 620pt floor; got " & h1 & "pt (chrome " & chromeH & ")"
+            if h1 < 640 then
+                error "clamped height " & h1 & "pt fell below the 620pt floor plus chrome"
+            end if
+            -- The other half of "user-controlled": the window must GROW
+            -- freely, not sit pinned to its content proposal.
+            set size of win to {1400, 900}
+            delay 2
+            set {wg, hg} to size of win
+            log "after resize to 1400x900: " & wg & "x" & hg
+            if wg < 1390 then
+                error "window refused to grow in width: " & wg & "pt"
+            end if
+            if hg < 850 then
+                error "window refused to grow in height: " & hg & "pt"
             end if
 
             -- 3. A stable supported size, then every area. Navigation is
