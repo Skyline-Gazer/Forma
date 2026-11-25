@@ -248,6 +248,19 @@ private struct WindowConfigurator: NSViewRepresentable {
             guard let window = view.window else { return }
             window.contentMinSize = NSSize(width: CGFloat(ShellLayout.windowMinWidth),
                                            height: CGFloat(ShellLayout.windowMinHeight))
+            // The #153 family is NSHostingController tracking the content's
+            // fitting size as the WINDOW's size: every layout pass re-sizes
+            // the window to its proposal (launch = fit, user resizes snap
+            // back - probe R saw 1400x900 collapse to 1024x676 even though
+            // `.windowResizability(.contentMinSize)` should decouple them).
+            // `sizingOptions` is that tracking; clearing it hands size to the
+            // window (defaultSize + AppKit minimum + the person's resizes).
+            // Guarded: absent on an unexpected hosting class, the scene
+            // behaves as before (probe R), never worse.
+            if let controller = window.contentViewController,
+               controller.responds(to: NSSelectorFromString("setSizingOptions:")) {
+                controller.setValue(0, forKey: "sizingOptions")
+            }
             let key = "shell.windowFirstSizeApplied"
             if !UserDefaults.standard.bool(forKey: key) {
                 UserDefaults.standard.set(true, forKey: key)
