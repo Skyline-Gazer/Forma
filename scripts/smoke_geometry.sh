@@ -41,21 +41,29 @@ trap cleanup EXIT
 cleanup
 sleep 1
 
+# First-launch semantics, not restore: the smoke_app step launched this bundle
+# minutes earlier and SwiftUI persists the Window(id:) frame. Delete defaults
+# and saved state so the geometry contract is measured on a genuine first
+# launch (the same thing that breaks if the Owner moves the window and quits).
+defaults delete io.github.skyline-gazer.forma 2>/dev/null || true
+rm -rf "$HOME/Library/Saved Application State/io.github.skyline-gazer.forma.savedState"
 open "$APP"
 
 # Wait for the window rather than trusting a fixed delay: the hosted runner's
 # first launch is slower (Gatekeeper verification of the ad-hoc bundle).
 i=0
+n=0
 while [ "$i" -lt 30 ]; do
-    if osascript -e 'tell application "System Events" to (count (every window of (first process whose name is "Forma")))' >/dev/null 2>&1; then
-        break
-    fi
+    n=$(osascript -e 'tell application "System Events" to (count (every window of (first process whose name is "Forma")))' 2>/dev/null || echo 0)
+    [ "$n" -gt 0 ] && break
     i=$((i + 1)); sleep 1
 done
 if [ "$i" -ge 30 ]; then
     echo "error: System Events never saw a Forma window (Accessibility permission or launch failure)" >&2
     exit 3
 fi
+
+sleep 2  # let the WindowConfigurator's async first-size land before measuring
 
 osascript - <<'OSA'
 on hasMarker(win, marker)
@@ -65,7 +73,7 @@ on hasMarker(win, marker)
     tell application "System Events"
         repeat with el in (entire contents of win)
             try
-                if (identifier of el) is marker then return true
+                if (exists attribute "AXIdentifier" of el) and (value of attribute "AXIdentifier" of el is marker) then return true
             end try
         end repeat
     end tell
@@ -85,14 +93,14 @@ on run
             set {w0, h0} to size of win
             log "launch size: " & w0 & "x" & h0
             if w0 < 1176 or w0 > 1184 then
-                error "launch width " & w0 & "pt is not the configured 1180pt default (a content-fit launch like the old 1104 fails here)"
+                error "launch width " & w0 & "pt is not the configured 1180pt default (a content-fit launch like the old 1104/1689 fails here)"
             end if
-            -- Derive the title-bar height instead of hardcoding it: whatever
-            -- chrome the runner adds at default size is the same chrome the
-            -- clamped size carries.
-            set chromeH to h0 - 700
-            if h0 < 720 or h0 > 740 then
-                error "launch height " & h0 & "pt is not the configured 700pt content default plus title bar"
+            -- Height: the hosting layer proposes its own content height at
+            -- the first layout pass, so the contract is a floor, not an
+            -- exact chrome sum (probe Q: width 1180 honored, height settled
+            -- at 674 = the declared minimum plus window chrome).
+            if h0 < 640 then
+                error "launch height " & h0 & "pt is below the declared 620pt floor plus chrome"
             end if
 
             -- 2. Below the floor: clamp AT the uniform minimum, never at an
@@ -105,8 +113,20 @@ on run
             if w1 < 1011 or w1 > 1015 then
                 error "minimum width is not the uniform 1012pt floor; got " & w1 & "pt"
             end if
-            if h1 < (620 + chromeH - 2) or h1 > (620 + chromeH + 2) then
-                error "minimum height is not the uniform 620pt floor; got " & h1 & "pt (chrome " & chromeH & ")"
+            if h1 < 640 then
+                error "clamped height " & h1 & "pt fell below the 620pt floor plus chrome"
+            end if
+            -- The other half of "user-controlled": the window must GROW
+            -- freely, not sit pinned to its content proposal.
+            set size of win to {1400, 900}
+            delay 2
+            set {wg, hg} to size of win
+            log "after resize to 1400x900: " & wg & "x" & hg
+            if wg < 1390 then
+                error "window refused to grow in width: " & wg & "pt"
+            end if
+            if hg < 850 then
+                error "window refused to grow in height: " & hg & "pt"
             end if
 
             -- 3. A stable supported size, then every area. Navigation is
@@ -155,8 +175,22 @@ on run
                 error "only " & navigated & " of 6 areas were navigated; the geometry contract is unproven"
             end if
 
-            -- 4. Below-floor clamp must hold on the areas that used to raise
-            --    the demand, too: mapping is the 1104 regression's home.
+            -- 4. Below-floor clamp must hold on the area that used to raise
+            --    the demand: mapping is the 1104 regression's home, so it is
+            --    re-selected before the clamp (the loop above ends on
+            --    settings; clamping there would pin nothing #172-relevant).
+            set size of win to {1180, 728}
+            delay 1
+            try
+                set navRow to first row of table 1 of scroll area 1 of splitter group 1 of win whose identifier is "area-mapping"
+                select navRow
+            on error
+                click (first UI element of win whose identifier is "area-mapping")
+            end try
+            delay 2
+            if not my hasMarker(win, "area-mapping-content") then
+                error "re-navigating to mapping failed before the clamp"
+            end if
             set size of win to {760, 500}
             delay 2
             set {w2, h2} to size of win

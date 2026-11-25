@@ -33,7 +33,9 @@ struct MappingView: View {
                 // frame here: it would raise the pane - and the window with
                 // it - to 190+542+chrome = 1104pt, the area-dependent floor
                 // #172 exists to remove, and do not wrap the Table in a
-                // ScrollView: it already scrolls, and nesting it traps.
+                // ScrollView: it already scrolls, and a wrapped Table would
+                        // re-raise this pane's demand instead of the window
+                        // holding the one declared floor (#172).
                 fileTable
                     .frame(maxWidth: .infinity,
                            maxHeight: .infinity, alignment: .topLeading)

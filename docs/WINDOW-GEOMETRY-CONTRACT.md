@@ -12,8 +12,8 @@ document states the contract the Owner asked to see in writing.
 | --- | --- | --- |
 | Default first-launch size | 1180 × 700 pt | `.defaultSize` on the `Window` scene |
 | Window minimum, sidebar + inspector open | **1012 pt** (132 + 640 + 240) | `ShellLayout.windowMinWidth`, declared once on the root frame |
-| Window minimum, inspector closed | 772 pt (132 + 640) | `inspectorColumnWidth(min:)` + toggle |
-| Window minimum, sidebar + inspector closed | 640 pt | the uniform content floor |
+| Window minimum, inspector closed | **1012 pt** | the constant root frame - column state does not change the window minimum |
+| Window minimum, sidebar + inspector closed | **1012 pt** | the same; collapsing columns only frees content width above the floor |
 | Height minimum | **620 pt** content; user-resizable above it | `ShellLayout.windowMinHeight` on the root frame |
 | Width maximum / height maximum | unlimited | `.windowResizability(.contentMinSize)` |
 
@@ -87,8 +87,10 @@ passes vacuously:
 - every area navigation is *verified* (sidebar row selected AND the pane's
   `area-<raw>-content` marker mounted) before its 1180 ±2 invariance counts,
   and fewer than 6 verified areas fail the run;
-- the mapping area (the 1104 regression's home) is re-clamped below the
-  floor and must still land on 1012.
+- the window must GROW to a requested 1400x900 (the "user-controlled" half
+  of #153 - a window pinned to its content proposal fails here);
+- the mapping area (the 1104 regression's home) is re-selected and re-clamped
+  below the floor, and must still land on 1012.
 
 If System Events cannot see the window at all (no Aqua session or no
 Accessibility permission) the script exits 3 - no claim is made - which is
