@@ -161,7 +161,8 @@ struct WorkspaceView: View {
                     Menu("\(listing.issues.count) \(ProductCopy.Workspace.issues)") {
                         ForEach(listing.issues.indices.prefix(25), id: \.self) { index in
                             let issue = listing.issues[index]
-                            Text("\(issue.relativePath): \(String(describing: issue.reason))")
+                            Text("\(issue.relativePath): \(issue.reason.productLabel)")
+                                .help(issue.reason.rawValue)
                         }
                         if listing.issues.count > 25 { Text(ProductCopy.Workspace.showingFirst25Issues) }
                     }
