@@ -73,6 +73,7 @@ struct ProductCopyTests {
         #expect(ProductCopy.Workspace.noExtension == "无扩展名")
         #expect(ProductCopy.Workspace.fileProvider == "File Provider")
         #expect(ProductCopy.Workspace.computeHash.contains("SHA-256"))
-        #expect(ProductCopy.Shell.databaseUUID == "Database UUID")
+        #expect(ProductCopy.Shell.databaseUUID.contains("UUID"),
+                "the label translates but keeps the machine identifier term")
     }
 }
