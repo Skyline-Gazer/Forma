@@ -57,15 +57,10 @@ cleanup() {
     kill -9 "$pid" 2>/dev/null || true
 }
 
-echo "== launch $APP"
-open -n "$APP"
-
-pid=""
-for _ in $(seq 1 100); do
-    pid=$(pgrep -f "$EXE" | head -1 || true)
-    [ -n "$pid" ] && break
-    sleep 0.2
-done
+echo "== launch $APP (probe: direct exec, stderr captured)"
+"$EXE" >/tmp/forma-smoke-stderr.log 2>&1 &
+pid=$!
+sleep 1
 
 if [ -z "$pid" ]; then
     echo "error: the app did not start" >&2
@@ -79,6 +74,11 @@ i=0
 while [ "$i" -lt "$steps" ]; do
     if ! kill -0 "$pid" 2>/dev/null; then
         echo "error: the app exited during the first ${OBSERVE_SECONDS}s" >&2
+        echo "== captured stderr (probe)"
+        cat /tmp/forma-smoke-stderr.log 2>/dev/null || true
+        echo "== exit status"
+        wait "$pid" 2>/dev/null; echo "raw wait rc: $?"
+        sleep 10
         collect_crash
         exit 1
     fi
