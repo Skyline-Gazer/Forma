@@ -1,0 +1,40 @@
+Date/Time:         2026-11-26 14:06:07 +0000, (817394767.535231)
+OS Version:        26B131
+FP Version:        4838.41.1
+uid:               501
+
+
+5 providers
+=====================================================
+com.apple.CloudDocs.iCloudDriveFileProvider
+=====================================================
+  + version: none
+  + available system wide: 1
+  + supports enumeration: 1
+  + supports FPFS: 1
+  + read-only: 0
+  + extension storage URLs: (1)
+    - <GroupContainers>/group.com.apple.iCloudDrive/F{19}e
+  + file coordination purpose ID: com.apple.bird
+  + display name: iCloud云盘
+  + bundle URL: /System/Library/PrivateFrameworks/CloudDocs.framework/PlugIns/com.apple.CloudDocs.iCloudDriveFileProvider.appex
+  + containing bundle identifier: com.apple.CloudDocs.iCloudDriveFileProvider
+  + persona: 4E84C864-C6DA-4534-802B-F95865E89035
+  + document group name: group.com.apple.iCloudDrive
+  + supported file types: none
+  + uses unique item identifiers across devices: 0
+  + applies changes atomically: 0
+  + supports failing upload on conflict: 1
+  + disallowed by MDM: 0
+  + push topics (development, opportunistic): (0)
+  + push topics (production): (0)
+  + push topics (production, opportunistic): (0)
+  + push topics (development): (0)
+
+-----------------------------------------------------
+domain: (default) (hidden)
+-----------------------------------------------------
+ no process observed; grace period timer not running
+  + features: 
+  + supported KF: 
+  + replicated KF: 

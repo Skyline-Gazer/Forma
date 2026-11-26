@@ -1,0 +1,39 @@
+{
+ "database": {
+  "path": "/Users/ian/Sorty-Benchmark/v1/devonthink-20261126-215932/FormaTest-20261126-215932.dtBase2",
+  "allocated_bytes_after": 159744,
+  "files_after": 16,
+  "index_seconds_first_pass": 0.95
+ },
+ "onedrive": {
+  "files": 8,
+  "logical_bytes": 22232,
+  "allocated_bytes": 49152,
+  "online_only_files": 0,
+  "eviction_attempts": 1,
+  "eviction_result": "brctl refused: outside CloudDocs app library"
+ },
+ "indexing": {
+  "indexed_records": 8,
+  "second_case_records": 3,
+  "search_hits_after_restart": {
+   "PRJ-A-001": 5,
+   "澄湾医院": 4
+  }
+ },
+ "identity": {
+  "uuid_stable_rename": true,
+  "uuid_stable_move": true,
+  "uuid_stable_parent_rename": true,
+  "uuid_stable_content_update": true,
+  "uuid_stable_sorty_move": true,
+  "custom_metadata_retained": true,
+  "content_hash_before": "d2deeb2675d0f5bdd38f1522c4bf44be6904bbfc",
+  "content_hash_after": "8b500efbe8ba74e1a7e1ede1cd94cdece13d5aa9"
+ },
+ "recovery": {
+  "dt_restart_search_ok": true,
+  "sync_store_configured": false,
+  "fresh_profile_restore": "NOT_VERIFIED"
+ }
+}

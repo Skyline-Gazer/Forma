@@ -1,0 +1,9 @@
+{"record_baseline":{"uuid":"2A0F8235-7EB3-4B22-A845-031D18CEED4D","path":"项目甲/技术方案_v1.txt","hash":"d2deeb2675d0f5bdd38f1522c4bf44be6904bbfc"},
+ "after_rename":{"uuid_same":true,"old_path":"NONE"},
+ "after_move":{"uuid_same":true},
+ "after_parent_rename":{"uuid_same":true},
+ "after_content_update":{"uuid_same":true,"hash":"8b500efbe8ba74e1a7e1ede1cd94cdece13d5aa9"},
+ "sorty_move":{"uuid":"E293415C-C33E-479A-839F-07631C63495F","uuid_same":true,"old_path":"NONE"},
+ "sorty_then_index":{"uuid":"915DFCA9-1097-4D14-9604-5E7B8ADAC1A7"},
+ "metadata":{"project_code":"HC26-041","bid_year":2026,"tag_objects":4},
+ "search":{"project_code_key_syntax_hits":0,"content_hits":4,"tag_lookup_hits":0}}

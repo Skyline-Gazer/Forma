@@ -1,0 +1,28 @@
+{
+ "scenarios": [
+  {"id":"B1","test":"prepare online-only vs downloaded files in real OneDrive File Provider","verdict":"BLOCKED_WITH_EVIDENCE",
+   "evidence":"brctl evict refused: 'Path is outside of any CloudDocs app library' (BRCloudDocsErrorDomain 6); fileproviderctl exposes no evict command; OneDrive app has no CLI/automation; onedrive.live.com unreachable from this network (ERR_CONNECTION_CLOSED)","impact":"no dataless file could be produced; all 8 fixtures stayed hydrated"},
+  {"id":"B2","test":"logical vs allocated bytes, cache and File Provider state","verdict":"PARTIAL",
+   "evidence":"8 files: logical 22 232 B, allocated 49 152 B (4 KiB block granularity); File Provider state only via fileproviderctl dump (default domain only, no per-item dataless flag)","impact":"storage overhead measurable, online-only state NOT_VERIFIED"},
+  {"id":"B3","test":"index, browse, search, sort, tags, custom metadata, smart groups","verdict":"PARTIAL",
+   "evidence":"index 8 files in 0.95 s; content search PASS (5/4 hits after restart); tags written & readable (count 4 after 2 hierarchical tags); custom metadata write/read PASS (project_code=HC26-041); custom-metadata key search 'project_code:HC26-041' returned 0; sort is UI-only (NOT_VERIFIED); no smart-group class in DEVONthink 4.4.2 sdef (creation NOT_SUPPORTED via AppleScript)"},
+  {"id":"B4","test":"Free Up Space limited to test files, then observe space/behaviour","verdict":"BLOCKED_WITH_EVIDENCE","evidence":"same eviction block as B1; no space could be reclaimed"},
+  {"id":"B5","test":"restart, re-search, preview, single-file open","verdict":"PARTIAL","evidence":"DEVONthink quit/reopen: searches still return 5/4 hits; preview/open of a dataless file NOT_VERIFIED (no dataless file exists)"},
+  {"id":"B6","test":"metadata sync with indexed content sync disabled","verdict":"NOT_VERIFIED","evidence":"no sync location configured ('synchronize' returns false); creating one requires cloud credentials/second device"},
+  {"id":"B7","test":"fresh isolated profile / second device restore of metadata, smart groups, index references","verdict":"NOT_VERIFIED","evidence":"no second device or fresh macOS profile authorized"},
+  {"id":"C1","test":"read/write record UUID, tags, custom fields","verdict":"PASS","evidence":"UUID read per record; tags written (2 hierarchical tags → 4 tag objects); custom metadata 'project_code'/'bid_year' written and read back; tag-name iteration via AppleScript fails in 4.4.2 (count only)"},
+  {"id":"C2","test":"identity under rename, same-volume move, parent-folder rename, content update","verdict":"PASS",
+   "evidence":"UUID 2A0F8235-…-ED4D unchanged across all four operations; custom metadata HC26-041 retained; content hash d2deeb26… → 8b500efb… after edit; old paths resolve to NONE"},
+  {"id":"C2b","test":"cross-device OneDrive change and identity","verdict":"NOT_VERIFIED","evidence":"no second device, web access blocked"},
+  {"id":"C2c","test":"per-file eviction / rehydration identity","verdict":"BLOCKED_WITH_EVIDENCE","evidence":"eviction unavailable (B1)"},
+  {"id":"C3","test":"Sorty-first-then-index, index-first-then-Sorty-move, interruption, retry, idempotency","verdict":"PASS",
+   "evidence":"index→sorty move: UUID E293415C-… stable, path updated, hash unchanged; re-apply of the same plan refused with destination-exists / source-missing errors (no partial writes); sorty-then-index created record 915DFCA9-…"},
+  {"id":"C4","test":"distinguish physical file identity, DT record identity, path and content hash","verdict":"PASS",
+   "evidence":"path changes while UUID and metadata stay fixed; content hash changes only on byte change; deletion+recreate at same path kept UUID with stale hash until refresh"},
+  {"id":"C5","test":"supported reindex/reassociate fallback","verdict":"NOT_TESTED","evidence":"identity held in every testable scenario, fallback not required"},
+  {"id":"C6","test":"Zotero conditional fallback","verdict":"NOT_EVALUATED","evidence":"conditional route; DEVONthink did not materially fail on identity"}
+ ],
+ "safety": {"production_databases_written": false, "production_documents_read": false,
+            "global_settings_or_tcc_changed": false, "test_db_location": "local SSD, outside OneDrive",
+            "test_onedrive_dir": "synthetic fixtures only (8+2 files, all generated)"}
+}

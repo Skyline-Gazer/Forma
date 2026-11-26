@@ -1,0 +1,34 @@
+{
+  "duplicate_groups": [],
+  "exclusions": [],
+  "mode": "organizeAndRename",
+  "operations": [
+    {
+      "destination": "projects/PRJ-T-4/\u8d44\u6599_4.txt",
+      "expected": {
+        "device": 16777230,
+        "inode": 73718444,
+        "kind": "file",
+        "modified_ns": 1795702135290920353,
+        "size": 44
+      },
+      "source": "in/\u8d44\u6599_4.txt"
+    },
+    {
+      "destination": "projects/PRJ-T-5/\u8d44\u6599_5.txt",
+      "expected": {
+        "device": 16777230,
+        "inode": 73718445,
+        "kind": "file",
+        "modified_ns": 1795702135291117271,
+        "size": 44
+      },
+      "source": "in/\u8d44\u6599_5.txt"
+    }
+  ],
+  "source_root": "/Users/ian/Sorty-Benchmark/v1/devonthink-20261126-215932/sorty-case2",
+  "tags": [],
+  "unorganized": [],
+  "version": 2,
+  "warnings": []
+}

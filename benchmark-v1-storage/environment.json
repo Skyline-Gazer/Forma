@@ -1,0 +1,74 @@
+{
+ "host": {
+  "macos": "27.2.1",
+  "build": "26B131",
+  "arch": "arm64",
+  "disk_free": "/dev/disk3s1   926Gi   611Gi   292Gi    68%    4.8M  3.1G    0%   /System/Volumes/Data"
+ },
+ "devonthink": {
+  "version": "4.4.2",
+  "license": "registration present (encrypted); edition not script-exposed",
+  "test_database": "/Users/ian/Sorty-Benchmark/v1/devonthink-20261126-215932/FormaTest-20261126-215932.dtBase2",
+  "note": "test DB outside OneDrive; no write command targeted production databases"
+ },
+ "onedrive": {
+  "app_version": "26.168.0830",
+  "root": "~/Library/CloudStorage/OneDrive-个人",
+  "test_dir": "FormaTest-20261126-215932"
+ },
+ "fixtures": {
+  "documents": 8,
+  "logical_bytes": 22232,
+  "allocated_bytes": 49152
+ },
+ "files": [
+  {
+   "path": "项目甲/清单.csv",
+   "logical": 74,
+   "allocated": 4096,
+   "sha256": "1ce0cd57a7b45f454429bf16f9f159a160208e9295312d7f0ba1f164bc178e01"
+  },
+  {
+   "path": "项目甲/技术方案_v1.pdf",
+   "logical": 17850,
+   "allocated": 20480,
+   "sha256": "d4f6d1ed3ac92dee778965b7d01deb716467ea8c7a8124b54bbf029de5754204"
+  },
+  {
+   "path": "项目甲/技术方案_v1.docx",
+   "logical": 3671,
+   "allocated": 4096,
+   "sha256": "17f347fb29a032bb74797385f4a218aab10ab6e0a8f9dea6d7037fc289c56d8c"
+  },
+  {
+   "path": "项目甲/报价_v2.txt",
+   "logical": 96,
+   "allocated": 4096,
+   "sha256": "b05f62715d07712ec9d727b738b2962c2c3d92c332a67fcd1b9b1e123650e9bd"
+  },
+  {
+   "path": "通用/模板说明.md",
+   "logical": 137,
+   "allocated": 4096,
+   "sha256": "30bc4ef13977900973d97a8d71d10d0292cf5a8d3a589bfe993611afaf95c804"
+  },
+  {
+   "path": "项目乙-renamed/清单.csv",
+   "logical": 71,
+   "allocated": 4096,
+   "sha256": "0fdb8897eb34376517fd1204cf94b1583d8d7cc8f9c39f84d671669491f6a744"
+  },
+  {
+   "path": "项目乙-renamed/技术方案_v1_renamed.txt",
+   "logical": 202,
+   "allocated": 4096,
+   "sha256": "57c2b7d3f396189b5c690d195e61cb610e8751592a360d2c2b6c5658eb33cace"
+  },
+  {
+   "path": "项目乙-renamed/会议记录.md",
+   "logical": 131,
+   "allocated": 4096,
+   "sha256": "2cc51feedc4aa344011401f8315c9c16f2a38d9fda8a9c61af5f19b55d11a91f"
+  }
+ ]
+}
