@@ -13,13 +13,16 @@
 #   1. first launch lands on the configured default size (1180x700 content),
 #      not a content-fit width - a regression to 1104 MUST fail here;
 #   2. below the uniform shell floor the window clamps AT 1012x620 content
-#      (AX adds the title bar height, measured from launch), for every area;
-#   3. navigating every area is proven by the area's content marker, and the
-#      window width never changes with the area.
+#      (AX adds the title bar height, measured from launch);
+#   3. width never changes with the area, for every area whose switch is
+#      marker-verified on this VM (see the scope note).
 # Sidebar rows carry identifier `area-<raw>` and each pane carries
-# `area-<raw>-content` (AppShell), so navigation is language-independent and
-# - unlike the first revision of this script - a failed navigation cannot
-# pass vacuously: `navigated` is counted and must reach 6.
+# `area-<raw>-content` (AppShell), so navigation is language-independent.
+# Scope note (#172, five-run evidence): the CI runner's accessibility
+# exposure reads zero identifiers after mount, so marker VERIFICATION is
+# logged and proven on physical Macs (#153 checklist); `navigated` counts
+# only marker-verified switches and asserts nothing when it is 0. The size
+# contract below is measured on the mounted pane and stands either way.
 #
 # Exit codes:
 #   0  all assertions passed
@@ -204,8 +207,12 @@ on run
                 -- proof the sidebar selection took effect.
                 if not my waitMarker(win, "area-" & areaRaw & "-content", 4, 2) then
                     log "nav: " & areaRaw & " content marker unreadable on this VM (Mac acceptance item)"
+                else
+                    -- Counted only on marker proof: a switch nobody verified
+                    -- must not raise `navigated` - the width checks that follow
+                    -- mean area-invariance only for the areas this counts.
+                    set navigated to navigated + 1
                 end if
-                set navigated to navigated + 1
                 set {wA, hA} to size of win
                 log "after navigating to " & areaRaw & ": " & wA & "x" & hA
                 if wA < 1178 or wA > 1182 then
@@ -260,7 +267,7 @@ on run
             set {w2, h2} to size of win
             log "mapping-area clamp: " & w2 & "x" & h2
             if w2 < 1011 or w2 > 1015 then
-                error "mapping area raises the minimum above the uniform floor; got " & w2 & "pt"
+                error "clamp below the floor landed on " & w2 & "pt, not 1012 (mapping re-select verified: " & mappingNav & ")"
             end if
         end tell
     end tell

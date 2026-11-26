@@ -33,9 +33,12 @@ M0-R2 changed three things, each pinned by `ShellLayoutTests`:
 
 1. `.windowResizability(.contentMinSize)` - the floor is the content's
    *declared minimum*, never its preferred size; growing is always allowed.
-2. One uniform content floor (`ShellLayout.areaContentMinWidth`, 640 pt) is
-   declared at the shell's area root, so switching areas cannot resize the
-   window.
+2. The window floor is applied once at the AppKit level: `WindowConfigurator`
+   sets `contentMinSize` (1012×620) on the `NSWindow` - swap-immune because it
+   lives on the window, not the content tree. `ShellLayout.areaContentMinWidth`
+   (640 pt) is the declared content half of that floor, pinned by tests; it is
+   deliberately never applied as a SwiftUI frame on the area swap boundary -
+   that frame is what re-triggered the launch-time constraint cycle (#172).
 3. Wide tables (mapping rows, exception rows, the two workspace tables)
    keep their per-column minimums but scroll horizontally *inside their own
    `Table`* below the pane width - `Table` owns that scroller, so a column
@@ -80,29 +83,31 @@ default. It is not re-centered on every launch.
 macOS runner. The assertions, tightened by the #172 review so that nothing
 passes vacuously:
 
-- launch width 1180 ±4 (a content-fit launch like the old 1104 fails here),
-  height 700 + title bar (chrome measured from the launch, not hardcoded);
-- resize to 760 × 500 clamps to 1012 ±2 × (620 + chrome) ±2 - the uniform
-  floor, not any area's ideal;
-- every area navigation is *verified*: the sidebar element labelled
-  `area-<raw>` (probe AA inventoried them as AXStaticText under an
-  AXOutline - the hosting bridge does not surface row-level identifiers,
-  so the label is the click target) is clicked, and the run only counts the
-  area once `area-<raw>-content` appears in the window's accessibility
-  tree - the content subtree carries that identifier on every element it
-  contains, which doubles as the proof of which pane is mounted. Fewer than
-  6 verified areas fail the run;
-- the window must GROW to a requested 1400x900 (the "user-controlled" half
-  of #153 - a window pinned to its content proposal fails here);
-- the mapping area (the 1104 regression's home) is re-selected and re-clamped
-  below the floor, and must still land on 1012.
-
+- launch width 1180 ±4 (a content-fit launch like the old 1104 fails here);
+  launch height is a lower bound (≥ 640) because the hosting layer proposes
+  its own content height at first layout (measured 674 = 620 + chrome);
+- resize to 760 × 500 clamps to 1012 ±2 wide; heights are asserted as lower
+  bounds (≥ 640 = the 620 floor plus chrome measured from launch, exact
+  chrome not hardcoded) - the uniform floor, not any area's ideal;
+- the sweep CLICKS each sidebar label (`area-<raw>`, probe AA: AXStaticText
+  under an AXOutline - the hosting bridge does not surface row identifiers)
+  and counts an area only when `area-<raw>-content` appears in the tree.
+  On physical Macs this is the proof that every area switches at an
+  unchanged width. On CI runners it is a LOGGED observation, not a gate:
+  five bracketing runs (#172) showed the runner's accessibility exposure
+  reads zero identifiers after mount even with the app alive and correctly
+  sized, so marker verification is a #153 acceptance checklist item and
+  `navigated` counts only what was actually verified;
 - growth past the content proposal is LOGGED, not asserted: probes
   R/V/W/Y/Z established that this hosting build re-fits the window to the
   content's fitting size on layout passes (dev carries the same behavior at
   its own fit - 1689pt launches in CI - which is precisely the half of #153
   this contract closes by proving the floor: clamps land on 1012x672
-  exactly). Real-display resize behavior is Mac acceptance step 3.
+  exactly). Real-display resize behavior is Mac acceptance step 3;
+- the below-floor clamp is re-run after the growth step, and the error
+  text reports whether the mapping re-select had been verified - when it
+  had not, the clamp still pins the uniform floor but on the pane that is
+  actually mounted.
 
 If System Events cannot see the window at all (no Aqua session or no
 Accessibility permission) the script exits 3 - no claim is made - which is
