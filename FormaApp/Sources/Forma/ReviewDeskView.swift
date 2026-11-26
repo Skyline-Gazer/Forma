@@ -203,7 +203,6 @@ struct ReviewDeskView: View {
                 }
             }
             .frame(maxWidth: 230)
-            .fixedSize()
             .accessibilityIdentifier("desk-source-picker")
 
             Button("添加目录…", systemImage: "folder.badge.plus") { perform(.addSource) }
@@ -217,7 +216,6 @@ struct ReviewDeskView: View {
                 }
             }
             .frame(maxWidth: 210)
-            .fixedSize()
             .disabled(!ShellProfilePicker.isEnabled(optionCount: model.profiles.count))
             .help(ShellProfilePicker.label(selected: model.profiles.contains(where: { $0.profileID == model.selectedProfileID })
                                            ? model.selectedProfileID : nil,

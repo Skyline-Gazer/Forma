@@ -43,15 +43,19 @@ struct ShellLayoutTests {
         }
     }
 
-    @Test("the workspace's two tables share the width instead of each demanding their own")
+    @Test("the workspace's tables scroll their columns; the pane contributes only the usable floor")
     func workspaceTablesStack() {
+        // #172 (F2): a Table owns its horizontal scroller, so neither the
+        // max column sum nor the sum of both tables reaches the window - the
+        // pane declares scrollableTableMinWidth below it, and the uniform
+        // areaContentMinWidth above keeps the outer minimum identical per area.
         let files = ShellLayout.columns(for: .workspaceFiles).reduce(0) { $0 + $1.min }
         let candidates = ShellLayout.columns(for: .workspaceCandidates).reduce(0) { $0 + $1.min }
-        let expected = ShellLayout.leading(for: .workspace).min + max(files, candidates)
+        let expected = ShellLayout.leading(for: .workspace).min + ShellLayout.scrollableTableMinWidth
         #expect(ShellLayout.minimumContentWidth(for: .workspace) == expected)
         #expect(ShellLayout.minimumContentWidth(for: .workspace)
-                < ShellLayout.leading(for: .workspace).min + files + candidates,
-                "the two tables are stacked, so their minimums compete for the same width")
+                < ShellLayout.leading(for: .workspace).min + max(files, candidates),
+                "the column sums must not become the pane's demand: 360/340pt tables fit a 640pt floor only because the Table scrolls")
     }
 
     @Test("the review desk's own panes fit the budget")
@@ -71,5 +75,44 @@ struct ShellLayoutTests {
         #expect(ShellWidthClass.classify(contentWidth: ShellLayout.wideContentWidth - 1) == .regular)
         #expect(ShellWidthClass.classify(contentWidth: ShellLayout.wideContentWidth) == .wide)
         #expect(ShellWidthClass.classify(contentWidth: 10_000) == .wide)
+    }
+
+    /// M0-R2 (#153): under the default window policy the window's floor was
+    /// the mounted content's *fitting* width, and it changed with the area -
+    /// 1665pt at the Review Desk, 1645 at Workspace, on a 1512pt display.
+    /// The scene now declares `.contentMinSize` and every area promises one
+    /// uniform content floor; this is the arithmetic that promise has to hold.
+    @Test("the shell declares one uniform window floor, and it fits the narrowest display in the field")
+    func uniformWindowFloor() {
+        let floor = ShellLayout.areaContentMinWidth
+        // The decisive property: no area's own content demand may exceed the
+        // uniform floor, or mounting that area raises the window above the
+        // floor again - which is exactly how mapping's 542pt column sum beside
+        // its 190pt panel once forced a 1104pt minimum (#172). With tables
+        // scrolling their columns inside the pane, every table area now pays
+        // only the usable table floor, so this must hold for every area.
+        for area in AppArea.allCases {
+            #expect(ShellLayout.minimumContentWidth(for: area) <= floor,
+                    "\(area) demands more than the uniform floor; switching to it would resize the window")
+        }
+        // The floor must dominate the desk's two panes too.
+        #expect(floor >= ShellLayout.deskMinimumContentWidth,
+                "the floor is the one number; a bigger area demand splits it again")
+        // Sidebar and inspector open (the launch state): below the 1104pt the
+        // Owner saw for the *smallest* area, and below the 1180pt default.
+        let everyColumn = ShellLayout.sidebar.min + floor + ShellLayout.inspector.min
+        #expect(everyColumn <= 1104,
+                "the window floor with every column open was 1104pt in the field; it must be below it")
+        // The documented supported minimum: sidebar and inspector closed.
+        #expect(floor <= 660,
+                "the bare window minimum is the floor itself; it must stay a usable small window")
+        // Tables may exceed the floor - that width belongs to the table's own
+        // horizontal scroller inside the pane, never to the window. The
+        // column sums stay declared budgets, not window demands.
+        for table in ShellTable.allCases {
+            let width = ShellLayout.tableMinimumWidth(table)
+            #expect(width > 0)
+            #expect(width >= ShellLayout.scrollableTableMinWidth)
+        }
     }
 }
