@@ -126,6 +126,8 @@ struct M0R2CorrectionGateRecoveryTests {
         let published = try #require(applied.manifest.entries.first)
         #expect(published.snapshotRevision == 3 && published.snapshotFingerprint == fingerprintB,
                 "the published revision rebinds the entry to the snapshot the reviewer corrected")
+        #expect(applied.correction.snapshotFingerprint == fingerprintB,
+                "the audit receipt names the reviewed generation, not the superseded one - evidence IDs and produced revision belong to B")
         #expect(published.outcome(for: .projectname)?.value == "示例项目_2026")
     }
 
