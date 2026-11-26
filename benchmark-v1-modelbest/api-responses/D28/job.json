@@ -1,0 +1,138 @@
+{
+ "upload_status": 200,
+ "file_id": "mf_9e23236c-4d6d-41f5-bac8-b785a33f78c7",
+ "job": {
+  "id": "ocr_6119a7e5-a2d4-4e7e-acf5-c46c5e12404e",
+  "status": "Success",
+  "pages_done": 1,
+  "pages_total": 1,
+  "pages": [
+   {
+    "ocr": {
+     "mode": "ocr_only",
+     "blocks": [
+      {
+       "bbox": [
+        83,
+        99,
+        347,
+        150
+       ],
+       "label": "paragraph_title",
+       "order": 0,
+       "status": "ok",
+       "content": "未完成审批页",
+       "regions": [
+        [
+         83,
+         99,
+         347,
+         150
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        83,
+        195,
+        348,
+        235
+       ],
+       "label": "text",
+       "order": 1,
+       "status": "ok",
+       "content": "文件类型：审批页。",
+       "regions": [
+        [
+         83,
+         195,
+         348,
+         235
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        83,
+        267,
+        588,
+        307
+       ],
+       "label": "text",
+       "order": 2,
+       "status": "ok",
+       "content": "签署人、项目编号、采购人均未填写。",
+       "regions": [
+        [
+         83,
+         267,
+         588,
+         307
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        83,
+        339,
+        438,
+        380
+       ],
+       "label": "text",
+       "order": 3,
+       "status": "ok",
+       "content": "无其他足够证据确认归属。",
+       "regions": [
+        [
+         83,
+         339,
+         438,
+         380
+        ]
+       ],
+       "inline_formula_mixed": false
+      }
+     ],
+     "rotation": {
+      "applied": false,
+      "enabled": true,
+      "confirmed": null,
+      "total_angle": -0.2,
+      "deskew_angle": -0.2,
+      "skipped_reason": null,
+      "predicted_angle": 0,
+      "predicted_score": 0.927,
+      "orientation_angle": 0
+     },
+     "request_id": "2949da234ebb4496879098c345c257fb",
+     "image_width": 1190,
+     "image_height": 1684,
+     "coordinate_space": "processed_image"
+    },
+    "usage": {
+     "total_tokens": 1080,
+     "prompt_tokens": 1049,
+     "completion_tokens": 31
+    },
+    "issues": [],
+    "choices": [
+     {
+      "message": {
+       "content": "## 未完成审批页\n\n文件类型：审批页。\n\n签署人、项目编号、采购人均未填写。\n\n无其他足够证据确认归属。"
+      }
+     }
+    ],
+    "metadata": {
+     "page_index": 0
+    },
+    "request_id": "2949da234ebb4496879098c345c257fb",
+    "result_status": "complete"
+   }
+  ],
+  "markdown": "## 未完成审批页\n\n文件类型：审批页。\n\n签署人、项目编号、采购人均未填写。\n\n无其他足够证据确认归属。",
+  "created_at": "2026-11-26T13:05:22.987835Z"
+ }
+}

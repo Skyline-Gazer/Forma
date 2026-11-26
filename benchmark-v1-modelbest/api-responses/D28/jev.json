@@ -1,0 +1,224 @@
+{
+ "summary": {
+  "id": "D28",
+  "items": 4,
+  "scored": 4,
+  "prob_mean": 0.9983,
+  "prob_min": 0.9975,
+  "prob_max": 0.9988,
+  "below_half": 0,
+  "verdicts": {
+   "scored": 4
+  }
+ },
+ "items": [
+  {
+   "page": 0,
+   "order": 0,
+   "label": "paragraph_title",
+   "category": "text",
+   "content": "未完成审批页",
+   "http_status": 200,
+   "seconds": 1.03,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 0.9974661700939487,
+      "prob_no": 0.0025338299060513325,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 1.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 1.0,
+       "mean_prob_yes": 0.9974661700939487
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 234,
+    "completion_tokens": 0,
+    "total_tokens": 234
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 0.9974661700939487, \"prob_no\": 0.0025338299060513325, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"mean_prob_yes\": 0.9974661700939487}}}}",
+   "prob_yes": 0.9974661700939487,
+   "verdict": "scored"
+  },
+  {
+   "page": 0,
+   "order": 1,
+   "label": "text",
+   "category": "text",
+   "content": "文件类型：审批页。",
+   "http_status": 200,
+   "seconds": 1.03,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 0.9983296111789217,
+      "prob_no": 0.0016703888210782836,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 1.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 1.0,
+       "mean_prob_yes": 0.9983296111789217
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 247,
+    "completion_tokens": 0,
+    "total_tokens": 247
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 0.9983296111789217, \"prob_no\": 0.0016703888210782836, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"mean_prob_yes\": 0.9983296111789217}}}}",
+   "prob_yes": 0.9983296111789217,
+   "verdict": "scored"
+  },
+  {
+   "page": 0,
+   "order": 2,
+   "label": "text",
+   "category": "text",
+   "content": "签署人、项目编号、采购人均未填写。",
+   "http_status": 200,
+   "seconds": 1.34,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 0.9988212493689974,
+      "prob_no": 0.0011787506310025897,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 1.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 1.0,
+       "mean_prob_yes": 0.9988212493689974
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 262,
+    "completion_tokens": 0,
+    "total_tokens": 262
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 0.9988212493689974, \"prob_no\": 0.0011787506310025897, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"mean_prob_yes\": 0.9988212493689974}}}}",
+   "prob_yes": 0.9988212493689974,
+   "verdict": "scored"
+  },
+  {
+   "page": 0,
+   "order": 3,
+   "label": "text",
+   "category": "text",
+   "content": "无其他足够证据确认归属。",
+   "http_status": 200,
+   "seconds": 1.38,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 0.9985967070798786,
+      "prob_no": 0.001403292920121424,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 1.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 1.0,
+       "mean_prob_yes": 0.9985967070798786
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 228,
+    "completion_tokens": 0,
+    "total_tokens": 228
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 0.9985967070798786, \"prob_no\": 0.001403292920121424, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"mean_prob_yes\": 0.9985967070798786}}}}",
+   "prob_yes": 0.9985967070798786,
+   "verdict": "scored"
+  }
+ ]
+}

@@ -1,0 +1,380 @@
+{
+ "summary": {
+  "id": "D17",
+  "items": 7,
+  "scored": 7,
+  "prob_mean": 0.9978,
+  "prob_min": 0.996,
+  "prob_max": 0.9984,
+  "below_half": 0,
+  "verdicts": {
+   "scored": 7
+  }
+ },
+ "items": [
+  {
+   "page": 0,
+   "order": 0,
+   "label": "paragraph_title",
+   "category": "text",
+   "content": "采购公告",
+   "http_status": 200,
+   "seconds": 1.0,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 0.9976518992996304,
+      "prob_no": 0.0023481007003696153,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 1.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 1.0,
+       "mean_prob_yes": 0.9976518992996304
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 236,
+    "completion_tokens": 0,
+    "total_tokens": 236
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 0.9976518992996304, \"prob_no\": 0.0023481007003696153, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"mean_prob_yes\": 0.9976518992996304}}}}",
+   "prob_yes": 0.9976518992996304,
+   "verdict": "scored"
+  },
+  {
+   "page": 0,
+   "order": 1,
+   "label": "text",
+   "category": "text",
+   "content": "项目编号：LG25-019",
+   "http_status": 200,
+   "seconds": 1.07,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 0.9976260402800902,
+      "prob_no": 0.002373959719909835,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 1.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 1.0,
+       "mean_prob_yes": 0.9976260402800902
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 235,
+    "completion_tokens": 0,
+    "total_tokens": 235
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 0.9976260402800902, \"prob_no\": 0.002373959719909835, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"mean_prob_yes\": 0.9976260402800902}}}}",
+   "prob_yes": 0.9976260402800902,
+   "verdict": "scored"
+  },
+  {
+   "page": 0,
+   "order": 2,
+   "label": "text",
+   "category": "text",
+   "content": "采购人：星港物流中心",
+   "http_status": 200,
+   "seconds": 1.06,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 0.9981500826073133,
+      "prob_no": 0.0018499173926866952,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 1.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 1.0,
+       "mean_prob_yes": 0.9981500826073133
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 222,
+    "completion_tokens": 0,
+    "total_tokens": 222
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 0.9981500826073133, \"prob_no\": 0.0018499173926866952, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"mean_prob_yes\": 0.9981500826073133}}}}",
+   "prob_yes": 0.9981500826073133,
+   "verdict": "scored"
+  },
+  {
+   "page": 0,
+   "order": 3,
+   "label": "text",
+   "category": "text",
+   "content": "事项：虚拟化平台更新",
+   "http_status": 200,
+   "seconds": 1.03,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 0.9959648573947198,
+      "prob_no": 0.004035142605280151,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 1.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 1.0,
+       "mean_prob_yes": 0.9959648573947198
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 219,
+    "completion_tokens": 0,
+    "total_tokens": 219
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 0.9959648573947198, \"prob_no\": 0.004035142605280151, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"mean_prob_yes\": 0.9959648573947198}}}}",
+   "prob_yes": 0.9959648573947198,
+   "verdict": "scored"
+  },
+  {
+   "page": 0,
+   "order": 4,
+   "label": "text",
+   "category": "text",
+   "content": "投标截止：2025-12-03",
+   "http_status": 200,
+   "seconds": 1.5,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 0.9983836313346125,
+      "prob_no": 0.001616368665387502,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 1.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 1.0,
+       "mean_prob_yes": 0.9983836313346125
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 227,
+    "completion_tokens": 0,
+    "total_tokens": 227
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 0.9983836313346125, \"prob_no\": 0.001616368665387502, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"mean_prob_yes\": 0.9983836313346125}}}}",
+   "prob_yes": 0.9983836313346125,
+   "verdict": "scored"
+  },
+  {
+   "page": 0,
+   "order": 5,
+   "label": "text",
+   "category": "text",
+   "content": "采购范围：三节点集群、共享存储、迁移。",
+   "http_status": 200,
+   "seconds": 1.09,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 0.998212274803503,
+      "prob_no": 0.0017877251964969476,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 1.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 1.0,
+       "mean_prob_yes": 0.998212274803503
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 251,
+    "completion_tokens": 0,
+    "total_tokens": 251
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 0.998212274803503, \"prob_no\": 0.0017877251964969476, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"mean_prob_yes\": 0.998212274803503}}}}",
+   "prob_yes": 0.998212274803503,
+   "verdict": "scored"
+  },
+  {
+   "page": 0,
+   "order": 6,
+   "label": "text",
+   "category": "text",
+   "content": "公开采购通知；供潜在供应商了解项目及截止时间。",
+   "http_status": 200,
+   "seconds": 1.1,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 0.9984073143299169,
+      "prob_no": 0.0015926856700830827,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 1.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 1.0,
+       "mean_prob_yes": 0.9984073143299169
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 231,
+    "completion_tokens": 0,
+    "total_tokens": 231
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 0.9984073143299169, \"prob_no\": 0.0015926856700830827, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"mean_prob_yes\": 0.9984073143299169}}}}",
+   "prob_yes": 0.9984073143299169,
+   "verdict": "scored"
+  }
+ ]
+}

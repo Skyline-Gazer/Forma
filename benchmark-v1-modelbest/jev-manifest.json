@@ -1,0 +1,98 @@
+[
+ {
+  "id": "D01",
+  "items": 7,
+  "scored": 7,
+  "prob_mean": 0.9978,
+  "prob_min": 0.9969,
+  "prob_max": 0.9985,
+  "below_half": 0,
+  "verdicts": {
+   "scored": 7
+  }
+ },
+ {
+  "id": "D06",
+  "items": 8,
+  "scored": 8,
+  "prob_mean": 0.9975,
+  "prob_min": 0.9963,
+  "prob_max": 0.9986,
+  "below_half": 0,
+  "verdicts": {
+   "scored": 8
+  }
+ },
+ {
+  "id": "D09",
+  "items": 7,
+  "scored": 7,
+  "prob_mean": 0.998,
+  "prob_min": 0.9974,
+  "prob_max": 0.9988,
+  "below_half": 0,
+  "verdicts": {
+   "scored": 7
+  }
+ },
+ {
+  "id": "D14",
+  "items": 8,
+  "scored": 8,
+  "prob_mean": 0.9978,
+  "prob_min": 0.9971,
+  "prob_max": 0.9986,
+  "below_half": 0,
+  "verdicts": {
+   "scored": 8
+  }
+ },
+ {
+  "id": "D17",
+  "items": 7,
+  "scored": 7,
+  "prob_mean": 0.9978,
+  "prob_min": 0.996,
+  "prob_max": 0.9984,
+  "below_half": 0,
+  "verdicts": {
+   "scored": 7
+  }
+ },
+ {
+  "id": "D22",
+  "items": 8,
+  "scored": 8,
+  "prob_mean": 0.9972,
+  "prob_min": 0.9944,
+  "prob_max": 0.9989,
+  "below_half": 0,
+  "verdicts": {
+   "scored": 8
+  }
+ },
+ {
+  "id": "D26",
+  "items": 4,
+  "scored": 4,
+  "prob_mean": 0.7488,
+  "prob_min": 0.0,
+  "prob_max": 0.999,
+  "below_half": 1,
+  "verdicts": {
+   "scored": 4
+  }
+ },
+ {
+  "id": "D28",
+  "items": 4,
+  "scored": 4,
+  "prob_mean": 0.9983,
+  "prob_min": 0.9975,
+  "prob_max": 0.9988,
+  "below_half": 0,
+  "verdicts": {
+   "scored": 4
+  }
+ }
+]

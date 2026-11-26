@@ -1,0 +1,12 @@
+{
+ "id": "D26",
+ "source": "下载/待处理/产品介绍.pdf",
+ "sha256": "eb8455b6ec399839612c53416706685276147a67e72f2fbadf04dbc46605f8a0",
+ "status": "Success",
+ "job_id": "ocr_bb4e42c2-ba5f-470c-a091-4bcaff4b9110",
+ "pages": 1,
+ "chars": 64,
+ "blocks": 4,
+ "seconds": 2.95,
+ "file_id": "mf_0289bef6-0ddf-4a81-b9df-572c0c4bc621"
+}

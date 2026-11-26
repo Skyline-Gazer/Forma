@@ -1,0 +1,12 @@
+{
+ "id": "D28",
+ "source": "桌面备份/新建文件夹/扫描件.pdf",
+ "sha256": "19e21f5c91e0e3c922da2d664ba13863a8589438583801f1baa52caaa62daa55",
+ "status": "Success",
+ "job_id": "ocr_6119a7e5-a2d4-4e7e-acf5-c46c5e12404e",
+ "pages": 1,
+ "chars": 53,
+ "blocks": 4,
+ "seconds": 2.98,
+ "file_id": "mf_9e23236c-4d6d-41f5-bac8-b785a33f78c7"
+}

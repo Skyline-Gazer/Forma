@@ -1,0 +1,27 @@
+{
+ "api": {
+  "document_parse_calls": 8,
+  "document_parse_success": 8,
+  "pages": 8,
+  "parse_seconds_total": 26.52,
+  "jev_calls": 53,
+  "jev_tokens": 12337,
+  "jev_seconds_total": 60.2,
+  "billing": "MiniCPM-OCR-1.0 and MiniCPM-OCR-Jev are 限时免费 (free during promotion) per the official price table on 2026-11-12",
+  "actual_cost": 0.0
+ },
+ "quality": {
+  "jev_prob_mean": 0.9667,
+  "jev_docs_below_half": 1,
+  "similarity_mean": 0.9519,
+  "similarity_min": 0.9297,
+  "key_field_deltas_total": 0
+ },
+ "blocks": {
+  "doc_title": 4,
+  "text": 45,
+  "paragraph_title": 4,
+  "table": 0,
+  "formula": 0
+ }
+}

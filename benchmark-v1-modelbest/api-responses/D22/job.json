@@ -1,0 +1,222 @@
+{
+ "upload_status": 200,
+ "file_id": "mf_b8912688-f789-4e26-bc3a-488954ca0a5f",
+ "job": {
+  "id": "ocr_808beded-5786-46d7-9456-4d44d7d14b66",
+  "status": "Success",
+  "pages_done": 1,
+  "pages_total": 1,
+  "pages": [
+   {
+    "ocr": {
+     "mode": "ocr_only",
+     "blocks": [
+      {
+       "bbox": [
+        86,
+        100,
+        428,
+        147
+       ],
+       "label": "doc_title",
+       "order": 0,
+       "status": "ok",
+       "content": "制造商项目授权函",
+       "regions": [
+        [
+         86,
+         100,
+         428,
+         147
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        197,
+        373,
+        232
+       ],
+       "label": "text",
+       "order": 1,
+       "status": "ok",
+       "content": "项目编号：LG25-019",
+       "regions": [
+        [
+         86,
+         197,
+         373,
+         232
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        269,
+        394,
+        305
+       ],
+       "label": "text",
+       "order": 2,
+       "status": "ok",
+       "content": "采购人：星港物流中心",
+       "regions": [
+        [
+         86,
+         269,
+         394,
+         305
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        341,
+        393,
+        377
+       ],
+       "label": "text",
+       "order": 3,
+       "status": "ok",
+       "content": "事项：虚拟化平台更新",
+       "regions": [
+        [
+         86,
+         341,
+         393,
+         377
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        413,
+        398,
+        448
+       ],
+       "label": "text",
+       "order": 4,
+       "status": "ok",
+       "content": "投标截止：2025-12-03",
+       "regions": [
+        [
+         86,
+         413,
+         398,
+         448
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        485,
+        333,
+        520
+       ],
+       "label": "text",
+       "order": 5,
+       "status": "ok",
+       "content": "授权方：矩川科技",
+       "regions": [
+        [
+         86,
+         485,
+         333,
+         520
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        557,
+        364,
+        593
+       ],
+       "label": "text",
+       "order": 6,
+       "status": "ok",
+       "content": "被授权方：远栖系统",
+       "regions": [
+        [
+         86,
+         557,
+         364,
+         593
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        85,
+        630,
+        676,
+        665
+       ],
+       "label": "text",
+       "order": 7,
+       "status": "ok",
+       "content": "仅授权本项目投标；不适用于其他采购项目。",
+       "regions": [
+        [
+         85,
+         630,
+         676,
+         665
+        ]
+       ],
+       "inline_formula_mixed": false
+      }
+     ],
+     "rotation": {
+      "applied": false,
+      "enabled": true,
+      "confirmed": null,
+      "total_angle": 0.0,
+      "deskew_angle": 0.0,
+      "skipped_reason": null,
+      "predicted_angle": 0,
+      "predicted_score": 0.924,
+      "orientation_angle": 0
+     },
+     "request_id": "c9b6e26009f24f53bdfa4dbc0321508e",
+     "image_width": 1190,
+     "image_height": 1684,
+     "coordinate_space": "processed_image"
+    },
+    "usage": {
+     "total_tokens": 2271,
+     "prompt_tokens": 2200,
+     "completion_tokens": 71
+    },
+    "issues": [],
+    "choices": [
+     {
+      "message": {
+       "content": "# 制造商项目授权函\n\n项目编号：LG25-019\n\n采购人：星港物流中心\n\n事项：虚拟化平台更新\n\n投标截止：2025-12-03\n\n授权方：矩川科技\n\n被授权方：远栖系统\n\n仅授权本项目投标；不适用于其他采购项目。"
+      }
+     }
+    ],
+    "metadata": {
+     "page_index": 0
+    },
+    "request_id": "c9b6e26009f24f53bdfa4dbc0321508e",
+    "result_status": "complete"
+   }
+  ],
+  "markdown": "# 制造商项目授权函\n\n项目编号：LG25-019\n\n采购人：星港物流中心\n\n事项：虚拟化平台更新\n\n投标截止：2025-12-03\n\n授权方：矩川科技\n\n被授权方：远栖系统\n\n仅授权本项目投标；不适用于其他采购项目。",
+  "created_at": "2026-11-26T13:05:17.050927Z"
+ }
+}

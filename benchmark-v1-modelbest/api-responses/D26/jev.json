@@ -1,0 +1,224 @@
+{
+ "summary": {
+  "id": "D26",
+  "items": 4,
+  "scored": 4,
+  "prob_mean": 0.7488,
+  "prob_min": 0.0,
+  "prob_max": 0.999,
+  "below_half": 1,
+  "verdicts": {
+   "scored": 4
+  }
+ },
+ "items": [
+  {
+   "page": 0,
+   "order": 0,
+   "label": "paragraph_title",
+   "category": "text",
+   "content": "后岳通用产品目录",
+   "http_status": 200,
+   "seconds": 0.97,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 8.549582756888427e-07,
+      "prob_no": 0.9999991450417243,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 0.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 0.0,
+       "mean_prob_yes": 8.549582756888427e-07
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 223,
+    "completion_tokens": 0,
+    "total_tokens": 223
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 8.549582756888427e-07, \"prob_no\": 0.9999991450417243, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 0.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 0.0, \"mean_prob_yes\": 8.549582756888427e-07}}}}",
+   "prob_yes": 8.549582756888427e-07,
+   "verdict": "scored"
+  },
+  {
+   "page": 0,
+   "order": 1,
+   "label": "text",
+   "category": "text",
+   "content": "启岳科技通用交换及存储产品目录。",
+   "http_status": 200,
+   "seconds": 1.08,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 0.9975667589119852,
+      "prob_no": 0.0024332410880147926,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 1.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 1.0,
+       "mean_prob_yes": 0.9975667589119852
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 255,
+    "completion_tokens": 0,
+    "total_tokens": 255
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 0.9975667589119852, \"prob_no\": 0.0024332410880147926, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"mean_prob_yes\": 0.9975667589119852}}}}",
+   "prob_yes": 0.9975667589119852,
+   "verdict": "scored"
+  },
+  {
+   "page": 0,
+   "order": 2,
+   "label": "text",
+   "category": "text",
+   "content": "不含项目编号、采购人或专属授权。",
+   "http_status": 200,
+   "seconds": 1.08,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 0.998532692645269,
+      "prob_no": 0.0014673073547309956,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 1.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 1.0,
+       "mean_prob_yes": 0.998532692645269
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 253,
+    "completion_tokens": 0,
+    "total_tokens": 253
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 0.998532692645269, \"prob_no\": 0.0014673073547309956, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"mean_prob_yes\": 0.998532692645269}}}}",
+   "prob_yes": 0.998532692645269,
+   "verdict": "scored"
+  },
+  {
+   "page": 0,
+   "order": 3,
+   "label": "text",
+   "category": "text",
+   "content": "适用于多个客户的前期技术选型。",
+   "http_status": 200,
+   "seconds": 1.09,
+   "parsed": {
+    "results": [
+     {
+      "case_id": "0",
+      "category": "text",
+      "verdict": "scored",
+      "prob_yes": 0.9990295749464381,
+      "prob_no": 0.0009704250535619297,
+      "detail": ""
+     }
+    ],
+    "summary": {
+     "total": 1,
+     "scored": 1,
+     "precheck_reject": 0,
+     "render_error": 0,
+     "forward_error": 0,
+     "pass_rate": 1.0,
+     "throughput_rate": 1.0,
+     "threshold_used": 0.5,
+     "input_form": "ternary",
+     "by_category": {
+      "text": {
+       "total": 1,
+       "scored": 1,
+       "precheck_reject": 0,
+       "render_error": 0,
+       "forward_error": 0,
+       "pass_rate": 1.0,
+       "throughput_rate": 1.0,
+       "mean_prob_yes": 0.9990295749464381
+      }
+     }
+    }
+   },
+   "usage": {
+    "prompt_tokens": 245,
+    "completion_tokens": 0,
+    "total_tokens": 245
+   },
+   "raw_message": "{\"results\": [{\"case_id\": \"0\", \"category\": \"text\", \"verdict\": \"scored\", \"prob_yes\": 0.9990295749464381, \"prob_no\": 0.0009704250535619297, \"detail\": \"\"}], \"summary\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"threshold_used\": 0.5, \"input_form\": \"ternary\", \"by_category\": {\"text\": {\"total\": 1, \"scored\": 1, \"precheck_reject\": 0, \"render_error\": 0, \"forward_error\": 0, \"pass_rate\": 1.0, \"throughput_rate\": 1.0, \"mean_prob_yes\": 0.9990295749464381}}}}",
+   "prob_yes": 0.9990295749464381,
+   "verdict": "scored"
+  }
+ ]
+}

@@ -1,0 +1,298 @@
+[
+ {
+  "id": "D01",
+  "source": "旧归档/2024/已完成/医疗/客户资料/其他/批次1/公告.pdf",
+  "similarity": 0.943,
+  "modelbest_chars": 110,
+  "previous_chars": 99,
+  "modelbest_fields": {
+   "项目编号": "HC26-041",
+   "采购人": "澄湾市仁泽医院",
+   "事项": "数据中心存储扩容",
+   "投标截止": "2026-05-18",
+   "采购范围": "双控存储、96TB、双路径。公开采购通知；供潜在供应商了解项目及截止时间。"
+  },
+  "previous_fields": {
+   "项目编号": "HC26-041",
+   "采购人": "澄湾市仁泽医院",
+   "事项": "数据中心存储扩容",
+   "投标截止": "2026-05-18",
+   "采购范围": "双控存储、96TB、双路径。公开采购通知；供潜在供应商了解项目及截止时间。"
+  },
+  "deltas": {},
+  "modelbest_seconds": 3.2,
+  "pages": 1,
+  "blocks": 7,
+  "jev": {
+   "id": "D01",
+   "items": 7,
+   "scored": 7,
+   "prob_mean": 0.9978,
+   "prob_min": 0.9969,
+   "prob_max": 0.9985,
+   "below_half": 0,
+   "verdicts": {
+    "scored": 7
+   }
+  },
+  "low_items": []
+ },
+ {
+  "id": "D06",
+  "source": "桌面备份/新建文件夹/批次1/授权函.pdf",
+  "similarity": 0.9319,
+  "modelbest_chars": 111,
+  "previous_chars": 98,
+  "modelbest_fields": {
+   "项目编号": "HC26-041",
+   "采购人": "澄湾市仁泽医院",
+   "事项": "数据中心存储扩容",
+   "投标截止": "2026-05-18",
+   "授权方": "启岳科技",
+   "被授权方": "澜桥数字仅授权本项目投标；不适用于其他采购项目。"
+  },
+  "previous_fields": {
+   "项目编号": "HC26-041",
+   "采购人": "澄湾市仁泽医院",
+   "事项": "数据中心存储扩容",
+   "投标截止": "2026-05-18",
+   "授权方": "启岳科技",
+   "被授权方": "澜桥数字仅授权本项目投标；不适用于其他采购项目。"
+  },
+  "deltas": {},
+  "modelbest_seconds": 5.4,
+  "pages": 1,
+  "blocks": 8,
+  "jev": {
+   "id": "D06",
+   "items": 8,
+   "scored": 8,
+   "prob_mean": 0.9975,
+   "prob_min": 0.9963,
+   "prob_max": 0.9986,
+   "below_half": 0,
+   "verdicts": {
+    "scored": 8
+   }
+  },
+  "low_items": []
+ },
+ {
+  "id": "D09",
+  "source": "项目/2026/新建/未确认/资料/批次2/公告.pdf",
+  "similarity": 0.9368,
+  "modelbest_chars": 109,
+  "previous_chars": 96,
+  "modelbest_fields": {
+   "项目编号": "ED26-073",
+   "采购人": "北屿职业学院",
+   "事项": "校园网络改造",
+   "投标截止": "2026-09-12",
+   "采购范围": "48口交换机、万兆上联、堆叠。公开采购通知；供潜在供应商了解项目及截止时间。"
+  },
+  "previous_fields": {
+   "项目编号": "ED26-073",
+   "采购人": "北屿职业学院",
+   "事项": "校园网络改造",
+   "投标截止": "2026-09-12",
+   "采购范围": "48口交换机、万兆上联、堆叠。公开采购通知；供潜在供应商了解项目及截止时间。"
+  },
+  "deltas": {},
+  "modelbest_seconds": 3.07,
+  "pages": 1,
+  "blocks": 7,
+  "jev": {
+   "id": "D09",
+   "items": 7,
+   "scored": 7,
+   "prob_mean": 0.998,
+   "prob_min": 0.9974,
+   "prob_max": 0.9988,
+   "below_half": 0,
+   "verdicts": {
+    "scored": 7
+   }
+  },
+  "low_items": []
+ },
+ {
+  "id": "D14",
+  "source": "旧归档/2024/已完成/医疗/客户资料/其他/批次2/授权函.pdf",
+  "similarity": 0.9297,
+  "modelbest_chars": 108,
+  "previous_chars": 94,
+  "modelbest_fields": {
+   "项目编号": "ED26-073",
+   "采购人": "北屿职业学院",
+   "事项": "校园网络改造",
+   "投标截止": "2026-09-12",
+   "授权方": "启岳科技",
+   "被授权方": "澜桥数字仅授权本项目投标；不适用于其他采购项目。"
+  },
+  "previous_fields": {
+   "项目编号": "ED26-073",
+   "采购人": "北屿职业学院",
+   "事项": "校园网络改造",
+   "投标截止": "2026-09-12",
+   "授权方": "启岳科技",
+   "被授权方": "澜桥数字仅授权本项目投标；不适用于其他采购项目。"
+  },
+  "deltas": {},
+  "modelbest_seconds": 2.95,
+  "pages": 1,
+  "blocks": 8,
+  "jev": {
+   "id": "D14",
+   "items": 8,
+   "scored": 8,
+   "prob_mean": 0.9978,
+   "prob_min": 0.9971,
+   "prob_max": 0.9986,
+   "below_half": 0,
+   "verdicts": {
+    "scored": 8
+   }
+  },
+  "low_items": []
+ },
+ {
+  "id": "D17",
+  "source": "历史/2025/已完成/参考/技术/批次3/公告.pdf",
+  "similarity": 0.9368,
+  "modelbest_chars": 109,
+  "previous_chars": 96,
+  "modelbest_fields": {
+   "项目编号": "LG25-019",
+   "采购人": "星港物流中心",
+   "事项": "虚拟化平台更新",
+   "投标截止": "2025-12-03",
+   "采购范围": "三节点集群、共享存储、迁移。公开采购通知；供潜在供应商了解项目及截止时间。"
+  },
+  "previous_fields": {
+   "项目编号": "LG25-019",
+   "采购人": "星港物流中心",
+   "事项": "虚拟化平台更新",
+   "投标截止": "2025-12-03",
+   "采购范围": "三节点集群、共享存储、迁移。公开采购通知；供潜在供应商了解项目及截止时间。"
+  },
+  "deltas": {},
+  "modelbest_seconds": 2.93,
+  "pages": 1,
+  "blocks": 7,
+  "jev": {
+   "id": "D17",
+   "items": 7,
+   "scored": 7,
+   "prob_mean": 0.9978,
+   "prob_min": 0.996,
+   "prob_max": 0.9984,
+   "below_half": 0,
+   "verdicts": {
+    "scored": 7
+   }
+  },
+  "low_items": []
+ },
+ {
+  "id": "D22",
+  "source": "项目/2026/新建/未确认/资料/批次3/授权函.pdf",
+  "similarity": 0.9947,
+  "modelbest_chars": 109,
+  "previous_chars": 100,
+  "modelbest_fields": {
+   "项目编号": "LG25-019",
+   "采购人": "星港物流中心",
+   "事项": "虚拟化平台更新",
+   "投标截止": "2025-12-03",
+   "授权方": "矩川科技",
+   "被授权方": "远栖系统仅授权本项目投标；不适用于其他采购项目。"
+  },
+  "previous_fields": {
+   "项目编号": "LG25-019",
+   "采购人": "星港物流中心",
+   "事项": "虚拟化平台更新",
+   "投标截止": "2025-12-03",
+   "授权方": "矩川科技",
+   "被授权方": "远栖系统仅授权本项目投标；不适用于其他采购项目。"
+  },
+  "deltas": {},
+  "modelbest_seconds": 3.04,
+  "pages": 1,
+  "blocks": 8,
+  "jev": {
+   "id": "D22",
+   "items": 8,
+   "scored": 8,
+   "prob_mean": 0.9972,
+   "prob_min": 0.9944,
+   "prob_max": 0.9989,
+   "below_half": 0,
+   "verdicts": {
+    "scored": 8
+   }
+  },
+  "low_items": []
+ },
+ {
+  "id": "D26",
+  "source": "下载/待处理/产品介绍.pdf",
+  "similarity": 0.9643,
+  "modelbest_chars": 64,
+  "previous_chars": 61,
+  "modelbest_fields": {},
+  "previous_fields": {},
+  "deltas": {},
+  "modelbest_seconds": 2.95,
+  "pages": 1,
+  "blocks": 4,
+  "jev": {
+   "id": "D26",
+   "items": 4,
+   "scored": 4,
+   "prob_mean": 0.7488,
+   "prob_min": 0.0,
+   "prob_max": 0.999,
+   "below_half": 1,
+   "verdicts": {
+    "scored": 4
+   }
+  },
+  "low_items": [
+   {
+    "label": "paragraph_title",
+    "prob": 8.549582756888427e-07,
+    "text": "后岳通用产品目录"
+   }
+  ]
+ },
+ {
+  "id": "D28",
+  "source": "桌面备份/新建文件夹/扫描件.pdf",
+  "similarity": 0.9778,
+  "modelbest_chars": 53,
+  "previous_chars": 47,
+  "modelbest_fields": {
+   "文件类型": "审批页。签署人、项目编号、采购人均未填写。无其他足够证据确认归属。"
+  },
+  "previous_fields": {
+   "文件类型": "审批页。签署人、项目编号、采购人均未填写。无其他足够证据确认归属。"
+  },
+  "deltas": {},
+  "modelbest_seconds": 2.98,
+  "pages": 1,
+  "blocks": 4,
+  "jev": {
+   "id": "D28",
+   "items": 4,
+   "scored": 4,
+   "prob_mean": 0.9983,
+   "prob_min": 0.9975,
+   "prob_max": 0.9988,
+   "below_half": 0,
+   "verdicts": {
+    "scored": 4
+   }
+  },
+  "low_items": []
+ }
+]

@@ -1,0 +1,12 @@
+{
+ "id": "D22",
+ "source": "项目/2026/新建/未确认/资料/批次3/授权函.pdf",
+ "sha256": "35b2594e4eb8704c4164015cfdebd0d5ca7bea032e3907332d28b7817e1aa5b7",
+ "status": "Success",
+ "job_id": "ocr_808beded-5786-46d7-9456-4d44d7d14b66",
+ "pages": 1,
+ "chars": 109,
+ "blocks": 8,
+ "seconds": 3.04,
+ "file_id": "mf_b8912688-f789-4e26-bc3a-488954ca0a5f"
+}

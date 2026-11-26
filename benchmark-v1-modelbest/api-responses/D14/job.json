@@ -1,0 +1,222 @@
+{
+ "upload_status": 200,
+ "file_id": "mf_b223c755-c9ba-48aa-bc01-dc5830d221c6",
+ "job": {
+  "id": "ocr_4be00732-be6f-4e15-b813-244ec62d0e6c",
+  "status": "Success",
+  "pages_done": 1,
+  "pages_total": 1,
+  "pages": [
+   {
+    "ocr": {
+     "mode": "ocr_only",
+     "blocks": [
+      {
+       "bbox": [
+        87,
+        87,
+        412,
+        131
+       ],
+       "label": "doc_title",
+       "order": 0,
+       "status": "ok",
+       "content": "制造商项目授权函",
+       "regions": [
+        [
+         87,
+         87,
+         412,
+         131
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        191,
+        311,
+        220
+       ],
+       "label": "text",
+       "order": 1,
+       "status": "ok",
+       "content": "项目编号：ED26-073",
+       "regions": [
+        [
+         86,
+         191,
+         311,
+         220
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        245,
+        334,
+        274
+       ],
+       "label": "text",
+       "order": 2,
+       "status": "ok",
+       "content": "采购人：北屿职业学院",
+       "regions": [
+        [
+         86,
+         245,
+         334,
+         274
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        87,
+        299,
+        310,
+        328
+       ],
+       "label": "text",
+       "order": 3,
+       "status": "ok",
+       "content": "事项：校园网络改造",
+       "regions": [
+        [
+         87,
+         299,
+         310,
+         328
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        353,
+        322,
+        382
+       ],
+       "label": "text",
+       "order": 4,
+       "status": "ok",
+       "content": "投标截止：2026-09-12",
+       "regions": [
+        [
+         86,
+         353,
+         322,
+         382
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        407,
+        285,
+        436
+       ],
+       "label": "text",
+       "order": 5,
+       "status": "ok",
+       "content": "授权方：启岳科技",
+       "regions": [
+        [
+         86,
+         407,
+         285,
+         436
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        87,
+        461,
+        309,
+        490
+       ],
+       "label": "text",
+       "order": 6,
+       "status": "ok",
+       "content": "被授权方：澜桥数字",
+       "regions": [
+        [
+         87,
+         461,
+         309,
+         490
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        516,
+        558,
+        544
+       ],
+       "label": "text",
+       "order": 7,
+       "status": "ok",
+       "content": "仅授权本项目投标；不适用于其他采购项目。",
+       "regions": [
+        [
+         86,
+         516,
+         558,
+         544
+        ]
+       ],
+       "inline_formula_mixed": false
+      }
+     ],
+     "rotation": {
+      "applied": false,
+      "enabled": true,
+      "confirmed": null,
+      "total_angle": -0.2,
+      "deskew_angle": -0.2,
+      "skipped_reason": null,
+      "predicted_angle": 0,
+      "predicted_score": 0.9235,
+      "orientation_angle": 0
+     },
+     "request_id": "990cd2a0b9bb44b0b1ffdfbb1ed1225e",
+     "image_width": 1190,
+     "image_height": 1684,
+     "coordinate_space": "processed_image"
+    },
+    "usage": {
+     "total_tokens": 2323,
+     "prompt_tokens": 2253,
+     "completion_tokens": 70
+    },
+    "issues": [],
+    "choices": [
+     {
+      "message": {
+       "content": "# 制造商项目授权函\n\n项目编号：ED26-073\n\n采购人：北屿职业学院\n\n事项：校园网络改造\n\n投标截止：2026-09-12\n\n授权方：启岳科技\n\n被授权方：澜桥数字\n\n仅授权本项目投标；不适用于其他采购项目。"
+      }
+     }
+    ],
+    "metadata": {
+     "page_index": 0
+    },
+    "request_id": "990cd2a0b9bb44b0b1ffdfbb1ed1225e",
+    "result_status": "complete"
+   }
+  ],
+  "markdown": "# 制造商项目授权函\n\n项目编号：ED26-073\n\n采购人：北屿职业学院\n\n事项：校园网络改造\n\n投标截止：2026-09-12\n\n授权方：启岳科技\n\n被授权方：澜桥数字\n\n仅授权本项目投标；不适用于其他采购项目。",
+  "created_at": "2026-11-26T13:05:11.026334Z"
+ }
+}

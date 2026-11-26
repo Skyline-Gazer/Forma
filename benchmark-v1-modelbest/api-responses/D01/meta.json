@@ -1,0 +1,12 @@
+{
+ "id": "D01",
+ "source": "旧归档/2024/已完成/医疗/客户资料/其他/批次1/公告.pdf",
+ "sha256": "7ccf72cb672cc3f549e5149749ad9ae10268f9f923ef296e88e93a0d3bd49f92",
+ "status": "Success",
+ "job_id": "ocr_da1e913c-ffa9-4b27-b7bf-1e5030114c54",
+ "pages": 1,
+ "chars": 110,
+ "blocks": 7,
+ "seconds": 3.2,
+ "file_id": "mf_ed5c242e-701a-4878-8187-de84489a65b7"
+}

@@ -1,0 +1,12 @@
+{
+ "id": "D09",
+ "source": "项目/2026/新建/未确认/资料/批次2/公告.pdf",
+ "sha256": "aac6d2f959ca277c519675d0b56823b71c2eabb9e5deb36ab873640bcc4f852a",
+ "status": "Success",
+ "job_id": "ocr_4314249b-0cf7-43ed-a4fc-d9bb979e3dbd",
+ "pages": 1,
+ "chars": 109,
+ "blocks": 7,
+ "seconds": 3.07,
+ "file_id": "mf_45ceee58-f3e4-441f-8615-3bc56058a65e"
+}

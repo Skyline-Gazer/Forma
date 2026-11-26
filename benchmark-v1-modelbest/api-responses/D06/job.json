@@ -1,0 +1,222 @@
+{
+ "upload_status": 200,
+ "file_id": "mf_0b990243-983c-421b-be75-32750e304aa8",
+ "job": {
+  "id": "ocr_aaee3bf2-a41d-4957-91ba-6508c4c1d3eb",
+  "status": "Success",
+  "pages_done": 1,
+  "pages_total": 1,
+  "pages": [
+   {
+    "ocr": {
+     "mode": "ocr_only",
+     "blocks": [
+      {
+       "bbox": [
+        87,
+        87,
+        411,
+        131
+       ],
+       "label": "doc_title",
+       "order": 0,
+       "status": "ok",
+       "content": "制造商项目授权函",
+       "regions": [
+        [
+         87,
+         87,
+         411,
+         131
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        191,
+        315,
+        220
+       ],
+       "label": "text",
+       "order": 1,
+       "status": "ok",
+       "content": "项目编号：HC26-041",
+       "regions": [
+        [
+         86,
+         191,
+         315,
+         220
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        87,
+        245,
+        358,
+        274
+       ],
+       "label": "text",
+       "order": 2,
+       "status": "ok",
+       "content": "采购人：澄湾市仁泽医院",
+       "regions": [
+        [
+         87,
+         245,
+         358,
+         274
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        87,
+        298,
+        358,
+        328
+       ],
+       "label": "text",
+       "order": 3,
+       "status": "ok",
+       "content": "事项：数据中心存储扩容",
+       "regions": [
+        [
+         87,
+         298,
+         358,
+         328
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        353,
+        322,
+        382
+       ],
+       "label": "text",
+       "order": 4,
+       "status": "ok",
+       "content": "投标截止：2026-05-18",
+       "regions": [
+        [
+         86,
+         353,
+         322,
+         382
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        407,
+        285,
+        435
+       ],
+       "label": "text",
+       "order": 5,
+       "status": "ok",
+       "content": "授权方：启岳科技",
+       "regions": [
+        [
+         86,
+         407,
+         285,
+         435
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        87,
+        461,
+        309,
+        490
+       ],
+       "label": "text",
+       "order": 6,
+       "status": "ok",
+       "content": "被授权方：澜桥数字",
+       "regions": [
+        [
+         87,
+         461,
+         309,
+         490
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        516,
+        558,
+        544
+       ],
+       "label": "text",
+       "order": 7,
+       "status": "ok",
+       "content": "仅授权本项目投标；不适用于其他采购项目。",
+       "regions": [
+        [
+         86,
+         516,
+         558,
+         544
+        ]
+       ],
+       "inline_formula_mixed": false
+      }
+     ],
+     "rotation": {
+      "applied": false,
+      "enabled": true,
+      "confirmed": null,
+      "total_angle": -0.2,
+      "deskew_angle": -0.2,
+      "skipped_reason": null,
+      "predicted_angle": 0,
+      "predicted_score": 0.9245,
+      "orientation_angle": 0
+     },
+     "request_id": "35726b55a40948d99c094362a4453290",
+     "image_width": 1190,
+     "image_height": 1684,
+     "coordinate_space": "processed_image"
+    },
+    "usage": {
+     "total_tokens": 2324,
+     "prompt_tokens": 2251,
+     "completion_tokens": 73
+    },
+    "issues": [],
+    "choices": [
+     {
+      "message": {
+       "content": "# 制造商项目授权函\n\n项目编号：HC26-041\n\n采购人：澄湾市仁泽医院\n\n事项：数据中心存储扩容\n\n投标截止：2026-05-18\n\n授权方：启岳科技\n\n被授权方：澜桥数字\n\n仅授权本项目投标；不适用于其他采购项目。"
+      }
+     }
+    ],
+    "metadata": {
+     "page_index": 0
+    },
+    "request_id": "35726b55a40948d99c094362a4453290",
+    "result_status": "complete"
+   }
+  ],
+  "markdown": "# 制造商项目授权函\n\n项目编号：HC26-041\n\n采购人：澄湾市仁泽医院\n\n事项：数据中心存储扩容\n\n投标截止：2026-05-18\n\n授权方：启岳科技\n\n被授权方：澜桥数字\n\n仅授权本项目投标；不适用于其他采购项目。",
+  "created_at": "2026-11-26T13:05:02.803275Z"
+ }
+}

@@ -1,0 +1,201 @@
+{
+ "upload_status": 200,
+ "file_id": "mf_45ceee58-f3e4-441f-8615-3bc56058a65e",
+ "job": {
+  "id": "ocr_4314249b-0cf7-43ed-a4fc-d9bb979e3dbd",
+  "status": "Success",
+  "pages_done": 1,
+  "pages_total": 1,
+  "pages": [
+   {
+    "ocr": {
+     "mode": "ocr_only",
+     "blocks": [
+      {
+       "bbox": [
+        87,
+        87,
+        251,
+        132
+       ],
+       "label": "paragraph_title",
+       "order": 0,
+       "status": "ok",
+       "content": "采购公告",
+       "regions": [
+        [
+         87,
+         87,
+         251,
+         132
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        85,
+        191,
+        311,
+        220
+       ],
+       "label": "text",
+       "order": 1,
+       "status": "ok",
+       "content": "项目编号：ED26-073",
+       "regions": [
+        [
+         85,
+         191,
+         311,
+         220
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        244,
+        334,
+        274
+       ],
+       "label": "text",
+       "order": 2,
+       "status": "ok",
+       "content": "采购人：北屿职业学院",
+       "regions": [
+        [
+         86,
+         244,
+         334,
+         274
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        298,
+        310,
+        328
+       ],
+       "label": "text",
+       "order": 3,
+       "status": "ok",
+       "content": "事项：校园网络改造",
+       "regions": [
+        [
+         86,
+         298,
+         310,
+         328
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        352,
+        322,
+        382
+       ],
+       "label": "text",
+       "order": 4,
+       "status": "ok",
+       "content": "投标截止：2026-09-12",
+       "regions": [
+        [
+         86,
+         352,
+         322,
+         382
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        407,
+        533,
+        436
+       ],
+       "label": "text",
+       "order": 5,
+       "status": "ok",
+       "content": "采购范围：48口交换机、万兆上联、堆叠。",
+       "regions": [
+        [
+         86,
+         407,
+         533,
+         436
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        86,
+        461,
+        630,
+        490
+       ],
+       "label": "text",
+       "order": 6,
+       "status": "ok",
+       "content": "公开采购通知；供潜在供应商了解项目及截止时间。",
+       "regions": [
+        [
+         86,
+         461,
+         630,
+         490
+        ]
+       ],
+       "inline_formula_mixed": false
+      }
+     ],
+     "rotation": {
+      "applied": false,
+      "enabled": true,
+      "confirmed": null,
+      "total_angle": 0.0,
+      "deskew_angle": 0.0,
+      "skipped_reason": null,
+      "predicted_angle": 0,
+      "predicted_score": 0.9235,
+      "orientation_angle": 0
+     },
+     "request_id": "e3d9716816d74aac8213e13c05fb03ed",
+     "image_width": 1190,
+     "image_height": 1684,
+     "coordinate_space": "processed_image"
+    },
+    "usage": {
+     "total_tokens": 2061,
+     "prompt_tokens": 1990,
+     "completion_tokens": 71
+    },
+    "issues": [],
+    "choices": [
+     {
+      "message": {
+       "content": "## 采购公告\n\n项目编号：ED26-073\n\n采购人：北屿职业学院\n\n事项：校园网络改造\n\n投标截止：2026-09-12\n\n采购范围：48口交换机、万兆上联、堆叠。\n\n公开采购通知；供潜在供应商了解项目及截止时间。"
+      }
+     }
+    ],
+    "metadata": {
+     "page_index": 0
+    },
+    "request_id": "e3d9716816d74aac8213e13c05fb03ed",
+    "result_status": "complete"
+   }
+  ],
+  "markdown": "## 采购公告\n\n项目编号：ED26-073\n\n采购人：北屿职业学院\n\n事项：校园网络改造\n\n投标截止：2026-09-12\n\n采购范围：48口交换机、万兆上联、堆叠。\n\n公开采购通知；供潜在供应商了解项目及截止时间。",
+  "created_at": "2026-11-26T13:05:08.097651Z"
+ }
+}

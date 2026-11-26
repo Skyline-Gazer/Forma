@@ -1,0 +1,138 @@
+{
+ "upload_status": 200,
+ "file_id": "mf_0289bef6-0ddf-4a81-b9df-572c0c4bc621",
+ "job": {
+  "id": "ocr_bb4e42c2-ba5f-470c-a091-4bcaff4b9110",
+  "status": "Success",
+  "pages_done": 1,
+  "pages_total": 1,
+  "pages": [
+   {
+    "ocr": {
+     "mode": "ocr_only",
+     "blocks": [
+      {
+       "bbox": [
+        85,
+        87,
+        413,
+        133
+       ],
+       "label": "paragraph_title",
+       "order": 0,
+       "status": "ok",
+       "content": "后岳通用产品目录",
+       "regions": [
+        [
+         85,
+         87,
+         413,
+         133
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        85,
+        190,
+        463,
+        222
+       ],
+       "label": "text",
+       "order": 1,
+       "status": "ok",
+       "content": "启岳科技通用交换及存储产品目录。",
+       "regions": [
+        [
+         85,
+         190,
+         463,
+         222
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        85,
+        244,
+        464,
+        275
+       ],
+       "label": "text",
+       "order": 2,
+       "status": "ok",
+       "content": "不含项目编号、采购人或专属授权。",
+       "regions": [
+        [
+         85,
+         244,
+         464,
+         275
+        ]
+       ],
+       "inline_formula_mixed": false
+      },
+      {
+       "bbox": [
+        84,
+        298,
+        440,
+        330
+       ],
+       "label": "text",
+       "order": 3,
+       "status": "ok",
+       "content": "适用于多个客户的前期技术选型。",
+       "regions": [
+        [
+         84,
+         298,
+         440,
+         330
+        ]
+       ],
+       "inline_formula_mixed": false
+      }
+     ],
+     "rotation": {
+      "applied": false,
+      "enabled": true,
+      "confirmed": null,
+      "total_angle": 0.0,
+      "deskew_angle": 0.0,
+      "skipped_reason": "gated",
+      "predicted_angle": null,
+      "predicted_score": null,
+      "orientation_angle": 0
+     },
+     "request_id": "8b1ca099bf3e4cf3b4820672a4e287cb",
+     "image_width": 1190,
+     "image_height": 1684,
+     "coordinate_space": "processed_image"
+    },
+    "usage": {
+     "total_tokens": 1195,
+     "prompt_tokens": 1160,
+     "completion_tokens": 35
+    },
+    "issues": [],
+    "choices": [
+     {
+      "message": {
+       "content": "## 后岳通用产品目录\n\n启岳科技通用交换及存储产品目录。\n\n不含项目编号、采购人或专属授权。\n\n适用于多个客户的前期技术选型。"
+      }
+     }
+    ],
+    "metadata": {
+     "page_index": 0
+    },
+    "request_id": "8b1ca099bf3e4cf3b4820672a4e287cb",
+    "result_status": "complete"
+   }
+  ],
+  "markdown": "## 后岳通用产品目录\n\n启岳科技通用交换及存储产品目录。\n\n不含项目编号、采购人或专属授权。\n\n适用于多个客户的前期技术选型。",
+  "created_at": "2026-11-26T13:05:20.006034Z"
+ }
+}
