@@ -1,0 +1,10 @@
+已按批准计划完成全部 19 项移动与重命名。10 项待确认文件均保持原位。整理后共 29 份文件。
+
+Helper 返回 `completed`；应用后核对确认 19 个目标存在、原源路径已释放、文件大小符合扫描快照，待确认项仍在原路径。未执行删除、复制、覆盖、改扩展名或正文修改。
+
+- [执行结果报告](/private/tmp/sorty-skill03-result.md)
+- [Journal](/private/tmp/sorty-skill03-state/journals/78e9c3817a7646b689cfb163c0106d19.jsonl)
+- [应用计划](/private/tmp/sorty-skill03-plan.json)
+- [整理后扫描快照](/private/tmp/sorty-skill03-scan-after.json)
+
+完整性校验由 helper 在移动过程中执行；未另做逐文件前后哈希比对。

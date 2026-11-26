@@ -1,0 +1,56 @@
+{
+  "exclusions": [],
+  "generated_at": "2026-11-26T09:35:38.944085+00:00",
+  "items": [
+    {
+      "device": 16777230,
+      "inode": 73562909,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.519543+00:00",
+      "modified_ns": 1795685087519542871,
+      "path": "invoice-overdue-1.pdf",
+      "size": 10,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562909,
+        "kind": "file",
+        "modified_ns": 1795685087519542871,
+        "size": 10
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562910,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.519634+00:00",
+      "modified_ns": 1795685087519634455,
+      "path": "invoice-overdue-2.pdf",
+      "size": 10,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562910,
+        "kind": "file",
+        "modified_ns": 1795685087519634455,
+        "size": 10
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562911,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.519725+00:00",
+      "modified_ns": 1795685087519725331,
+      "path": "invoice-paid.pdf",
+      "size": 5,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562911,
+        "kind": "file",
+        "modified_ns": 1795685087519725331,
+        "size": 5
+      }
+    }
+  ],
+  "source_root": "/Users/bench/Sorty-Benchmark/v1/run.5DF0O7rG/hosts/official-eval/tags",
+  "version": 2
+}

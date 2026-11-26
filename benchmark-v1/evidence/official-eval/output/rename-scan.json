@@ -1,0 +1,72 @@
+{
+  "exclusions": [],
+  "generated_at": "2026-11-26T09:35:38.350457+00:00",
+  "items": [
+    {
+      "device": 16777230,
+      "inode": 73562864,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.515662+00:00",
+      "modified_ns": 1795685087515661721,
+      "path": "INVOICE_ACME_0042_v1.PDF",
+      "size": 21,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562864,
+        "kind": "file",
+        "modified_ns": 1795685087515661721,
+        "size": 21
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562865,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.515762+00:00",
+      "modified_ns": 1795685087515761597,
+      "path": "INVOICE_ACME_0042_v2.PDF",
+      "size": 21,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562865,
+        "kind": "file",
+        "modified_ns": 1795685087515761597,
+        "size": 21
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562866,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.515858+00:00",
+      "modified_ns": 1795685087515858181,
+      "path": "INVOICE_ACME_0042_v2.txt",
+      "size": 10,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562866,
+        "kind": "file",
+        "modified_ns": 1795685087515858181,
+        "size": 10
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562867,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.515953+00:00",
+      "modified_ns": 1795685087515953306,
+      "path": "notes.txt",
+      "size": 12,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562867,
+        "kind": "file",
+        "modified_ns": 1795685087515953306,
+        "size": 12
+      }
+    }
+  ],
+  "source_root": "/Users/bench/Sorty-Benchmark/v1/run.5DF0O7rG/hosts/official-eval/rename",
+  "version": 2
+}

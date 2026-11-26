@@ -1,0 +1,136 @@
+{
+  "exclusions": [],
+  "generated_at": "2026-11-26T09:35:38.253853+00:00",
+  "items": [
+    {
+      "device": 16777230,
+      "inode": 73562854,
+      "kind": "directory",
+      "modified_at": "2026-11-26T09:24:47.514835+00:00",
+      "modified_ns": 1795685087514835008,
+      "path": "Chemistry",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562854,
+        "kind": "directory",
+        "modified_ns": 1795685087514835008,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562855,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.514898+00:00",
+      "modified_ns": 1795685087514898008,
+      "path": "Chemistry/equilibrium-notes.txt",
+      "size": 28,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562855,
+        "kind": "file",
+        "modified_ns": 1795685087514898008,
+        "size": 28
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562856,
+      "kind": "directory",
+      "modified_at": "2026-11-26T09:24:47.515010+00:00",
+      "modified_ns": 1795685087515009884,
+      "path": "English EE",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562856,
+        "kind": "directory",
+        "modified_ns": 1795685087515009884,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562857,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.515059+00:00",
+      "modified_ns": 1795685087515058884,
+      "path": "English EE/source-notes.txt",
+      "size": 36,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562857,
+        "kind": "file",
+        "modified_ns": 1795685087515058884,
+        "size": 36
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562858,
+      "kind": "directory",
+      "modified_at": "2026-11-26T09:24:47.515363+00:00",
+      "modified_ns": 1795685087515362594,
+      "path": "Inbox",
+      "size": 160,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562858,
+        "kind": "directory",
+        "modified_ns": 1795685087515362594,
+        "size": 160
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562860,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.515310+00:00",
+      "modified_ns": 1795685087515309552,
+      "path": "Inbox/0042.txt",
+      "size": 69,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562860,
+        "kind": "file",
+        "modified_ns": 1795685087515309552,
+        "size": 69
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562859,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.515205+00:00",
+      "modified_ns": 1795685087515204885,
+      "path": "Inbox/chemistry-equilibrium-practice.txt",
+      "size": 20,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562859,
+        "kind": "file",
+        "modified_ns": 1795685087515204885,
+        "size": 20
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562861,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.515404+00:00",
+      "modified_ns": 1795685087515404219,
+      "path": "Inbox/draft.txt",
+      "size": 6,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562861,
+        "kind": "file",
+        "modified_ns": 1795685087515404219,
+        "size": 6
+      }
+    }
+  ],
+  "source_root": "/Users/bench/Sorty-Benchmark/v1/run.5DF0O7rG/hosts/official-eval/school",
+  "version": 2
+}

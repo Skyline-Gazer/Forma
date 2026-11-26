@@ -1,0 +1,43 @@
+{
+  "duplicate_groups": [],
+  "exclusions": [],
+  "mode": "renameOnly",
+  "operations": [
+    {
+      "destination": "invoice-acme-0042-v1.PDF",
+      "expected": {
+        "device": 16777230,
+        "inode": 73562864,
+        "kind": "file",
+        "modified_ns": 1795685087515661721,
+        "size": 21
+      },
+      "source": "INVOICE_ACME_0042_v1.PDF"
+    },
+    {
+      "destination": "invoice-acme-0042-v2.PDF",
+      "expected": {
+        "device": 16777230,
+        "inode": 73562865,
+        "kind": "file",
+        "modified_ns": 1795685087515761597,
+        "size": 21
+      },
+      "source": "INVOICE_ACME_0042_v2.PDF"
+    }
+  ],
+  "source_root": "/Users/bench/Sorty-Benchmark/v1/run.5DF0O7rG/hosts/official-eval/rename",
+  "tags": [],
+  "unorganized": [
+    {
+      "path": "INVOICE_ACME_0042_v2.txt",
+      "reason": "Not a PDF; request covers invoice PDFs only"
+    },
+    {
+      "path": "notes.txt",
+      "reason": "Not an invoice PDF"
+    }
+  ],
+  "version": 2,
+  "warnings": []
+}

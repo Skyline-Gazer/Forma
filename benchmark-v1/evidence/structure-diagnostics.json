@@ -1,0 +1,49 @@
+{
+ "GUI-01": {
+  "files": 29,
+  "dirs": 72,
+  "max_depth": 7,
+  "depth_hist": {
+   "2": 3,
+   "3": 6,
+   "4": 4,
+   "5": 4,
+   "6": 8,
+   "7": 4
+  },
+  "empty_dirs": 11,
+  "files_kept_at_original_path": 25,
+  "files_moved_or_renamed": 4
+ },
+ "SKILL-01": {
+  "files": 29,
+  "dirs": 71,
+  "max_depth": 7,
+  "depth_hist": {
+   "1": 1,
+   "2": 2,
+   "3": 20,
+   "4": 1,
+   "6": 3,
+   "7": 2
+  },
+  "empty_dirs": 16,
+  "files_kept_at_original_path": 9,
+  "files_moved_or_renamed": 20
+ },
+ "CONTROL-01": {
+  "files": 29,
+  "dirs": 69,
+  "max_depth": 7,
+  "depth_hist": {
+   "2": 3,
+   "3": 20,
+   "4": 1,
+   "6": 3,
+   "7": 2
+  },
+  "empty_dirs": 16,
+  "files_kept_at_original_path": 9,
+  "files_moved_or_renamed": 20
+ }
+}

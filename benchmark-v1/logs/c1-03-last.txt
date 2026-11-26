@@ -1,0 +1,7 @@
+预览已完成，**尚未移动或改名任何文件**。
+
+- [查看逐文件预览报告](/private/tmp/sorty-skill03-preview.md)：包含建议目录、19 项拟移动/改名、10 项原位待确认、业务关系证据、元数据与 Smart Groups 建议，以及能力边界。
+- [查看 Sorty 原始计划](/private/tmp/sorty-skill03-plan.json)
+- [查看验证结果](/private/tmp/sorty-skill03-validation.json)：计划有效，0 个错误；29 份文件均已计入。
+
+PDF 扫描件无法进行 OCR，已列为待确认；没有使用云端模型。报告、计划和日志均保存在 `workspace/` 外。依照你的要求，我会停在预览阶段，等待你批准后再应用。

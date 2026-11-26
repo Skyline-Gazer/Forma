@@ -1,0 +1,56 @@
+{
+  "exclusions": [],
+  "generated_at": "2026-11-26T09:35:38.845234+00:00",
+  "items": [
+    {
+      "device": 16777230,
+      "inode": 73562907,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.519391+00:00",
+      "modified_ns": 1795685087519390828,
+      "path": "IMG_0042.HEIC",
+      "size": 13,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562907,
+        "kind": "file",
+        "modified_ns": 1795685087519390828,
+        "size": 13
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562905,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.519212+00:00",
+      "modified_ns": 1795685087519211911,
+      "path": "Screen Shot 2026-03-04 at 10.15.22.png",
+      "size": 6,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562905,
+        "kind": "file",
+        "modified_ns": 1795685087519211911,
+        "size": 6
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562906,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.519305+00:00",
+      "modified_ns": 1795685087519304578,
+      "path": "Screen Shot 2026-03-05 at 09.01.10.png",
+      "size": 6,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562906,
+        "kind": "file",
+        "modified_ns": 1795685087519304578,
+        "size": 6
+      }
+    }
+  ],
+  "source_root": "/Users/bench/Sorty-Benchmark/v1/run.5DF0O7rG/hosts/official-eval/screenshots",
+  "version": 2
+}

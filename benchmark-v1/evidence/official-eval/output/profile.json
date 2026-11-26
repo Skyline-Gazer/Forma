@@ -1,0 +1,11 @@
+{
+  "agentExclusions": [],
+  "agentLearnings": [],
+  "preferences": {
+    "renameNamingOptions": {
+      "separator": "underscore",
+      "caseStyle": "snake",
+      "datePolicy": "whenFound"
+    }
+  }
+}

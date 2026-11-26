@@ -1,0 +1,99 @@
+workspace
+workspace/下载
+workspace/下载/待处理
+workspace/下载/待处理/产品介绍.pdf
+workspace/下载/待处理/批次1
+workspace/下载/待处理/批次2
+workspace/下载/待处理/批次3
+workspace/临时
+workspace/临时/厂商
+workspace/临时/厂商/启岳
+workspace/临时/厂商/启岳/附件
+workspace/临时/厂商/启岳/附件/批次1
+workspace/临时/厂商/启岳/附件/批次2
+workspace/临时/厂商/启岳/附件/批次3
+workspace/临时/厂商/启岳/附件/报价.xlsx
+workspace/历史
+workspace/历史/2024
+workspace/历史/2024/已完成
+workspace/历史/2024/已完成/参考
+workspace/历史/2024/已完成/参考/技术
+workspace/历史/2025
+workspace/历史/2025/已完成
+workspace/历史/2025/已完成/参考
+workspace/历史/2025/已完成/参考/技术
+workspace/历史/2025/已完成/参考/技术/批次1
+workspace/历史/2025/已完成/参考/技术/批次2
+workspace/历史/2025/已完成/参考/技术/批次3
+workspace/历史/2025/已完成/参考/技术/批次3/公告.pdf
+workspace/旧归档
+workspace/旧归档/2024
+workspace/旧归档/2024/已完成
+workspace/旧归档/2024/已完成/医疗
+workspace/旧归档/2024/已完成/医疗/客户资料
+workspace/旧归档/2024/已完成/医疗/客户资料/其他
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次1
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次1/公告.pdf
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次2
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次2/授权函.pdf
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次3
+workspace/桌面备份
+workspace/桌面备份/新建文件夹
+workspace/桌面备份/新建文件夹/扫描件.pdf
+workspace/桌面备份/新建文件夹/批次1
+workspace/桌面备份/新建文件夹/批次1/授权函.pdf
+workspace/桌面备份/新建文件夹/批次2
+workspace/桌面备份/新建文件夹/批次3
+workspace/通用参考
+workspace/通用参考/技术方案模板
+workspace/通用参考/技术方案模板/旧川市公立医院机房改造_历史方案模板.docx
+workspace/邮件附件
+workspace/邮件附件/转发
+workspace/邮件附件/转发/待整理
+workspace/邮件附件/转发/待整理/批次1
+workspace/邮件附件/转发/待整理/批次2
+workspace/邮件附件/转发/待整理/批次3
+workspace/项目
+workspace/项目/2026
+workspace/项目/2026/新建
+workspace/项目/2026/新建/未确认
+workspace/项目/2026/新建/未确认/资料
+workspace/项目/2026/新建/未确认/资料/批次1
+workspace/项目/2026/新建/未确认/资料/批次2
+workspace/项目/2026/新建/未确认/资料/批次2/公告.pdf
+workspace/项目/2026/新建/未确认/资料/批次3
+workspace/项目/2026/新建/未确认/资料/批次3/授权函.pdf
+workspace/项目/ED26-073 北屿职业学院 校园网络改造
+workspace/项目/ED26-073 北屿职业学院 校园网络改造/响应与报价
+workspace/项目/ED26-073 北屿职业学院 校园网络改造/响应与报价/制造商渠道报价_启岳科技_内部成本.xlsx
+workspace/项目/ED26-073 北屿职业学院 校园网络改造/响应与报价/技术响应_V0.3_内部审阅.docx
+workspace/项目/ED26-073 北屿职业学院 校园网络改造/响应与报价/技术响应_V1.0_批准提交.docx
+workspace/项目/ED26-073 北屿职业学院 校园网络改造/过程记录
+workspace/项目/ED26-073 北屿职业学院 校园网络改造/过程记录/内部项目资料说明.txt
+workspace/项目/ED26-073 北屿职业学院 校园网络改造/过程记录/项目协调记录.txt
+workspace/项目/ED26-073 北屿职业学院 校园网络改造/递交记录
+workspace/项目/ED26-073 北屿职业学院 校园网络改造/递交记录/最终递交确认.txt
+workspace/项目/ED26-073 北屿职业学院 校园网络改造/采购文件
+workspace/项目/ED26-073 北屿职业学院 校园网络改造/采购文件/采购技术要求.xlsx
+workspace/项目/HC26-041 澄湾市仁泽医院 数据中心存储扩容
+workspace/项目/HC26-041 澄湾市仁泽医院 数据中心存储扩容/响应与报价
+workspace/项目/HC26-041 澄湾市仁泽医院 数据中心存储扩容/响应与报价/制造商渠道报价_启岳科技_内部成本.xlsx
+workspace/项目/HC26-041 澄湾市仁泽医院 数据中心存储扩容/响应与报价/技术响应_V0.3_内部审阅.docx
+workspace/项目/HC26-041 澄湾市仁泽医院 数据中心存储扩容/响应与报价/技术响应_V1.0_批准提交.docx
+workspace/项目/HC26-041 澄湾市仁泽医院 数据中心存储扩容/过程记录
+workspace/项目/HC26-041 澄湾市仁泽医院 数据中心存储扩容/过程记录/项目协调记录.txt
+workspace/项目/HC26-041 澄湾市仁泽医院 数据中心存储扩容/递交记录
+workspace/项目/HC26-041 澄湾市仁泽医院 数据中心存储扩容/递交记录/最终递交确认.txt
+workspace/项目/HC26-041 澄湾市仁泽医院 数据中心存储扩容/采购文件
+workspace/项目/HC26-041 澄湾市仁泽医院 数据中心存储扩容/采购文件/采购技术要求.xlsx
+workspace/项目/LG25-019 星港物流中心 虚拟化平台更新
+workspace/项目/LG25-019 星港物流中心 虚拟化平台更新/响应与报价
+workspace/项目/LG25-019 星港物流中心 虚拟化平台更新/响应与报价/制造商渠道报价_矩川科技_内部成本.xlsx
+workspace/项目/LG25-019 星港物流中心 虚拟化平台更新/响应与报价/技术响应_V0.3_内部审阅.docx
+workspace/项目/LG25-019 星港物流中心 虚拟化平台更新/响应与报价/技术响应_V1.0_批准提交.docx
+workspace/项目/LG25-019 星港物流中心 虚拟化平台更新/过程记录
+workspace/项目/LG25-019 星港物流中心 虚拟化平台更新/过程记录/项目协调记录.txt
+workspace/项目/LG25-019 星港物流中心 虚拟化平台更新/递交记录
+workspace/项目/LG25-019 星港物流中心 虚拟化平台更新/递交记录/最终递交确认.txt
+workspace/项目/LG25-019 星港物流中心 虚拟化平台更新/采购文件
+workspace/项目/LG25-019 星港物流中心 虚拟化平台更新/采购文件/采购技术要求.xlsx

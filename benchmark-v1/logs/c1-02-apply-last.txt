@@ -1,0 +1,8 @@
+已完成整理：22 项全部移动并重命名，3 项待确认资料与 1 项跨项目模板保持原位。Sorty helper 应用前校验通过，应用报告为 `completed 22`；应用后 22 个目标均存在，原路径均已清空，文件大小、设备号和 inode 与原扫描快照一致。操作使用同卷 `rename`，未修改正文或扩展名。
+
+Journal 和结果报告均保存在 workspace 外：
+
+- [Journal](/private/tmp/sorty-state/journals/c1569f9c6dc34971a1a756148aebd9b8.jsonl)
+- [执行结果报告](/private/tmp/sorty-result-report.txt)
+
+结果报告注明：未单独计算全文件 SHA-256，字节内容未作独立哈希复核。

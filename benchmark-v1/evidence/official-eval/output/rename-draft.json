@@ -1,0 +1,24 @@
+{
+  "mode": "renameOnly",
+  "operations": [
+    {
+      "source": "INVOICE_ACME_0042_v1.PDF",
+      "destination": "invoice-acme-0042-v1.PDF"
+    },
+    {
+      "source": "INVOICE_ACME_0042_v2.PDF",
+      "destination": "invoice-acme-0042-v2.PDF"
+    }
+  ],
+  "unorganized": [
+    {
+      "path": "INVOICE_ACME_0042_v2.txt",
+      "reason": "Not a PDF; request covers invoice PDFs only"
+    },
+    {
+      "path": "notes.txt",
+      "reason": "Not an invoice PDF"
+    }
+  ],
+  "warnings": []
+}

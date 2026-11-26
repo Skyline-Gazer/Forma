@@ -1,0 +1,36 @@
+{
+  "duplicate_groups": [],
+  "exclusions": [
+    "Keep/**"
+  ],
+  "mode": "organize",
+  "operations": [
+    {
+      "destination": "Chemistry/chemistry-equilibrium.txt",
+      "expected": {
+        "device": 16777230,
+        "inode": 73562871,
+        "kind": "file",
+        "modified_ns": 1795685087516258308,
+        "size": 12
+      },
+      "source": "chemistry-equilibrium.txt"
+    },
+    {
+      "destination": "Chemistry/chemistry-kinetics.txt",
+      "expected": {
+        "device": 16777230,
+        "inode": 73562872,
+        "kind": "file",
+        "modified_ns": 1795685087516353017,
+        "size": 9
+      },
+      "source": "chemistry-kinetics.txt"
+    }
+  ],
+  "source_root": "/Users/bench/Sorty-Benchmark/v1/run.5DF0O7rG/hosts/official-eval/apply",
+  "tags": [],
+  "unorganized": [],
+  "version": 2,
+  "warnings": []
+}

@@ -1,0 +1,28 @@
+{
+ "timestamps_epoch": {
+  "plan_start": 1795688216,
+  "plan_end": 1795688578,
+  "apply_start": 1795688590,
+  "apply_end": 1795688650
+ },
+ "wall_clock": {
+  "plan_seconds": 362,
+  "apply_seconds": 60,
+  "total_seconds": 434
+ },
+ "owner_interactions": {
+  "approval_requests": 0,
+  "detail": "covered by runs 02-03 preauthorization"
+ },
+ "plan": {
+  "operations": 22,
+  "unresolved": 3,
+  "left_in_place_ref_template": 1,
+  "validation": "valid",
+  "mode": "organizeAndRename"
+ },
+ "errors": [],
+ "retries": 0,
+ "tokens": "NOT_VERIFIED",
+ "cost": "NOT_VERIFIED"
+}

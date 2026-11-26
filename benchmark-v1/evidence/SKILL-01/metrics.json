@@ -1,0 +1,47 @@
+{
+ "timestamps_epoch": {
+  "plan_start": 1795684986,
+  "plan_end": 1795685191,
+  "apply_start": 1795685256,
+  "apply_end": 1795685378
+ },
+ "wall_clock": {
+  "plan_seconds": 205,
+  "apply_seconds": 122,
+  "blocked_resume_retry_seconds": 31,
+  "total_seconds": 392,
+  "note": "first resume attempt ran with wrong cwd and was correctly refused by the agent (0 writes); one retry from the arm directory then succeeded"
+ },
+ "owner_interactions": {
+  "approval_requests": 1,
+  "approvals_granted": 2,
+  "between_phase_human_steps": 1,
+  "detail": "owner pre-authorized apply; orchestrator confirmed the plan and resumed the same session"
+ },
+ "plan": {
+  "operations": 20,
+  "unresolved_kept_in_place": 9,
+  "validation": "valid",
+  "mode": "organizeAndRename",
+  "destructive_ops": 0,
+  "copies": 0,
+  "extension_changes": 0
+ },
+ "native_metrics": {
+  "tokens": "NOT_VERIFIED (Codex event log retained)",
+  "cost": "NOT_VERIFIED",
+  "conversations": 2,
+  "apply_journal": "evidence/SKILL-01/journal/"
+ },
+ "errors": [
+  "first apply resume refused: sandbox root was the Forma repo, not the arm (safety behaviour, 0 writes)"
+ ],
+ "retries": 1,
+ "exports": {
+  "plan_json": true,
+  "validation_json": true,
+  "scan_json": true,
+  "preview_md": true,
+  "journal_jsonl": true
+ }
+}

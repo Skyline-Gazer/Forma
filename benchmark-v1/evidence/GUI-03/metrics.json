@@ -1,0 +1,32 @@
+{
+ "timestamps_epoch": {
+  "start": 1795688080,
+  "preview_ready": 1795688173,
+  "apply_click": 1795688182,
+  "apply_complete": 1795688198
+ },
+ "wall_clock": {
+  "analysis_and_preview_seconds": 93,
+  "apply_seconds": 16,
+  "total_seconds": 118
+ },
+ "owner_interactions": {
+  "approval_requests": 0,
+  "approvals_granted": "covered by run02-03 preauth"
+ },
+ "native_metrics": {
+  "files_organized": 29,
+  "folders_created": 7,
+  "names_improved": 3,
+  "files_moved": 4,
+  "files_left_in_place": 25
+ },
+ "errors": [],
+ "retries": 0,
+ "tokens": "NOT_VERIFIED",
+ "rollback": {
+  "undo_tree": "identical to pre-apply",
+  "undo_hashes": "identical",
+  "redo": "identical to applied"
+ }
+}

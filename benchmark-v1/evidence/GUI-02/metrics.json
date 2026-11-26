@@ -1,0 +1,35 @@
+{
+ "timestamps_epoch": {
+  "start": 1795687634,
+  "preview_ready": 1795687821,
+  "apply_click": 1795688010,
+  "apply_complete": 1795688026
+ },
+ "wall_clock": {
+  "analysis_and_preview_seconds": 187,
+  "apply_seconds": 16,
+  "total_seconds": 392,
+  "note": "includes one owner approval gate before apply"
+ },
+ "owner_interactions": {
+  "approval_requests": 1,
+  "approvals_granted": 1,
+  "scope": "apply for runs 02-03"
+ },
+ "native_metrics": {
+  "files_organized": 29,
+  "folders_created": 9,
+  "names_improved": 3,
+  "files_moved": 4,
+  "files_left_in_place": 25,
+  "cost_usd": "NOT_VERIFIED_BY_UI_THIS_RUN"
+ },
+ "errors": [],
+ "retries": 0,
+ "tokens": "NOT_VERIFIED",
+ "rollback": {
+  "undo_tree": "byte-identical to fresh baseline",
+  "undo_hashes": "identical",
+  "redo": "identical to applied state"
+ }
+}

@@ -1,0 +1,152 @@
+{
+  "exclusions": [],
+  "generated_at": "2026-11-26T09:35:38.745100+00:00",
+  "items": [
+    {
+      "device": 16777230,
+      "inode": 73562896,
+      "kind": "directory",
+      "modified_at": "2026-11-26T09:24:47.518531+00:00",
+      "modified_ns": 1795685087518530948,
+      "path": "backup",
+      "size": 128,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562896,
+        "kind": "directory",
+        "modified_ns": 1795685087518530948,
+        "size": 128
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562897,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.518375+00:00",
+      "modified_ns": 1795685087518375322,
+      "path": "backup/beach copy.jpg",
+      "size": 14,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562897,
+        "kind": "file",
+        "modified_ns": 1795685087518375322,
+        "size": 14
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562899,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.518570+00:00",
+      "modified_ns": 1795685087518569823,
+      "path": "backup/sunset.jpg",
+      "size": 15,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562899,
+        "kind": "file",
+        "modified_ns": 1795685087518569823,
+        "size": 15
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562900,
+      "kind": "directory",
+      "modified_at": "2026-11-26T09:24:47.519059+00:00",
+      "modified_ns": 1795685087519058618,
+      "path": "docs",
+      "size": 128,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562900,
+        "kind": "directory",
+        "modified_ns": 1795685087519058618,
+        "size": 128
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562901,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.518697+00:00",
+      "modified_ns": 1795685087518697074,
+      "path": "docs/report-link.txt",
+      "size": 17,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562901,
+        "kind": "file",
+        "modified_ns": 1795685087518697074,
+        "size": 17
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562901,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.518697+00:00",
+      "modified_ns": 1795685087518697074,
+      "path": "docs/report.txt",
+      "size": 17,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562901,
+        "kind": "file",
+        "modified_ns": 1795685087518697074,
+        "size": 17
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562894,
+      "kind": "directory",
+      "modified_at": "2026-11-26T09:24:47.518426+00:00",
+      "modified_ns": 1795685087518425781,
+      "path": "photos",
+      "size": 128,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562894,
+        "kind": "directory",
+        "modified_ns": 1795685087518425781,
+        "size": 128
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562895,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.518239+00:00",
+      "modified_ns": 1795685087518238446,
+      "path": "photos/beach.jpg",
+      "size": 14,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562895,
+        "kind": "file",
+        "modified_ns": 1795685087518238446,
+        "size": 14
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562898,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.518481+00:00",
+      "modified_ns": 1795685087518480739,
+      "path": "photos/sunset.jpg",
+      "size": 15,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562898,
+        "kind": "file",
+        "modified_ns": 1795685087518480739,
+        "size": 15
+      }
+    }
+  ],
+  "source_root": "/Users/bench/Sorty-Benchmark/v1/run.5DF0O7rG/hosts/official-eval/duplicates",
+  "version": 2
+}

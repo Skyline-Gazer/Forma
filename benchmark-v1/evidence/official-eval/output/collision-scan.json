@@ -1,0 +1,104 @@
+{
+  "exclusions": [],
+  "generated_at": "2026-11-26T09:35:38.546297+00:00",
+  "items": [
+    {
+      "device": 16777230,
+      "inode": 73562877,
+      "kind": "directory",
+      "modified_at": "2026-11-26T09:24:47.517102+00:00",
+      "modified_ns": 1795685087517101814,
+      "path": "Downloads",
+      "size": 160,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562877,
+        "kind": "directory",
+        "modified_ns": 1795685087517101814,
+        "size": 160
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562880,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.517149+00:00",
+      "modified_ns": 1795685087517148689,
+      "path": "Downloads/notes.txt",
+      "size": 14,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562880,
+        "kind": "file",
+        "modified_ns": 1795685087517148689,
+        "size": 14
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562878,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.516945+00:00",
+      "modified_ns": 1795685087516945021,
+      "path": "Downloads/receipt-2024.pdf",
+      "size": 28,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562878,
+        "kind": "file",
+        "modified_ns": 1795685087516945021,
+        "size": 28
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562879,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.517049+00:00",
+      "modified_ns": 1795685087517048897,
+      "path": "Downloads/receipt-2025.pdf",
+      "size": 13,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562879,
+        "kind": "file",
+        "modified_ns": 1795685087517048897,
+        "size": 13
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562881,
+      "kind": "directory",
+      "modified_at": "2026-11-26T09:24:47.517251+00:00",
+      "modified_ns": 1795685087517251231,
+      "path": "Receipts",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562881,
+        "kind": "directory",
+        "modified_ns": 1795685087517251231,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562882,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.517294+00:00",
+      "modified_ns": 1795685087517293732,
+      "path": "Receipts/receipt-2024.pdf",
+      "size": 23,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562882,
+        "kind": "file",
+        "modified_ns": 1795685087517293732,
+        "size": 23
+      }
+    }
+  ],
+  "source_root": "/Users/bench/Sorty-Benchmark/v1/run.5DF0O7rG/hosts/official-eval/collision",
+  "version": 2
+}

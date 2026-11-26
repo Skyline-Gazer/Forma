@@ -1,0 +1,102 @@
+workspace
+workspace/02_AREAS
+workspace/02_AREAS/BID-TEMPLATES
+workspace/ED26-073 北屿学院网络改造
+workspace/ED26-073 北屿学院网络改造/00_TENDER-DOCS
+workspace/ED26-073 北屿学院网络改造/01_TECHNICAL-BID
+workspace/ED26-073 北屿学院网络改造/01_TECHNICAL-BID/ED26 073 技术响应 V1 0 已批准.docx
+workspace/ED26-073 北屿学院网络改造/04_SUBMISSION
+workspace/ED26-073 北屿学院网络改造/99_WIP
+workspace/ED26-073 北屿学院网络改造/99_WIP/ED26 073 内部项目协调说明.txt
+workspace/HC26-041 澄湾医院存储扩容
+workspace/HC26-041 澄湾医院存储扩容/00_TENDER-DOCS
+workspace/HC26-041 澄湾医院存储扩容/01_TECHNICAL-BID
+workspace/HC26-041 澄湾医院存储扩容/04_SUBMISSION
+workspace/HC26-041 澄湾医院存储扩容/99_WIP
+workspace/LG25-019 星港物流平台更新
+workspace/LG25-019 星港物流平台更新/00_TENDER-DOCS
+workspace/LG25-019 星港物流平台更新/01_TECHNICAL-BID
+workspace/LG25-019 星港物流平台更新/04_SUBMISSION
+workspace/LG25-019 星港物流平台更新/99_WIP
+workspace/SHARED-AND-REVIEW
+workspace/SHARED-AND-REVIEW/02_AREAS
+workspace/SHARED-AND-REVIEW/02_AREAS/VENDOR-REFERENCE
+workspace/SHARED-AND-REVIEW/02_AREAS/VENDOR-REFERENCE/启岳通用交换与存储产品目录.pdf
+workspace/SHARED-AND-REVIEW/99_ATTRIBUTION-PENDING
+workspace/SHARED-AND-REVIEW/99_ATTRIBUTION-PENDING/扫描件.pdf
+workspace/下载
+workspace/下载/待处理
+workspace/下载/待处理/批次1
+workspace/下载/待处理/批次1/技术要求.xlsx
+workspace/下载/待处理/批次2
+workspace/下载/待处理/批次2/交付清单.txt
+workspace/下载/待处理/批次3
+workspace/下载/待处理/批次3/报价.xlsx
+workspace/临时
+workspace/临时/厂商
+workspace/临时/厂商/启岳
+workspace/临时/厂商/启岳/附件
+workspace/临时/厂商/启岳/附件/批次1
+workspace/临时/厂商/启岳/附件/批次1/技术方案_最终.docx
+workspace/临时/厂商/启岳/附件/批次2
+workspace/临时/厂商/启岳/附件/批次2/技术要求.xlsx
+workspace/临时/厂商/启岳/附件/批次3
+workspace/临时/厂商/启岳/附件/批次3/交付清单.txt
+workspace/临时/厂商/启岳/附件/报价.xlsx
+workspace/历史
+workspace/历史/2024
+workspace/历史/2024/已完成
+workspace/历史/2024/已完成/参考
+workspace/历史/2024/已完成/参考/技术
+workspace/历史/2024/已完成/参考/技术/技术方案.docx
+workspace/历史/2025
+workspace/历史/2025/已完成
+workspace/历史/2025/已完成/参考
+workspace/历史/2025/已完成/参考/技术
+workspace/历史/2025/已完成/参考/技术/批次1
+workspace/历史/2025/已完成/参考/技术/批次1/报价.xlsx
+workspace/历史/2025/已完成/参考/技术/批次2
+workspace/历史/2025/已完成/参考/技术/批次2/技术方案.docx
+workspace/历史/2025/已完成/参考/技术/批次3
+workspace/历史/2025/已完成/参考/技术/批次3/公告.pdf
+workspace/历史/2025/已完成/参考/技术/批次3/说明.txt
+workspace/旧归档
+workspace/旧归档/2024
+workspace/旧归档/2024/已完成
+workspace/旧归档/2024/已完成/医疗
+workspace/旧归档/2024/已完成/医疗/客户资料
+workspace/旧归档/2024/已完成/医疗/客户资料/其他
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次1
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次1/公告.pdf
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次1/说明.txt
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次2
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次2/授权函.pdf
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次3
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次3/技术方案_最终.docx
+workspace/桌面备份
+workspace/桌面备份/新建文件夹
+workspace/桌面备份/新建文件夹/批次1
+workspace/桌面备份/新建文件夹/批次1/授权函.pdf
+workspace/桌面备份/新建文件夹/批次3
+workspace/桌面备份/新建文件夹/批次3/技术要求.xlsx
+workspace/邮件附件
+workspace/邮件附件/转发
+workspace/邮件附件/转发/待整理
+workspace/邮件附件/转发/待整理/批次1
+workspace/邮件附件/转发/待整理/批次1/交付清单.txt
+workspace/邮件附件/转发/待整理/批次2
+workspace/邮件附件/转发/待整理/批次2/报价.xlsx
+workspace/邮件附件/转发/待整理/批次3
+workspace/邮件附件/转发/待整理/批次3/技术方案.docx
+workspace/项目
+workspace/项目/2026
+workspace/项目/2026/新建
+workspace/项目/2026/新建/未确认
+workspace/项目/2026/新建/未确认/资料
+workspace/项目/2026/新建/未确认/资料/批次1
+workspace/项目/2026/新建/未确认/资料/批次1/技术方案.docx
+workspace/项目/2026/新建/未确认/资料/批次2
+workspace/项目/2026/新建/未确认/资料/批次2/公告.pdf
+workspace/项目/2026/新建/未确认/资料/批次2/说明.txt
+workspace/项目/2026/新建/未确认/资料/批次3
+workspace/项目/2026/新建/未确认/资料/批次3/授权函.pdf

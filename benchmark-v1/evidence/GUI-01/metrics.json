@@ -1,0 +1,54 @@
+{
+ "timestamps_epoch": {
+  "analysis_start": 1795684574,
+  "apply_click": 1795684840,
+  "apply_complete": 1795684854
+ },
+ "wall_clock": {
+  "analysis_and_preview_seconds": 266,
+  "apply_seconds": 14,
+  "total_seconds": 280,
+  "label": "setup/config excluded; includes model waits and 1 owner gate"
+ },
+ "owner_interactions": {
+  "approval_requests": 1,
+  "approvals_granted": 2,
+  "modes": [
+   "cloud egress of synthetic corpus",
+   "apply pre-authorized conditional on integrity checks"
+  ]
+ },
+ "native_metrics": {
+  "files_organized": 29,
+  "folders_created": 21,
+  "names_improved": 3,
+  "files_moved": 4,
+  "files_left_in_place": 25,
+  "minutes_saved_estimate": 9.7,
+  "cost_usd": 0.0026,
+  "conversations": 1,
+  "success_rate_shown": "100%"
+ },
+ "errors": [],
+ "retries": 0,
+ "token_usage": "NOT_VERIFIED (not exposed; 1 conversation, $0.0026 reported)",
+ "peak_memory": "NOT_VERIFIED",
+ "app_install_size": "85 MB",
+ "native_exports": {
+  "preview_export": "NOT_SUPPORTED (no export control in preview UI)",
+  "history_export": "NOT_SUPPORTED (history list only; run detail row did not expand when clicked)",
+  "screenshots": "captured by orchestrator"
+ },
+ "rollback": {
+  "undo": {
+   "files_restored": 4,
+   "folders_removed": 21,
+   "tree_identical": true,
+   "hashes_identical": true
+  },
+  "redo": {
+   "tree_matches_applied": true,
+   "hashes_match": true
+  }
+ }
+}

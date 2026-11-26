@@ -1,0 +1,88 @@
+workspace
+workspace/Document Identity To Confirm
+workspace/Document Identity To Confirm/扫描件.pdf
+workspace/ED26-073 Campus Network
+workspace/ED26-073 Campus Network/ED26 073 Internal Coordination Note.txt
+workspace/ED26-073 Campus Network/ED26 073 Technical Response Approved V1 0.docx
+workspace/HC26-041 Hospital Storage
+workspace/LG25-019 Virtualization Update
+workspace/Technical Bid Templates
+workspace/Tender Workbooks To Confirm
+workspace/Vendor Reference
+workspace/Vendor Reference/Qiyue General Switching and Storage Catalog.pdf
+workspace/下载
+workspace/下载/待处理
+workspace/下载/待处理/批次1
+workspace/下载/待处理/批次1/技术要求.xlsx
+workspace/下载/待处理/批次2
+workspace/下载/待处理/批次2/交付清单.txt
+workspace/下载/待处理/批次3
+workspace/下载/待处理/批次3/报价.xlsx
+workspace/临时
+workspace/临时/厂商
+workspace/临时/厂商/启岳
+workspace/临时/厂商/启岳/附件
+workspace/临时/厂商/启岳/附件/批次1
+workspace/临时/厂商/启岳/附件/批次1/技术方案_最终.docx
+workspace/临时/厂商/启岳/附件/批次2
+workspace/临时/厂商/启岳/附件/批次2/技术要求.xlsx
+workspace/临时/厂商/启岳/附件/批次3
+workspace/临时/厂商/启岳/附件/批次3/交付清单.txt
+workspace/临时/厂商/启岳/附件/报价.xlsx
+workspace/历史
+workspace/历史/2024
+workspace/历史/2024/已完成
+workspace/历史/2024/已完成/参考
+workspace/历史/2024/已完成/参考/技术
+workspace/历史/2024/已完成/参考/技术/技术方案.docx
+workspace/历史/2025
+workspace/历史/2025/已完成
+workspace/历史/2025/已完成/参考
+workspace/历史/2025/已完成/参考/技术
+workspace/历史/2025/已完成/参考/技术/批次1
+workspace/历史/2025/已完成/参考/技术/批次1/报价.xlsx
+workspace/历史/2025/已完成/参考/技术/批次2
+workspace/历史/2025/已完成/参考/技术/批次2/技术方案.docx
+workspace/历史/2025/已完成/参考/技术/批次3
+workspace/历史/2025/已完成/参考/技术/批次3/公告.pdf
+workspace/历史/2025/已完成/参考/技术/批次3/说明.txt
+workspace/旧归档
+workspace/旧归档/2024
+workspace/旧归档/2024/已完成
+workspace/旧归档/2024/已完成/医疗
+workspace/旧归档/2024/已完成/医疗/客户资料
+workspace/旧归档/2024/已完成/医疗/客户资料/其他
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次1
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次1/公告.pdf
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次1/说明.txt
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次2
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次2/授权函.pdf
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次3
+workspace/旧归档/2024/已完成/医疗/客户资料/其他/批次3/技术方案_最终.docx
+workspace/桌面备份
+workspace/桌面备份/新建文件夹
+workspace/桌面备份/新建文件夹/批次1
+workspace/桌面备份/新建文件夹/批次1/授权函.pdf
+workspace/桌面备份/新建文件夹/批次3
+workspace/桌面备份/新建文件夹/批次3/技术要求.xlsx
+workspace/邮件附件
+workspace/邮件附件/转发
+workspace/邮件附件/转发/待整理
+workspace/邮件附件/转发/待整理/批次1
+workspace/邮件附件/转发/待整理/批次1/交付清单.txt
+workspace/邮件附件/转发/待整理/批次2
+workspace/邮件附件/转发/待整理/批次2/报价.xlsx
+workspace/邮件附件/转发/待整理/批次3
+workspace/邮件附件/转发/待整理/批次3/技术方案.docx
+workspace/项目
+workspace/项目/2026
+workspace/项目/2026/新建
+workspace/项目/2026/新建/未确认
+workspace/项目/2026/新建/未确认/资料
+workspace/项目/2026/新建/未确认/资料/批次1
+workspace/项目/2026/新建/未确认/资料/批次1/技术方案.docx
+workspace/项目/2026/新建/未确认/资料/批次2
+workspace/项目/2026/新建/未确认/资料/批次2/公告.pdf
+workspace/项目/2026/新建/未确认/资料/批次2/说明.txt
+workspace/项目/2026/新建/未确认/资料/批次3
+workspace/项目/2026/新建/未确认/资料/批次3/授权函.pdf

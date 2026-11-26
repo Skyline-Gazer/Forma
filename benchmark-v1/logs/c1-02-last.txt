@@ -1,0 +1,15 @@
+预览已生成并通过 Sorty 校验，**尚未对 workspace 执行任何整理**。
+
+- 拟移动/重命名：22 项，按项目编号、采购人、事项归入 HC26-041、ED26-073、LG25-019 三个项目目录。
+- 待确认：3 项——启岳报价草表、启岳产品目录、未完成审批扫描件。跨项目报价和缺少归属字段的扫描件不会被强行归类。
+- 保持原位：1 个跨项目参考模板。
+- 计划不修改文件正文、不删除、不复制、不改扩展名。
+- 元数据建议与 Smart Groups 查询维度已写入预览说明。Sorty helper 不提供业务元数据写入能力；建议内容已明确记录。
+
+审阅材料均在 workspace 外：
+
+- [整理预览与逐项清单](/private/tmp/sorty-preview.txt)
+- [Sorty 原始预览计划](/private/tmp/sorty-preview-plan-original.json)
+- [原始扫描快照](/private/tmp/sorty-preview-scan-original.json)
+
+请审阅后明确确认是否应用此计划。

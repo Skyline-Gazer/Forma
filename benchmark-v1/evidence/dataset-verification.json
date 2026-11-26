@@ -1,0 +1,55 @@
+{
+ "archive": {
+  "name": "forma-bench-v1-blind.zip",
+  "bytes": 359398,
+  "sha256": "e293155118a83a3f45649899df176998b09a3727700300d10accb0a3e3aa8696",
+  "sha1": "f0aa92b0c46d53ab2ad58e17d7b6dde280b4caea",
+  "expected_sha256": "e293155118a83a3f45649899df176998b09a3727700300d10accb0a3e3aa8696",
+  "expected_bytes": 359398,
+  "match": true
+ },
+ "entry_audit": {
+  "entries": 32,
+  "documents": 29,
+  "by_extension": {
+   "pdf": 8,
+   "docx": 7,
+   "xlsx": 7,
+   "txt": 7
+  },
+  "absolute_paths": 0,
+  "path_traversal": 0,
+  "symlinks": 0,
+  "executables": 0,
+  "utf8_flag_on_workspace_paths": true
+ },
+ "per_arm_initial": {
+  "GUI-01": {
+   "arm": "GUI-01",
+   "declared": 29,
+   "verified": 29,
+   "bad": [],
+   "disk_files": 32,
+   "workspace_files": 29,
+   "extra": []
+  },
+  "SKILL-01": {
+   "arm": "SKILL-01",
+   "declared": 29,
+   "verified": 29,
+   "bad": [],
+   "disk_files": 32,
+   "workspace_files": 29,
+   "extra": []
+  },
+  "CONTROL-01": {
+   "arm": "CONTROL-01",
+   "declared": 29,
+   "verified": 29,
+   "bad": [],
+   "disk_files": 32,
+   "workspace_files": 29,
+   "extra": []
+  }
+ }
+}

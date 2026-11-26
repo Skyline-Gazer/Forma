@@ -1,0 +1,19 @@
+{
+ "suite": "upstream scripts/sorty_skill_eval.py (sorty-organizer/Sorty @ 9c5ad2ed)",
+ "fixtures": "prepare → 9 cases, skill copy without imported settings/preferences",
+ "host": "Codex CLI 0.164.0, gpt-6-luna, effort low, isolated CODEX_HOME (c1 skill home unused; fixture skill used per guide)",
+ "wall_seconds": 378,
+ "score": {
+  "passed": 27,
+  "total": 28
+ },
+ "failed_checks": [
+  "tags: no Finder tag mutation"
+ ],
+ "failed_check_analysis": "The harness requires that no _kMDItemUserTags xattr exists under tags/ after the run, i.e. it treats tag writes as a prohibited side effect. The tags case request explicitly asks for a red 'Urgent' Finder tag on two overdue invoices, and the agent applied it through the skill's own scripts/sorty_tags.py. xattr dump recorded. This is an upstream expectation conflict, not an orchestrator or model violation of the task text.",
+ "deterministic_tests": {
+  "pinned_skill": "27 passed, 10 subtests passed",
+  "app_bundled_skill": "23 passed"
+ },
+ "integrity": "no modifications to the skill or eval code; score run unmodified"
+}

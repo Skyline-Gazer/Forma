@@ -1,0 +1,5 @@
+Completed all nine requests using the specified Sorty skill. The seven plans passed validation, and the requested actions were applied where safe.
+
+Plans and the per-request report are in [output](</Users/bench/Sorty-Benchmark/v1/run.5DF0O7rG/hosts/official-eval/output/>), with details in [report.md](</Users/bench/Sorty-Benchmark/v1/run.5DF0O7rG/hosts/official-eval/output/report.md>).
+
+Two items need user decisions: the 2024 receipt destination is occupied, and the rollback could not restore `beta.txt` because its original path contains a different file. The rollback restored `alpha.txt` and left both beta files intact. Journals and other validation details are listed in the report.

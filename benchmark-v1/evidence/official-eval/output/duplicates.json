@@ -1,0 +1,34 @@
+{
+  "duplicate_groups": [
+    {
+      "hard_links_only": false,
+      "paths": [
+        "backup/beach copy.jpg",
+        "photos/beach.jpg"
+      ],
+      "sha256": "30ce015905ee73291ff71204d3e2f679c1f61edf98696e83c365c66ea82f9e4c",
+      "size": 14,
+      "stored_objects": 2
+    },
+    {
+      "hard_links_only": true,
+      "paths": [
+        "docs/report-link.txt",
+        "docs/report.txt"
+      ],
+      "sha256": "7963fca1db03d266a23e07389d2e5c14daf332b960300f39db337b8fbbd53a78",
+      "size": 17,
+      "stored_objects": 1
+    }
+  ],
+  "exclusions": [],
+  "mode": "organize",
+  "operations": [],
+  "source_root": "/Users/bench/Sorty-Benchmark/v1/run.5DF0O7rG/hosts/official-eval/duplicates",
+  "tags": [],
+  "unorganized": [],
+  "version": 2,
+  "warnings": [
+    "No deletions planned. The report pair is hard-linked and shares one stored object."
+  ]
+}

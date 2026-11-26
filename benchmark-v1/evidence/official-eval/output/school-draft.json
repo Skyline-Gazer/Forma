@@ -1,0 +1,22 @@
+{
+  "mode": "organize",
+  "operations": [
+    {
+      "source": "Inbox/0042.txt",
+      "destination": "English EE/0042.txt"
+    },
+    {
+      "source": "Inbox/chemistry-equilibrium-practice.txt",
+      "destination": "Chemistry/chemistry-equilibrium-practice.txt"
+    }
+  ],
+  "unorganized": [
+    {
+      "path": "Inbox/draft.txt",
+      "reason": "Filename and authorized text content give no reliable IBDP subject or project"
+    }
+  ],
+  "warnings": [
+    "Read local text files 0042.txt, chemistry-equilibrium-practice.txt, and draft.txt to resolve placement."
+  ]
+}

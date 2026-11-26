@@ -1,0 +1,152 @@
+{
+  "exclusions": [],
+  "generated_at": "2026-11-26T09:35:38.644460+00:00",
+  "items": [
+    {
+      "device": 16777230,
+      "inode": 73562884,
+      "kind": "directory",
+      "modified_at": "2026-11-26T09:24:47.517462+00:00",
+      "modified_ns": 1795685087517461441,
+      "path": "Atlas",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562884,
+        "kind": "directory",
+        "modified_ns": 1795685087517461441,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562885,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.517506+00:00",
+      "modified_ns": 1795685087517505941,
+      "path": "Atlas/plan.txt",
+      "size": 19,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562885,
+        "kind": "file",
+        "modified_ns": 1795685087517505941,
+        "size": 19
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562888,
+      "kind": "directory",
+      "modified_at": "2026-11-26T09:24:47.517992+00:00",
+      "modified_ns": 1795685087517991986,
+      "path": "Inbox",
+      "size": 192,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562888,
+        "kind": "directory",
+        "modified_ns": 1795685087517991986,
+        "size": 192
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562891,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.517945+00:00",
+      "modified_ns": 1795685087517945277,
+      "path": "Inbox/brief.txt",
+      "size": 19,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562891,
+        "kind": "file",
+        "modified_ns": 1795685087517945277,
+        "size": 19
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562889,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.517768+00:00",
+      "modified_ns": 1795685087517767610,
+      "path": "Inbox/meeting-notes.txt",
+      "size": 219,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562889,
+        "kind": "file",
+        "modified_ns": 1795685087517767610,
+        "size": 219
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562892,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.518030+00:00",
+      "modified_ns": 1795685087518030445,
+      "path": "Inbox/menu.txt",
+      "size": 22,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562892,
+        "kind": "file",
+        "modified_ns": 1795685087518030445,
+        "size": 22
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562890,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.517859+00:00",
+      "modified_ns": 1795685087517858944,
+      "path": "Inbox/q3-budget.txt",
+      "size": 24,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562890,
+        "kind": "file",
+        "modified_ns": 1795685087517858944,
+        "size": 24
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562886,
+      "kind": "directory",
+      "modified_at": "2026-11-26T09:24:47.517600+00:00",
+      "modified_ns": 1795685087517600067,
+      "path": "Orion",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562886,
+        "kind": "directory",
+        "modified_ns": 1795685087517600067,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562887,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.517639+00:00",
+      "modified_ns": 1795685087517638942,
+      "path": "Orion/plan.txt",
+      "size": 19,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562887,
+        "kind": "file",
+        "modified_ns": 1795685087517638942,
+        "size": 19
+      }
+    }
+  ],
+  "source_root": "/Users/bench/Sorty-Benchmark/v1/run.5DF0O7rG/hosts/official-eval/injection",
+  "version": 2
+}

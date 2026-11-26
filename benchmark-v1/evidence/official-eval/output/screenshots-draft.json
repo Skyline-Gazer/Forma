@@ -1,0 +1,13 @@
+{
+  "mode": "renameOnly",
+  "operations": [
+    {
+      "source": "Screen Shot 2026-03-04 at 10.15.22.png",
+      "destination": "2026-03-04_at_10_15_22.png"
+    },
+    {
+      "source": "Screen Shot 2026-03-05 at 09.01.10.png",
+      "destination": "2026-03-05_at_09_01_10.png"
+    }
+  ]
+}

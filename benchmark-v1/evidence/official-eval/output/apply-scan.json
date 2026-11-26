@@ -1,0 +1,104 @@
+{
+  "exclusions": [],
+  "generated_at": "2026-11-26T09:35:38.447422+00:00",
+  "items": [
+    {
+      "device": 16777230,
+      "inode": 73562869,
+      "kind": "directory",
+      "modified_at": "2026-11-26T09:24:47.516113+00:00",
+      "modified_ns": 1795685087516112849,
+      "path": "Chemistry",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562869,
+        "kind": "directory",
+        "modified_ns": 1795685087516112849,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562870,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.516163+00:00",
+      "modified_ns": 1795685087516162516,
+      "path": "Chemistry/reference.txt",
+      "size": 19,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562870,
+        "kind": "file",
+        "modified_ns": 1795685087516162516,
+        "size": 19
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562873,
+      "kind": "directory",
+      "modified_at": "2026-11-26T09:24:47.516568+00:00",
+      "modified_ns": 1795685087516568394,
+      "path": "Keep",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562873,
+        "kind": "directory",
+        "modified_ns": 1795685087516568394,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562874,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.516620+00:00",
+      "modified_ns": 1795685087516620436,
+      "path": "Keep/chemistry-private.txt",
+      "size": 14,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562874,
+        "kind": "file",
+        "modified_ns": 1795685087516620436,
+        "size": 14
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562871,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.516258+00:00",
+      "modified_ns": 1795685087516258308,
+      "path": "chemistry-equilibrium.txt",
+      "size": 12,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562871,
+        "kind": "file",
+        "modified_ns": 1795685087516258308,
+        "size": 12
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73562872,
+      "kind": "file",
+      "modified_at": "2026-11-26T09:24:47.516353+00:00",
+      "modified_ns": 1795685087516353017,
+      "path": "chemistry-kinetics.txt",
+      "size": 9,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73562872,
+        "kind": "file",
+        "modified_ns": 1795685087516353017,
+        "size": 9
+      }
+    }
+  ],
+  "source_root": "/Users/bench/Sorty-Benchmark/v1/run.5DF0O7rG/hosts/official-eval/apply",
+  "version": 2
+}

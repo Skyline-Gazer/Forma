@@ -1,0 +1,21 @@
+{
+ "arm": "SKILL-01",
+ "host": "Codex CLI 0.164.0",
+ "model": "gpt-6-luna",
+ "model_reasoning_effort": "low",
+ "auth": "ChatGPT (Codex subscription), isolated CODEX_HOME per arm",
+ "codex_home": "hosts/c1",
+ "skills": "sorty skill installed at hosts/c1/skills/sorty (pinned 9c5ad2ed)",
+ "skill_sha_skilmd": "7b0bc56dd1bd2d57b245bbd8a1dd58fe255ec0c66f733a0cf0aed5b49728ad1d",
+ "skill_provenance": "upstream sorty-organizer/Sorty @ 9c5ad2ed83b08d412b8c7f0ac7412408d000d8cc (app bundles older bc4371fb; not used)",
+ "sandbox": "workspace-write, network_access=true, approval_policy=never",
+ "cwd": "SKILL-01",
+ "prompt_file": "prompts/c1-prompt.md",
+ "task_md_sha256": "127cd57f80e410cc11d4378302c6a1c974c8cad3b527375ba777ac84b0c30b4f",
+ "isolation": [
+  "fresh CODEX_HOME (no prior sessions, no user AGENTS.md/config)",
+  "no skills in control",
+  "workspace copied from the same verified ZIP",
+  "orchestrator gave no business hints and performed no semantic corrections"
+ ]
+}

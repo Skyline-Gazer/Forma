@@ -1,0 +1,35 @@
+{
+ "timestamps_epoch": {
+  "plan_start": 1795685385,
+  "plan_end": 1795685598,
+  "apply_start": 1795685604,
+  "apply_end": 1795685681
+ },
+ "wall_clock": {
+  "plan_seconds": 213,
+  "apply_seconds": 77,
+  "total_seconds": 296
+ },
+ "owner_interactions": {
+  "approval_requests": 1,
+  "approvals_granted": 2,
+  "between_phase_human_steps": 1
+ },
+ "plan": {
+  "operations": 20,
+  "unresolved_kept_in_place": 9,
+  "preview_summary_claimed": "21 moved / 8 kept",
+  "discrepancy": "agent noticed the confirmation message said 21/8 while its own preview table listed 20/9 and followed the table"
+ },
+ "native_metrics": {
+  "tokens": "NOT_VERIFIED",
+  "cost": "NOT_VERIFIED",
+  "conversations": 2
+ },
+ "errors": [],
+ "retries": 0,
+ "exports": {
+  "preview_md": true,
+  "per_file_rationale": true
+ }
+}

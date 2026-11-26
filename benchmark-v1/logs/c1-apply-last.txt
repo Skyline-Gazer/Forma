@@ -1,0 +1,5 @@
+整理已完成。Helper 报告 20 项全部完成；复核确认 20 个目标文件均存在、原路径均已空出，9 项待确认文件仍在原位。所有操作为同卷重命名与移动，没有复制文件内容。
+
+- [执行结果报告](/private/tmp/sorty_skill01_result_report.md)
+- [机器可读报告](/private/tmp/sorty_skill01_result_report.json)
+- [Journal](/private/tmp/sorty_skill01_state/journals/94b61f584ef448e19c784bf5b07204ba.jsonl)

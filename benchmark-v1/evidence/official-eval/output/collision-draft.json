@@ -1,0 +1,20 @@
+{
+  "mode": "organize",
+  "operations": [
+    {
+      "source": "Downloads/receipt-2025.pdf",
+      "destination": "Receipts/receipt-2025.pdf"
+    }
+  ],
+  "exclusions": [],
+  "duplicate_groups": [],
+  "unorganized": [
+    {
+      "path": "Downloads/receipt-2024.pdf",
+      "reason": "Destination Receipts/receipt-2024.pdf already exists; requires user decision"
+    }
+  ],
+  "warnings": [
+    "Blocked 2024 receipt move because destination already exists; no overwrite is authorized."
+  ]
+}

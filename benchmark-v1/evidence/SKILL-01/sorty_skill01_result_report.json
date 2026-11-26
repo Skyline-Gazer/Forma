@@ -1,0 +1,153 @@
+{
+  "status": "completed",
+  "source_root": "/Users/bench/Sorty-Benchmark/v1/run.5DF0O7rG/SKILL-01/workspace",
+  "approved_operations": 20,
+  "completed_operations": 20,
+  "unorganized_unchanged": 9,
+  "destination_files_verified": 20,
+  "original_files_accounted": 29,
+  "journal_completed_rows": 20,
+  "journal": "/private/tmp/sorty_skill01_state/journals/94b61f584ef448e19c784bf5b07204ba.jsonl",
+  "apply_id": "94b61f584ef448e19c784bf5b07204ba",
+  "verification_errors": [],
+  "operations": [
+    {
+      "source": "下载/待处理/批次1/技术要求.xlsx",
+      "destination": "项目/HC26-041_澄湾市仁泽医院_数据中心存储扩容/采购文件/技术要求.xlsx",
+      "verified": true
+    },
+    {
+      "source": "项目/2026/新建/未确认/资料/批次1/技术方案.docx",
+      "destination": "项目/HC26-041_澄湾市仁泽医院_数据中心存储扩容/技术响应/技术响应_V0.3_内部审阅稿.docx",
+      "verified": true
+    },
+    {
+      "source": "临时/厂商/启岳/附件/批次1/技术方案_最终.docx",
+      "destination": "项目/HC26-041_澄湾市仁泽医院_数据中心存储扩容/技术响应/技术响应_V1.0_批准提交版.docx",
+      "verified": true
+    },
+    {
+      "source": "历史/2025/已完成/参考/技术/批次1/报价.xlsx",
+      "destination": "项目/HC26-041_澄湾市仁泽医院_数据中心存储扩容/商务与采购/制造商渠道报价_启岳科技.xlsx",
+      "verified": true
+    },
+    {
+      "source": "旧归档/2024/已完成/医疗/客户资料/其他/批次1/说明.txt",
+      "destination": "项目/HC26-041_澄湾市仁泽医院_数据中心存储扩容/过程记录/项目协调记录_澜桥数字_2026-05-18.txt",
+      "verified": true
+    },
+    {
+      "source": "下载/待处理/批次2/交付清单.txt",
+      "destination": "项目/ED26-073_北屿职业学院_校园网络改造/投标归档/最终递交确认_澜桥数字_2026-09-12.txt",
+      "verified": true
+    },
+    {
+      "source": "临时/厂商/启岳/附件/批次2/技术要求.xlsx",
+      "destination": "项目/ED26-073_北屿职业学院_校园网络改造/采购文件/技术要求.xlsx",
+      "verified": true
+    },
+    {
+      "source": "历史/2025/已完成/参考/技术/批次2/技术方案.docx",
+      "destination": "项目/ED26-073_北屿职业学院_校园网络改造/技术响应/技术响应_V0.3_内部审阅稿.docx",
+      "verified": true
+    },
+    {
+      "source": "桌面备份/新建文件夹/批次2/技术方案_临时.docx",
+      "destination": "项目/ED26-073_北屿职业学院_校园网络改造/技术响应/技术响应_V1.0_批准提交版.docx",
+      "verified": true
+    },
+    {
+      "source": "项目/2026/新建/未确认/资料/批次2/说明.txt",
+      "destination": "项目/ED26-073_北屿职业学院_校园网络改造/过程记录/项目协调记录_澜桥数字_2026-09-12.txt",
+      "verified": true
+    },
+    {
+      "source": "邮件附件/转发/待整理/批次1/交付清单.txt",
+      "destination": "项目/HC26-041_澄湾市仁泽医院_数据中心存储扩容/投标归档/最终递交确认_澜桥数字_2026-05-18.txt",
+      "verified": true
+    },
+    {
+      "source": "邮件附件/转发/待整理/批次2/报价.xlsx",
+      "destination": "项目/ED26-073_北屿职业学院_校园网络改造/商务与采购/制造商渠道报价_启岳科技.xlsx",
+      "verified": true
+    },
+    {
+      "source": "邮件附件/转发/待整理/批次3/技术方案.docx",
+      "destination": "项目/LG25-019_星港物流中心_虚拟化平台更新/技术响应/技术响应_V0.3_内部审阅稿.docx",
+      "verified": true
+    },
+    {
+      "source": "旧归档/2024/已完成/医疗/客户资料/其他/批次3/技术方案_最终.docx",
+      "destination": "项目/LG25-019_星港物流中心_虚拟化平台更新/技术响应/技术响应_V1.0_批准提交版.docx",
+      "verified": true
+    },
+    {
+      "source": "桌面备份/新建文件夹/批次3/技术要求.xlsx",
+      "destination": "项目/LG25-019_星港物流中心_虚拟化平台更新/采购文件/技术要求.xlsx",
+      "verified": true
+    },
+    {
+      "source": "临时/厂商/启岳/附件/批次3/交付清单.txt",
+      "destination": "项目/LG25-019_星港物流中心_虚拟化平台更新/投标归档/最终递交确认_远栖系统_2025-12-03.txt",
+      "verified": true
+    },
+    {
+      "source": "下载/待处理/批次3/报价.xlsx",
+      "destination": "项目/LG25-019_星港物流中心_虚拟化平台更新/商务与采购/制造商渠道报价_矩川科技.xlsx",
+      "verified": true
+    },
+    {
+      "source": "历史/2025/已完成/参考/技术/批次3/说明.txt",
+      "destination": "项目/LG25-019_星港物流中心_虚拟化平台更新/过程记录/项目协调记录_远栖系统_2025-12-03.txt",
+      "verified": true
+    },
+    {
+      "source": "历史/2024/已完成/参考/技术/技术方案.docx",
+      "destination": "通用参考/技术响应模板_旧川市公立医院机房改造_2023.docx",
+      "verified": true
+    },
+    {
+      "source": "下载/待处理/README.txt",
+      "destination": "项目/ED26-073_北屿职业学院_校园网络改造/过程记录/项目协调记录_用途说明.txt",
+      "verified": true
+    }
+  ],
+  "unorganized": [
+    {
+      "path": "旧归档/2024/已完成/医疗/客户资料/其他/批次1/公告.pdf",
+      "reason": "PDF正文当前无法本地提取；标题不足以区分公告主体、项目及其时效，待核验正文"
+    },
+    {
+      "path": "旧归档/2024/已完成/医疗/客户资料/其他/批次2/授权函.pdf",
+      "reason": "PDF正文当前无法本地提取；授权主体、被授权方及项目范围待确认"
+    },
+    {
+      "path": "项目/2026/新建/未确认/资料/批次2/公告.pdf",
+      "reason": "PDF正文当前无法本地提取；标题不足以确认是否为采购方公告及其项目内容"
+    },
+    {
+      "path": "项目/2026/新建/未确认/资料/批次3/授权函.pdf",
+      "reason": "图像型扫描PDF；授权主体、被授权方及项目范围待OCR/人工核验"
+    },
+    {
+      "path": "桌面备份/新建文件夹/批次1/授权函.pdf",
+      "reason": "PDF正文当前无法本地提取；无法确认其项目、授权主体及有效范围"
+    },
+    {
+      "path": "桌面备份/新建文件夹/扫描件.pdf",
+      "reason": "图像型扫描PDF且文件名无主题；内容及归属均待OCR/人工核验"
+    },
+    {
+      "path": "下载/待处理/产品介绍.pdf",
+      "reason": "PDF正文当前无法本地提取；无法确认厂商、产品、通用性或关联项目"
+    },
+    {
+      "path": "临时/厂商/启岳/附件/报价.xlsx",
+      "reason": "正文明确未填采购人和项目编号，且说明多个项目均可能涉及；保留待确认，不归入具体项目"
+    },
+    {
+      "path": "历史/2025/已完成/参考/技术/批次3/公告.pdf",
+      "reason": "PDF正文当前无法本地提取；标题不足以区分公告主体、项目及其时效，待核验正文"
+    }
+  ]
+}

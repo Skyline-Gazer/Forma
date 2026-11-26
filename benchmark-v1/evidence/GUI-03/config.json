@@ -1,0 +1,21 @@
+{
+ "arm": "G1-run03",
+ "app": "Sorty 1.3.1 (20261105122310)",
+ "mode": "Organize & Rename",
+ "deep_scan": true,
+ "fast_mode": false,
+ "ai_vision": true,
+ "provider": "openai",
+ "auth": "Codex CLI (Subscription)",
+ "model": "gpt-6-luna",
+ "output_language": "English",
+ "ocr_languages": [
+  "en-US"
+ ],
+ "persona": "General",
+ "custom_instructions": "TASK.md verbatim in Settings>组织方式>额外指令 and run-level 说明",
+ "learnings": "paused during run; existing data retained",
+ "watched_folders": 0,
+ "auto_apply": false,
+ "deviations_from_run01": "none observed"
+}

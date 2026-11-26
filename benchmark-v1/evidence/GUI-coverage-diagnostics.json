@@ -1,0 +1,42 @@
+{
+ "question": "Why did the GUI move only 4 of 29 documents?",
+ "observable_evidence": {
+  "scanned": {
+   "value": 29,
+   "evidence": "progress text 'Analyzing file content: N files' and 'Finding the best folders for 29 files… %'; confirm dialog '29 files will be organized' — identical in runs 01-03"
+  },
+  "not_scanned": {
+   "value": 0,
+   "evidence": "no skip/error notice; count equals inventory"
+  },
+  "scanned_but_not_content_analyzed": {
+   "value": "NOT_VERIFIED",
+   "evidence": "product exposes no per-file analysis state; fast mode off and vision on were verified, but per-file extraction success is not shown"
+  },
+  "omitted_from_model_input": {
+   "value": "NOT_VERIFIED",
+   "evidence": "no prompt/context inspector, no log trace (app log records only updater events)"
+  },
+  "omitted_from_model_response": {
+   "value": "NOT_VERIFIED",
+   "evidence": "no response parser diagnostics; 25 files merely appear under 未组织文件"
+  },
+  "rejected_during_response_parsing": {
+   "value": "NOT_VERIFIED",
+   "evidence": "no parse-error surface in any run"
+  },
+  "excluded_from_final_plan": {
+   "value": 25,
+   "evidence": "'未组织文件 25 文件' in all three previews; confirm dialog '25 files will remain in place'"
+  },
+  "deliberately_left_in_place": {
+   "value": "NOT_OBSERVABLE",
+   "evidence": "GUI offers no per-file rationale; only run 03 encodes intent via 'To Confirm' folder names"
+  },
+  "genuinely_unresolved": {
+   "value": 1,
+   "evidence": "run 03 places 扫描件.pdf in 'Document Identity To Confirm'; run 02 places it in '00_INBOX/PROJECT-CONFIRMATION' without a rationale"
+  }
+ },
+ "conclusion": "The 4/29 ceiling is reproducible across three runs and is visible only as a plan-coverage fact. The GUI cannot attribute it to scanning, extraction, prompting, parsing or decisioning; those splits are NOT_VERIFIED rather than inferred."
+}

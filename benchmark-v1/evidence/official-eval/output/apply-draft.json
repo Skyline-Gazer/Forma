@@ -1,0 +1,18 @@
+{
+  "mode": "organize",
+  "operations": [
+    {
+      "source": "chemistry-equilibrium.txt",
+      "destination": "Chemistry/chemistry-equilibrium.txt"
+    },
+    {
+      "source": "chemistry-kinetics.txt",
+      "destination": "Chemistry/chemistry-kinetics.txt"
+    }
+  ],
+  "unorganized": [],
+  "warnings": [],
+  "exclusions": [
+    "Keep/**"
+  ]
+}

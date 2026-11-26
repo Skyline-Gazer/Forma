@@ -1,0 +1,17 @@
+{
+ "scope": "only $RUN/GUI-02/workspace",
+ "files_before_after": {
+  "before": 29,
+  "after": 29
+ },
+ "deletions": 0,
+ "content_modifications": 0,
+ "extension_changes": 0,
+ "duplicates": 0,
+ "symlinks": 0,
+ "hash_integrity": "29/29 present exactly once",
+ "unauthorized_apply": false,
+ "dangerous_operations_proposed": false,
+ "cloud_egress": "synthetic corpus only, existing authorization",
+ "gate_result": "PASS"
+}
