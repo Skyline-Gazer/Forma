@@ -165,6 +165,26 @@ public struct CorrectionEngine: Sendable {
         let previous = manifest.entries[position].outcome(for: field)?.value
         var violations: [ValidationViolation] = []
 
+        // The snapshot under correction is the file the reviewer is looking at.
+        // A citation is judged against two snapshots, not one, and the audit
+        // receipt must name the same generation the citation was judged by:
+        // while a listing exists it owns that answer (the file may have a
+        // generation the manifest has not caught up with, and a re-read row
+        // matches the listing - the published correction rebinds the entry to
+        // that same generation, so the receipt that documents it belongs to it
+        // too). Without a listing - an imported bundle - the manifest is the
+        // whole record. Hoisted above the gate because the success receipt at
+        // the end of this function reads it: an audit row whose fingerprint
+        // column named the superseded document while its evidence IDs and
+        // produced revision belonged to the current one would repeat the
+        // one-column-two-meanings bug already fixed for `manifest_revision`.
+        let manifestSnapshot = (revision: manifest.entries[position].snapshotRevision,
+                                fingerprint: manifest.entries[position].snapshotFingerprint)
+        let listingSnapshot = currentEntries.first { $0.id == sourceID }.map {
+            (revision: Int($0.snapshotRevision), fingerprint: $0.snapshotFingerprint)
+        }
+        let reviewSnapshot = listingSnapshot ?? manifestSnapshot
+
         if let correctedValue {
             if let policy = profile.fields[field] {
                 if !policy.valueType.validate(correctedValue) {
@@ -195,32 +215,15 @@ public struct CorrectionEngine: Sendable {
             // citations x history. `evidence` is keyed by source, so the rows
             // here are already the cited source's own.
             let rows = evidence[sourceID] ?? []
-            let target = manifest.entries[position]
             let rowsByID = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            // A citation is judged against two snapshots, not one. The manifest
-            // says which snapshot the entry under correction describes; the
-            // current listing says which snapshot the file has now. A row that
-            // matches the manifest but not the listing is a row read before the
-            // file moved - publishing on it would describe a document state
-            // nobody is looking at any more. A row that matches neither was
-            // never evidence for this revision at all.
-            let listingEntry = currentEntries.first { $0.id == sourceID }
-            let manifestSnapshot = (revision: target.snapshotRevision, fingerprint: target.snapshotFingerprint)
-            let listingSnapshot = listingEntry.map {
-                (revision: Int($0.snapshotRevision), fingerprint: $0.snapshotFingerprint)
-            }
-            // The snapshot under correction is the file the reviewer is looking at.
-            // While a listing exists it owns that answer: the file has a generation
-            // the manifest may not have caught up with, and a row that matches only
-            // the manifest's binding then describes the superseded document - the
-            // row the reviewer must not cite, exactly as before. A row re-read from
-            // the current file matches the listing and is citable; publishing the
-            // correction rebinds the entry to that same generation (the validator
-            // rebuilds every entry from the current entries), so nothing is
-            // retrofitted onto an old revision and history is never rewritten.
-            // Without a listing - an imported bundle - the manifest is the whole
-            // record and the gate is as strict as it has ever been.
-            let reviewSnapshot = listingSnapshot ?? manifestSnapshot
+            // Gate semantics: the manifest says which snapshot the entry under
+            // correction describes; the listing says which snapshot the file has
+            // now (both hoisted above). A row matching only the manifest's
+            // binding describes the superseded document - the row the reviewer
+            // must not cite, exactly as before. A row re-read from the current
+            // file matches the listing and is citable, and publishing rebinds
+            // the entry to that generation, so nothing is retrofitted onto an
+            // old revision and history is never rewritten.
             // Three refusals wear different faces and the review screen has to
             // say which one happened: a citation that names no row the program
             // holds anywhere is missing evidence; a row that exists but
@@ -435,7 +438,12 @@ public struct CorrectionEngine: Sendable {
             manifestID: manifest.envelope.manifestID, manifestRevision: manifest.envelope.revision,
             producedRevision: candidate.envelope.revision, sourceID: sourceID, field: field,
             previousValue: previous, correctedValue: correctedValue, evidenceIDs: evidenceIDs,
-            snapshotFingerprint: manifest.entries[position].snapshotFingerprint,
+            // The reviewed generation, not the superseded one: the citations
+            // above were judged by reviewSnapshot and the published entry is
+            // rebound to it, so the receipt must name the same document. For a
+            // lagging manifest this is the listing's fingerprint; without a
+            // listing it stays the manifest's own value, as before.
+            snapshotFingerprint: reviewSnapshot.fingerprint,
             contextRevision: context.revision, origin: origin,
             // Only a correction that passed every rule above reaches this line:
             // a rejected attempt returned earlier, with the manifest unchanged.
