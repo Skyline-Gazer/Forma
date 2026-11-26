@@ -374,7 +374,7 @@ struct WorkspaceInspector: View {
                 } else {
                     Button("Read Evidence") { model.readFileEvidence(entry, extracting: true) }
                         .disabled(entry.state != .present
-                                  || !["pdf", "docx", "xlsx"].contains((entry.relativePath as NSString).pathExtension.lowercased()))
+                                  || !EvidenceExtractor.supportedFileExtensions.contains((entry.relativePath as NSString).pathExtension.lowercased()))
                         .accessibilityIdentifier("read-evidence")
                     Button("Compute SHA-256") { model.readFileEvidence(entry, extracting: false) }
                         .disabled(entry.state != .present)
