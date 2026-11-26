@@ -80,10 +80,21 @@ default. It is not re-centered on every launch.
 ## What acceptance must observe (CI cannot fully cover)
 
 `scripts/smoke_geometry.sh` (launch-smoke job) drives the real window on the
-macOS runner. The assertions, tightened by the #172 review so that nothing
-passes vacuously:
+macOS runner. It requires an explicit `FORMA_SMOKE_MODE`: `ci` (ephemeral VM,
+first-launch state reset through the exact-domain whitelist) or `mac`
+(physical host: never deletes preferences or saved state, never quits or
+drives an instance it did not launch, refuses to run while any Forma is up,
+and asserts the first-launch band only under a declared dedicated test
+account - overriding HOME is not isolation, since NSUserDefaults is per-uid
+via cfprefsd). Both modes audit host appearance before and after the run and
+FAIL with both values if it changed - no silent restore. The static lint
+`scripts/check_host_safety.sh` (test job) keeps those mutation patterns out
+of all automation. The assertions, tightened by the #172 review so that
+nothing passes vacuously:
 
-- launch width 1180 ±4 (a content-fit launch like the old 1104 fails here);
+- launch width 1180 ±4 (a content-fit launch like the old 1104 fails here),
+  asserted only when the run truly starts from isolated user state; on a
+  shared host it is skipped and logged, never faked;
   launch height is a lower bound (≥ 640) because the hosting layer proposes
   its own content height at first layout (measured 674 = 620 + chrome);
 - resize to 760 × 500 clamps to 1012 ±2 wide; heights are asserted as lower
