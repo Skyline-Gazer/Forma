@@ -1,0 +1,12 @@
+{
+ "id": "D23",
+ "source": "临时/厂商/启岳/附件/批次3/交付清单.txt",
+ "sha256": "787e1be3205f890ce7fac523c599d3e3b7e0591cb72fd89653854fa1ad78b3fd",
+ "sha256_matches_inventory": true,
+ "bytes": 268,
+ "ext": ".txt",
+ "status": "ok",
+ "method": "direct_read",
+ "chars": 110,
+ "total_seconds": 0.0
+}

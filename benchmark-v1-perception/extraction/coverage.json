@@ -1,0 +1,67 @@
+{
+ "documents": 29,
+ "extracted_ok": 29,
+ "failed": 0,
+ "by_method": {
+  "docvortex_native_pdf": 6,
+  "docvortex": 14,
+  "direct_read": 7,
+  "apple_vision_ocr_fallback": 2
+ },
+ "by_ext": {
+  ".pdf": 8,
+  ".xlsx": 7,
+  ".docx": 7,
+  ".txt": 7
+ },
+ "pdfs": [
+  {
+   "id": "D01",
+   "source": "旧归档/2024/已完成/医疗/客户资料/其他/批次1/公告.pdf",
+   "method": "docvortex_native_pdf",
+   "chars": 99
+  },
+  {
+   "id": "D06",
+   "source": "桌面备份/新建文件夹/批次1/授权函.pdf",
+   "method": "docvortex_native_pdf",
+   "chars": 98
+  },
+  {
+   "id": "D09",
+   "source": "项目/2026/新建/未确认/资料/批次2/公告.pdf",
+   "method": "docvortex_native_pdf",
+   "chars": 96
+  },
+  {
+   "id": "D14",
+   "source": "旧归档/2024/已完成/医疗/客户资料/其他/批次2/授权函.pdf",
+   "method": "docvortex_native_pdf",
+   "chars": 94
+  },
+  {
+   "id": "D17",
+   "source": "历史/2025/已完成/参考/技术/批次3/公告.pdf",
+   "method": "docvortex_native_pdf",
+   "chars": 96
+  },
+  {
+   "id": "D22",
+   "source": "项目/2026/新建/未确认/资料/批次3/授权函.pdf",
+   "method": "apple_vision_ocr_fallback",
+   "chars": 100
+  },
+  {
+   "id": "D26",
+   "source": "下载/待处理/产品介绍.pdf",
+   "method": "docvortex_native_pdf",
+   "chars": 61
+  },
+  {
+   "id": "D28",
+   "source": "桌面备份/新建文件夹/扫描件.pdf",
+   "method": "apple_vision_ocr_fallback",
+   "chars": 47
+  }
+ ]
+}

@@ -1,0 +1,15 @@
+{
+ "id": "D27",
+ "source": "临时/厂商/启岳/附件/报价.xlsx",
+ "sha256": "7afeafc34efb8e93f9422d35456d1aaca7f7ebcd847f1a2dd735f6af81e7f2c1",
+ "sha256_matches_inventory": true,
+ "bytes": 3799,
+ "ext": ".xlsx",
+ "status": "ok",
+ "method": "docvortex",
+ "chars": 125,
+ "docvortex_seconds": 0.51,
+ "exit_code": 0,
+ "stderr": "",
+ "total_seconds": 1.01
+}

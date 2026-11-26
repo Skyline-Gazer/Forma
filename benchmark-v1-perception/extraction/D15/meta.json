@@ -1,0 +1,12 @@
+{
+ "id": "D15",
+ "source": "下载/待处理/批次2/交付清单.txt",
+ "sha256": "bbe067720ff481b44175de49aa1e075c8fc8a9ff0cbc658007af7ca8f6a0679a",
+ "sha256_matches_inventory": true,
+ "bytes": 265,
+ "ext": ".txt",
+ "status": "ok",
+ "method": "direct_read",
+ "chars": 109,
+ "total_seconds": 0.0
+}

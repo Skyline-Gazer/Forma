@@ -1,0 +1,12 @@
+{
+ "id": "D09",
+ "source": "项目/2026/新建/未确认/资料/批次2/公告.pdf",
+ "sha256": "aac6d2f959ca277c519675d0b56823b71c2eabb9e5deb36ab873640bcc4f852a",
+ "sha256_matches_inventory": true,
+ "bytes": 2675,
+ "ext": ".pdf",
+ "status": "ok",
+ "method": "docvortex_native_pdf",
+ "chars": 96,
+ "seconds": 0.6
+}

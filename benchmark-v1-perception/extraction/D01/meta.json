@@ -1,0 +1,12 @@
+{
+ "id": "D01",
+ "source": "旧归档/2024/已完成/医疗/客户资料/其他/批次1/公告.pdf",
+ "sha256": "7ccf72cb672cc3f549e5149749ad9ae10268f9f923ef296e88e93a0d3bd49f92",
+ "sha256_matches_inventory": true,
+ "bytes": 2683,
+ "ext": ".pdf",
+ "status": "ok",
+ "method": "docvortex_native_pdf",
+ "chars": 99,
+ "seconds": 0.77
+}

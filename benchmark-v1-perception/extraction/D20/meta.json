@@ -1,0 +1,15 @@
+{
+ "id": "D20",
+ "source": "旧归档/2024/已完成/医疗/客户资料/其他/批次3/技术方案_最终.docx",
+ "sha256": "a81ded1c1f07db595c35fa8e8744012346dbdf2ab72a94785558c62ac8021afd",
+ "sha256_matches_inventory": true,
+ "bytes": 36978,
+ "ext": ".docx",
+ "status": "ok",
+ "method": "docvortex",
+ "chars": 131,
+ "docvortex_seconds": 0.54,
+ "exit_code": 0,
+ "stderr": "",
+ "total_seconds": 1.1
+}

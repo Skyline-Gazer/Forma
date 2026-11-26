@@ -1,0 +1,15 @@
+{
+ "id": "D04",
+ "source": "临时/厂商/启岳/附件/批次1/技术方案_最终.docx",
+ "sha256": "3dc582626158b04818c7a3ca3714287f7a6716e63cea938f2311d526d3c3a55a",
+ "sha256_matches_inventory": true,
+ "bytes": 36968,
+ "ext": ".docx",
+ "status": "ok",
+ "method": "docvortex",
+ "chars": 133,
+ "docvortex_seconds": 0.55,
+ "exit_code": 0,
+ "stderr": "",
+ "total_seconds": 1.11
+}

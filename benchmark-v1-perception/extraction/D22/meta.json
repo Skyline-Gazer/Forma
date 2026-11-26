@@ -1,0 +1,16 @@
+{
+ "id": "D22",
+ "source": "项目/2026/新建/未确认/资料/批次3/授权函.pdf",
+ "sha256": "35b2594e4eb8704c4164015cfdebd0d5ca7bea032e3907332d28b7817e1aa5b7",
+ "sha256_matches_inventory": true,
+ "bytes": 63030,
+ "ext": ".pdf",
+ "status": "ok",
+ "method": "apple_vision_ocr_fallback",
+ "chars": 100,
+ "seconds": 0.45,
+ "reason": "Error: PDF OCR is not supported by DocVortex. Please download and install MinerU to process this document: https://github.com/opendatalab/MinerU",
+ "vision_engine": "Apple Vision VNRecognizeTextRequest (zh-Hans, en-US, accurate)",
+ "vision_seconds": 35.79,
+ "modelbest_note": "ModelBest Document Parse unavailable: MODELBEST_API_KEY absent (HTTP 401 invalid_api_key); OS Vision used for this image-only PDF"
+}

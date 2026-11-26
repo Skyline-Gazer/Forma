@@ -1,0 +1,15 @@
+{
+ "id": "D12",
+ "source": "桌面备份/新建文件夹/批次2/技术方案_临时.docx",
+ "sha256": "ddc394bba921a4c5d5911102a5009991c3e29c62dec770081656457a051d7dd1",
+ "sha256_matches_inventory": true,
+ "bytes": 36977,
+ "ext": ".docx",
+ "status": "ok",
+ "method": "docvortex",
+ "chars": 131,
+ "docvortex_seconds": 0.55,
+ "exit_code": 0,
+ "stderr": "",
+ "total_seconds": 1.13
+}

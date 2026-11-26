@@ -1,0 +1,18 @@
+{
+ "arm": "B1-C0-02",
+ "documents": 29,
+ "moved": 27,
+ "kept_at_original": 2,
+ "kept_ids": [
+  "D27",
+  "D28"
+ ],
+ "dirs_total": 71,
+ "empty_dirs": 22,
+ "single_child_dirs": 22,
+ "max_doc_depth": 5,
+ "mean_doc_depth": 3.93,
+ "integrity": "PASS",
+ "wall_seconds": 152,
+ "status": "plan_exit=0\napply_exit=0"
+}

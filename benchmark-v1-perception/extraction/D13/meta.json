@@ -1,0 +1,15 @@
+{
+ "id": "D13",
+ "source": "邮件附件/转发/待整理/批次2/报价.xlsx",
+ "sha256": "9074877a50642c590514c96940a87c9aa532b2d2b0962e651a462b6bfd560c33",
+ "sha256_matches_inventory": true,
+ "bytes": 3905,
+ "ext": ".xlsx",
+ "status": "ok",
+ "method": "docvortex",
+ "chars": 199,
+ "docvortex_seconds": 0.49,
+ "exit_code": 0,
+ "stderr": "",
+ "total_seconds": 0.98
+}

@@ -1,0 +1,12 @@
+{
+ "id": "D14",
+ "source": "旧归档/2024/已完成/医疗/客户资料/其他/批次2/授权函.pdf",
+ "sha256": "5a16b61590a7e8904ca4ac02e2e830125d06c15cef9e8a741e44d5657f25deb3",
+ "sha256_matches_inventory": true,
+ "bytes": 2658,
+ "ext": ".pdf",
+ "status": "ok",
+ "method": "docvortex_native_pdf",
+ "chars": 94,
+ "seconds": 0.61
+}

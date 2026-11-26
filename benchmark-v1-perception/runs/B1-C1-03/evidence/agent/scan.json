@@ -1,0 +1,1306 @@
+{
+  "exclusions": [
+    "**/.git/**"
+  ],
+  "generated_at": "2026-11-26T12:53:59.585910+00:00",
+  "items": [
+    {
+      "device": 16777230,
+      "inode": 73669924,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.024388+00:00",
+      "modified_ns": 1795696315024387810,
+      "path": "\u4e0b\u8f7d",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669924,
+        "kind": "directory",
+        "modified_ns": 1795696315024387810,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669925,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.025181+00:00",
+      "modified_ns": 1795696315025180564,
+      "path": "\u4e0b\u8f7d/\u5f85\u5904\u7406",
+      "size": 224,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669925,
+        "kind": "directory",
+        "modified_ns": 1795696315025180564,
+        "size": 224
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669926,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u4e0b\u8f7d/\u5f85\u5904\u7406/README.txt",
+      "size": 273,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669926,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 273
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669927,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u4e0b\u8f7d/\u5f85\u5904\u7406/\u4ea7\u54c1\u4ecb\u7ecd.pdf",
+      "size": 2543,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669927,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 2543
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669928,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.024835+00:00",
+      "modified_ns": 1795696315024834854,
+      "path": "\u4e0b\u8f7d/\u5f85\u5904\u7406/\u6279\u6b211",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669928,
+        "kind": "directory",
+        "modified_ns": 1795696315024834854,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669929,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u4e0b\u8f7d/\u5f85\u5904\u7406/\u6279\u6b211/\u6280\u672f\u8981\u6c42.xlsx",
+      "size": 3886,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669929,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 3886
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669930,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.025060+00:00",
+      "modified_ns": 1795696315025059980,
+      "path": "\u4e0b\u8f7d/\u5f85\u5904\u7406/\u6279\u6b212",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669930,
+        "kind": "directory",
+        "modified_ns": 1795696315025059980,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669931,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u4e0b\u8f7d/\u5f85\u5904\u7406/\u6279\u6b212/\u4ea4\u4ed8\u6e05\u5355.txt",
+      "size": 265,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669931,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 265
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669932,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.025240+00:00",
+      "modified_ns": 1795696315025240064,
+      "path": "\u4e0b\u8f7d/\u5f85\u5904\u7406/\u6279\u6b213",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669932,
+        "kind": "directory",
+        "modified_ns": 1795696315025240064,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669933,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u4e0b\u8f7d/\u5f85\u5904\u7406/\u6279\u6b213/\u62a5\u4ef7.xlsx",
+      "size": 3909,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669933,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 3909
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669934,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.025453+00:00",
+      "modified_ns": 1795696315025453190,
+      "path": "\u4e34\u65f6",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669934,
+        "kind": "directory",
+        "modified_ns": 1795696315025453190,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669935,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.025504+00:00",
+      "modified_ns": 1795696315025503690,
+      "path": "\u4e34\u65f6/\u5382\u5546",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669935,
+        "kind": "directory",
+        "modified_ns": 1795696315025503690,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669936,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.025555+00:00",
+      "modified_ns": 1795696315025554982,
+      "path": "\u4e34\u65f6/\u5382\u5546/\u542f\u5cb3",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669936,
+        "kind": "directory",
+        "modified_ns": 1795696315025554982,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669937,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.026787+00:00",
+      "modified_ns": 1795696315026786571,
+      "path": "\u4e34\u65f6/\u5382\u5546/\u542f\u5cb3/\u9644\u4ef6",
+      "size": 192,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669937,
+        "kind": "directory",
+        "modified_ns": 1795696315026786571,
+        "size": 192
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669938,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.025666+00:00",
+      "modified_ns": 1795696315025666024,
+      "path": "\u4e34\u65f6/\u5382\u5546/\u542f\u5cb3/\u9644\u4ef6/\u6279\u6b211",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669938,
+        "kind": "directory",
+        "modified_ns": 1795696315025666024,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669939,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u4e34\u65f6/\u5382\u5546/\u542f\u5cb3/\u9644\u4ef6/\u6279\u6b211/\u6280\u672f\u65b9\u6848_\u6700\u7ec8.docx",
+      "size": 36968,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669939,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 36968
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669940,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.026218+00:00",
+      "modified_ns": 1795696315026218152,
+      "path": "\u4e34\u65f6/\u5382\u5546/\u542f\u5cb3/\u9644\u4ef6/\u6279\u6b212",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669940,
+        "kind": "directory",
+        "modified_ns": 1795696315026218152,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669941,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u4e34\u65f6/\u5382\u5546/\u542f\u5cb3/\u9644\u4ef6/\u6279\u6b212/\u6280\u672f\u8981\u6c42.xlsx",
+      "size": 3888,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669941,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 3888
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669942,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.026437+00:00",
+      "modified_ns": 1795696315026437278,
+      "path": "\u4e34\u65f6/\u5382\u5546/\u542f\u5cb3/\u9644\u4ef6/\u6279\u6b213",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669942,
+        "kind": "directory",
+        "modified_ns": 1795696315026437278,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669943,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u4e34\u65f6/\u5382\u5546/\u542f\u5cb3/\u9644\u4ef6/\u6279\u6b213/\u4ea4\u4ed8\u6e05\u5355.txt",
+      "size": 268,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669943,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 268
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669944,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u4e34\u65f6/\u5382\u5546/\u542f\u5cb3/\u9644\u4ef6/\u62a5\u4ef7.xlsx",
+      "size": 3799,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669944,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 3799
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669945,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.027722+00:00",
+      "modified_ns": 1795696315027722200,
+      "path": "\u5386\u53f2",
+      "size": 128,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669945,
+        "kind": "directory",
+        "modified_ns": 1795696315027722200,
+        "size": 128
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669946,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.027062+00:00",
+      "modified_ns": 1795696315027062530,
+      "path": "\u5386\u53f2/2024",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669946,
+        "kind": "directory",
+        "modified_ns": 1795696315027062530,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669947,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.027119+00:00",
+      "modified_ns": 1795696315027118780,
+      "path": "\u5386\u53f2/2024/\u5df2\u5b8c\u6210",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669947,
+        "kind": "directory",
+        "modified_ns": 1795696315027118780,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669948,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.027177+00:00",
+      "modified_ns": 1795696315027177114,
+      "path": "\u5386\u53f2/2024/\u5df2\u5b8c\u6210/\u53c2\u8003",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669948,
+        "kind": "directory",
+        "modified_ns": 1795696315027177114,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669949,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.027242+00:00",
+      "modified_ns": 1795696315027241864,
+      "path": "\u5386\u53f2/2024/\u5df2\u5b8c\u6210/\u53c2\u8003/\u6280\u672f",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669949,
+        "kind": "directory",
+        "modified_ns": 1795696315027241864,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669950,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u5386\u53f2/2024/\u5df2\u5b8c\u6210/\u53c2\u8003/\u6280\u672f/\u6280\u672f\u65b9\u6848.docx",
+      "size": 36896,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669950,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 36896
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669951,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.027783+00:00",
+      "modified_ns": 1795696315027782617,
+      "path": "\u5386\u53f2/2025",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669951,
+        "kind": "directory",
+        "modified_ns": 1795696315027782617,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669952,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.027843+00:00",
+      "modified_ns": 1795696315027843325,
+      "path": "\u5386\u53f2/2025/\u5df2\u5b8c\u6210",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669952,
+        "kind": "directory",
+        "modified_ns": 1795696315027843325,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669953,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.027896+00:00",
+      "modified_ns": 1795696315027896242,
+      "path": "\u5386\u53f2/2025/\u5df2\u5b8c\u6210/\u53c2\u8003",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669953,
+        "kind": "directory",
+        "modified_ns": 1795696315027896242,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669954,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.028805+00:00",
+      "modified_ns": 1795696315028805496,
+      "path": "\u5386\u53f2/2025/\u5df2\u5b8c\u6210/\u53c2\u8003/\u6280\u672f",
+      "size": 160,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669954,
+        "kind": "directory",
+        "modified_ns": 1795696315028805496,
+        "size": 160
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669955,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.028031+00:00",
+      "modified_ns": 1795696315028031034,
+      "path": "\u5386\u53f2/2025/\u5df2\u5b8c\u6210/\u53c2\u8003/\u6280\u672f/\u6279\u6b211",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669955,
+        "kind": "directory",
+        "modified_ns": 1795696315028031034,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669956,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u5386\u53f2/2025/\u5df2\u5b8c\u6210/\u53c2\u8003/\u6280\u672f/\u6279\u6b211/\u62a5\u4ef7.xlsx",
+      "size": 3914,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669956,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 3914
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669957,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.028302+00:00",
+      "modified_ns": 1795696315028301952,
+      "path": "\u5386\u53f2/2025/\u5df2\u5b8c\u6210/\u53c2\u8003/\u6280\u672f/\u6279\u6b212",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669957,
+        "kind": "directory",
+        "modified_ns": 1795696315028301952,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669958,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u5386\u53f2/2025/\u5df2\u5b8c\u6210/\u53c2\u8003/\u6280\u672f/\u6279\u6b212/\u6280\u672f\u65b9\u6848.docx",
+      "size": 36967,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669958,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 36967
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669959,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.029065+00:00",
+      "modified_ns": 1795696315029064622,
+      "path": "\u5386\u53f2/2025/\u5df2\u5b8c\u6210/\u53c2\u8003/\u6280\u672f/\u6279\u6b213",
+      "size": 128,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669959,
+        "kind": "directory",
+        "modified_ns": 1795696315029064622,
+        "size": 128
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669960,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u5386\u53f2/2025/\u5df2\u5b8c\u6210/\u53c2\u8003/\u6280\u672f/\u6279\u6b213/\u516c\u544a.pdf",
+      "size": 2686,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669960,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 2686
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669961,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u5386\u53f2/2025/\u5df2\u5b8c\u6210/\u53c2\u8003/\u6280\u672f/\u6279\u6b213/\u8bf4\u660e.txt",
+      "size": 271,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669961,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 271
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669962,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.029269+00:00",
+      "modified_ns": 1795696315029268956,
+      "path": "\u65e7\u5f52\u6863",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669962,
+        "kind": "directory",
+        "modified_ns": 1795696315029268956,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669963,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.029326+00:00",
+      "modified_ns": 1795696315029326415,
+      "path": "\u65e7\u5f52\u6863/2024",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669963,
+        "kind": "directory",
+        "modified_ns": 1795696315029326415,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669964,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.029383+00:00",
+      "modified_ns": 1795696315029383499,
+      "path": "\u65e7\u5f52\u6863/2024/\u5df2\u5b8c\u6210",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669964,
+        "kind": "directory",
+        "modified_ns": 1795696315029383499,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669965,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.029445+00:00",
+      "modified_ns": 1795696315029444874,
+      "path": "\u65e7\u5f52\u6863/2024/\u5df2\u5b8c\u6210/\u533b\u7597",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669965,
+        "kind": "directory",
+        "modified_ns": 1795696315029444874,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669966,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.029503+00:00",
+      "modified_ns": 1795696315029503249,
+      "path": "\u65e7\u5f52\u6863/2024/\u5df2\u5b8c\u6210/\u533b\u7597/\u5ba2\u6237\u8d44\u6599",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669966,
+        "kind": "directory",
+        "modified_ns": 1795696315029503249,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669967,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.030283+00:00",
+      "modified_ns": 1795696315030283461,
+      "path": "\u65e7\u5f52\u6863/2024/\u5df2\u5b8c\u6210/\u533b\u7597/\u5ba2\u6237\u8d44\u6599/\u5176\u4ed6",
+      "size": 160,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669967,
+        "kind": "directory",
+        "modified_ns": 1795696315030283461,
+        "size": 160
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669968,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.029821+00:00",
+      "modified_ns": 1795696315029821501,
+      "path": "\u65e7\u5f52\u6863/2024/\u5df2\u5b8c\u6210/\u533b\u7597/\u5ba2\u6237\u8d44\u6599/\u5176\u4ed6/\u6279\u6b211",
+      "size": 128,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669968,
+        "kind": "directory",
+        "modified_ns": 1795696315029821501,
+        "size": 128
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669969,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:34+00:00",
+      "modified_ns": 1795648234000000000,
+      "path": "\u65e7\u5f52\u6863/2024/\u5df2\u5b8c\u6210/\u533b\u7597/\u5ba2\u6237\u8d44\u6599/\u5176\u4ed6/\u6279\u6b211/\u516c\u544a.pdf",
+      "size": 2683,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669969,
+        "kind": "file",
+        "modified_ns": 1795648234000000000,
+        "size": 2683
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669970,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u65e7\u5f52\u6863/2024/\u5df2\u5b8c\u6210/\u533b\u7597/\u5ba2\u6237\u8d44\u6599/\u5176\u4ed6/\u6279\u6b211/\u8bf4\u660e.txt",
+      "size": 277,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669970,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 277
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669971,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.030091+00:00",
+      "modified_ns": 1795696315030090835,
+      "path": "\u65e7\u5f52\u6863/2024/\u5df2\u5b8c\u6210/\u533b\u7597/\u5ba2\u6237\u8d44\u6599/\u5176\u4ed6/\u6279\u6b212",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669971,
+        "kind": "directory",
+        "modified_ns": 1795696315030090835,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669972,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u65e7\u5f52\u6863/2024/\u5df2\u5b8c\u6210/\u533b\u7597/\u5ba2\u6237\u8d44\u6599/\u5176\u4ed6/\u6279\u6b212/\u6388\u6743\u51fd.pdf",
+      "size": 2658,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669972,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 2658
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669973,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.030347+00:00",
+      "modified_ns": 1795696315030347170,
+      "path": "\u65e7\u5f52\u6863/2024/\u5df2\u5b8c\u6210/\u533b\u7597/\u5ba2\u6237\u8d44\u6599/\u5176\u4ed6/\u6279\u6b213",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669973,
+        "kind": "directory",
+        "modified_ns": 1795696315030347170,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669974,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u65e7\u5f52\u6863/2024/\u5df2\u5b8c\u6210/\u533b\u7597/\u5ba2\u6237\u8d44\u6599/\u5176\u4ed6/\u6279\u6b213/\u6280\u672f\u65b9\u6848_\u6700\u7ec8.docx",
+      "size": 36978,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669974,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 36978
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669975,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.030909+00:00",
+      "modified_ns": 1795696315030908839,
+      "path": "\u684c\u9762\u5907\u4efd",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669975,
+        "kind": "directory",
+        "modified_ns": 1795696315030908839,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669976,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.032220+00:00",
+      "modified_ns": 1795696315032220303,
+      "path": "\u684c\u9762\u5907\u4efd/\u65b0\u5efa\u6587\u4ef6\u5939",
+      "size": 192,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669976,
+        "kind": "directory",
+        "modified_ns": 1795696315032220303,
+        "size": 192
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669977,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u684c\u9762\u5907\u4efd/\u65b0\u5efa\u6587\u4ef6\u5939/\u626b\u63cf\u4ef6.pdf",
+      "size": 31959,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669977,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 31959
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669978,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.031511+00:00",
+      "modified_ns": 1795696315031510924,
+      "path": "\u684c\u9762\u5907\u4efd/\u65b0\u5efa\u6587\u4ef6\u5939/\u6279\u6b211",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669978,
+        "kind": "directory",
+        "modified_ns": 1795696315031510924,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669979,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u684c\u9762\u5907\u4efd/\u65b0\u5efa\u6587\u4ef6\u5939/\u6279\u6b211/\u6388\u6743\u51fd.pdf",
+      "size": 2670,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669979,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 2670
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669980,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.031751+00:00",
+      "modified_ns": 1795696315031751092,
+      "path": "\u684c\u9762\u5907\u4efd/\u65b0\u5efa\u6587\u4ef6\u5939/\u6279\u6b212",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669980,
+        "kind": "directory",
+        "modified_ns": 1795696315031751092,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669981,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u684c\u9762\u5907\u4efd/\u65b0\u5efa\u6587\u4ef6\u5939/\u6279\u6b212/\u6280\u672f\u65b9\u6848_\u4e34\u65f6.docx",
+      "size": 36977,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669981,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 36977
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669982,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.032278+00:00",
+      "modified_ns": 1795696315032277595,
+      "path": "\u684c\u9762\u5907\u4efd/\u65b0\u5efa\u6587\u4ef6\u5939/\u6279\u6b213",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669982,
+        "kind": "directory",
+        "modified_ns": 1795696315032277595,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669983,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u684c\u9762\u5907\u4efd/\u65b0\u5efa\u6587\u4ef6\u5939/\u6279\u6b213/\u6280\u672f\u8981\u6c42.xlsx",
+      "size": 3901,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669983,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 3901
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669984,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.032492+00:00",
+      "modified_ns": 1795696315032492012,
+      "path": "\u90ae\u4ef6\u9644\u4ef6",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669984,
+        "kind": "directory",
+        "modified_ns": 1795696315032492012,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669985,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.032548+00:00",
+      "modified_ns": 1795696315032547971,
+      "path": "\u90ae\u4ef6\u9644\u4ef6/\u8f6c\u53d1",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669985,
+        "kind": "directory",
+        "modified_ns": 1795696315032547971,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669986,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.033024+00:00",
+      "modified_ns": 1795696315033023514,
+      "path": "\u90ae\u4ef6\u9644\u4ef6/\u8f6c\u53d1/\u5f85\u6574\u7406",
+      "size": 160,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669986,
+        "kind": "directory",
+        "modified_ns": 1795696315033023514,
+        "size": 160
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669987,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.032672+00:00",
+      "modified_ns": 1795696315032672096,
+      "path": "\u90ae\u4ef6\u9644\u4ef6/\u8f6c\u53d1/\u5f85\u6574\u7406/\u6279\u6b211",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669987,
+        "kind": "directory",
+        "modified_ns": 1795696315032672096,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669988,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u90ae\u4ef6\u9644\u4ef6/\u8f6c\u53d1/\u5f85\u6574\u7406/\u6279\u6b211/\u4ea4\u4ed8\u6e05\u5355.txt",
+      "size": 274,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669988,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 274
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669989,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.032861+00:00",
+      "modified_ns": 1795696315032861014,
+      "path": "\u90ae\u4ef6\u9644\u4ef6/\u8f6c\u53d1/\u5f85\u6574\u7406/\u6279\u6b212",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669989,
+        "kind": "directory",
+        "modified_ns": 1795696315032861014,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669990,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u90ae\u4ef6\u9644\u4ef6/\u8f6c\u53d1/\u5f85\u6574\u7406/\u6279\u6b212/\u62a5\u4ef7.xlsx",
+      "size": 3905,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669990,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 3905
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669991,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.033092+00:00",
+      "modified_ns": 1795696315033092390,
+      "path": "\u90ae\u4ef6\u9644\u4ef6/\u8f6c\u53d1/\u5f85\u6574\u7406/\u6279\u6b213",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669991,
+        "kind": "directory",
+        "modified_ns": 1795696315033092390,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669992,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u90ae\u4ef6\u9644\u4ef6/\u8f6c\u53d1/\u5f85\u6574\u7406/\u6279\u6b213/\u6280\u672f\u65b9\u6848.docx",
+      "size": 36975,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669992,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 36975
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669993,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.033619+00:00",
+      "modified_ns": 1795696315033618975,
+      "path": "\u9879\u76ee",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669993,
+        "kind": "directory",
+        "modified_ns": 1795696315033618975,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669994,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.033671+00:00",
+      "modified_ns": 1795696315033670809,
+      "path": "\u9879\u76ee/2026",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669994,
+        "kind": "directory",
+        "modified_ns": 1795696315033670809,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669995,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.033725+00:00",
+      "modified_ns": 1795696315033725351,
+      "path": "\u9879\u76ee/2026/\u65b0\u5efa",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669995,
+        "kind": "directory",
+        "modified_ns": 1795696315033725351,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669996,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.033778+00:00",
+      "modified_ns": 1795696315033777893,
+      "path": "\u9879\u76ee/2026/\u65b0\u5efa/\u672a\u786e\u8ba4",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669996,
+        "kind": "directory",
+        "modified_ns": 1795696315033777893,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669997,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.034741+00:00",
+      "modified_ns": 1795696315034740730,
+      "path": "\u9879\u76ee/2026/\u65b0\u5efa/\u672a\u786e\u8ba4/\u8d44\u6599",
+      "size": 160,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669997,
+        "kind": "directory",
+        "modified_ns": 1795696315034740730,
+        "size": 160
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669998,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.033884+00:00",
+      "modified_ns": 1795696315033884018,
+      "path": "\u9879\u76ee/2026/\u65b0\u5efa/\u672a\u786e\u8ba4/\u8d44\u6599/\u6279\u6b211",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669998,
+        "kind": "directory",
+        "modified_ns": 1795696315033884018,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73669999,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u9879\u76ee/2026/\u65b0\u5efa/\u672a\u786e\u8ba4/\u8d44\u6599/\u6279\u6b211/\u6280\u672f\u65b9\u6848.docx",
+      "size": 36965,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73669999,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 36965
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73670000,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.034612+00:00",
+      "modified_ns": 1795696315034612188,
+      "path": "\u9879\u76ee/2026/\u65b0\u5efa/\u672a\u786e\u8ba4/\u8d44\u6599/\u6279\u6b212",
+      "size": 128,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73670000,
+        "kind": "directory",
+        "modified_ns": 1795696315034612188,
+        "size": 128
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73670001,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u9879\u76ee/2026/\u65b0\u5efa/\u672a\u786e\u8ba4/\u8d44\u6599/\u6279\u6b212/\u516c\u544a.pdf",
+      "size": 2675,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73670001,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 2675
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73670002,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u9879\u76ee/2026/\u65b0\u5efa/\u672a\u786e\u8ba4/\u8d44\u6599/\u6279\u6b212/\u8bf4\u660e.txt",
+      "size": 268,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73670002,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 268
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73670003,
+      "kind": "directory",
+      "modified_at": "2026-11-26T12:31:55.034800+00:00",
+      "modified_ns": 1795696315034800314,
+      "path": "\u9879\u76ee/2026/\u65b0\u5efa/\u672a\u786e\u8ba4/\u8d44\u6599/\u6279\u6b213",
+      "size": 96,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73670003,
+        "kind": "directory",
+        "modified_ns": 1795696315034800314,
+        "size": 96
+      }
+    },
+    {
+      "device": 16777230,
+      "inode": 73670004,
+      "kind": "file",
+      "modified_at": "2026-11-25T23:10:36+00:00",
+      "modified_ns": 1795648236000000000,
+      "path": "\u9879\u76ee/2026/\u65b0\u5efa/\u672a\u786e\u8ba4/\u8d44\u6599/\u6279\u6b213/\u6388\u6743\u51fd.pdf",
+      "size": 63030,
+      "snapshot": {
+        "device": 16777230,
+        "inode": 73670004,
+        "kind": "file",
+        "modified_ns": 1795648236000000000,
+        "size": 63030
+      }
+    }
+  ],
+  "source_root": "/Users/bench/Sorty-Benchmark/v1/perception/runs/B1-C1-03/workspace",
+  "version": 2
+}

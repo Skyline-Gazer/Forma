@@ -1,0 +1,15 @@
+{
+ "id": "D18",
+ "source": "桌面备份/新建文件夹/批次3/技术要求.xlsx",
+ "sha256": "264858e9298ea641518f4a44d8677391f179485010992182dd68860d0076f1bd",
+ "sha256_matches_inventory": true,
+ "bytes": 3901,
+ "ext": ".xlsx",
+ "status": "ok",
+ "method": "docvortex",
+ "chars": 186,
+ "docvortex_seconds": 0.49,
+ "exit_code": 0,
+ "stderr": "",
+ "total_seconds": 0.98
+}

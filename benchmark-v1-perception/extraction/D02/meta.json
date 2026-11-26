@@ -1,0 +1,15 @@
+{
+ "id": "D02",
+ "source": "下载/待处理/批次1/技术要求.xlsx",
+ "sha256": "f89eb09192d9a701e9ba33f88227811cdee8996476d6d2129fcd0fa01ab14bad",
+ "sha256_matches_inventory": true,
+ "bytes": 3886,
+ "ext": ".xlsx",
+ "status": "ok",
+ "method": "docvortex",
+ "chars": 188,
+ "docvortex_seconds": 0.66,
+ "exit_code": 0,
+ "stderr": "",
+ "total_seconds": 1.15
+}

@@ -1,0 +1,15 @@
+{
+ "id": "D10",
+ "source": "临时/厂商/启岳/附件/批次2/技术要求.xlsx",
+ "sha256": "ce07b9a0cbcfeac1ec3ab97e486c54ea78bd36998567a9a611068d776284dfb5",
+ "sha256_matches_inventory": true,
+ "bytes": 3888,
+ "ext": ".xlsx",
+ "status": "ok",
+ "method": "docvortex",
+ "chars": 186,
+ "docvortex_seconds": 0.49,
+ "exit_code": 0,
+ "stderr": "",
+ "total_seconds": 0.98
+}

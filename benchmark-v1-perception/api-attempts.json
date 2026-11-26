@@ -1,0 +1,21 @@
+{
+ "provider": "ModelBest (api.modelbest.cn)",
+ "purpose": "PDF Document Parse + MiniCPM-OCR-Jev quality scoring",
+ "credential_lookup": [
+  {"source": "process env MODELBEST_API_KEY", "present": false},
+  {"source": "launchctl getenv MODELBEST_API_KEY", "present": false},
+  {"source": "~/.config/modelbest.key", "present": false},
+  {"source": "keychain service=modelbest", "present": false},
+  {"source": "any process environment (ps eww -A)", "present": false}
+ ],
+ "attempts": [
+  {"call": "POST /v1/files", "http_status": 401, "error_code": "invalid_api_key", "message": "缺少 Bearer API 密钥", "when": "2026-11-26", "document": "D28", "evidence": "extraction/D28/parse-raw.json"}
+ ],
+ "result": "BLOCKED_WITH_EVIDENCE — no API key available on host; no Billable call made",
+ "fallback_used": {
+  "pdf_text": "DocVortex 0.6.26 native parse (6/8 PDFs)",
+  "pdf_image_only": "Apple Vision VNRecognizeTextRequest zh-Hans/en-US accurate (2/8 PDFs) — OS framework, no model deployment",
+  "why": "keeps 29/29 coverage; documented as a deviation from the requested MiniCPM-OCR path"
+ },
+ "jev": {"status": "NOT_VERIFIED", "reason": "same credential block; no score computed or invented"}
+}

@@ -1,0 +1,39 @@
+{
+ "extraction": {
+  "documents": 29,
+  "total_seconds": 47.66,
+  "by_method": {
+   "docvortex_office": {
+    "docs": 14,
+    "seconds": 7.49
+   },
+   "docvortex_pdf_native": {
+    "docs": 6,
+    "seconds": 3.77
+   },
+   "vision_ocr": {
+    "docs": 2,
+    "seconds": 36.4
+   },
+   "direct_read": {
+    "docs": 7,
+    "seconds": 0.0
+   }
+  },
+  "api": {
+   "successful_calls": 0,
+   "failed_calls": 1,
+   "http_status": [
+    401
+   ],
+   "cost_usd": 0.0,
+   "note": "no API key available; no billable call"
+  }
+ },
+ "model": {
+  "harness": "Codex CLI 0.164.0",
+  "model": "gpt-6-luna",
+  "reasoning": "low",
+  "skill_pin": "9c5ad2ed83b08d412b8c7f0ac7412408d000d8cc"
+ }
+}

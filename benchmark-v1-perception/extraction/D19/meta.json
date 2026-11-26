@@ -1,0 +1,15 @@
+{
+ "id": "D19",
+ "source": "邮件附件/转发/待整理/批次3/技术方案.docx",
+ "sha256": "f7d4a13bdd01431f948a895c18a8f25b4707776af0d4e7e52b046846bec8a5b1",
+ "sha256_matches_inventory": true,
+ "bytes": 36975,
+ "ext": ".docx",
+ "status": "ok",
+ "method": "docvortex",
+ "chars": 129,
+ "docvortex_seconds": 0.55,
+ "exit_code": 0,
+ "stderr": "",
+ "total_seconds": 1.1
+}

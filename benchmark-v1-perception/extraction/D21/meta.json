@@ -1,0 +1,15 @@
+{
+ "id": "D21",
+ "source": "下载/待处理/批次3/报价.xlsx",
+ "sha256": "8a4e310ac76dda72d17aa82979b911ddc22b73bba6d88ed3b289aab884b6f828",
+ "sha256_matches_inventory": true,
+ "bytes": 3909,
+ "ext": ".xlsx",
+ "status": "ok",
+ "method": "docvortex",
+ "chars": 200,
+ "docvortex_seconds": 0.48,
+ "exit_code": 0,
+ "stderr": "",
+ "total_seconds": 0.98
+}

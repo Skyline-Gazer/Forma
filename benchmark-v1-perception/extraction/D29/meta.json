@@ -1,0 +1,12 @@
+{
+ "id": "D29",
+ "source": "下载/待处理/README.txt",
+ "sha256": "add243a756f749c07da5686c2aa9c93b28c230e67a5e6017ce3179831c629cea",
+ "sha256_matches_inventory": true,
+ "bytes": 273,
+ "ext": ".txt",
+ "status": "ok",
+ "method": "direct_read",
+ "chars": 99,
+ "total_seconds": 0.0
+}

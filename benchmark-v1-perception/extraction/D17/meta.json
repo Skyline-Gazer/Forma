@@ -1,0 +1,12 @@
+{
+ "id": "D17",
+ "source": "历史/2025/已完成/参考/技术/批次3/公告.pdf",
+ "sha256": "79afd17b31f9720b326c7a572d4349ad7b0febe9c099bcf484a290c57b7a042e",
+ "sha256_matches_inventory": true,
+ "bytes": 2686,
+ "ext": ".pdf",
+ "status": "ok",
+ "method": "docvortex_native_pdf",
+ "chars": 96,
+ "seconds": 0.6
+}

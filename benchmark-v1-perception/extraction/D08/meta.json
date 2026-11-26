@@ -1,0 +1,12 @@
+{
+ "id": "D08",
+ "source": "旧归档/2024/已完成/医疗/客户资料/其他/批次1/说明.txt",
+ "sha256": "dfd446037d00cf3857bb56549d82a432ed5a652d1d3c8a3301c12ea9e15b5fac",
+ "sha256_matches_inventory": true,
+ "bytes": 277,
+ "ext": ".txt",
+ "status": "ok",
+ "method": "direct_read",
+ "chars": 111,
+ "total_seconds": 0.0
+}

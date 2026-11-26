@@ -1,0 +1,12 @@
+{
+ "id": "D07",
+ "source": "邮件附件/转发/待整理/批次1/交付清单.txt",
+ "sha256": "de1518fbe4c7dd097116f1ddb2ae279645ce5a87bc042f6b7c32c4bb21ae3ab0",
+ "sha256_matches_inventory": true,
+ "bytes": 274,
+ "ext": ".txt",
+ "status": "ok",
+ "method": "direct_read",
+ "chars": 112,
+ "total_seconds": 0.0
+}

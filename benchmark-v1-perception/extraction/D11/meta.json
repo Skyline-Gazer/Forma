@@ -1,0 +1,15 @@
+{
+ "id": "D11",
+ "source": "历史/2025/已完成/参考/技术/批次2/技术方案.docx",
+ "sha256": "23b2faf2defa80fcb2b00b2a76df547f80baa88db39146b3b0be8bc7afe839d7",
+ "sha256_matches_inventory": true,
+ "bytes": 36967,
+ "ext": ".docx",
+ "status": "ok",
+ "method": "docvortex",
+ "chars": 129,
+ "docvortex_seconds": 0.55,
+ "exit_code": 0,
+ "stderr": "",
+ "total_seconds": 1.11
+}

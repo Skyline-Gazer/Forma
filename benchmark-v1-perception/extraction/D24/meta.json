@@ -1,0 +1,12 @@
+{
+ "id": "D24",
+ "source": "历史/2025/已完成/参考/技术/批次3/说明.txt",
+ "sha256": "39c6a525bec3c5060e3c6badb680336120513bdd5ffd52595f63c71bc873e522",
+ "sha256_matches_inventory": true,
+ "bytes": 271,
+ "ext": ".txt",
+ "status": "ok",
+ "method": "direct_read",
+ "chars": 109,
+ "total_seconds": 0.0
+}

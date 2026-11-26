@@ -1,0 +1,7 @@
+已按确认的计划完成 **27 项移动/重命名**，两项待确认文件保持原位。复核了全部 29 份文件：workspace 内仍有 29 个文件，SHA-256 全部与解析清单匹配，未发现缺失、额外副本或源位置残留；无异常。
+
+- [逐份复核报告](./preview/post-apply-review.md)
+- [复核结果 JSON](./preview/verification.json)
+- Journal：[d5c4521d6dc147339054074c75ddb47a.jsonl](./preview/state/journals/d5c4521d6dc147339054074c75ddb47a.jsonl)
+
+所有计划、journal 和报告均保存在 `workspace/` 外。复核范围为文件数量、实际路径和内容哈希。

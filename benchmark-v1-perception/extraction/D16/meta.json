@@ -1,0 +1,12 @@
+{
+ "id": "D16",
+ "source": "项目/2026/新建/未确认/资料/批次2/说明.txt",
+ "sha256": "f91a82d23b2063bdbc9aa155811fcf90f12c31fe2fb35e2df886c247f74e3929",
+ "sha256_matches_inventory": true,
+ "bytes": 268,
+ "ext": ".txt",
+ "status": "ok",
+ "method": "direct_read",
+ "chars": 108,
+ "total_seconds": 0.0
+}

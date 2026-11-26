@@ -1,0 +1,15 @@
+{
+ "id": "D03",
+ "source": "项目/2026/新建/未确认/资料/批次1/技术方案.docx",
+ "sha256": "41b743c2b25041fecfe320bc3e9bc085959e52342099a91e0d2e7ed1f7fad8f0",
+ "sha256_matches_inventory": true,
+ "bytes": 36965,
+ "ext": ".docx",
+ "status": "ok",
+ "method": "docvortex",
+ "chars": 131,
+ "docvortex_seconds": 0.58,
+ "exit_code": 0,
+ "stderr": "",
+ "total_seconds": 1.14
+}

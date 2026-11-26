@@ -1,0 +1,15 @@
+{
+ "id": "D05",
+ "source": "历史/2025/已完成/参考/技术/批次1/报价.xlsx",
+ "sha256": "607022f6386ce5d88a9f9d82cd845811f4ad6ad063a54403e4f5871f1e1c5190",
+ "sha256_matches_inventory": true,
+ "bytes": 3914,
+ "ext": ".xlsx",
+ "status": "ok",
+ "method": "docvortex",
+ "chars": 202,
+ "docvortex_seconds": 0.49,
+ "exit_code": 0,
+ "stderr": "",
+ "total_seconds": 0.97
+}
