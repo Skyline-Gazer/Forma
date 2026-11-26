@@ -168,22 +168,38 @@ echo "owned pid: $MYPID"
 
 # Wait for OUR window rather than trusting a fixed delay: the hosted runner's
 # first launch is slower (Gatekeeper verification of the ad-hoc bundle).
+# Values reach AppleScript as argv (no system-attribute dialect to get wrong),
+# the process is matched by name AND unix id (a whose-clause on `unix id`
+# alone was never proven on this runner), and the last error is retained so a
+# timeout names its cause instead of swallowing it.
 i=0
 n=0
 while [ "$i" -lt 30 ]; do
-    n=$(FORMA_SMOKE_PID=$MYPID osascript -e 'set thePid to (value of (system attribute "FORMA_SMOKE_PID")) as integer
-tell application "System Events" to count (every window of (first process whose unix id is thePid))' 2>/dev/null || echo 0)
+    n=$(osascript - "$MYPID" <<'W' 2>/tmp/forma_smoke_axerr || echo 0
+on run argv
+    set thePid to (item 1 of argv) as integer
+    tell application "System Events"
+        repeat with p in (every process whose name is "Forma")
+            if (unix id of p) is thePid then return count (every window of p)
+        end repeat
+    end tell
+    return 0
+end run
+W
+)
     [ "$n" -gt 0 ] && break
     i=$((i + 1)); sleep 1
 done
 if [ "$i" -ge 30 ]; then
-    echo "error: System Events never saw a window of our instance (Accessibility permission or launch failure)" >&2
+    echo "error: System Events never saw a window of our instance (pid $MYPID)." >&2
+    if kill -0 "$MYPID" 2>/dev/null; then echo "diagnostic: our pid is alive - this is an Accessibility/dialect problem, not a launch failure." >&2; else echo "diagnostic: our pid is GONE - the app exited; recent crash reports:" >&2; ls -t "$HOME/Library/Logs/DiagnosticReports"/Forma*.ips 2>/dev/null | head -2 >&2; fi
+    echo "diagnostic: last System Events error: $(cat /tmp/forma_smoke_axerr 2>/dev/null || echo none)" >&2
     exit 3
 fi
 
 sleep 2  # let the WindowConfigurator's async first-size land before measuring
 
-FORMA_SMOKE_PID=$MYPID FORMA_SMOKE_MODE=$MODE FORMA_MAC_FIRST_LAUNCH_ACCOUNT="${FORMA_MAC_FIRST_LAUNCH_ACCOUNT:-}" osascript - <<'OSA'
+osascript - "$MYPID" "$MODE" "${FORMA_MAC_FIRST_LAUNCH_ACCOUNT:-}" <<'OSA'
 on appAlive(thePid)
     try
         do shell script "kill -0 " & (thePid as text)
@@ -249,12 +265,17 @@ on clickById(win, idStr)
     return false
 end clickById
 
-on run
-    set thePid to (value of (system attribute "FORMA_SMOKE_PID")) as integer
-    set theMode to (value of (system attribute "FORMA_SMOKE_MODE"))
-    set firstLaunchIsolated to (theMode is "ci") or ((value of (system attribute "FORMA_MAC_FIRST_LAUNCH_ACCOUNT")) is "1")
+on run argv
+    set thePid to (item 1 of argv) as integer
+    set theMode to (item 2 of argv)
+    set firstLaunchIsolated to (theMode is "ci") or ((item 3 of argv) is "1")
     tell application "System Events"
-        tell (first process whose unix id is thePid)
+        set ourProc to missing value
+        repeat with p in (every process whose name is "Forma")
+            if (unix id of p) is thePid then set ourProc to p
+        end repeat
+        if ourProc is missing value then error "our instance (pid " & (thePid as text) & ") is not visible to System Events"
+        tell ourProc
             set win to front window
 
             -- 1. First launch: the scene default (1180x700 content). The old
