@@ -32,6 +32,11 @@ jobs:
       # it (verified on the DevBox with an unauthenticated `git fetch`).
       - name: ADS pin consistency
         run: python3 scripts/check_ads_pin.py --verify-upstream
+      # Host-safety lint (#153 physical-run report): automation must never
+      # write global appearance, delete unscoped preferences, remove user
+      # saved state, or control the user's app by name.
+      - name: Host-state safety lint
+        run: sh scripts/check_host_safety.sh
       - name: Unit tests
         run: swift test --parallel --force-resolved-versions
 
@@ -110,5 +115,9 @@ jobs:
       # display; unit tests cannot see NSHostingController's contentMinSize.
       # This drives the actual window: default size, resize to the shell
       # floor, clamp below it, and area navigation at a stable width.
+      # The runner is an ephemeral single-purpose VM: ci mode (state reset
+      # through the exact whitelist) is authorized here and nowhere else.
       - name: Window geometry regression
+        env:
+          FORMA_SMOKE_MODE: ci
         run: sh scripts/smoke_geometry.sh artifact/Forma.app
