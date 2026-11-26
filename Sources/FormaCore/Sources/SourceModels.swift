@@ -15,6 +15,18 @@ public enum SourceScanState: String, Codable, Sendable {
 public struct SourceScanIssue: Sendable, Equatable {
     public enum Reason: String, Sendable {
         case authorization, unreadable, hydrationPending, unknownVolumeSemantics, pathCollision
+
+        /// The scan-issue menu's user-facing word; rawValue stays machine
+        /// (tooltip + logs) per the #175 carve-out.
+        public var productLabel: String {
+            switch self {
+            case .authorization: "缺少访问授权"
+            case .unreadable: "无法读取"
+            case .hydrationPending: "云端内容未就绪"
+            case .unknownVolumeSemantics: "卷语义未知"
+            case .pathCollision: "路径冲突"
+            }
+        }
     }
 
     public let relativePath: String

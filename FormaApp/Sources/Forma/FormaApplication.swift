@@ -12,10 +12,19 @@ struct FormaApplication: App {
             FormaRoot(state: delegate.state)
         }
         .defaultSize(width: 1180, height: 700)
-        // No `windowResizability`, no fixed sizes: the window stays genuinely
-        // user-resizable (owner failure #1/#2 were nested split views forcing
-        // frame growth, not a missing constraint). One shell owns the columns;
-        // every pane inside is flexible with declared bounds.
+        // The window's floor is the shell's declared minimum, not the content's
+        // preferred size. Under the default policy the window could not be
+        // dragged below the mounted content's fitting (ideal) width, so every
+        // area's ideal demanded - 168 sidebar + 320 inspector + the area's
+        // own 616-1177 - became the *minimum*: 1665pt at the Review Desk on a
+        // 1512pt display (owner report, M0-R1 physical acceptance: "页面大小
+        // 不能调整，是固定死的"). `.contentMinSize` ties the floor to the
+        // minimum instead - bounded panes, truncating cells, and locally
+        // scrolling tables hold that minimum at one uniform, small number,
+        // so no business view dictates the window and switching areas
+        // cannot resize it (failure #2 stays fixed: this is still one shell,
+        // not per-area split views).
+        .windowResizability(.contentMinSize)
 
         Settings {
             ProviderSettingsRoot(state: delegate.state)
@@ -196,19 +205,59 @@ private struct FormaRoot: View {
     @ObservedObject var state: FormaApplicationState
 
     var body: some View {
-        switch state.launch {
-        case .starting:
-            ProgressView("Opening workspace…")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .ready(let workspace):
-            WorkspaceAreas(workspace: workspace, state: state)
-        case .degraded(let error):
-            ContentUnavailableView(
-                "Workspace unavailable",
-                systemImage: "externaldrive.badge.exclamationmark",
-                description: Text(error.localizedDescription))
+        // One minimum for every launch state. The scan completes seconds
+        // after launch and swaps `.starting` for the shell; if the two
+        // propose different content minimums, AppKit re-solves the window's
+        // constraints mid-display-cycle and the process traps there (the
+        // #174 stack, reproduced in CI by this slice's first revision -
+        // see ShellLayout.windowMinWidth's comment). Declaring the shell's
+        // steady-state minimum here makes the swap constraint-neutral.
+        Group {
+            switch state.launch {
+            case .starting:
+                ProgressView(ProductCopy.Shell.openingWorkspace)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .ready(let workspace):
+                WorkspaceAreas(workspace: workspace, state: state)
+            case .degraded(let error):
+                ContentUnavailableView(
+                    ProductCopy.Shell.workspaceUnavailable,
+                    systemImage: "externaldrive.badge.exclamationmark",
+                    description: Text(error.localizedDescription))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
+        .frame(minWidth: CGFloat(ShellLayout.windowMinWidth), maxWidth: .infinity,
+               minHeight: CGFloat(ShellLayout.windowMinHeight), maxHeight: .infinity)
+        .background(WindowConfigurator())
     }
+}
+
+/// The two window facts the SwiftUI scene cannot express on the macOS 26
+/// hosting layer (probes J/K/M/O/P in #172): a content min frame makes the
+/// window open AT that min - `.defaultSize` is swallowed - while removing it
+/// re-opens the #153 content-fit launch (1689pt in CI). Set both facts once
+/// at the AppKit level: a static content minimum, which never re-solves when
+/// the mounted subtree swaps (that mid-cycle re-solve was the trap), and a
+/// first-launch content size behind an explicit flag so a returning user's
+/// restored frame is never touched.
+private struct WindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.contentMinSize = NSSize(width: CGFloat(ShellLayout.windowMinWidth),
+                                           height: CGFloat(ShellLayout.windowMinHeight))
+            let key = "shell.windowFirstSizeApplied"
+            if !UserDefaults.standard.bool(forKey: key) {
+                UserDefaults.standard.set(true, forKey: key)
+                window.setContentSize(NSSize(width: CGFloat(ShellLayout.windowIdealWidth),
+                                             height: CGFloat(ShellLayout.windowIdealHeight)))
+            }
+        }
+        return view
+    }
+    func updateNSView(_ view: NSView, context: Context) {}
 }
 
 /// Column widths for the whole app. Every split in the window is bounded here,
@@ -254,6 +303,17 @@ enum ShellGeometry {
     static let workspaceLeading = AreaWidth(ShellLayout.leading(for: .workspace))
     static let mappingLeading = AreaWidth(ShellLayout.leading(for: .mapping))
     static let exceptionsLeading = AreaWidth(ShellLayout.leading(for: .exceptions))
+    /// The one content floor every area declares, so the window's minimum is
+    /// the same number no matter which area is mounted. Tables deliberately
+    /// do not add their own: a `Table` scrolls its columns inside the pane,
+    /// and only this floor reaches the window (see ShellLayout's
+    /// `scrollableTableMinWidth` for the modelled demand).
+    /// The uniform per-area content contract (#172). Declared and tested,
+    /// NEVER applied as a frame on the swap boundary: probes D/J in #172
+    /// showed `areaContent.frame(minWidth:)` is exactly what re-solves the
+    /// window constraints at the .starting -> .ready swap and traps. The
+    /// window minimum is carried by the root frame and window.contentMinSize.
+    static let contentFloor = CGFloat(ShellLayout.areaContentMinWidth)
 }
 
 extension View {
@@ -387,7 +447,7 @@ private struct WorkspaceAreas: View {
             await model.restore()
         }
         .alert("Forma", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
-            Button("OK") { model.error = nil }
+            Button(ProductCopy.Shell.ok) { model.error = nil }
         } message: {
             Text(model.error?.localizedDescription ?? "")
         }
@@ -653,7 +713,7 @@ private struct WorkspaceAreas: View {
 
     private func chooseSource() {
         let panel = NSOpenPanel()
-        panel.title = "Choose a source folder"
+        panel.title = ProductCopy.Shell.chooseSourceFolder
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -665,8 +725,8 @@ private struct WorkspaceAreas: View {
 
     private func chooseReauthorization(for scope: SourceScope) {
         let panel = NSOpenPanel()
-        panel.title = "Choose the folder for \(scope.displayName) again"
-        panel.message = "Forma renews access only when the folder is the same one."
+        panel.title = ProductCopy.Shell.reauthorizeFolder(name: scope.displayName)
+        panel.message = ProductCopy.Workspace.renewsAccess
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -678,10 +738,10 @@ private struct WorkspaceAreas: View {
 
     private func chooseExportDirectory() {
         let panel = NSOpenPanel()
-        panel.title = "Choose a folder for the export bundle"
+        panel.title = ProductCopy.Shell.chooseExportFolder
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
-        panel.prompt = "Export Here"
+        panel.prompt = ProductCopy.Shell.exportHere
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             Task { @MainActor in model.export(to: url) }
@@ -690,11 +750,11 @@ private struct WorkspaceAreas: View {
 
     private func choosePlanExportFolder() {
         let panel = NSOpenPanel()
-        panel.title = "Choose a folder for the import plan"
+        panel.title = ProductCopy.Shell.choosePlanFolder
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
-        panel.prompt = "Write Plan Here"
+        panel.prompt = ProductCopy.Shell.writePlanHere
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             // The encode and the write are off the main actor now (#151 audit
@@ -718,23 +778,25 @@ private struct ImportRecoveryBanner: View {
                 .foregroundStyle(.orange)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Interrupted import operations")
+                Text(ProductCopy.Shell.interruptedImports)
                     .font(.headline)
                 Text(summary)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 if let failure = state.recoveryFailure {
-                    Text("Recovery sweep failed: \(failure.localizedDescription)")
+                    Text(ProductCopy.Shell.recoverySweepFailed(detail: failure.localizedDescription))
                         .font(.callout)
                         .foregroundStyle(.red)
                 }
                 if let scope = state.recoveryScope {
-                    Text("Read scope: \(scope.databaseName) · \(scope.groupPath.joined(separator: "/"))")
+                    Text(ProductCopy.Shell.readScopeLine(name: scope.databaseName,
+                                                     path: scope.groupPath.joined(separator: "/")))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 if let review = state.recoveryReview {
                     Text(reviewSummary(review))
+                        .help(reportCodes(review))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -745,10 +807,10 @@ private struct ImportRecoveryBanner: View {
                 }
             }
             Spacer()
-            Button("Read Scope…") { configuringScope = true }
+            Button(ProductCopy.Shell.readScope) { configuringScope = true }
                 .disabled(state.recovery.requiresReview == false)
                 .accessibilityIdentifier("configure-recovery-scope")
-            Button("Recheck read-only") {
+            Button(ProductCopy.Shell.recheckReadOnly) {
                 Task { await state.requestRecoveryRecheck() }
             }
             .disabled(state.recovery.requiresReview == false
@@ -764,14 +826,27 @@ private struct ImportRecoveryBanner: View {
         }
     }
 
+    /// Machine codes for the tooltip: the banner speaks Chinese, the ledger
+    /// stays English (#175).
+    private func reportCodes(_ report: ImportRecoveryReviewReport) -> String {
+        ImportRecoveryReviewResult.Outcome.allCases
+            .compactMap { outcome in
+                guard let count = report.counts[outcome], count > 0 else { return nil }
+                return "\(outcome.rawValue)=\(count)"
+            }.joined(separator: " ")
+    }
+
     private func reviewSummary(_ report: ImportRecoveryReviewReport) -> String {
         let counts = report.counts
         let parts = ImportRecoveryReviewResult.Outcome.allCases.compactMap { outcome -> String? in
             guard let count = counts[outcome], count > 0 else { return nil }
-            return "\(count) \(outcome.rawValue)"
+            return "\(count) \(outcome.productLabel)"
         }
-        let verdict = report.isConclusive ? "conclusive" : "inconclusive"
-        return "Read-only check \(verdict): " + (parts.isEmpty ? "nothing reviewed" : parts.joined(separator: " · "))
+        let verdict = report.isConclusive
+        return ProductCopy.Shell.reviewVerdict(
+            conclusive: verdict,
+            parts: parts.isEmpty ? ProductCopy.Shell.nothingReviewed
+                                 : parts.joined(separator: " · "))
     }
 
     private var summary: String {
@@ -780,28 +855,28 @@ private struct ImportRecoveryBanner: View {
             guard let count = counts[entryState], count > 0 else { return nil }
             return "\(count) \(label(entryState))"
         }
-        return parts.isEmpty ? "No pending operation." : parts.joined(separator: " · ")
+        return parts.isEmpty ? ProductCopy.Shell.nothingPending : parts.joined(separator: " · ")
     }
 
     private func label(_ entryState: ImportRecoveryEntry.State) -> String {
         switch entryState {
-        case .notStarted: return "not started"
-        case .intentRecorded: return "intent recorded, no record"
-        case .recordCreated: return "record created, fields pending"
-        case .metadataAnswered: return "fields written, readback pending"
-        case .outcomeUnknown: return "outcome unknown"
-        case .settled: return "settled"
+        case .notStarted: return ProductCopy.Shell.notStarted
+        case .intentRecorded: return ProductCopy.Shell.intentRecorded
+        case .recordCreated: return ProductCopy.Shell.recordCreated
+        case .metadataAnswered: return ProductCopy.Shell.metadataAnswered
+        case .outcomeUnknown: return ProductCopy.Shell.outcomeUnknown
+        case .settled: return ProductCopy.Shell.settled
         }
     }
 
     private func reviewExplanation(_ reason: String) -> String {
         switch reason {
         case "no_authorized_scope":
-            return "A read-only recheck needs a confirmed read scope. Until one is confirmed these operations stay VERIFY_REQUIRED and are never retried automatically."
+            return ProductCopy.Shell.needsScopeExplanation
         case "nothing_to_review":
-            return "Nothing is waiting for a readback."
+            return ProductCopy.Shell.nothingAwaitingReadback
         case "workspace_unavailable":
-            return "The workspace or ledger could not be opened; no recheck is attempted."
+            return ProductCopy.Shell.workspaceUnopenable
         default:
             return reason
         }
@@ -830,26 +905,26 @@ private struct RecoveryScopeSheet: View {
         case .none, .ready:
             return nil
         case .missingFields:
-            return "Enter a database UUID, a name and at least one group component."
+            return ProductCopy.Shell.recoveryScopeHint
         case .invalidUUID:
-            return "The database UUID is not a valid UUID."
+            return ProductCopy.Shell.invalidDatabaseUUID
         }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Read-only recovery scope")
+            Text(ProductCopy.Shell.recoveryScopeTitle)
                 .font(.headline)
-            Text("Forma will read the records of interrupted operations in this database and group. It never writes and never retries an import.")
+            Text(ProductCopy.Shell.readOnlyScopeStatement)
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            TextField("Database UUID", text: $draft.databaseID)
+            TextField(ProductCopy.Shell.databaseUUID, text: $draft.databaseID)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("recovery-database-id")
-            TextField("Database name (label only)", text: $draft.databaseName)
+            TextField(ProductCopy.Shell.databaseNameLabel, text: $draft.databaseName)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("recovery-database-name")
-            TextField("Group path, e.g. Forma_I1B2/r1", text: $draft.groupPath)
+            TextField(ProductCopy.Shell.groupPathPlaceholder, text: $draft.groupPath)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("recovery-group-path")
             if let errorText {
@@ -860,11 +935,11 @@ private struct RecoveryScopeSheet: View {
             }
             HStack {
                 Spacer()
-                Button("Cancel") {
+                Button(ProductCopy.Shell.cancel) {
                     draft.reset()
                     dismiss()
                 }
-                Button("Confirm read-only scope") {
+                Button(ProductCopy.Shell.confirmReadOnlyScope) {
                     draft.attemptConfirmation()
                     // Dismiss and commit only on a valid submission. Checking the
                     // application's `recoveryScope` here would also dismiss after a

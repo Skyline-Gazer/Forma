@@ -126,8 +126,8 @@ struct FirstReadSnapshotBindingTests {
         #expect(reopened.entries.first?.outcome(for: .projectname)?.evidenceIDs == [citedPath.id])
     }
 
-    @Test("a manifest mapped from the pre-capture listing stays refused, and the refusal names the stale snapshot")
-    func stalePreCaptureMappingStaysRefused() async throws {
+    @Test("a manifest mapped from the pre-capture listing recovers by citing the rows of the current file")
+    func stalePreCaptureManifestRecoversWithCurrentRows() async throws {
         let state = try await FirstCapture()
         defer { state.fixture.cleanUp() }
         let workspace = state.workspace
@@ -150,11 +150,11 @@ struct FirstReadSnapshotBindingTests {
                 "without binding, the manifest stays pinned to the pre-read snapshot")
         let stored = try await workspace.saveManifest(result.manifest, scopeID: scope.id)
 
-        // The repair does not weaken the citation gate: a row from the newer
-        // snapshot stays refused for the older-bound entry. What changes is
-        // the honest diagnosis - a stale snapshot, not missing evidence - so
-        // the review screen can ask for a re-read instead of a rescan, with no
-        // path or content in the message.
+        // M0-R2 (#153): the post-read rows describe the file as it now is, and
+        // the listing - not the lagging manifest - is the snapshot under
+        // correction. Citing them is the recovery the review screen promises;
+        // publishing rebinds the entry, while the saved revision that was
+        // mapped from the stale listing stays untouched.
         let rows = try #require(state.captured[before.id])
         let citedPath = try #require(rows.first {
             $0.source == .path && $0.isUsable && ($0.excerpt ?? "").contains("示例项目_2026")
@@ -163,15 +163,21 @@ struct FirstReadSnapshotBindingTests {
             to: stored, sourceID: before.id, field: .projectname,
             correctedValue: "示例项目_2026", evidenceIDs: [citedPath.id],
             origin: .manual, scope: scope, profile: profile)
-        #expect(applied.violations.contains { $0.code == "evidence_snapshot_mismatch" },
-                "a superseded-snapshot citation must be reported as stale, not missing: \(applied.violations.map(\.code))")
-        #expect(!applied.violations.contains { $0.code == "evidence_not_found" })
-        #expect(applied.correction.reviewState == .rejected)
-        #expect(applied.correction.producedRevision == nil)
-        #expect(applied.manifest.entries.first?.metadata[.projectname] == nil)
+        #expect(applied.violations.isEmpty,
+                "a row stamped with the current snapshot must be citable: \(applied.violations.map(\.code))")
+        #expect(applied.correction.producedRevision != nil)
+        #expect(applied.manifest.envelope.revision > stored.envelope.revision)
+        let rebound = try #require(applied.manifest.entries.first)
+        #expect(Int(rebound.snapshotRevision) == Int(citedPath.snapshotRevision),
+                "the published revision is bound to the snapshot the cited rows describe")
         let reopened = try #require(try await workspace.currentManifest(scope: scope, profile: profile))
-        #expect(reopened.envelope.revision == stored.envelope.revision,
-                "a refused correction must not publish a revision")
+        #expect(reopened.envelope.revision == applied.manifest.envelope.revision)
+
+        // The strict half survives: a row that matches the file's *earlier*
+        // generation - what the pre-read manifest bound, once a newer read
+        // exists - is still expired evidence, refused and named as such. The
+        // engine-level pin of that rule lives in
+        // `EvidenceCurrencyTests.movedFileExpiresEveryCitation`.
     }
 
     @Test("binding separates a lost target from a moved context, and refuses neither silently")
