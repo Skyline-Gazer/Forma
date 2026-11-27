@@ -33,16 +33,20 @@
 |---|---|---|---|---|---|---|---|---|
 | **Pure WorkBuddy Native (无自定义代码)** | 原生 100% 兼容 | 零依赖 | 不可在 Linux 确定性单测 | 无法复用 `SF_DATALESS` / 账本契约 | **不足**：原生 `Bash`/`Write` 缺原子日志、Unicode 碰撞预检与 `SF_DATALESS` 防水合 | 零 | N/A | 不满足 `FR1`/`FR5` 安全门槛（**否决**） |
 | **Shell (`bash`/`zsh`) + UNIX 工具** | 兼容 `Bash` | 零依赖 | Linux/macOS `stat`/flags 语法差异大 | 需重写账本与 JSON 解析 | **弱**：路径含空格/换行/Unicode 极易出错，JSON 构造脆弱 | 低 | N/A | 复杂日志状态机难以维护（**否决**） |
-| **Python (仅标准库，零第三方包)** | Skill `scripts/` 调用 `python3`；**待 `M1-A` 实测宿主机 `python3` 与 PATH** | 若用系统/已有 `python3`（且 `docvortex` 本身已有 Python）则零额外运行时；否则需引导 | DevBox (Python 3.14) 可直接跑 `unittest`（零 `pytest` 强依赖） | 可直接迁移 `FormaCore` 算法规则与 `make_i1_b2_synthetic.py` 风格 | `os.path.realpath`、`unicodedata.normalize('NFC')`、`sqlite3`/`json`、`ctypes`/`stat` 检查 `SF_DATALESS` 均原生内置 | 随 Skill `scripts/` 直接打包，无需跨架构编译 | PSF (兼容) | ~450–650 LOC；可读性高、单语言内聚（**候选 A**） |
+| **Python (仅标准库，零第三方包)** | Skill `scripts/` 调用 `python3`；**待 `M1-A` 实测宿主机 `python3` 与 PATH** | 若用系统/已有 `python3`（且 `docvortex` 本身已有 Python）则零额外运行时；否则需引导 | DevBox (Python 3.14) 可直接跑 `unittest`（零 `pytest` 强依赖） | 可直接迁移 `FormaCore` 算法规则与 `make_i1_b2_synthetic.py` 风格 | `os.path.realpath`、`unicodedata.normalize('NFC')`、`sqlite3`/`json`、`ctypes` 调用 `renamex_np(RENAME_EXCL)`/`renameat2(RENAME_NOREPLACE)` 与 `SF_DATALESS`（不支持时 fail closed；禁用静默覆盖的 `os.rename`） | 随 Skill `scripts/` 直接打包，无需跨架构编译 | PSF (兼容) | ~450–650 LOC；可读性高、单语言内聚（**候选 A**） |
 | **Node.js / TypeScript** | Skill 不共享 Connector 托管 Node；需用户自装 Node | 增加非必要运行时负担（DocVortex 已用 Python） | DevBox 需额外维护 Node/TS 构建 | 零复用 | `fs` + `sqlite`（Node <22 无稳定内置 SQLite） | 若用 TS 需编译产物或打包 `node_modules` | MIT | 多引入一门运行时，无必要多语言（**否决**） |
-| **Go (单静态二进制)** | Skill 直接调用编译好的 macOS arm64 二进制，不依赖用户 `python3` | **零运行时依赖**，不受客户机 Python PATH 破坏影响 | DevBox (Linux) 可交叉编译 `GOOS=darwin GOARCH=arm64` 并跑 `go test` | 规则移植成本与 Python 相近 | 强类型、原生 `filepath.EvalSymlinks`、`syscall.Stat_t.Flags` (`SF_DATALESS`)、原子 `os.Rename` | 需分发预编译二进制（可能触发 macOS Gatekeeper/quarantine，须 `M1-A` 实测） | BSD-3-Clause | ~500–750 LOC；若 `M1-A` 发现 Python PATH 不稳则为最优备选（**候选 B**） |
-| **Existing Swift (`FormaCore` 窄 CLI)** | 可调用预编译 arm64 CLI | 依赖 Xcode/macOS 14+ 运行库，且 `FormaCore` 绑定 `CryptoKit`/`Security`/GRDB | **Linux DevBox 无法编译测试**（CI 仅 `macos-26`） | 可直接复用 `SourceFilesystem` / `ImportLedger` | 原生最强 | 需在 Mac 构建/签名，DevBox 无法本地出包 | 仓库缺 `LICENSE` | 拉入 GRDB/ZIPFoundation 重型依赖（**备选，非首选**） |
+| **Go (单静态二进制)** | Skill 直接调用编译好的 macOS arm64 二进制，不依赖用户 `python3` | **零运行时依赖**，不受客户机 Python PATH 破坏影响 | DevBox (Linux) 可交叉编译 `GOOS=darwin GOARCH=arm64` 并跑 `go test` | 规则移植成本与 Python 相近 | 强类型、原生 `filepath.EvalSymlinks`、`syscall.Stat_t.Flags` (`SF_DATALESS`)、`unix.RenamexNp(..., RENAME_EXCL)` / `Renameat2(..., RENAME_NOREPLACE)`（禁用静默覆盖的 `os.Rename`） | 需分发预编译二进制（可能触发 macOS Gatekeeper/quarantine，须 `M1-A` 实测） | BSD-3-Clause | ~500–750 LOC；若 `M1-A` 发现 Python PATH 不稳则为最优备选（**候选 B**） |
+| **Existing Swift (`FormaCore` 窄 CLI)** | 可调用预编译 arm64 CLI | 依赖 Xcode/macOS 14+ 运行库，且 `FormaCore` 绑定 `CryptoKit`/`Security`/GRDB | **Linux DevBox 无法编译测试**（CI 仅 `macos-26`） | 可直接复用 `SourceFilesystem` / `ImportLedger` | 原生 `Darwin.renamex_np(RENAME_EXCL)` 最强 | 需在 Mac 构建/签名，DevBox 无法本地出包 | 仓库缺 `LICENSE` | 拉入 GRDB/ZIPFoundation 重型依赖（**备选，非首选**） |
 
 ### 2.1 Evidence-Gated Selection (`M1-A` 决策门)
-- **不预设语言**：删除原 Plan 中对 Python 3.11–3.14 与 `pytest` 的硬性锁定。
-- **决策路径**：在 **`M1-A`（WorkBuddy 宿主机可行性门禁）** 中于真实 Mac WorkBuddy 客户端实测：(1) 无害只读脚本通过 `python3` 调用的 `PATH`/权限表现；(2) `docvortex` CLI 直接调用方式；(3) 预编译无签名/ad-hoc 二进制是否被 macOS Gatekeeper 拦截。
-  - 若 `M1-A` 证实 WorkBuddy `Bash` 环境稳定具备 `python3`（且与 `docvortex` 环境一致）→ **锁定候选 A（stdlib-only Python，零第三方包，标准库 `unittest`）**；
-  - 若 `M1-A` 发现客户端沙盒/PATH 隔离导致 `python3` 不可靠，且单二进制可通过执行校验 → **锁定候选 B（单静态 Go 二进制或极窄 Swift CLI）**。
+- **不预设语言**：保持 Python / Go / Swift 开放；**原子无覆盖（`RENAME_EXCL` / `RENAME_NOREPLACE`）不作为预设特定语言的理由**（三者均可调用）。
+- **决策路径**：在 **`M1-A`** 中于真实 Mac WorkBuddy 客户端实测普通 Expert 的 `Bash`/`python3`/`docvortex` 与首次安装、依赖发现、重复调用、升级、卸载全链路：
+  - 若 `M1-A` 证实普通 Expert 的 `Bash` + `python3` 稳定可用 → **锁定候选 A（stdlib-only Python）**；
+  - 若普通 Expert 的 `Bash`/Python 路径失败，按以下 **4 级备选顺序** 评估（**Connector 仅作备选，非默认必选项**）：
+    1. **WorkBuddy 原生能力 + 直接 CLI 调用**（无需自建运行时）；
+    2. **官方托管运行时的 CLI Connector**（`cli.json` `runtime`）：仅当它能解决真实运行时缺口且不违背平台限制时作为备选，绝非默认必建组件；
+    3. **无运行时依赖的单静态二进制**（如 Go 交叉编译，验证 Gatekeeper 放行）；
+    4. **最小 Swift 组件复用**（如极窄 macOS CLI）。
 
 ---
 

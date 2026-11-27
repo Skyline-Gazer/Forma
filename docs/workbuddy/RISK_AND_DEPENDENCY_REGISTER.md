@@ -30,9 +30,9 @@
 
 | ID | Category | Risk Description | Severity | Likelihood | Mitigation & Contingency | Gate |
 |---|---|---|---|---|---|---|
-| **R-01** | 平台准入与安装 | 官方文档未记载本地 zip 导入；若客户端无法加载本地 Expert/Skill，将阻塞全流程 | High | Medium | 通过新增 **`M1-A`** 在 `M1-B` 编码前第一时间在 Mac 客户端实测；若被阻断立即停工上报 `BLOCKED` | `M1-A` |
-| **R-02** | macOS TCC / 运行时路径 | WorkBuddy `Bash` 子进程可能因 PATH 隔离找不到 `python3`/`docvortex`，或预编译二进制被 Gatekeeper 拦截，或被 TCC 静默拒绝 | High | Medium | `M1-A` 实测可用运行时与合成目录 TCC 后再锁定残余执行器语言（stdlib Python vs 单静态 Go/Swift 二进制） | `M1-A` |
-| **R-03** | 授权绕过风险 (Track C) | WorkBuddy 统一分配 `Write`/`Bash` 工具；Prompt/`allowed-tools` 不是安全边界，Agent 理论上可能绕过预定执行器直写 | High | Medium | 1. `M1-A` 实测原生工具审批是否可强制逐次确认；2. 执行器内部强制复核 `plan_hash`/`snapshot_hash`/containment/Journal；3. 验收核查真实文件映射与操作日志一致性 | `M1-A` / `M3` |
+| **R-01** | 平台准入与安装 | 官方文档未记载本地 zip 导入；用户实际**首次安装/依赖发现/重复调用/升级/卸载**体验若被阻塞将影响可用性 | High | Medium | 通过 **`M1-A`** 在 `M1-B` 编码前于 Mac 客户端实测完整用户分发与生命周期体验（不把未承诺的本地 ZIP 导入视作已验证）；阻塞即停工上报 | `M1-A` |
+| **R-02** | macOS TCC / 运行时路径 | WorkBuddy `Bash` 子进程可能因 PATH 隔离找不到 `python3`/`docvortex`，或预编译二进制被 Gatekeeper 拦截，或被 TCC 静默拒绝 | High | Medium | `M1-A` 实测失败时按 4 级顺序评估：原生+CLI → 可选托管运行时 CLI Connector（仅解决真实缺口时）→ 单静态二进制 → 最小 Swift 复用；不预锁语言 | `M1-A` |
+| **R-03** | 授权绕过与静默覆盖风险 (Track C / B1) | 1. WorkBuddy 统一分配 `Write`/`Bash`，Prompt/`allowed-tools` 不是安全边界；2. 标准 POSIX `rename()` 会静默覆盖已存在目标，预检后`rename()` 存在 TOCTOU 竞态；3. OneDrive/File Provider 原子语义未确认 | High | Medium | 1. `M1-A` 实测原生工具审批强制力；2. 执行器强制使用 `renamex_np(RENAME_EXCL)` / `renameat2(RENAME_NOREPLACE)`，不支持则 **fail closed**，并配套并发出现目标竞态测试；3. File Provider 目标单独隔离，未验证不宣称支持 | `M1-A` / `M1-B` / `#214` |
 | **R-04** | 模型数据出境与隐私 | 本地解析≠本地推理；文档正文进入 WorkBuddy 云端模型路由存在出境风险 | Critical | High | Alpha 与盲测仅用合成语料；明确披露模型路由与出境边界；真实试点须 Owner 单独书面授权 | `FR8` |
 | **R-05** | OneDrive 存储与恢复 | 扫描/哈希可能意外触发 File Provider 批量水合；且无 CLI 驱逐接口 | High | High | `inspect` 通过 `SF_DATALESS` 跳过未水合文件按需读取；活动 DT DB 禁入 OneDrive；`#214` 独立验收 | `#214` |
 | **R-06** | DEVONthink 限制 | 4.4.2 AppleScript 不支持建 Smart Group、按自定义字段 key 搜索与 tag 名称回读 | Medium | High | 保持 DEVONthink 可选；优先 4.4+ 内置 MCP 或极简 `osascript` 仅做 Index + 字段/标签写入与 UUID/路径/计数回读 | `M3` / `#215` |
