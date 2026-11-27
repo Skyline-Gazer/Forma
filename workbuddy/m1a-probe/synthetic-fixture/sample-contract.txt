@@ -1,0 +1,5 @@
+[SYNTHETIC TEST FIXTURE - NO REAL DATA]
+Project: Alpha-Synthetic-2026
+Document Type: Draft Service Agreement
+Parties: Example Buyer Co. / Example Vendor Ltd.
+Note: This synthetic file is solely for M1-A read-only directory access verification.

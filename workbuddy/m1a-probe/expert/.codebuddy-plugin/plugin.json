@@ -1,0 +1,51 @@
+{
+  "name": "forma-m1a-probe",
+  "version": "0.0.1-probe.1",
+  "description": "Disposable read-only M1-A host feasibility probe for Forma WorkBuddy Edition",
+  "author": {
+    "name": "Mark D.",
+    "email": "219239532+markd3ng@users.noreply.github.com"
+  },
+  "expertType": "agent",
+  "agentName": "forma-probe",
+  "agents": ["./agents/forma-probe.md"],
+  "skills": ["./skills/forma-host-probe"],
+  "displayName": {
+    "en": "Forma M1-A Probe",
+    "zh": "Forma M1-A 探针"
+  },
+  "profession": {
+    "en": "Read-Only Host Feasibility Probe",
+    "zh": "只读宿主机可行性探针"
+  },
+  "displayDescription": {
+    "en": "Disposable read-only probe verifying WorkBuddy Expert loading, Skill discovery, path resolution, runtime availability, and synthetic directory permissions.",
+    "zh": "用于验证WorkBuddy宿主机加载、技能发现、只读脚本执行、路径解析与合成目录权限的最小探针专家。"
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "04-DataAI",
+  "defaultInitPrompt": {
+    "zh": "请运行只读宿主机环境探针，并检查合成测试目录",
+    "en": "Run the read-only host environment probe and inspect the synthetic test folder"
+  },
+  "plugin": "forma-m1a-probe",
+  "tags": [
+    { "en": "Host Probe", "zh": "宿主探针" },
+    { "en": "Read Only", "zh": "只读检测" },
+    { "en": "Feasibility", "zh": "可行性验证" }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "请运行只读宿主机环境探针，并检查合成测试目录",
+      "en": "Run the read-only host environment probe and inspect the synthetic test folder"
+    },
+    {
+      "zh": "请读取 probe-checklist 参考文件并报告路径解析结果",
+      "en": "Read the probe-checklist reference file and report path resolution results"
+    },
+    {
+      "zh": "请列出当前可用的 Python、DocVortex 与系统工具版本",
+      "en": "List available Python, DocVortex, and system tool versions"
+    }
+  ]
+}
