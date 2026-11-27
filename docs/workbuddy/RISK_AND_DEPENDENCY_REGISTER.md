@@ -18,11 +18,14 @@
 1. WorkBuddy Mac 客户端可通过官方支持的「我的专家 → 创建专家」或私有预览路径加载单 Agent Expert 与 `skills/*/SKILL.md`（将在 **`M1-A`** 实测验证）。
 2. `docvortex convert` CLI 可在目标 Apple Silicon Mac 上由 WorkBuddy `Bash` 或预配置环境调用（将在 **`M1-A`** 验证）。
 
-### 1.3 Unverified Items (`NOT_VERIFIED` / `BLOCKED`)
-1. WorkBuddy 客户端实际加载机制、Skill 发现、可用运行时（`python3` vs 预编译二进制）、包内相对路径解析、合成目录 TCC 权限与原生工具审批弹窗强制力（`NOT_VERIFIED`，**`M1-A` 首要验证目标**）。
-2. WorkBuddy 内置模型路由在 29 文档与 150 文档盲测上的真实语义得分与成本（`NOT_VERIFIED`，`M3`/`#213`）。
-3. OneDrive 在线占位符水合字节控制与跨设备恢复（`BLOCKED`/`NOT_VERIFIED`，`#214`）。
-4. 真实业务含审阅在内的 `>= 80%` 省时目标（`NOT_VERIFIED`，`#216`）。
+### 1.3 M1-A Closure & Remaining Unverified Items
+- **`CORE_HOST_FEASIBILITY_VERIFIED`**：Mac 实测已确认 Expert 本地安装注册、Skill 自动发现与调用、自然语言驱动、脚本执行、包内资源路径、Python/Node.js/Swift 运行时及升级卸载可用。
+- **`NATIVE_SECURITY_ARCHITECTURE_DOCUMENTED`**：已核对 `Permission-Modes` 官方文档，WorkBuddy 原生提供工作空间沙箱、默认权限确认、3000MB 自动备份、删除保护、敏感保护、Tool 管控与工具内容注入防护。
+- **`PRODUCT_SECURITY_ACCEPTANCE_PENDING`**（待 `M3` 实测）：
+  1. 此前 `M1-A` 权限测试使用 `bypassPermissions`，**默认权限模式与安全中心规则在真实业务流程中的拦截效果须在 `M3` 实测验收**；
+  2. WorkBuddy 内置模型路由在 29 文档与 150 文档盲测上的真实语义得分与成本（`NOT_VERIFIED`，`M3`/`#213`）；
+  3. OneDrive 在线占位符水合字节控制与跨设备恢复（`BLOCKED`/`NOT_VERIFIED`，`#214`）；
+  4. 真实业务含审阅在内的 `>= 80%` 省时目标（`NOT_VERIFIED`，`#216`）。
 
 ---
 
@@ -30,8 +33,8 @@
 
 | ID | Category | Risk Description | Severity | Likelihood | Mitigation & Contingency | Gate |
 |---|---|---|---|---|---|---|
-| **R-01** | 平台准入与安装 | 官方文档未记载本地 zip 导入；用户实际**首次安装/依赖发现/重复调用/升级/卸载**体验若被阻塞将影响可用性 | High | Medium | 通过 **`M1-A`** 在 `M1-B` 编码前于 Mac 客户端实测完整用户分发与生命周期体验（不把未承诺的本地 ZIP 导入视作已验证）；阻塞即停工上报 | `M1-A` |
-| **R-02** | macOS TCC / 运行时路径 | WorkBuddy `Bash` 子进程可能因 PATH 隔离找不到 `python3`/`docvortex`，或预编译二进制被 Gatekeeper 拦截，或被 TCC 静默拒绝 | High | Medium | `M1-A` 实测失败时按 4 级顺序评估：原生+CLI → 可选托管运行时 CLI Connector（仅解决真实缺口时）→ 单静态二进制 → 最小 Swift 复用；不预锁语言 | `M1-A` |
+| **R-01** | 平台准入与安装 | `M1-A` 已验证本地安装/升级/卸载与 Skill 调用可用；残余风险为 `M3` 默认权限与安全中心配置实测 | Low | Low | 已在 `M1-A` 验证；`M3` 按默认权限+安全中心指南实测（`PRODUCT_SECURITY_ACCEPTANCE_PENDING`） | `M3` |
+| **R-02** | 可选解析工具缺省 | `M1-A` 环境未预装 `docvortex`/`mac-ocr`；但这不否定 WorkBuddy 原生文档读取能力 | Low | Medium | 采用 Native-First 策略：优先 WorkBuddy 原生 PDF/Office/TXT/图片读取，仅在扫描件或复杂多表时提示可选安装 `docvortex`/`mac-ocr` | `M3` |
 | **R-03** | 授权绕过与静默覆盖风险 (Track C / B1) | 1. WorkBuddy 统一分配 `Write`/`Bash`，Prompt/`allowed-tools` 不是安全边界；2. 标准 POSIX `rename()` 会静默覆盖已存在目标，预检后`rename()` 存在 TOCTOU 竞态；3. OneDrive/File Provider 原子语义未确认 | High | Medium | 1. `M1-A` 实测原生工具审批强制力；2. 执行器强制使用 `renamex_np(RENAME_EXCL)` / `renameat2(RENAME_NOREPLACE)`，不支持则 **fail closed**，并配套并发出现目标竞态测试；3. File Provider 目标单独隔离，未验证不宣称支持 | `M1-A` / `M1-B` / `#214` |
 | **R-04** | 模型数据出境与隐私 | 本地解析≠本地推理；文档正文进入 WorkBuddy 云端模型路由存在出境风险 | Critical | High | Alpha 与盲测仅用合成语料；明确披露模型路由与出境边界；真实试点须 Owner 单独书面授权 | `FR8` |
 | **R-05** | OneDrive 存储与恢复 | 扫描/哈希可能意外触发 File Provider 批量水合；且无 CLI 驱逐接口 | High | High | `inspect` 通过 `SF_DATALESS` 跳过未水合文件按需读取；活动 DT DB 禁入 OneDrive；`#214` 独立验收 | `#214` |
