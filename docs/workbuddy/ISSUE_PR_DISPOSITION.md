@@ -20,11 +20,14 @@
 
 ---
 
-## 2. Open Issues Disposition Matrix (All 43 Open Issues)
+## 2. Open Issues Disposition Matrix (All 46 Open Issues)
 
 | # | Title | Classification | Rationale | Project #18 Disposition |
 |---|---|---|---|---|
 | `#217` | `[Program][P0] Forma WorkBuddy Edition — Expert alpha, reuse-first implementation` | **Active** | 新版实施主任务（Spec §8） | Add → `In Progress` (`P0`, `Track C`) |
+| `#218` | `[WorkBuddy][P0][M1] M1-A host feasibility & M1-B residual deterministic tooling` | **Active (Planned)** | 待批实施任务：`M1-A` 宿主机可行性前置 + `M1-B` 残余确定性工具（等待 Docs PR 合并） | Add → `Todo` (`P0`) |
+| `#219` | `[WorkBuddy][P0][M2] WorkBuddy Expert package, Skills, reproducible packaging & Linux CI verification` | **Active (Planned)** | 待批实施任务：Expert 打包、校验与指南（阻塞于 `#218` 合入 `workbuddy/dev`） | Add → `Todo` (`P0`) |
+| `#220` | `[WorkBuddy][P0][M3] Mac WorkBuddy client installation, 29-doc Alpha E2E & Owner UX acceptance` | **Active (Planned)** | 待批实施任务：Mac 客户端实装、29 文档回归与 Owner UX（阻塞于 `#219` 合入与包 SHA256） | Add → `Todo` (`P0`) |
 | `#213` | `[WorkBuddy][P0][#213] WorkBuddy semantic acceptance & 100–200 doc blind holdout` | **Active (Gated)** | 已移除 `Start now` 与主动 Sorty 指令（历史记录保留）；改为仅在 `#220` (`M3` Owner UX 批准) 后启动 WorkBuddy 盲测 | `In Progress` → `Blocked` (`P0`) |
 | `#214` | `[WorkBuddy][P0][#214] DEVONthink Index + OneDrive — physical storage and fresh-device recovery` | **Active (Gated)** | 归属对齐 `#217`，保留存储/恢复门禁与 `dae571dc` 证据；受真实 OneDrive/第二设备环境阻塞 | `In Progress` → `Blocked` (`P0`) |
 | `#215` | `[WorkBuddy][P0][#215] WorkBuddy -> DEVONthink optional metadata identity & integration` | **Active (Gated)** | 已移除 Sorty-first 指令（历史保留），对齐 WorkBuddy → DEVONthink 集成，受 `#218`–`#220` 阻塞 | `In Progress` → `Blocked` (`P0`) |
@@ -108,7 +111,7 @@
 | Issue | Status | Priority | Project Item ID | Scope / Constraint |
 |---|---|---|---|---|
 | `#217` | `In Progress` | `P0` | `PVTI_lADOEwGMMc4BtHPlzhMWrm8` | Active Program（`Track C · ADS Governance`） |
-| `#218` | `Todo` | `P0` | `PVTI_lADOEwGMMc4BtHPlzhMWsxY` | `[M1]` Core deterministic CLI（Waiting for Owner approval） |
+| `#218` | `Todo` | `P0` | `PVTI_lADOEwGMMc4BtHPlzhMWsxY` | `M1-A` host feasibility + `M1-B` residual tooling（Waiting for Owner approval of Docs PR） |
 | `#219` | `Todo` | `P0` | `PVTI_lADOEwGMMc4BtHPlzhMWs7I` | `[M2]` Expert package, Skills & Linux CI（Waiting for Owner approval） |
 | `#220` | `Todo` | `P0` | `PVTI_lADOEwGMMc4BtHPlzhMWtD0` | `[M3]` Mac installation, 29-doc Alpha & Owner UX（Waiting for Owner approval） |
 

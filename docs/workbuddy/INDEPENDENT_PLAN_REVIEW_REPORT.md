@@ -1,32 +1,36 @@
-# Independent Plan Review Report
+# Independent Plan Review Report (Revised Plan)
 
-- **Reviewer**: Independent Plan Auditor (`research` subagent, read-only)
-- **Reviewed Baseline**: Canonical Spec [`docs/specs/2026-11-27-workbuddy-edition.md`](../specs/2026-11-27-workbuddy-edition.md) (`110a469208a944a485b4389779795174dad7bc5b`)
-- **Reviewed Artifacts**:
-  - `docs/workbuddy/IMPLEMENTATION_PLAN.md`
-  - `docs/workbuddy/REUSE_MATRIX.md`
-  - `docs/workbuddy/SPEC_TRACEABILITY_MATRIX.md`
-  - `docs/workbuddy/RISK_AND_DEPENDENCY_REGISTER.md`
-  - `docs/workbuddy/ISSUE_PR_DISPOSITION.md`
-- **Initial Verdict**: `NEEDS_FIXES` (2 Major, 3 Minor) → **Post-Fix Verdict**: `PASS` (all 5 findings resolved)
+- **Reviewer**: Independent Read-Only Auditor via OMP (`omp -p --no-session --model magpie/deepseek/deepseek-flash`)
+- **Model Identity**: `magpie/deepseek/deepseek-flash` (verified live, no silent fallback)
+- **Reviewed Commit**: `cdeb7fba56d7ed5d8278c4f748f937aab99d7841` (`workbuddy/docs/implementation-plan`)
+- **Frozen Spec**: [`docs/specs/2026-11-27-workbuddy-edition.md`](../specs/2026-11-27-workbuddy-edition.md) (`110a469208a944a485b4389779795174dad7bc5b`, byte-identical)
+- **Previous Draft Note**: Supersedes initial review of `2d3d44168bef899bda88488298799ea0d45c00fc`.
+- **Verdict on `cdeb7fb`**: `NEEDS_FIXES` (1 Major, 4 Minor, 0 Critical) → **Post-Fix Verdict**: `PASS` (all 5 findings resolved before Docs PR submission)
 
 ---
 
-## Audit Summary
+## 9-Point Review Checklist (on `cdeb7fb` + Post-Fix)
 
-- **Spec Coverage**: 17/17 sections & FRs (`§1`–`§4`, `FR1`–`FR8`, `§6`–`§9`) verified 100% mapped in `SPEC_TRACEABILITY_MATRIX.md` (forward & reverse).
-- **Open Issues & PRs**: 43/43 open issues and 9/9 open PRs verified accounted for in `ISSUE_PR_DISPOSITION.md` with zero missing/extra/duplicate entries.
-- **Facts, SHAs & Licenses**: Verified accurate against `capability_audit.md`, `workbuddy_docs.md`, `deps_research.md`, and `issues.json`.
-- **Scope & Gates**: Zero unauthorized scope expansion, zero weakened acceptance criteria, zero unapproved architecture changes.
+| # | Criterion | Status on `cdeb7fb` | Post-Fix Status |
+|---|---|---|---|
+| 1 | No premature language commitment | `FAIL` (F-01: stale `INDEPENDENT_PLAN_REVIEW_REPORT.md` still mentioned `pytest`) | **PASS** (this report updated; Plan & Reuse Matrix lock language only after `M1-A`) |
+| 2 | No unnecessary custom implementation | `PASS` (F-03: LOC arithmetic note) | **PASS** (reconciled to ~400–850 LOC) |
+| 3 | No undocumented platform assumptions treated as facts | `PASS` | **PASS** |
+| 4 | No delayed critical feasibility gate | `PASS` | **PASS** |
+| 5 | No disconnected branch dependencies | `PASS` (F-05: unpushed/PR not yet opened) | **PASS** (pushed & Docs-only PR opened to `workbuddy/dev`) |
+| 6 | No contradictory active Issue instructions | `PASS` (F-02: `#218`–`#220` rows/count) | **PASS** |
+| 7 | No weakened approval / privacy boundary | `PASS` | **PASS** |
+| 8 | No expansion into a standalone application | `PASS` | **PASS** |
+| 9 | No unauthorized product implementation | `PASS` | **PASS** |
 
 ---
 
-## Findings & Disposition
+## Findings & Dispositions
 
-| # | Severity | Target | Finding | Disposition |
+| ID | Severity | File | Finding | Disposition |
 |---|---|---|---|---|
-| **1** | `MAJOR` | `IMPLEMENTATION_PLAN.md` §C2.2 | `plugin.json` required fields omitted `description` (`string`, short English description), which is a required base field per `open.workbuddy.cn/docs/expert`. | **FIXED**: Added `description` to `plugin.json 必填字段` in §C2.2 and explicitly included it in `M2` validation script checks. |
-| **2** | `MAJOR` | `IMPLEMENTATION_PLAN.md` §C4 (`M1` Test Methods) | Stated `在 Linux CI 运行`, contradicting `.github/workflows/ci.yml` (`macos-26` Swift-only) and `AGENTS.md` (no duplicate CI). | **FIXED**: Updated `M1` to run deterministic `pytest` locally on **Linux DevBox** (and if added to CI, only via existing `.github/workflows/ci.yml` on `pull_request`, without duplicate CI; Mac-only paths remain `NOT_VERIFIED_ON_LINUX`). |
-| **3** | `MINOR` | `IMPLEMENTATION_PLAN.md` §C4 (`M2` Deliverables) | Did not explicitly list `known gaps` (Spec §6) and the 12-field DevBox final report (Spec §9). | **FIXED**: Explicitly added `known gaps` and all 12 Spec §9 report fields to `M2` Deliverables. |
-| **4** | `MINOR` | `IMPLEMENTATION_PLAN.md` | Section numbering jumped from `C2` to `C4`, skipping `C3`. | **FIXED**: Added `## C3. Reuse Matrix` linking to `REUSE_MATRIX.md` so `C1`–`C5` numbering is continuous. |
-| **5** | `MINOR` | `ISSUE_PR_DISPOSITION.md` §4 | Project #18 reconciliation table was pending live `gh project` execution. | **FIXED**: Populated §4 with live `gh project` before/after counts, item IDs, new `M1`/`M2`/`M3` issue numbers, and execution status immediately after Step 3. |
+| **F-01** | `MAJOR` | `INDEPENDENT_PLAN_REVIEW_REPORT.md` | Stale report from `2d3d441` still referenced `pytest` and removed sections. | **FIXED**: Replaced with this `cdeb7fb` audit report; removed `pytest` reference. |
+| **F-02** | `MINOR` | `ISSUE_PR_DISPOSITION.md` | Header said 43 open issues (live = 46); `#218`–`#220` missing from §2 matrix; `#218` §4.2 label still said `Core deterministic CLI`. | **FIXED**: Updated header to 46, added `#218`–`#220` to §2 matrix, updated `#218` §4.2 to `M1-A host feasibility + M1-B residual tooling`. |
+| **F-03** | `MINOR` | `REUSE_MATRIX.md` §2; `IMPLEMENTATION_PLAN.md` §C3 | Residual LOC total stated `400–700` while itemized rows summed to `400–850`. | **FIXED**: Reconciled both documents to `~400–850 LOC` (executor ~400–700 + chunking <150). |
+| **F-04** | `MINOR` | `IMPLEMENTATION_PLAN.md` §C4.2 `M1-B` | `SPEC_TRACEABILITY_MATRIX` FR5 cited separately approved empty-dir cleanup (`no recursive deletion`), which was omitted from `M1-B` scope. | **FIXED**: Added separately previewed/approved empty-dir cleanup (no recursive deletion) to `M1-B` deliverables & verification. |
+| **F-05** | `MINOR` | Branch / PR state | `cdeb7fb` was local/unpushed and Docs-only PR not yet opened. | **FIXED**: Pushed final commit to `origin/workbuddy/docs/implementation-plan` and opened Docs-only PR to `workbuddy/dev`. |

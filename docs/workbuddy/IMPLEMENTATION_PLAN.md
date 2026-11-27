@@ -55,7 +55,7 @@
 
 完整逐项分析见 [`REUSE_MATRIX.md`](./REUSE_MATRIX.md)。核心结论：
 1. **无语言预设**：移除原 Plan 对 Python 3.11–3.14 / `pytest` / 5 子命令大一统 CLI 的强制要求；DocVortex 有 Python SDK 不等于 Forma 必须用 Python。
-2. **最小残余代码（约 400–700 LOC）**：仅针对 WorkBuddy 原生工具无法保证的确定性缺口——本地 FS 原子移动/Journal/碰撞/`SF_DATALESS`/symlink 校验及长文档有界分块。
+2. **最小残余代码（约 400–850 LOC）**：仅针对 WorkBuddy 原生工具无法保证的确定性缺口——本地 FS 枚举/碰撞/`SF_DATALESS`/symlink 校验、原子移动/Journal/冲突恢复（~400–700 LOC）及长文档有界分块（<150 LOC）。
 3. **语言锁定门禁**：由 **`M1-A`（宿主机可行性实测）** 的客观证据决定——若客户端 `Bash` 稳定支持 `python3` 则选用 **stdlib-only Python**（候选 A）；若环境/PATH 隔离阻断则选用 **单静态 Go 二进制或极窄 Swift CLI**（候选 B）。
 
 ---
@@ -81,7 +81,7 @@
 | Phase | Spec IDs | Inputs & Preconditions | Concrete Deliverables | Verification & Acceptance | Failure / Rollback | Host |
 |---|---|---|---|---|---|---|
 | **M1-A** (`#218` 前置) | `§3`, `FR1`, `FR8` | 文档 PR 已合入 `workbuddy/dev` | 最小一次性官方格式 Expert/Skill 探针夹具（仅含无害只读脚本与合成目录） | Mac 实测 8 项未知：官方创建/加载、Skill 发现、只读脚本/CLI 调用、包内路径解析、真实可用运行时与依赖、合成目录 TCC 权限、原生工具审批行为、私有安装路径可用性 | 若平台阻断关键能力，立即停止后续编码并给出最小替代方案；绝不以 DevBox/OMP 冒充通过 | `DevBox` 制具 → `Mac` 实测 |
-| **M1-B** (`#218` 残余) | `FR1`, `FR2`, `FR4`, `FR5`, `FR8` | `M1-A` 通过且语言/运行时已锁定 | 最小残余确定性执行器（`inspect/chunk/plan-verify/apply/recover`）+ `#136` 口径修复 + 确定性单测 | DevBox 确定性单测全部通过（路径/Unicode/symlink/过期计划/幂等/日志恢复/防注入）；macOS 专属（Vision/`SF_DATALESS`）标 `NOT_VERIFIED_ON_LINUX` | 仅在 `workbuddy/feat/*` 修正或回退，不污染 `workbuddy/dev` | `DevBox` (+ Mac 复核) |
+| **M1-B** (`#218` 残余) | `FR1`, `FR2`, `FR4`, `FR5`, `FR8` | `M1-A` 通过且语言/运行时已锁定 | 最小残余确定性执行器（`inspect/chunk/plan-verify/apply/recover`，含单独预览批准的空目录清理、禁止递归删除）+ `#136` 口径修复 + 确定性单测 | DevBox 确定性单测全部通过（路径/Unicode/symlink/过期计划/幂等/日志恢复/防注入/空目录单独批准）；macOS 专属（Vision/`SF_DATALESS`）标 `NOT_VERIFIED_ON_LINUX` | 仅在 `workbuddy/feat/*` 修正或回退，不污染 `workbuddy/dev` | `DevBox` (+ Mac 复核) |
 | **M2** (`#219`) | `§3`, `FR3`, `FR6`, `FR8`, `§6`, `§9` | `M1` 已合入 `workbuddy/dev` | 完整 Expert 包、Skills、可读/机读包校验器、版本化 `.zip` + `SHA256`、安装/卸载指南、known gaps、DEVONthink 可选适配器、Spec §9 12 项报告 | 官方字段约束 100% 校验通过（含 `description`、40–50 字中文简介、禁用 `tools`）；合成端到端干跑；`MAC_HANDOFF` | 校验失败禁止产出发布包 | `DevBox` |
 | **M3** (`#220`) | `FR1–FR8`, `§6`, `§7` (Alpha) | `M2` 已合入且包 `SHA256` 锁定 | Mac 客户端安装实录、29 文档回归 E2E（干跑→批准→执行→映射核验→可选 DT Index/写回读→断点恢复→重复幂等）、宿主恢复记录、Owner UX 结论 | Alpha 门禁：无需 Owner 手动串联命令；零丢失/覆盖/逃逸；DEVONthink 可选读回；Owner 体验批准（29 文档不作盲测成绩，不继承 92.34） | 未获 Owner UX 批准不得启动 `#213` 高成本盲测 | `Mac` + `Owner` |
 | **Phase 4** (`#213`/`#214`/`#215`) | `FR6`, `FR7`, `§7` (Holdout) | `M3` 获 Owner UX 批准 | DevBox 冻结 100–200（目标 150）盲测语料/Gold/Rubric (30/20/15/10/10/10/5)；Mac 3 次独立运行 + 增量更新切片；`#214` OneDrive 大文件实测；`#215` DT 固化 | 均值 ≥90、最低 ≥85、3/3 流程、100% 项目/版本、≥95% 角色、零严重错归/丢失、≤5% 纠错、计数/分母透明；`#214` 独立评定（缺环境标 `BLOCKED`/`NOT_VERIFIED`） | 失败仅允许一次低成本定向修复建议；无可靠路径即止损 | `DevBox` + `Mac` |

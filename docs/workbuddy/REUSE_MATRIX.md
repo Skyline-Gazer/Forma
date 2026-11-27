@@ -27,7 +27,7 @@
 
 ## 2. Language & Runtime Evaluation for Residual Gap
 
-**残余自定义代码总规模**：仅覆盖两处真实缺口——(a) 含 NFC/大小写碰撞、`SF_DATALESS`、symlink/containment、计划哈希、append-only 日志与冲突恢复的本地 FS 确定性执行器，(b) 长文档有界分块辅助（总计约 **400–700 LOC**）。不对“无需自定义代码”的推理、UI、路由、OCR、存储引入任何语言。
+**残余自定义代码总规模**：仅覆盖两处真实缺口——(a) 含 NFC/大小写碰撞、`SF_DATALESS`、symlink/containment、计划哈希、append-only 日志与冲突恢复的本地 FS 确定性执行器（含枚举/资格检查 ~150–250 LOC 与计划/执行/恢复 ~250–450 LOC），(b) 长文档有界分块辅助（<150 LOC），合计约 **400–850 LOC**。不对“无需自定义代码”的推理、UI、路由、OCR、存储引入任何语言。
 
 | Candidate | WorkBuddy 执行与打包兼容 | macOS 安装与依赖负担 | DevBox 开发与验证 | 现有代码复用 | FS 安全与恢复 (NFC/Symlink/Atomic) | 分发与更新复杂度 | 许可兼容 | 长期维护与规模 |
 |---|---|---|---|---|---|---|---|---|
