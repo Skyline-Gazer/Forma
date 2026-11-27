@@ -11,3 +11,6 @@ xcuserdata/
 *.sqlite-wal
 .env
 .env.*
+
+# WorkBuddy local build artifacts (reproducible zip/sha256 generated on demand)
+workbuddy/dist/
