@@ -1,13 +1,13 @@
 # Forma WorkBuddy Edition — Implementation Plan (Revised)
 
-- **Status**: `PLAN_REVISION_COMPLETE` · **Implementation**: `NOT_STARTED` (`WAITING_FOR_OWNER_APPROVAL`)
+- **Status**: `CORE_HOST_FEASIBILITY_VERIFIED` · `NATIVE_SECURITY_ARCHITECTURE_DOCUMENTED` · `PRODUCT_SECURITY_ACCEPTANCE_PENDING` · **Delivery**: `ALPHA_IN_PROGRESS` (`M1-A` Closed → `M1-B` + `M2` Continuous Delivery)
 - **Canonical Spec**: [`docs/specs/2026-11-27-workbuddy-edition.md`](../specs/2026-11-27-workbuddy-edition.md) (Immutable SHA: `110a469208a944a485b4389779795174dad7bc5b`)
 - **Active Program**: [#217](https://github.com/Skyline-Gazer/Forma/issues/217) · **GitHub Project**: [#18](https://github.com/orgs/Skyline-Gazer/projects/18)
-- **Revision Date**: 2026-11-27 (Supersedes initial draft `2d3d44168bef899bda88488298799ea0d45c00fc` per Owner review)
-- **Engineering Principles**: Ponytail（复用优先、最小实现、证据驱动，拒绝为形态完整而自造轮子）。
+- **Revision Date**: 2026-11-27 (`M1-A` closure & Native-First Alpha convergence)
+- **Engineering Principles**: Ponytail（**WorkBuddy Native First → Existing Skills → Existing Tools → Minimal Adaptation → Residual Custom Code**）。
 
-> [!IMPORTANT]
-> **Stop-Gate 声明**：本轮仅授权 Plan 修订、分支与 Issue 治理收敛、独立审查及向 `workbuddy/dev` 提交文档 PR。**未启动 `M1-A` 夹具构建或任何产品代码实施**；须待 Owner 审阅合并本规划 PR 并批准进入 `M1` 后，方可在整合后的 `workbuddy/dev` HEAD 上启动 `M1-A`。
+> [!NOTE]
+> **M1-A 收口结论**：Mac 真机探针已验证 Expert 本地安装注册、Skill 自动发现与调用、自然语言驱动、脚本执行、包内资源路径、Python/Node.js/Swift 运行时及 Expert 升级/卸载。此前权限探针运行于 `bypassPermissions` 下，不能否定 WorkBuddy 官方「默认权限与安全中心」机制；`docvortex`/`mac-ocr` 未预装也不否定 WorkBuddy 原生文档解析能力。本轮采用 WorkBuddy 原生文档能力与安全中心为底座，将真实产品安全配置纳入 `M3` 验收。
 
 ---
 
@@ -45,7 +45,7 @@
   - `agents/forma.md`：**严禁自填 `tools` 字段**（平台统一分配 `Read`/`Write`/`Grep`/`Glob`/`Bash` 等）。
   - `SKILL.md`：按官方双语 frontmatter 填写；`allowed-tools` 仅作提示，不作安全边界。
 - **外部工具与可选集成**：
-  - **文档解析**：优先直接调用 `docvortex convert` CLI（`0.6.26`, MIT），`.txt` 使用 WorkBuddy 原生读取；扫描件在 macOS 回退 `mac-ocr`（MIT）或等效 `VNRecognizeTextRequest`。
+  - **文档解析（Native-First）**：优先使用 WorkBuddy 原生文档读取及官方办公文档处理能力覆盖 PDF/DOCX/XLSX/PPTX/TXT；仅当原生读取遇到扫描件、抽取失败或复杂多表需兜底时，才选用 `docvortex convert`、`mac-ocr` 或 Apple Vision，不默认强制预装。
   - **DEVONthink（可选）**：**不写入 `plugin.json` 必填 `dependencies`**；优先 DEVONthink 4.4+ 内置 MCP 或极简 `osascript` (JXA/AppleScript)，仅允许隔离测试库；禁止将 macOS-only DEVONthink 包装为跨平台 CLI Connector。
   - **OneDrive（可选）**：仅作原件目录；严禁在 OneDrive 内放置活动 DEVONthink DB。
 
@@ -54,9 +54,8 @@
 ## C3. Reuse & Language Decision Summary
 
 完整逐项分析见 [`REUSE_MATRIX.md`](./REUSE_MATRIX.md)。核心结论：
-1. **无语言预设**：移除原 Plan 对 Python 3.11–3.14 / `pytest` / 5 子命令大一统 CLI 的强制要求；DocVortex 有 Python SDK 不等于 Forma 必须用 Python。
-2. **最小残余代码（约 400–850 LOC）**：仅针对 WorkBuddy 原生工具无法保证的确定性缺口——本地 FS 枚举/碰撞/`SF_DATALESS`/symlink 校验、原子移动/Journal/冲突恢复（~400–700 LOC）及长文档有界分块（<150 LOC）。
-3. **语言锁定门禁**：由 **`M1-A`（宿主机可行性实测）** 的客观证据决定——若客户端 `Bash` 稳定支持 `python3` 则选用 **stdlib-only Python**（候选 A）；若环境/PATH 隔离阻断则选用 **单静态 Go 二进制或极窄 Swift CLI**（候选 B）。
+1. **Native-First 原则**：WorkBuddy 原生提供工作空间、默认权限、安全中心（文件/命令/网络规则、3000MB 自动备份、删除保护、敏感保护、Tool 管控、工具内容注入防护）、原生文档读取与预览确认流，Forma 不重复建设这些基础设施。
+2. **最小确定性安全内核**：仅针对原生未覆盖的排他无覆盖移动（macOS `renamex_np(..., RENAME_EXCL)` / Linux `renameat2(..., RENAME_NOREPLACE)`）、`snapshot_hash`/`plan_hash` 绑定、NFC/大小写碰撞、`SF_DATALESS` 防水合、append-only 日志与四态冲突恢复，采用零第三方依赖的最小脚本实现（`M1-A` 已验证 `python3` 运行时可用）。
 
 ---
 

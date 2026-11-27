@@ -1,0 +1,54 @@
+{
+  "name": "forma-organizer",
+  "version": "0.1.0-alpha.1",
+  "description": "Business document understanding, structured organization preview, approval-bound apply, and optional DEVONthink archival expert for WorkBuddy.",
+  "author": {
+    "name": "Mark D.",
+    "email": "219239532+markd3ng@users.noreply.github.com"
+  },
+  "expertType": "agent",
+  "agentName": "forma",
+  "agents": ["./agents/forma.md"],
+  "skills": [
+    "./skills/forma-organize",
+    "./skills/forma-devonthink-optional"
+  ],
+  "displayName": {
+    "en": "Forma",
+    "zh": "Forma 文档整理专家"
+  },
+  "profession": {
+    "en": "Business Document Organization Expert",
+    "zh": "业务文档理解与归档专家"
+  },
+  "displayDescription": {
+    "en": "WorkBuddy-native business document organizer: understands content and project relationships, previews a structured plan, applies safely on approval, and optionally indexes to DEVONthink.",
+    "zh": "面向业务文档理解与结构化归档的WorkBuddy专家，支持内容推理、方案预览、批准执行与安全恢复。"
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "04-DataAI",
+  "defaultInitPrompt": {
+    "zh": "请整理我选定的文件夹：先只读检查并展示整理方案预览，经我确认后再执行。",
+    "en": "Organize my selected folder: inspect read-only and show a preview plan first, then apply only after my approval."
+  },
+  "plugin": "forma-organizer",
+  "tags": [
+    { "en": "Document Organization", "zh": "文档整理" },
+    { "en": "Business Archive", "zh": "业务归档" },
+    { "en": "DEVONthink", "zh": "DEVONthink" }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "请整理我选定的文件夹：先只读检查并展示整理方案预览，经我确认后再执行。",
+      "en": "Organize my selected folder: inspect read-only and show a preview plan first, then apply only after my approval."
+    },
+    {
+      "zh": "仅检查选定文件夹并生成整理方案预览，不要修改或移动任何文件。",
+      "en": "Inspect the selected folder and propose an organization plan without modifying or moving any files."
+    },
+    {
+      "zh": "请帮我审阅或恢复上一次的文档整理方案与执行日志。",
+      "en": "Review or recover my previous document organization plan and execution journal."
+    }
+  ]
+}
