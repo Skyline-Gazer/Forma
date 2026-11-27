@@ -14,3 +14,5 @@ xcuserdata/
 
 # WorkBuddy local build artifacts (reproducible zip/sha256 generated on demand)
 workbuddy/dist/
+__pycache__/
+*.pyc

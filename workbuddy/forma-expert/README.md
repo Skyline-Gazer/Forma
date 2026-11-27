@@ -42,3 +42,11 @@ Forma 是运行在 WorkBuddy 内的业务文档理解与归档专家（单 Agent
   - `docvortex`（`0.6.26`, Apple Silicon macOS 14+）：`pip install docvortex==0.6.26`
   - `mac-ocr`（macOS Vision 离线 OCR）：`npm install -g mac-ocr`
 - **可选 DEVONthink**：仅当明确启用时使用，需本机已安装 DEVONthink（Custom Metadata 需 Pro/Server）并手动指定隔离测试库。
+
+---
+
+## 5. 已知限制（Alpha）
+
+- 当前为合成目录/隔离测试库 Alpha 包，**未完成 Mac M3 真机验收前不得用于生产数据**。
+- OneDrive / File Provider 路径上的 `renamex_np(RENAME_EXCL)` 原子性尚未实测验证，默认受隔离保护拦截。
+- DEVONthink AppleScript 不支持脚本创建 Smart Groups 或按自定义字段 key 搜索；仅支持隔离库 Index、字段/标签写入与 UUID/路径/计数回读。

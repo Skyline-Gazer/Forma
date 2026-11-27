@@ -19,7 +19,6 @@ import json
 import os
 import platform
 import shutil
-import stat
 import sys
 import time
 import unicodedata
@@ -126,15 +125,26 @@ def _load_eligibility_rules(policy_path: Path | None) -> dict[str, Any]:
     return {"policy_id": "fallback", "rules": []}
 
 
-def _classify_entry(rel_path: str, name: str) -> tuple[str, str]:
-    if name == ".DS_Store":
-        return "EXCLUDE", "technical_noise_ds_store"
-    if name.startswith("._"):
-        return "EXCLUDE", "technical_noise_appledouble"
-    if name.startswith("~$"):
-        return "EXCLUDE", "technical_noise_office_lock"
-    if any(part == ".git" for part in Path(rel_path).parts):
+def _classify_entry(rel_path: str, name: str, policy: dict[str, Any] | None = None) -> tuple[str, str]:
+    parts = Path(rel_path).parts
+    if any(part == ".git" for part in parts):
         return "REVIEW", "git_tracked_content"
+    for rule in (policy or {}).get("rules", []):
+        conds = rule.get("all", [])
+        if not conds:
+            continue
+        matched = True
+        for c in conds:
+            if "basenames" in c and name not in c["basenames"]:
+                matched = False
+            elif "basename_prefixes" in c and not any(name.startswith(p) for p in c["basename_prefixes"]):
+                matched = False
+            elif "dirnames" in c and not any(part in c["dirnames"] for part in parts[:-1]):
+                matched = False
+            elif "facts" in c:
+                matched = False
+        if matched:
+            return rule["decision"], rule.get("explanation_code", rule["rule_id"])
     return "INCLUDE", "eligible_business_candidate"
 
 
@@ -184,7 +194,7 @@ def inspect_directory(source: Path, max_entries: int = 5000, policy_path: Path |
             probed_count += 1
             st = os.lstat(fp)
             dataless = _is_dataless(st)
-            decision, reason = _classify_entry(rel, fn)
+            decision, reason = _classify_entry(rel, fn, policy)
             ext = fp.suffix.lower()
             sha256 = None
             mismatch = False
@@ -407,6 +417,11 @@ def _load_journal(journal_path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in journal_path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
+def _compute_plan_hash(plan: dict[str, Any]) -> str:
+    core = {k: v for k, v in plan.items() if k not in ("plan_id", "plan_hash")}
+    return _sha256_bytes(_canonical_json(core).encode("utf-8"))
+
+
 def execute_plan(
     plan: dict[str, Any],
     state_dir: Path,
@@ -420,18 +435,70 @@ def execute_plan(
     src_root = Path(plan["source_root"])
     dst_root = Path(plan["dest_root"])
 
-    if not execute:
-        return {"status": "DRY_RUN", "plan_id": plan["plan_id"], "plan_hash": plan["plan_hash"], "results": []}
+    # #1 CRITICAL: always recompute plan_hash over canonical plan content (prevents post-approval tampering)
+    recomputed_hash = _compute_plan_hash(plan)
+    if recomputed_hash != plan.get("plan_hash"):
+        raise PermissionError(f"Plan integrity check failed: tampered plan (stored={plan.get('plan_hash')}, actual={recomputed_hash})")
 
-    if approve_plan_hash != plan["plan_hash"] or approve_snapshot_hash != plan["snapshot_hash"]:
+    if execute and (approve_plan_hash != recomputed_hash or approve_snapshot_hash != plan["snapshot_hash"]):
         raise PermissionError("Approval mismatch: plan_hash or snapshot_hash does not match approved values")
 
-    if (plan.get("dest_cloud_storage") or _is_cloud_storage_path(src_root) or _is_cloud_storage_path(dst_root)) and not allow_file_provider:
+    if execute and (plan.get("dest_cloud_storage") or _is_cloud_storage_path(src_root) or _is_cloud_storage_path(dst_root)) and not allow_file_provider:
         raise PermissionError("CloudStorage/OneDrive path detected: atomic RENAME_EXCL unverified; pass --allow-file-provider only in isolated tests")
+
+    journal_path = state_dir / "journal.jsonl"
+    existing_events = _load_journal(journal_path)
+    completed_ops = {e["op_id"] for e in existing_events if e.get("phase") == "COMMITTED" and e.get("plan_hash") == recomputed_hash}
+    intent_ops = {e["op_id"] for e in existing_events if e.get("phase") == "INTENT" and e.get("plan_hash") == recomputed_hash}
+
+    # Pre-flight validation runs for BOTH dry-run and execute
+    total_move_bytes = 0
+    preflight_results: list[dict[str, Any]] = []
+    resumed_ops: set[str] = set()
+    for op in plan["operations"]:
+        if op["disposition"] not in ("move", "rename"):
+            preflight_results.append({"op_id": op["op_id"], "status": f"NOOP_{op['disposition'].upper()}"})
+            continue
+        if op["op_id"] in completed_ops:
+            preflight_results.append({"op_id": op["op_id"], "status": "SKIP_VERIFIED"})
+            continue
+
+        src = _ensure_within(src_root, src_root / op["source_rel"])
+        dst = _ensure_dest_target_within(dst_root, op["dest_rel"])
+
+        # Crash-between-rename-and-COMMITTED resume detection
+        if op["op_id"] in intent_ops and not src.exists() and dst.exists() and not dst.is_symlink():
+            if not op["source_sha256"] or _sha256_file(dst) == op["source_sha256"]:
+                resumed_ops.add(op["op_id"])
+                preflight_results.append({"op_id": op["op_id"], "status": "WOULD_RESUME_VERIFIED", "src": str(src), "dest": str(dst)})
+                continue
+
+        if src.is_symlink() or not src.exists():
+            raise ValueError(f"Stale plan: source missing or symlink: {src}")
+        st = os.lstat(src)
+        if _is_dataless(st):
+            raise ValueError(f"Refusing to move dataless placeholder: {src}")
+        if not os.access(src, os.R_OK):
+            raise PermissionError(f"Source not readable: {src}")
+        if op["source_sha256"] and _sha256_file(src) != op["source_sha256"]:
+            raise ValueError(f"Stale plan: source content changed since snapshot: {src}")
+        if dst.exists():
+            raise FileExistsError(f"Destination exists at preflight: {dst}")
+        total_move_bytes += st.st_size
+        preflight_results.append({"op_id": op["op_id"], "status": "WOULD_APPLY", "src": str(src), "dest": str(dst)})
+
+    # Available disk space check on dest_root
+    if hasattr(os, "statvfs") and total_move_bytes > 0:
+        vfs = os.statvfs(dst_root)
+        free_bytes = vfs.f_bavail * vfs.f_frsize
+        if free_bytes < total_move_bytes:
+            raise OSError(errno.ENOSPC, f"Insufficient space at {dst_root}: need {total_move_bytes}, free {free_bytes}")
+
+    if not execute:
+        return {"status": "DRY_RUN", "plan_id": plan["plan_id"], "plan_hash": recomputed_hash, "results": preflight_results}
 
     state_dir.mkdir(parents=True, exist_ok=True)
     lock_path = state_dir / "writer.lock"
-    journal_path = state_dir / "journal.jsonl"
     results: list[dict[str, Any]] = []
 
     with lock_path.open("w") as lockf:
@@ -439,25 +506,6 @@ def execute_plan(
             fcntl.flock(lockf.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise RuntimeError("Single-writer lock held by another process") from exc
-
-        existing_events = _load_journal(journal_path)
-        completed_ops = {e["op_id"] for e in existing_events if e.get("phase") == "COMMITTED" and e.get("plan_hash") == plan["plan_hash"]}
-
-        # Pre-flight stale check across all mutable ops before mutating anything
-        for op in plan["operations"]:
-            if op["disposition"] not in ("move", "rename") or op["op_id"] in completed_ops:
-                continue
-            src = _ensure_within(src_root, src_root / op["source_rel"])
-            if src.is_symlink() or not src.exists():
-                raise ValueError(f"Stale plan: source missing or symlink: {src}")
-            st = os.lstat(src)
-            if _is_dataless(st):
-                raise ValueError(f"Refusing to move dataless placeholder: {src}")
-            if op["source_sha256"] and _sha256_file(src) != op["source_sha256"]:
-                raise ValueError(f"Stale plan: source content changed since snapshot: {src}")
-            dst = _ensure_dest_target_within(dst_root, op["dest_rel"])
-            if dst.exists():
-                raise FileExistsError(f"Destination exists at preflight: {dst}")
 
         for op in plan["operations"]:
             if op["disposition"] not in ("move", "rename"):
@@ -469,10 +517,24 @@ def execute_plan(
 
             src = _ensure_within(src_root, src_root / op["source_rel"])
             dst = _ensure_dest_target_within(dst_root, op["dest_rel"])
+            if op["op_id"] in resumed_ops:
+                _append_journal(journal_path, {
+                    "ts": time.time(),
+                    "phase": "COMMITTED",
+                    "plan_hash": recomputed_hash,
+                    "op_id": op["op_id"],
+                    "src": str(src),
+                    "dst": str(dst),
+                    "expected_sha256": op["source_sha256"],
+                    "mode": "resumed_after_intent",
+                })
+                results.append({"op_id": op["op_id"], "status": "RESUMED_VERIFIED", "dest": str(dst)})
+                continue
+
             _append_journal(journal_path, {
                 "ts": time.time(),
                 "phase": "INTENT",
-                "plan_hash": plan["plan_hash"],
+                "plan_hash": recomputed_hash,
                 "op_id": op["op_id"],
                 "src": str(src),
                 "dst": str(dst),
@@ -484,23 +546,29 @@ def execute_plan(
 
             try:
                 mode = _move_no_replace(src, dst, op["source_sha256"], rename_fn=rename_fn)
+                # Post-apply independent verification: src absent, dst present & SHA-256 matches
+                verified = (not src.exists()) and dst.exists() and (not dst.is_symlink()) and (
+                    not op["source_sha256"] or _sha256_file(dst) == op["source_sha256"]
+                )
+                if not verified:
+                    raise ValueError(f"Post-apply verification failed for {dst}")
                 _append_journal(journal_path, {
                     "ts": time.time(),
                     "phase": "COMMITTED",
-                    "plan_hash": plan["plan_hash"],
+                    "plan_hash": recomputed_hash,
                     "op_id": op["op_id"],
                     "src": str(src),
                     "dst": str(dst),
                     "expected_sha256": op["source_sha256"],
                     "mode": mode,
                 })
-                results.append({"op_id": op["op_id"], "status": "APPLIED", "mode": mode, "dest": str(dst)})
+                results.append({"op_id": op["op_id"], "status": "APPLIED", "mode": mode, "dest": str(dst), "verified": True})
             except OSError as exc:
                 status = "CONFLICT_HOLD" if exc.errno == errno.EEXIST else "FAIL_CLOSED"
                 _append_journal(journal_path, {
                     "ts": time.time(),
                     "phase": status,
-                    "plan_hash": plan["plan_hash"],
+                    "plan_hash": recomputed_hash,
                     "op_id": op["op_id"],
                     "src": str(src),
                     "dst": str(dst),
@@ -510,12 +578,15 @@ def execute_plan(
                 results.append({"op_id": op["op_id"], "status": status, "errno": exc.errno, "error": str(exc)})
 
     has_failures = any(r["status"] in ("CONFLICT_HOLD", "FAIL_CLOSED") for r in results)
-    return {
+    report = {
         "status": "PARTIAL_OR_FAILED" if has_failures else "APPLIED_VERIFIED",
         "plan_id": plan["plan_id"],
-        "plan_hash": plan["plan_hash"],
+        "plan_hash": recomputed_hash,
+        "snapshot_hash": plan["snapshot_hash"],
         "results": results,
     }
+    (state_dir / "verify_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return report
 
 
 def cleanup_empty_dirs(source_root: Path, dirs: list[str], approve_hash: str | None, execute: bool) -> dict[str, Any]:

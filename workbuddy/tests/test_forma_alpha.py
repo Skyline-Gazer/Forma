@@ -61,14 +61,21 @@ class FormaAlphaTests(unittest.TestCase):
             )
             self.assertIn(plan["plan_hash"], md)
 
-            # Dry-run must not mutate
+            # Dry-run must validate & enumerate operations without mutating
             dry = forma_fs.execute_plan(plan, state, execute=False)
             self.assertEqual(dry["status"], "DRY_RUN")
+            self.assertEqual(dry["results"][0]["status"], "WOULD_APPLY")
             self.assertTrue(f.exists())
 
             # Wrong approval hash must fail closed
             with self.assertRaises(PermissionError):
                 forma_fs.execute_plan(plan, state, execute=True, approve_plan_hash="bad", approve_snapshot_hash=plan["snapshot_hash"])
+
+            # Tampered plan.json after approval must be rejected even if original hash is supplied
+            tampered = json.loads(json.dumps(plan))
+            tampered["operations"][0]["dest_rel"] = "UNREVIEWED/doc.txt"
+            with self.assertRaises(PermissionError):
+                forma_fs.execute_plan(tampered, state, execute=True, approve_plan_hash=plan["plan_hash"], approve_snapshot_hash=plan["snapshot_hash"])
 
             # Modifying source invalidates plan
             f.write_text("v2-mutated", encoding="utf-8")
@@ -148,6 +155,7 @@ class FormaAlphaTests(unittest.TestCase):
 
             res1 = forma_fs.execute_plan(plan, state, execute=True, approve_plan_hash=plan["plan_hash"], approve_snapshot_hash=plan["snapshot_hash"])
             self.assertEqual(res1["status"], "APPLIED_VERIFIED")
+            self.assertTrue((state / "verify_report.json").exists())
             # Repeat apply must be idempotent SKIP_VERIFIED
             res2 = forma_fs.execute_plan(plan, state, execute=True, approve_plan_hash=plan["plan_hash"], approve_snapshot_hash=plan["snapshot_hash"])
             self.assertEqual(res2["results"][0]["status"], "SKIP_VERIFIED")
@@ -157,6 +165,49 @@ class FormaAlphaTests(unittest.TestCase):
             rec = forma_fs.recover_journal(state / "journal.jsonl", mode="rollback", execute=True)
             self.assertEqual(rec["operations"][0]["action"], "CONFLICT_HOLD_USER_EDIT")
             self.assertEqual((dst / "Sub/r.txt").read_text(encoding="utf-8"), "user-edited")
+
+    def test_10_cross_volume_exdev_and_intent_resume(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            src, dst, state = Path(td) / "src", Path(td) / "dst", Path(td) / "state"
+            src.mkdir()
+            dst.mkdir()
+            (src / "xv.txt").write_text("cross-vol", encoding="utf-8")
+            snap = forma_fs.inspect_directory(src)
+            plan, _ = forma_fs.build_plan(snap, [{"source_rel": "xv.txt", "disposition": "move", "dest_rel": "xv.txt"}], dst)
+
+            def exdev_then_exclusive(s: Path, d: Path) -> None:
+                if s.parent == src:
+                    raise OSError(errno.EXDEV, "Invalid cross-device link")
+                forma_fs._exclusive_rename_os(s, d)
+
+            res = forma_fs.execute_plan(
+                plan,
+                state,
+                execute=True,
+                approve_plan_hash=plan["plan_hash"],
+                approve_snapshot_hash=plan["snapshot_hash"],
+                rename_fn=exdev_then_exclusive,
+            )
+            self.assertEqual(res["status"], "APPLIED_VERIFIED")
+            self.assertEqual(res["results"][0]["mode"], "cross_volume_verified_no_replace")
+            self.assertEqual((dst / "xv.txt").read_text(encoding="utf-8"), "cross-vol")
+
+            # Simulate crash after INTENT + move but before COMMITTED
+            (src / "cr.txt").write_text("crash-resume", encoding="utf-8")
+            snap2 = forma_fs.inspect_directory(src)
+            plan2, _ = forma_fs.build_plan(snap2, [{"source_rel": "cr.txt", "disposition": "move", "dest_rel": "cr.txt"}], dst)
+            state2 = Path(td) / "state2"
+            forma_fs._append_journal(state2 / "journal.jsonl", {
+                "phase": "INTENT",
+                "plan_hash": plan2["plan_hash"],
+                "op_id": plan2["operations"][0]["op_id"],
+                "src": str(src / "cr.txt"),
+                "dst": str(dst / "cr.txt"),
+                "expected_sha256": plan2["operations"][0]["source_sha256"],
+            })
+            (src / "cr.txt").replace(dst / "cr.txt")
+            res2 = forma_fs.execute_plan(plan2, state2, execute=True, approve_plan_hash=plan2["plan_hash"], approve_snapshot_hash=plan2["snapshot_hash"])
+            self.assertEqual(res2["results"][0]["status"], "RESUMED_VERIFIED")
 
     def test_07_prompt_injection_filename_and_shell_safety(self) -> None:
         with tempfile.TemporaryDirectory() as td:
