@@ -8,7 +8,7 @@ Forma 是运行在 WorkBuddy 内的业务文档理解与归档专家（单 Agent
 
 > 说明：当前版本为内部 Alpha 测试包，仅用于合成或受控测试目录体验，不用于生产库或公开分发。
 
-1. 解压测试包 `forma-organizer-0.1.0-alpha.1.zip`，得到 `forma-expert/` 目录（内含 `.codebuddy-plugin/plugin.json`、`agents/forma.md`、`skills/`、`avatars/expert.png`）。
+1. 解压测试包 `forma-organizer-0.1.0-alpha.2.zip`，得到 `forma-expert/` 目录（内含 `.codebuddy-plugin/plugin.json`、`agents/forma.md`、`skills/`、`avatars/expert.png`）。
 2. 打开 macOS WorkBuddy 客户端，进入 **「专家 · 技能 · 连接器 → 我的专家 → 创建/导入专家」**（或将本地 `forma-expert/` 目录通过客户端已验证的本地专家/技能加载入口导入，并在提示信任工作区时选择正常打开）。
 3. 确认专家列表中出现 **「Forma 文档整理专家」**，且关联技能 `forma-organize`（及可选 `forma-devonthink-optional`）已就绪。
 
