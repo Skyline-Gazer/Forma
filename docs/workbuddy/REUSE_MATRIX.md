@@ -1,38 +1,58 @@
-# Forma WorkBuddy Edition — Capability Reuse & Dependency Matrix
+# Forma WorkBuddy Edition — Capability Reuse & Language Decision Matrix
 
 - **Canonical Spec**: `docs/specs/2026-11-27-workbuddy-edition.md` (`110a469208a944a485b4389779795174dad7bc5b`)
 - **Audit Baseline**: `origin/dev` (`0ac64c4d0dffa02d6f2785aad28bd8ea44ceaa59`) & `origin/benchmark-evidence-v1` (`dae571dc784b9db509f04afdefee46764df17894`)
-- **Rule**: 严格区分 `Native Capability` / `Configuration` / `Existing Tool Reuse` / `Minimal Adaptation` / `New Implementation`；无明确缺口证据不得提出新自研组件。
+- **Principle**: 严格按优先级选择方案——(1) WorkBuddy 原生能力 → (2) Expert/Skill 配置与指令 → (3) 成熟可执行工具/原生集成 → (4) 直接复用既有 Forma 组件 → (5) 最小适配 → (6) 仅对已证实的残余缺口新建最小实现。**严禁预设实现语言，不重建独立应用。**
 
 ---
 
-## 1. Capability Reuse Matrix
+## 1. Capability-by-Capability Reuse Decision
 
-| Capability / Requirement | Classification | Source & Actual Evidence | Direct Reuse Method | Necessary Adaptation | Rejected Alternatives & Rationale | Remaining Work |
+| Capability / Requirement | Preference Level & Classification | Existing Capability & Evidence | Reuse Method | Remaining Gap | Selected Approach & Language/Runtime | Estimated Burden & Trade-offs |
 |---|---|---|---|---|---|---|
-| **Runtime, 对话 UI, 模型路由, 基础工具 (`Read`/`Write`/`Bash`/`Grep`/`Glob`)** (`§1`, `§3`) | `Native Capability` | WorkBuddy 官方文档 (`open.workbuddy.cn/docs/expert`, 2026-11-27) | 直接由 WorkBuddy 客户端提供；Expert 不声明 `tools` 字段 | 无代码修改 | 自建 SwiftUI App（`FormaApp/` 冻结，多轮 M0-R2/R3 UI 缺陷 `#172`–`#176`/`#208`–`#211`）；独立 Runtime/模型路由（Spec §1 明令禁止） | 在 `M2` 编写 `plugin.json` 与 `agents/forma.md` 对接平台契约 |
-| **Expert / Skill 编排与团队可选共享上下文** (`§1`, `§3`, `FR3`) | `Configuration` | WorkBuddy Expert/Skill/Project 官方文档；`agents/*.md` + `SKILL.md` | 按官方模板配置单 Agent Expert 与预加载 Skills；Project 作为可选上下文 | 编写中文为主、双语元数据完备的 `plugin.json`、`forma.md` 与 3 个 `quickPrompts` | Expert Team（Spec §3 要求优先单 Agent）；Buddy App（依赖开放平台配置与发布，Alpha 非必需） | `M2` 完成配置与静态校验；`M3` 实测客户端加载 |
-| **文件枚举、NFC/大小写碰撞、Symlink 拒绝、云占位符识别** (`FR1`) | `Minimal Adaptation` | `FormaCore/Sources/SourceFilesystem.swift`（`SourcePath.normalize`, `SF_DATALESS`）, `Acceptance/M11RealDirectoryAcceptance.swift`（`assertNotSymlink`, containment） | 复用已验证的路径规范化、大小写折叠、symlink 拒绝与 dataless 检测逻辑规则 | 将核心规则移植为轻量便携 Python CLI（`inspect`），使 Linux DevBox 可直接运行测试并供 WorkBuddy `Bash` 调用（无需编译 Swift/Xcode） | 直接把 `FormaCore` 编成 macOS 二进制作为唯一执行器（依赖 Apple `CryptoKit`/`Security`/macOS 26，Linux CI 无法编译测试） | `M1` 实现便携 Python `inspect` CLI 与边界测试 |
-| **非业务目录/缓存过滤与口径修复** (`FR1`, `#51`, `#131`, `#136`) | `Existing Tool Reuse` | `Sources/FormaCore/Eligibility/Policies/forma-eligibility.v1.json`、`EligibilityClassifier.swift`（PR #115, 30/30 PASS） | 直接复用 `forma-eligibility.v1.json` 规则集与 reason codes | 在 Python `inspect` 中加载同一 JSON 策略；修复 `#136` 探测预算外记录误计为 `INCLUDE` 的口径问题 | 硬编码扩展名黑名单（`#131` 明确禁止仅按扩展名静默排除） | `M1` 接入 JSON 策略并补充 `#136` 回归测试 |
-| **PDF/DOCX/XLSX/PPTX/TXT 内容解析** (`FR2`) | `Existing Tool Reuse` | `DocVortex 0.6.26`（PyPI 2026-11-19, MIT, `benchmark-v1-perception` 验证 14 Office + 6 原生 PDF）；Python stdlib 读 `.txt` | 直接调用 `docvortex convert --format markdown` 或 `docvortex.parse()` SDK + Python 原生读 TXT | 增加有界分块检索（chunking）、页/表/节证据保留与失败原因透传（拒绝静默截断） | `FormaCore/EvidenceExtractor`（PDFKit 仅限 macOS 且不支持 PPTX）；`markitdown`（与 DocVortex 高度重叠，仅作备选）；自研解析器（禁止） | `M1` 封装 `perceive` CLI 与长文档分块测试 |
-| **扫描件 PDF OCR 回退** (`FR2`) | `Minimal Adaptation` | `benchmark-v1-perception/extraction/D22,D28/vision.json`（Apple `VNRecognizeTextRequest` 成功识别）；`privatenumber/mac-ocr`（v1.2.1, MIT, Oct 2026） | 当 DocVortex 返回 `pdf_ocr_unsupported` 时，在 macOS 上调用 `mac-ocr` 或最小 Swift `VNRecognizeTextRequest` 脚本 | 封装条件回退逻辑，保留逐页置信度与不可用原因；Linux 下显式返回 `NOT_VERIFIED_ON_LINUX` | 强制云端 OCR / ModelBest / Jev（D26 单字错误证据；Spec FR2 禁止默认强依赖云端 OCR）；`ocrit`（2025-02 停更）；`schappim/macOCR`（无 LICENSE） | `M1` 预留 OCR 接口与 mock 测试；`M3` 在 Mac 实测扫描件 |
-| **语义分类、关系推理与命名策略** (`FR3`) | `Configuration` | WorkBuddy 内置模型路由 + Skill 推理指令（参考 `benchmark-v1-perception/prompts/`） | 通过 Skill 提示词约束 LLM 基于正文与语料上下文输出结构化整理方案 | 注入防注入规则（文档文本仅作不可信数据）、禁止编造字段、允许合理浅层目录与内容判重不删原件 | 硬编码正则/固定分类表（Spec FR3 禁止）；Fork Sorty 及其 GPL-3.0 源码（Spec §4 禁止） | `M2` 编写推理 Skill；`M3`/`#213` 实测语义质量 |
-| **不可变计划、显式批准绑定、确定性执行、Journal 与恢复** (`FR4`, `FR5`) | `Minimal Adaptation` | `FormaCore/Import/`（`ImportPreflight`, `ImportLedger`, `ImportArbitration`, `ImportSingleWriter`）；`benchmark-v1-storage/raw/sorty-plan.json`（Plan v2 `{source,destination,expected{device,inode,kind,modified_ns,size}}`） | 复用 `FormaCore` 的防呆契约（绑定 `plan_hash` + `snapshot_hash`、四态仲裁、单写锁租约、append-only 日志、冲突感知恢复）与 Sorty v2 预期字段 | **必须新建本地文件系统执行传输层**：因 `FormaCore` 现有 `ImportWriteSurface` 仅面向 DEVONthink（建记录/写元数据），无本地文件 `move/rename` 执行器；用 Python 实现受控本地 FS `apply`/`recover` | 直接使用 Sorty `sorty_helper.py`（GPL-3.0 传染风险且缺乏 Forma 的 `snapshot_hash`/单写锁/四态仲裁）；手工 `mv` 脚本（无幂等日志与碰撞校验） | `M1` 实现并重度测试 `plan`/`apply`/`recover` CLI |
-| **DEVONthink 可选索引与元数据写/回读** (`FR6`, `#10`, `#215`) | `Minimal Adaptation` | `benchmark-v1-storage/summary.md`（`dae571dc`, C1/C2 PASS）；DEVONthink 4.4+ 官方内置 MCP（macOS Sequoia+）；`dvcrn/mcp-server-devonthink`（v1.10.0, GPL-3.0）；`docs/I1-B1-CAPABILITY-DISCOVERY.md`（`#10`） | 优先配置 DEVONthink 4.4+ 内置 MCP，或通过最小化 macOS AppleScript/JXA 适配器执行 `indicate`/Index、写入批准标签与自定义字段并回读 UUID/路径 | 仅选用必要字段子集（不强迫 12 字段）；严格隔离测试库；将原文件状态与 DEVONthink 记录状态分离，支持部分失败精确报告与重试 | 强绑定为 Expert 必填 Connector（Spec §3 禁止）；将 macOS-only DEVONthink 打包为跨平台 CLI Connector（Spec §3 禁止）；外部直连 SQLite（FR6 禁止）；`TomBener/devonthink-mcp`（无 LICENSE） | `M2` 提供可选 Skill/脚本；`M3`/`#215` 在 Mac 隔离库实测 |
-| **OneDrive File Provider 存储** (`FR7`, `#129`, `#130`, `#214`) | `Configuration` | macOS 原生 File Provider；`FormaCore` `SF_DATALESS` 检测；`benchmark-v1-storage` 实测证据 | 仅作为用户选定的原文件目录；`inspect` 检查 `SF_DATALESS` 以避免非预期触发下载 | 在 Skill 与 `inspect` 中强制“禁止范围外扫描/禁止将活动 DEVONthink DB 放入 OneDrive” | 自研存储同步/驱逐层（Spec §1 禁止）；强行调用 `brctl` 或 `NSFileProviderManager` 绕过阻塞（Spec FR7 禁止） | `#214` 在 Mac 实测大文件释放、占用字节与跨设备恢复 |
-| **合成夹具、打包校验与盲测计分** (`§6`, `§7`) | `New Implementation`（校验/计分） + `Existing Tool Reuse`（夹具/脚本） | 复用 `scripts/make_i1_b2_synthetic.py`、`scripts/check_ads_pin.py`、`#206` 宿主安全隔离原则；`benchmark-v1` 29 文档合成语料 | 复用既有合成夹具生成思路与 ADS/宿主安全检查脚本 | 新增 WorkBuddy 包清单校验脚本（验证 `plugin.json`/`agents/*.md`/`SKILL.md`）及 Phase 4 盲测计分脚本（`benchmark-evidence-v1` 无现成计分器） | 无（现成脚本缺 WorkBuddy 包校验与语义 Rubric 计分器） | `M2` 完成包校验；Phase 4 前冻结独立盲测 Rubric 与计分器 |
+| **Runtime、对话 UI、模型路由、基础工具 (`Read`/`Write`/`Grep`/`Glob`/`Bash`)** (`§1`, `§3`) | (1) `WorkBuddy Native Capability` | WorkBuddy 官方文档 (`open.workbuddy.cn/docs/expert`, 2026-11-27) | 直接使用客户端内置能力；`agents/forma.md` 禁止自定义 `tools` | 无 | **无需代码** | 零维护；受 WorkBuddy 工具审批机制约束（见 Plan §C4.5） |
+| **Expert / Skill 编排、命名策略、语义分类与推理** (`§3`, `FR3`) | (2) `WorkBuddy Configuration / Instructions` | `agents/*.md` + `skills/*/SKILL.md`；`benchmark-v1-perception/prompts/` | 以中文为主的 Skill 指令约束 LLM 基于内容推断角色/项目/关系/重复 | 无（防注入规则与不确定性显式标示由指令+Plan 校验协同） | **Markdown + YAML Frontmatter**，无需独立推理代码 | 维护成本极低；禁止硬编码正则/分类表，不 Fork Sorty |
+| **`.txt` 文件读取** (`FR2`) | (1) `WorkBuddy Native Capability` | WorkBuddy 原生 `Read` 工具 | Agent 直接读取或通过现有工具读取 | 仅长文档需防静默截断（与下方分块策略统一） | **原生 `Read` / shell 标准读取**，不单建解析器 | 零新增代码 |
+| **PDF/DOCX/XLSX/PPTX 内容解析** (`FR2`) | (3) `Existing Mature Tool` | `DocVortex 0.6.26`（PyPI 2026-11-19, MIT, `benchmark-v1-perception` 验证 14 Office + 6 PDF） | **直接调用 `docvortex convert` CLI**（注：DocVortex 有 Python SDK **不要求** Forma 用 Python 编写） | 长文档有界分块检索、表关系与失败原因透传 | **CLI 调用 `docvortex`**；仅在需要有界分块时加极薄包装（<150 LOC） | 锁版本 `0.6.26`；macOS 仅限 arm64 (macOS 14+)，Linux DevBox 可测 |
+| **扫描件 PDF OCR 回退** (`FR2`) | (3) `Existing Mature Tool` / (5) `Minimal Adaptation` | `benchmark-v1-perception` D22/D28 Apple Vision 结果；`privatenumber/mac-ocr` (`v1.2.1`, MIT, 2026-10) | 当 `docvortex` 返回 `pdf_ocr_unsupported` 时在 macOS 调用 `mac-ocr`（或 ~30 行 Swift `VNRecognizeTextRequest`） | 无通用跨平台 OCR 需求；Linux 标 `NOT_VERIFIED_ON_LINUX` | **直接调用现有 macOS CLI (`mac-ocr`)**，不自研 OCR 引擎 | 仅 macOS 运行；拒绝强制云端 OCR（D26 教训） |
+| **目录枚举、NFC/大小写碰撞、Symlink 检查、云占位符识别** (`FR1`) | (4)/(5) `Forma Contract Reuse + Minimal Adaptation` | `FormaCore/Sources/SourceFilesystem.swift` (`SourcePath.normalize`, `SF_DATALESS`), `M11RealDirectoryAcceptance.swift` (`assertNotSymlink`), `#51`/`#136` (`forma-eligibility.v1.json`) | 复用 `forma-eligibility.v1.json` 与碰撞/symlink/`SF_DATALESS` 校验规则；修复 `#136` 预算外误计 `INCLUDE` 口径 | WorkBuddy `Glob`/`Read` 无法原生检测 Unicode NFC/大小写碰撞与 Darwin `SF_DATALESS` 标记（避免误触发 OneDrive 水合） | **并入唯一残余确定性执行器**（语言由 `M1-A` 门禁锁定，见 §2） | ~150–250 LOC；显著低于移植整个 `FormaCore` |
+| **不可变计划校验、批准绑定、本地 FS 原子移动、Journal 与冲突恢复** (`FR4`, `FR5`) | (4)/(6) `Forma Contract Reuse + Residual New Implementation` | `FormaCore/Import/`（`ImportPreflight`, `ImportLedger`, `ImportArbitration`, `ImportSingleWriter` 契约）+ `sorty-plan.json` v2 预期字段 | 复用四态仲裁、单写租约、append-only 日志与 `plan_hash`/`snapshot_hash` 绑定契约 | **真正残余缺口**：`FormaCore` 的 `ImportWriteSurface` 仅支持 DEVONthink 写记录，无本地文件系统 `move/rename` 执行与碰撞/TOCTOU 防护 | **新建最小确定性本地 FS 执行器**（语言由 `M1-A` 门禁锁定，见 §2） | ~250–450 LOC；避免重造原生 App，避免混入 GPL-3.0 `sorty_helper.py` |
+| **DEVONthink 可选索引与元数据写/回读** (`FR6`, `#10`, `#215`) | (3) `Existing Native Integration` | DEVONthink 4.4+ 官方内置 MCP（macOS Sequoia+）；`dae571dc` 验证的 AppleScript/JXA (`C1/C2 PASS`) | 优先使用 DEVONthink 内置 MCP；无内置 MCP 时通过 `osascript` 调用极简 JXA/AppleScript 执行 Index + 字段/标签写入与 UUID/路径回读 | 仅做部分失败精确状态记录；不强迫 12 字段，不引入必填 Connector | **原生配置（内置 MCP）或 `osascript` 最小脚本**；不建跨平台 CLI Connector | 零长期守护进程；严禁外部直连 SQLite |
+| **OneDrive File Provider 存储** (`FR7`, `#214`) | (1)/(2) `OS Native + Configuration` | macOS 原生 File Provider；`SF_DATALESS` 规避水合 | 作为选定原件目录；通过 `inspect` 与 Skill 规则禁止范围外扫描或放入活动 DT DB | 平台无 CLI 驱逐接口（`B1/B4/C2c BLOCKED_WITH_EVIDENCE`） | **无代码（配置与规避策略）** | 不自研存储/驱逐层 |
+| **包清单校验与盲测计分** (`§6`, `§7`) | (3)/(6) `Reuse + Minimal Script` | `scripts/check_ads_pin.py`, `scripts/make_i1_b2_synthetic.py`；`benchmark-evidence-v1` 29 文档 | 复用既有脚本模式 | `benchmark-evidence-v1` 无现成盲测 Rubric 计分器；需包结构校验器 | 轻量开发期校验脚本（不随产品发布） | <200 LOC，随 `M2`/`#213` 按需建立 |
+
+> **关键澄清**：普通 Skill 中通过 `Bash` 调用脚本，**不得假设** Connector 专属的托管 Node.js/Python 运行时（`connector.json` 中的 `runtime` 字段仅用于 Connector，见 `workbuddy_docs.md`）对普通 Skill 自动可用。
 
 ---
 
-## 2. External Dependency Audit
+## 2. Language & Runtime Evaluation for Residual Gap
 
-| Dependency | Official Source | Latest Version (Date) | License & Redistribution | Maintenance Status | Platform Limits | Reuse Cost & Decision |
+**残余自定义代码总规模**：仅覆盖两处真实缺口——(a) 含 NFC/大小写碰撞、`SF_DATALESS`、symlink/containment、计划哈希、append-only 日志与冲突恢复的本地 FS 确定性执行器，(b) 长文档有界分块辅助（总计约 **400–700 LOC**）。不对“无需自定义代码”的推理、UI、路由、OCR、存储引入任何语言。
+
+| Candidate | WorkBuddy 执行与打包兼容 | macOS 安装与依赖负担 | DevBox 开发与验证 | 现有代码复用 | FS 安全与恢复 (NFC/Symlink/Atomic) | 分发与更新复杂度 | 许可兼容 | 长期维护与规模 |
+|---|---|---|---|---|---|---|---|---|
+| **Pure WorkBuddy Native (无自定义代码)** | 原生 100% 兼容 | 零依赖 | 不可在 Linux 确定性单测 | 无法复用 `SF_DATALESS` / 账本契约 | **不足**：原生 `Bash`/`Write` 缺原子日志、Unicode 碰撞预检与 `SF_DATALESS` 防水合 | 零 | N/A | 不满足 `FR1`/`FR5` 安全门槛（**否决**） |
+| **Shell (`bash`/`zsh`) + UNIX 工具** | 兼容 `Bash` | 零依赖 | Linux/macOS `stat`/flags 语法差异大 | 需重写账本与 JSON 解析 | **弱**：路径含空格/换行/Unicode 极易出错，JSON 构造脆弱 | 低 | N/A | 复杂日志状态机难以维护（**否决**） |
+| **Python (仅标准库，零第三方包)** | Skill `scripts/` 调用 `python3`；**待 `M1-A` 实测宿主机 `python3` 与 PATH** | 若用系统/已有 `python3`（且 `docvortex` 本身已有 Python）则零额外运行时；否则需引导 | DevBox (Python 3.14) 可直接跑 `unittest`（零 `pytest` 强依赖） | 可直接迁移 `FormaCore` 算法规则与 `make_i1_b2_synthetic.py` 风格 | `os.path.realpath`、`unicodedata.normalize('NFC')`、`sqlite3`/`json`、`ctypes`/`stat` 检查 `SF_DATALESS` 均原生内置 | 随 Skill `scripts/` 直接打包，无需跨架构编译 | PSF (兼容) | ~450–650 LOC；可读性高、单语言内聚（**候选 A**） |
+| **Node.js / TypeScript** | Skill 不共享 Connector 托管 Node；需用户自装 Node | 增加非必要运行时负担（DocVortex 已用 Python） | DevBox 需额外维护 Node/TS 构建 | 零复用 | `fs` + `sqlite`（Node <22 无稳定内置 SQLite） | 若用 TS 需编译产物或打包 `node_modules` | MIT | 多引入一门运行时，无必要多语言（**否决**） |
+| **Go (单静态二进制)** | Skill 直接调用编译好的 macOS arm64 二进制，不依赖用户 `python3` | **零运行时依赖**，不受客户机 Python PATH 破坏影响 | DevBox (Linux) 可交叉编译 `GOOS=darwin GOARCH=arm64` 并跑 `go test` | 规则移植成本与 Python 相近 | 强类型、原生 `filepath.EvalSymlinks`、`syscall.Stat_t.Flags` (`SF_DATALESS`)、原子 `os.Rename` | 需分发预编译二进制（可能触发 macOS Gatekeeper/quarantine，须 `M1-A` 实测） | BSD-3-Clause | ~500–750 LOC；若 `M1-A` 发现 Python PATH 不稳则为最优备选（**候选 B**） |
+| **Existing Swift (`FormaCore` 窄 CLI)** | 可调用预编译 arm64 CLI | 依赖 Xcode/macOS 14+ 运行库，且 `FormaCore` 绑定 `CryptoKit`/`Security`/GRDB | **Linux DevBox 无法编译测试**（CI 仅 `macos-26`） | 可直接复用 `SourceFilesystem` / `ImportLedger` | 原生最强 | 需在 Mac 构建/签名，DevBox 无法本地出包 | 仓库缺 `LICENSE` | 拉入 GRDB/ZIPFoundation 重型依赖（**备选，非首选**） |
+
+### 2.1 Evidence-Gated Selection (`M1-A` 决策门)
+- **不预设语言**：删除原 Plan 中对 Python 3.11–3.14 与 `pytest` 的硬性锁定。
+- **决策路径**：在 **`M1-A`（WorkBuddy 宿主机可行性门禁）** 中于真实 Mac WorkBuddy 客户端实测：(1) 无害只读脚本通过 `python3` 调用的 `PATH`/权限表现；(2) `docvortex` CLI 直接调用方式；(3) 预编译无签名/ad-hoc 二进制是否被 macOS Gatekeeper 拦截。
+  - 若 `M1-A` 证实 WorkBuddy `Bash` 环境稳定具备 `python3`（且与 `docvortex` 环境一致）→ **锁定候选 A（stdlib-only Python，零第三方包，标准库 `unittest`）**；
+  - 若 `M1-A` 发现客户端沙盒/PATH 隔离导致 `python3` 不可靠，且单二进制可通过执行校验 → **锁定候选 B（单静态 Go 二进制或极窄 Swift CLI）**。
+
+---
+
+## 3. External Dependency Audit
+
+| Dependency | Official Source | Latest Version (Date) | License & Redistribution | Maintenance | Platform Limits | Decision |
 |---|---|---|---|---|---|---|
-| **DocVortex** | PyPI `docvortex` / GitHub `myhloli/DocVortex` | `0.6.26` (2026-11-19) | **MIT**（打包含 `MIT AND Apache-2.0 AND BSD-3-Clause` 原生依赖）；允许分发 | 极活跃（2026-11-27 仍有提交） | **仅 macOS arm64 (macOS 14+)** / Linux x86_64/aarch64 / Win；不支持 Intel Mac；不含 OCR | **低**：锁死版本 `0.6.26`，作为 `FR2` 主力解析器 |
-| **mac-ocr** | GitHub `privatenumber/mac-ocr` / npm `mac-ocr` | `1.2.1` (2026-10-17) | **MIT**；允许分发 | 活跃（2026-10 更新） | 仅 macOS（调用系统 Vision 框架，纯离线） | **低**：作为扫描件 OCR 回退候选（或等价 30 行 Swift `VNRecognizeTextRequest`） |
-| **DEVONthink 4.4+ & Built-in MCP** | `devontechnologies.com` | `4.4.2` (2026-10-19) | **专有商业软件**（不可再分发；Custom Metadata 需 Pro/Server 版） | 厂商持续维护 | 仅 macOS（内置 MCP 需 macOS Sequoia+） | **低（配置）**：由用户本机已有软件提供，不打包分发 |
-| **dvcrn/mcp-server-devonthink** | GitHub `dvcrn/mcp-server-devonthink` / npm | `1.10.0` (2026-04-27; 提交至 2026-09-09) | **GPL-3.0**（`LICENSE` 为 GPLv3，`package.json` 误标 MIT，以 `LICENSE` 为准） | 活跃 | 仅 macOS（JXA 驱动 DEVONthink Pro） | **中**：仅当内置 MCP 不可用时作为用户侧可选参考，不直接混入 MIT/闭源包体 |
-| **Sorty** | GitHub `sorty-organizer/Sorty` | `v1.3.1` (2026-11-05) | **GPL-3.0**；未公证签名 | 活跃（2026-11-24） | macOS 15+ | **不采用源码/GUI**：仅参考其 `sorty-plan.json` v2 数据结构与既有评测教训 |
-| **markitdown** | GitHub `microsoft/markitdown` / PyPI | `0.1.9` (2026-10-21) | **MIT** | 活跃（Microsoft） | 跨平台 Python 3.10–3.14（图片/音频需外部 LLM） | **备选**：与 DocVortex 重叠，仅作极少数边界格式兜底 |
-| **pypdf / pdfplumber / python-docx / openpyxl / python-pptx** | PyPI | `7.2.0` / `0.11.11` / `1.2.0` / `3.1.5` / `1.0.2` | **BSD-3-Clause / MIT** | pypdf/pdfplumber 活跃；Office 三件套低频但稳定 | 纯 Python 跨平台 | **极低**：DocVortex 已内置大部分；仅在需精细表格/坐标时按需引入 |
-| **Forma 原仓库许可缺口** | `origin/dev` 根目录 | 无 `LICENSE` 文件 | **未声明许可证（默认保留所有权利）** | 内部仓库 | — | **治理项**：WorkBuddy 分支需在 `M2` 前由 Owner 明确仓库/包许可证，避免分发歧义 |
+| **DocVortex** | PyPI `docvortex` / `github.com/myhloli/DocVortex` | `0.6.26` (2026-11-19) | MIT（含 MIT/Apache-2.0/BSD-3-Clause 原生依赖） | 极活跃（2026-11-27） | **仅 macOS arm64 (macOS 14+)** / Linux；不支持 Intel Mac；不含 OCR | **直接调用 `docvortex convert` CLI** |
+| **mac-ocr** | `github.com/privatenumber/mac-ocr` | `1.2.1` (2026-10-17) | MIT | 活跃（2026-10） | 仅 macOS（Vision 框架，纯离线） | 扫描件 OCR 回退候选（或等价 30 行 Swift `VNRecognizeTextRequest`） |
+| **DEVONthink 4.4+ & 内置 MCP** | `devontechnologies.com` | `4.4.2` (2026-10-19) | 专有商业软件（Custom Metadata 需 Pro/Server） | 厂商维护 | 仅 macOS（内置 MCP 需 Sequoia+） | 宿主既有软件配置使用，不打包分发 |
+| **dvcrn/mcp-server-devonthink** | `github.com/dvcrn/mcp-server-devonthink` | `1.10.0` (2026-04-27) | **GPL-3.0**（`LICENSE` 为 GPLv3，`package.json` 误标 MIT） | 活跃（2026-09） | 仅 macOS（JXA） | 仅当内置 MCP 不可用时作用户侧可选参考，不混入包体 |
+| **Sorty** | `github.com/sorty-organizer/Sorty` | `v1.3.1` (2026-11-05) | GPL-3.0 | 活跃 | macOS 15+ | **不采用**：仅参考 `sorty-plan.json` v2 字段结构 |
+| **Forma 原仓库许可缺口** | `origin/dev` 根目录 | 无 `LICENSE` 文件 | 未声明（默认保留所有权利） | 内部仓库 | — | `M2` 打包前须由 Owner 明确仓库/产物许可证 |

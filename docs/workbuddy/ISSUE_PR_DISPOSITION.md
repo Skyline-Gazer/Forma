@@ -14,9 +14,9 @@
 | `dev` | `0ac64c4d0dffa02d6f2785aad28bd8ea44ceaa59` | Legacy SwiftUI line (frozen, unchanged) | `#144`, `#148`, `#153` |
 | `workbuddy/dev` | `0ac64c4d0dffa02d6f2785aad28bd8ea44ceaa59` | New WorkBuddy Edition development trunk | `#217` |
 | `workbuddy/docs/implementation-plan` | `110a469208a944a485b4389779795174dad7bc5b` | Spec-to-Plan, Traceability, Risk & Issue Convergence | `#217` |
-| `workbuddy/feat/m1-core-cli` *(planned)* | `workbuddy/dev` | M1 Deterministic Core CLI (`inspect/perceive/plan/apply/recover`) | `#218` *(Planned / Todo)* |
-| `workbuddy/feat/m2-expert-package` *(planned)* | `workbuddy/dev` | M2 Expert Package, Skills, Validator & Zip | `#219` *(Planned / Todo)* |
-| `workbuddy/feat/m3-mac-alpha` *(planned)* | `workbuddy/dev` | M3 Mac Installation fixes & Alpha E2E evidence | `#220` *(Planned / Todo)*, `#213`–`#215` |
+| `workbuddy/feat/m1-feasibility-and-core` *(planned)* | Integrated `workbuddy/dev` HEAD (post-Docs PR) | `M1-A` Host Feasibility → `M1-B` Residual Tooling | `#218` *(Todo — gated on Docs PR)* |
+| `workbuddy/feat/m2-expert-package` *(planned)* | Integrated `workbuddy/dev` HEAD (post-M1 PR) | M2 Expert Package, Skills, Validator & Zip | `#219` *(Todo — blocked on `#218`)* |
+| `workbuddy/feat/m3-mac-alpha` *(planned)* | Integrated `workbuddy/dev` HEAD (post-M2 PR + package SHA256) | M3 Mac Installation & 29-Doc Alpha E2E + Owner UX | `#220` *(Todo — blocked on `#219`)*, `#213`–`#215` |
 
 ---
 
@@ -25,9 +25,9 @@
 | # | Title | Classification | Rationale | Project #18 Disposition |
 |---|---|---|---|---|
 | `#217` | `[Program][P0] Forma WorkBuddy Edition — Expert alpha, reuse-first implementation` | **Active** | 新版实施主任务（Spec §8） | Add → `In Progress` (`P0`, `Track C`) |
-| `#213` | `[Adoption][P0][A] Sorty original App / Skill — semantic organization fit-gap` | **Active** | 承接语义质量与 100–200 文档盲测（Spec §8） | Keep `In Progress` (`P0`) |
-| `#214` | `[Adoption][P0][B] DEVONthink Index + OneDrive — physical storage and fresh-device recovery` | **Active** | 承接 OneDrive 存储与跨设备恢复验收 | Keep `In Progress` (`P0`) |
-| `#215` | `[Adoption][P0][C] Metadata identity, integration and conditional fallback` | **Active** | 承接 DEVONthink 元数据身份与集成 | Keep `In Progress` (`P0`) |
+| `#213` | `[WorkBuddy][P0][#213] WorkBuddy semantic acceptance & 100–200 doc blind holdout` | **Active (Gated)** | 已移除 `Start now` 与主动 Sorty 指令（历史记录保留）；改为仅在 `#220` (`M3` Owner UX 批准) 后启动 WorkBuddy 盲测 | `In Progress` → `Blocked` (`P0`) |
+| `#214` | `[WorkBuddy][P0][#214] DEVONthink Index + OneDrive — physical storage and fresh-device recovery` | **Active (Gated)** | 归属对齐 `#217`，保留存储/恢复门禁与 `dae571dc` 证据；受真实 OneDrive/第二设备环境阻塞 | `In Progress` → `Blocked` (`P0`) |
+| `#215` | `[WorkBuddy][P0][#215] WorkBuddy -> DEVONthink optional metadata identity & integration` | **Active (Gated)** | 已移除 Sorty-first 指令（历史保留），对齐 WorkBuddy → DEVONthink 集成，受 `#218`–`#220` 阻塞 | `In Progress` → `Blocked` (`P0`) |
 | `#216` | `[Adoption][P0][D] Reuse-first decision, cost comparison and ADS consumer evidence` | **Active** | 承接最终采用决策与成本对比 | Keep `Blocked` (`P0`, awaits M3/213-215) |
 | `#98` | `governance: ADS Learning Loop pilot (3–5 real deliveries)` | **Active** | 持续适用（按触发条件记录，不设新门禁） | Keep `In Progress` (`P1`) |
 | `#212` | `[Program][P0] Reuse-first adoption gate — Sorty / DEVONthink Index / OneDrive` | **Superseded** | 转为历史决策父节点，主动执行移交 `#217`（保留历史） | Move `In Progress` → `Backlog` (`P0`) |
@@ -96,9 +96,9 @@
 |---|---:|---:|---|
 | `Awaiting Acceptance` | 4 | 0 | `-4`：旧原生 UI 路线 `#5`, `#144`, `#148`, `#153` 移入 `Backlog`（冻结，未标 `Done`） |
 | `In Review` | 8 | 0 | `-8`：旧 M0-R2 缺陷 `#172`, `#173`, `#175`, `#176` 与可复用输入 `#51`, `#129`, `#130`, `#131` 移入 `Backlog` |
-| `In Progress` | 7 | 5 | `+1`（新增 `#217`），`-3`（`#212`, `#174`, `#206` 移入 `Backlog`）；现保留 `#217`, `#213`, `#214`, `#215`, `#98` |
-| `Todo` | 1 | 3 | `-1`（`#136` 移入 `Backlog`），`+3`（新建待批实施任务 `#218`, `#219`, `#220`） |
-| `Blocked` | 15 | 15 | 不变：`#216` 及历史阻塞/替代史诗 `#2, #4, #6–#11, #19, #20, #22–#24, #52` |
+| `In Progress` | 7 | 2 | `-5`：`#212` 移入 `Backlog`，`#174`/`#206` 移入 `Backlog`，`#213`–`#215` 移入 `Blocked`（受 `#220`/环境阻塞）；仅 `#217`, `#98` 处于活动状态 |
+| `Todo` | 1 | 3 | `-1`（`#136` 移入 `Backlog`），`+3`（新建待批实施任务 `#218` [`M1-A`→`M1-B`], `#219` [`M2`], `#220` [`M3`]） |
+| `Blocked` | 15 | 18 | `+3`：`#213`, `#214`, `#215`（与 `#216` 及历史阻塞/替代史诗 `#2, #4, #6–#11, #19, #20, #22–#24, #52` 共 18 项） |
 | `Backlog` | 2 | 18 | `+16`：保留 `#133`, `#162`，并接纳冻结/过渡/可复用输入条目 |
 | `Done` | 16 | 16 | 不变：未重开任何已完成历史条目（`#3, #12–#18, #21, #29, #138, #145, #149–#152`） |
 | **Total** | **53** | **57** | **`+4`**（`#217`, `#218`, `#219`, `#220`） |
