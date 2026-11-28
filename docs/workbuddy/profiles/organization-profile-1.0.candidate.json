@@ -1,0 +1,1040 @@
+{
+  "schema_version": "forma-org-profile/1.0",
+  "profile_id": "forma-org-profile-default",
+  "profile_version": "1.0.0-candidate.1",
+  "status": "candidate_pending_owner_approval",
+  "auto_activate": false,
+  "grants_execution": false,
+  "supersedes_profile_hash": null,
+  "seeded_from": [
+    "docs/SPEC.md@v0.1.2",
+    "docs/I1-B1-CAPABILITY-DISCOVERY.md"
+  ],
+  "storage_policy": {
+    "repository_template_dir": "docs/workbuddy/profiles/",
+    "local_active_dir": "~/.forma-workbuddy/profiles/",
+    "private_data_allowed_in_repo": false
+  },
+  "metadata_layers": {
+    "physical": {
+      "authority": "deterministic_snapshot_and_fs",
+      "llm_writable": false,
+      "fields": [
+        "source_id",
+        "source_root_id",
+        "source_relative_path",
+        "source_sha256",
+        "byte_size",
+        "mtime",
+        "extension",
+        "fs_state",
+        "is_dataless",
+        "magic_mismatch"
+      ]
+    },
+    "business": {
+      "authority": "profile_schema_with_llm_evidence_and_program_validation",
+      "llm_writable": "proposed_with_evidence_only",
+      "fields": [
+        "partition",
+        "project_id",
+        "projectname",
+        "business_year",
+        "completionyear",
+        "bidderentity",
+        "department",
+        "salesowner",
+        "endcustomer",
+        "biddeadline",
+        "tenderreference",
+        "bsdcode",
+        "documentcategory",
+        "documenttype",
+        "document_role",
+        "document_version",
+        "document_status",
+        "document_business_date",
+        "issuer",
+        "vendor_name",
+        "vendor_relationship",
+        "version_group_id",
+        "supersedes_source_id"
+      ]
+    },
+    "management": {
+      "authority": "deterministic_program_and_ledger",
+      "llm_writable": false,
+      "fields": [
+        "profile_id",
+        "profile_version",
+        "profile_hash",
+        "snapshot_hash",
+        "plan_hash",
+        "approval_record",
+        "devonthink_uuid",
+        "devonthink_database_uuid",
+        "devonthink_location",
+        "publication_status",
+        "readback_verified_at"
+      ]
+    }
+  },
+  "metadata_fields": {
+    "partition": {
+      "layer": "business",
+      "type": "enum",
+      "enum": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "required_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "fallback_to_triage",
+      "devonthink_field": null
+    },
+    "project_id": {
+      "layer": "business",
+      "type": "string",
+      "pattern": "^PRJ-\\d{4}-\\d{3}$",
+      "required_in": [
+        "project_archive"
+      ],
+      "nullable_in": [
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "null_and_route_to_triage_if_project_archive",
+      "devonthink_field": null
+    },
+    "projectname": {
+      "layer": "business",
+      "type": "string",
+      "max_length": 120,
+      "required_in": [
+        "project_archive"
+      ],
+      "nullable_in": [
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "null_never_fabricate",
+      "devonthink_field": "projectname"
+    },
+    "business_year": {
+      "layer": "business",
+      "type": "string",
+      "pattern": "^\\d{4}$",
+      "required_in": [
+        "project_archive"
+      ],
+      "nullable_in": [
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "notes": "Distinct from completionyear; represents bid/business occurrence year.",
+      "unknown_handling": "null_never_substitute_completionyear",
+      "devonthink_field": null
+    },
+    "completionyear": {
+      "layer": "business",
+      "type": "string",
+      "pattern": "^\\d{4}$",
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "notes": "Archive completion year only; never inferred from cover year, product year, or bid date.",
+      "unknown_handling": "null_and_block_archive_completion_if_missing",
+      "devonthink_field": "completionyear"
+    },
+    "bidderentity": {
+      "layer": "business",
+      "type": "string",
+      "max_length": 80,
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "null_unless_explicit_evidence_or_verified_project_context",
+      "devonthink_field": "bidderentity"
+    },
+    "department": {
+      "layer": "business",
+      "type": "string",
+      "max_length": 60,
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "null_unless_verified_org_context",
+      "devonthink_field": "department"
+    },
+    "salesowner": {
+      "layer": "business",
+      "type": "string",
+      "max_length": 60,
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "null_never_copy_from_similar_doc",
+      "devonthink_field": "salesowner"
+    },
+    "endcustomer": {
+      "layer": "business",
+      "type": "string",
+      "max_length": 100,
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "notes": "Distinct from bidderentity, agency, and issuer.",
+      "unknown_handling": "null_never_conflate_with_issuer_or_bidder",
+      "devonthink_field": "endcustomer"
+    },
+    "biddeadline": {
+      "layer": "business",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "notes": "Single-line YYYY-MM-DD text; no Date type migration in v1.",
+      "unknown_handling": "null_unless_explicit_deadline_evidence",
+      "devonthink_field": "biddeadline"
+    },
+    "tenderreference": {
+      "layer": "business",
+      "type": "string",
+      "max_length": 80,
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "null_unless_confirmed_procurement_or_tender_code",
+      "devonthink_field": "tenderreference"
+    },
+    "bsdcode": {
+      "layer": "business",
+      "type": "string",
+      "max_length": 60,
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "notes": "Never infer a date as bsdcode.",
+      "unknown_handling": "null_unless_confirmed_internal_bsd_code",
+      "devonthink_field": "bsdcode"
+    },
+    "documentcategory": {
+      "layer": "business",
+      "type": "enum",
+      "enum": [
+        "01_招标文件",
+        "02_投标文件",
+        "03_厂商支持文件",
+        "04_技术资料与编制素材",
+        "05_报价与商务",
+        "99_待分类",
+        "VL_厂商通用资料",
+        "SR_公司共享资料"
+      ],
+      "required_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "fallback_to_99_待分类",
+      "devonthink_field": "documentcategory"
+    },
+    "documenttype": {
+      "layer": "business",
+      "type": "string",
+      "max_length": 60,
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "null_unless_title_or_content_confirms_subtype",
+      "devonthink_field": "documenttype"
+    },
+    "issuer": {
+      "layer": "business",
+      "type": "string",
+      "max_length": 100,
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "notes": "Legal issuing party requires signature, seal, or explicit attribution; brand name alone is insufficient.",
+      "unknown_handling": "null_unless_legal_attribution_verified",
+      "devonthink_field": "issuer"
+    },
+    "document_role": {
+      "layer": "business",
+      "type": "enum",
+      "enum_ref": "document_role_taxonomy",
+      "required_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "unclassified_review",
+      "devonthink_field": null
+    },
+    "document_version": {
+      "layer": "business",
+      "type": "string",
+      "pattern": "^v\\d+\\.\\d+$",
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "null_if_unversioned",
+      "devonthink_field": null
+    },
+    "document_status": {
+      "layer": "business",
+      "type": "enum",
+      "enum": [
+        "draft",
+        "revised",
+        "final",
+        "signed",
+        "superseded",
+        "archived",
+        "unknown"
+      ],
+      "required_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "unknown",
+      "devonthink_field": null
+    },
+    "document_business_date": {
+      "layer": "business",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "null_never_use_file_mtime_as_business_date",
+      "devonthink_field": null
+    },
+    "vendor_name": {
+      "layer": "business",
+      "type": "string",
+      "max_length": 60,
+      "required_in": [
+        "vendor_library"
+      ],
+      "nullable_in": [
+        "project_archive",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "null_or_triage_if_vendor_library",
+      "devonthink_field": null
+    },
+    "vendor_relationship": {
+      "layer": "business",
+      "type": "enum",
+      "enum": [
+        "oem_authorizer",
+        "quoting_supplier",
+        "product_publisher",
+        "delivery_partner",
+        "none",
+        "unknown"
+      ],
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "unknown",
+      "devonthink_field": null
+    },
+    "version_group_id": {
+      "layer": "business",
+      "type": "string",
+      "pattern": "^VG-[A-Za-z0-9_-]{6,40}$",
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "null_if_single_version",
+      "devonthink_field": null
+    },
+    "supersedes_source_id": {
+      "layer": "business",
+      "type": "string",
+      "required_in": [],
+      "nullable_in": [
+        "project_archive",
+        "vendor_library",
+        "shared_reference",
+        "triage"
+      ],
+      "unknown_handling": "null_unless_prior_version_verified",
+      "devonthink_field": null
+    }
+  },
+  "project_registry_schema": {
+    "cardinality": "N:1 document_to_project with explicit evidence; shared and vendor-general docs have project_id=null",
+    "primary_key": "project_id",
+    "required_fields": [
+      "project_id",
+      "projectname",
+      "business_year",
+      "status"
+    ],
+    "optional_fields": [
+      "project_short",
+      "aliases",
+      "endcustomer",
+      "bidderentity",
+      "department",
+      "salesowner",
+      "completionyear",
+      "tenderreference",
+      "bsdcode",
+      "biddeadline"
+    ],
+    "conflict_rule": "If document evidence matches multiple projects or contradicts registry context, route to 99_待确认资料/conflict_or_ambiguous."
+  },
+  "document_role_taxonomy": [
+    {
+      "role": "tender_notice",
+      "role_code": "招标公告",
+      "default_partition": "project_archive",
+      "default_category": "01_招标文件",
+      "disambiguation": "Procurement announcement issued by buyer/agency."
+    },
+    {
+      "role": "tender_rfp",
+      "role_code": "招标文件",
+      "default_partition": "project_archive",
+      "default_category": "01_招标文件",
+      "disambiguation": "Official RFP/RFQ/procurement requirements issued by buyer."
+    },
+    {
+      "role": "tender_addendum",
+      "role_code": "澄清补遗",
+      "default_partition": "project_archive",
+      "default_category": "01_招标文件",
+      "disambiguation": "Buyer-issued clarification, corrigendum, or Q&A addendum."
+    },
+    {
+      "role": "tender_blank_template",
+      "role_code": "空白模板",
+      "default_partition": "project_archive",
+      "default_category": "01_招标文件",
+      "disambiguation": "Blank quotation/response forms distributed with RFP; filled forms belong in 02_投标文件."
+    },
+    {
+      "role": "bid_technical",
+      "role_code": "技术标",
+      "default_partition": "project_archive",
+      "default_category": "02_投标文件",
+      "disambiguation": "Customer-specific technical proposal/response; even if project name contains 采购."
+    },
+    {
+      "role": "bid_commercial",
+      "role_code": "商务标",
+      "default_partition": "project_archive",
+      "default_category": "02_投标文件",
+      "disambiguation": "Bid commercial volume; never route to 05_报价与商务 merely on word 商务."
+    },
+    {
+      "role": "bid_pricing",
+      "role_code": "价格分册",
+      "default_partition": "project_archive",
+      "default_category": "02_投标文件",
+      "disambiguation": "Official bid pricing schedule submitted by bidderentity."
+    },
+    {
+      "role": "bid_compliance_matrix",
+      "role_code": "技术对标表",
+      "default_partition": "project_archive",
+      "default_category": "02_投标文件",
+      "disambiguation": "Filled BID_CONTENTS matrix with actual models/responses; never classify as 04 solely on prefix."
+    },
+    {
+      "role": "vendor_authorization",
+      "role_code": "原厂授权",
+      "default_partition": "project_archive",
+      "default_category": "03_厂商支持文件",
+      "disambiguation": "Project-specific OEM authorization letter (MAF); operational activation guides go to 04 or vendor_library."
+    },
+    {
+      "role": "vendor_commitment",
+      "role_code": "厂商承诺",
+      "default_partition": "project_archive",
+      "default_category": "03_厂商支持文件",
+      "disambiguation": "Vendor project warranty, sole-source, or after-sales commitment."
+    },
+    {
+      "role": "vendor_quote",
+      "role_code": "厂商报价",
+      "default_partition": "project_archive",
+      "default_category": "05_报价与商务",
+      "disambiguation": "Independent supplier/channel quotation with unit prices, discounts, or totals."
+    },
+    {
+      "role": "vendor_datasheet",
+      "role_code": "规格书",
+      "default_partition": "vendor_library",
+      "default_category": "VL_厂商通用资料",
+      "disambiguation": "General product datasheet/spec sheet not tied to a single project."
+    },
+    {
+      "role": "vendor_whitepaper",
+      "role_code": "白皮书方案",
+      "default_partition": "vendor_library",
+      "default_category": "VL_厂商通用资料",
+      "disambiguation": "General vendor whitepaper, brochure, or generic solution; customer-bound solutions go to 02_投标文件."
+    },
+    {
+      "role": "vendor_manual",
+      "role_code": "产品手册",
+      "default_partition": "vendor_library",
+      "default_category": "VL_厂商通用资料",
+      "disambiguation": "Product manual, deployment guide, or operational activation guide."
+    },
+    {
+      "role": "internal_qualification",
+      "role_code": "公司资质",
+      "default_partition": "shared_reference",
+      "default_category": "SR_公司共享资料",
+      "disambiguation": "Cross-project corporate certificates, licenses, ISO/case credentials."
+    },
+    {
+      "role": "internal_template",
+      "role_code": "内部模板",
+      "default_partition": "shared_reference",
+      "default_category": "SR_公司共享资料",
+      "disambiguation": "Reusable internal bid templates, checklists, or standard specs."
+    },
+    {
+      "role": "internal_review_note",
+      "role_code": "内部评审",
+      "default_partition": "project_archive",
+      "default_category": "04_技术资料与编制素材",
+      "disambiguation": "Project-specific internal drafting notes, site survey notes, or review comments."
+    },
+    {
+      "role": "contract_agreement",
+      "role_code": "合同协议",
+      "default_partition": "project_archive",
+      "default_category": "05_报价与商务",
+      "disambiguation": "Executed or draft project contract/agreement."
+    },
+    {
+      "role": "acceptance_report",
+      "role_code": "验收文档",
+      "default_partition": "project_archive",
+      "default_category": "05_报价与商务",
+      "disambiguation": "Project delivery acceptance or sign-off document."
+    },
+    {
+      "role": "unclassified_review",
+      "role_code": "待确认",
+      "default_partition": "triage",
+      "default_category": "99_待分类",
+      "disambiguation": "Insufficient evidence, unreadable, corrupt, extension mismatch, or conflicting ownership."
+    }
+  ],
+  "directory_structure": {
+    "max_depth": 4,
+    "partitions": {
+      "project_archive": {
+        "root": "01_项目档案",
+        "template": "01_项目档案/{business_year}/{project_id}_{project_short}/{documentcategory}",
+        "categories": [
+          "01_招标文件",
+          "02_投标文件",
+          "03_厂商支持文件",
+          "04_技术资料与编制素材",
+          "05_报价与商务",
+          "99_待分类"
+        ],
+        "meaning": "Project-bound procurement, bid, OEM support, project drafting materials, and project commercial/quote records."
+      },
+      "vendor_library": {
+        "root": "02_厂商通用资料",
+        "template": "02_厂商通用资料/{vendor_name}/{doc_type_group}",
+        "doc_type_groups": [
+          "Datasheet",
+          "Whitepaper_Solution",
+          "Manual_Guide",
+          "General_Material"
+        ],
+        "meaning": "General vendor product documentation without single-project ownership; project_id MUST remain null."
+      },
+      "shared_reference": {
+        "root": "03_公司共享资料",
+        "template": "03_公司共享资料/{shared_category}",
+        "shared_categories": [
+          "公司资质",
+          "通用模板与规范",
+          "历史案例素材"
+        ],
+        "meaning": "Cross-project corporate assets, qualifications, and reusable templates."
+      },
+      "triage": {
+        "root": "99_待确认资料",
+        "template": "99_待确认资料/{triage_reason}",
+        "triage_reasons": [
+          "unassigned_project",
+          "conflict_or_ambiguous",
+          "unreadable_or_corrupt",
+          "extension_mismatch"
+        ],
+        "meaning": "Fail-closed holding area for items requiring Owner confirmation or repair."
+      }
+    }
+  },
+  "naming_templates": {
+    "separator": "_",
+    "date_format_filename": "YYYYMMDD",
+    "version_format": "v<major>.<minor>",
+    "unicode_normalization": "NFC",
+    "forbidden_chars_pattern": "[\\\\/:*?\"<>|\\x00-\\x1f]",
+    "forbidden_char_replacement": "-",
+    "collapse_whitespace_to": "-",
+    "max_filename_chars": 120,
+    "max_filename_utf8_bytes": 180,
+    "preserve_extension": true,
+    "omit_unknown_optional_tokens": true,
+    "keep_if_already_conforming": true,
+    "collision_suffix_policy": "_dup{n} or _{sha6}",
+    "templates": {
+      "project_archive": "{project_id}_{role_code}_{title_short}[_{vendor_name}][_{date_compact}][_{document_version}][_{status_tag}].{ext}",
+      "vendor_library": "{vendor_name}_{role_code}_{title_short}[_{date_compact}][_{document_version}].{ext}",
+      "shared_reference": "共享_{role_code}_{title_short}[_{date_compact}][_{document_version}].{ext}",
+      "triage": "待确认_{triage_reason}_{original_stem}.{ext}"
+    },
+    "already_conforming_regex": "^(PRJ-\\d{4}-\\d{3}|共享|待确认|[^_]+)_[^_]+_[^_]+.*\\.[A-Za-z0-9]+$"
+  },
+  "tag_taxonomy": {
+    "whitelist_namespaces": [
+      "role/",
+      "status/",
+      "year/",
+      "vendor/",
+      "scope/",
+      "review/"
+    ],
+    "allowed_values": {
+      "role/": [
+        "role/tender",
+        "role/bid",
+        "role/vendor-auth",
+        "role/vendor-quote",
+        "role/technical-ref",
+        "role/contract",
+        "role/internal-shared"
+      ],
+      "status/": [
+        "status/draft",
+        "status/revised",
+        "status/final",
+        "status/signed",
+        "status/superseded",
+        "status/archived",
+        "status/unknown"
+      ],
+      "scope/": [
+        "scope/project",
+        "scope/vendor-library",
+        "scope/shared-reference",
+        "scope/triage"
+      ],
+      "review/": [
+        "review/unassigned-project",
+        "review/conflict",
+        "review/unreadable",
+        "review/extension-mismatch",
+        "review/duplicate-content"
+      ]
+    },
+    "dynamic_namespaces": {
+      "year/": "^year/\\d{4}$",
+      "vendor/": "^vendor/[a-z0-9-]+$"
+    },
+    "derivation_rules": [
+      "Derive role/* deterministically from validated document_role.",
+      "Derive status/* deterministically from validated document_status.",
+      "Derive scope/* deterministically from validated partition.",
+      "Derive year/YYYY from business_year (or document_business_date year if business_year is null).",
+      "Derive vendor/<slug> only when vendor_name is verified.",
+      "Derive review/* only when a triage or duplicate condition is active."
+    ],
+    "conflict_handling": "Preserve non-Forma user tags during merge; if derived Forma tag conflicts with existing Forma namespace tag on the same record, halt publication for that record and mark REVIEW."
+  },
+  "devonthink_mapping": {
+    "preferred_transport": "devonthink_4_4_2_builtin_mcp",
+    "fallback_transport": "osascript_jxa_minimal",
+    "mode": "index",
+    "precheck_tool": "list_custom_metadata_fields",
+    "reject_unknown_keys": true,
+    "mandatory_readback": true,
+    "write_mode": "merge",
+    "field_whitelist": [
+      { "identifier": "projectname", "label_zh": "项目名称", "native_type": "string", "source_field": "projectname" },
+      { "identifier": "completionyear", "label_zh": "完成年份", "native_type": "string", "source_field": "completionyear" },
+      { "identifier": "bidderentity", "label_zh": "投标主体", "native_type": "string", "source_field": "bidderentity" },
+      { "identifier": "department", "label_zh": "业务部门", "native_type": "string", "source_field": "department" },
+      { "identifier": "salesowner", "label_zh": "销售负责人", "native_type": "string", "source_field": "salesowner" },
+      { "identifier": "endcustomer", "label_zh": "最终客户", "native_type": "string", "source_field": "endcustomer" },
+      { "identifier": "biddeadline", "label_zh": "投标截止日期", "native_type": "string", "source_field": "biddeadline" },
+      { "identifier": "tenderreference", "label_zh": "招标编号", "native_type": "string", "source_field": "tenderreference" },
+      { "identifier": "bsdcode", "label_zh": "BSD标识", "native_type": "string", "source_field": "bsdcode" },
+      { "identifier": "documentcategory", "label_zh": "文档类别", "native_type": "string", "source_field": "documentcategory" },
+      { "identifier": "documenttype", "label_zh": "文档类型", "native_type": "string", "source_field": "documenttype" },
+      { "identifier": "issuer", "label_zh": "出具厂商", "native_type": "string", "source_field": "issuer" }
+    ],
+    "non_whitelisted_profile_fields_disposition": {
+      "stored_in_forma_ledger": [
+        "project_id",
+        "business_year",
+        "document_role",
+        "document_version",
+        "document_status",
+        "document_business_date",
+        "vendor_name",
+        "vendor_relationship",
+        "version_group_id",
+        "supersedes_source_id",
+        "source_sha256",
+        "profile_version"
+      ],
+      "projected_to_devonthink_tags": true,
+      "auto_create_custom_metadata_fields": false
+    }
+  },
+  "duplicate_and_version_rules": {
+    "exact_byte_duplicate": {
+      "authority": "source_sha256",
+      "auto_delete": false,
+      "auto_overwrite": false,
+      "same_project_or_scope": "keep_existing_and_mark_new_as_REVIEW_duplicate_content",
+      "cross_project": "keep_independent_records_and_paths; no_default_replicant"
+    },
+    "semantic_version": {
+      "keep_all_versions": true,
+      "linkage": "version_group_id + supersedes_source_id",
+      "prior_version_tag_update": "status/superseded"
+    }
+  },
+  "lifecycle_rules": {
+    "versioning": "SemVer",
+    "hash_algorithm": "sha256_canonical_json",
+    "activation_requires_owner_approval": true,
+    "plan_binding_fields": [
+      "profile_id",
+      "profile_version",
+      "profile_hash"
+    ],
+    "invalidation": "Any change to profile_hash invalidates pending unexecuted plans and requires re-validation and fresh Owner approval.",
+    "existing_archive_migration": "Never implicit; requires separate proposed plan and explicit Owner approval."
+  },
+  "synthetic_examples": [
+    {
+      "case_id": "EX-01",
+      "scenario": "招标文件 (Tender RFP)",
+      "input_path": "inbox_batch_01/采购需求书_终稿.pdf",
+      "business_metadata": {
+        "partition": "project_archive",
+        "project_id": "PRJ-2026-001",
+        "projectname": "星云数据中心网络升级项目",
+        "business_year": "2026",
+        "completionyear": null,
+        "endcustomer": "星云科技有限公司",
+        "bidderentity": null,
+        "tenderreference": "XY-ZB-2026-018",
+        "biddeadline": "2026-12-15",
+        "documentcategory": "01_招标文件",
+        "documenttype": "招标文件",
+        "document_role": "tender_rfp",
+        "document_version": "v1.0",
+        "document_status": "final",
+        "document_business_date": "2026-11-10",
+        "issuer": "星云科技有限公司"
+      },
+      "target_dir": "01_项目档案/2026/PRJ-2026-001_星云网络升级/01_招标文件",
+      "rendered_filename": "PRJ-2026-001_招标文件_网络升级采购需求_20261110_v1.0_final.pdf",
+      "tags": ["role/tender", "status/final", "year/2026", "scope/project"],
+      "devonthink_12_fields": {
+        "projectname": "星云数据中心网络升级项目",
+        "endcustomer": "星云科技有限公司",
+        "tenderreference": "XY-ZB-2026-018",
+        "biddeadline": "2026-12-15",
+        "documentcategory": "01_招标文件",
+        "documenttype": "招标文件",
+        "issuer": "星云科技有限公司"
+      }
+    },
+    {
+      "case_id": "EX-02",
+      "scenario": "投标响应 (Bid Technical Response)",
+      "input_path": "inbox_batch_01/投标技术方案_草稿.docx",
+      "business_metadata": {
+        "partition": "project_archive",
+        "project_id": "PRJ-2026-001",
+        "projectname": "星云数据中心网络升级项目",
+        "business_year": "2026",
+        "completionyear": null,
+        "endcustomer": "星云科技有限公司",
+        "bidderentity": "示例集成有限公司",
+        "documentcategory": "02_投标文件",
+        "documenttype": "技术标",
+        "document_role": "bid_technical",
+        "document_version": "v1.0",
+        "document_status": "draft",
+        "document_business_date": "2026-11-18",
+        "issuer": "示例集成有限公司"
+      },
+      "target_dir": "01_项目档案/2026/PRJ-2026-001_星云网络升级/02_投标文件",
+      "rendered_filename": "PRJ-2026-001_技术标_核心交换机响应方案_20261118_v1.0_draft.docx",
+      "tags": ["role/bid", "status/draft", "year/2026", "scope/project"],
+      "devonthink_12_fields": {
+        "projectname": "星云数据中心网络升级项目",
+        "endcustomer": "星云科技有限公司",
+        "bidderentity": "示例集成有限公司",
+        "documentcategory": "02_投标文件",
+        "documenttype": "技术标",
+        "issuer": "示例集成有限公司"
+      }
+    },
+    {
+      "case_id": "EX-03",
+      "scenario": "原厂授权 (OEM Authorization)",
+      "input_path": "inbox_batch_01/scan_auth_003.pdf",
+      "business_metadata": {
+        "partition": "project_archive",
+        "project_id": "PRJ-2026-001",
+        "projectname": "星云数据中心网络升级项目",
+        "business_year": "2026",
+        "bidderentity": "示例集成有限公司",
+        "documentcategory": "03_厂商支持文件",
+        "documenttype": "原厂授权",
+        "document_role": "vendor_authorization",
+        "document_version": null,
+        "document_status": "signed",
+        "document_business_date": "2026-11-19",
+        "issuer": "示例网络设备有限公司",
+        "vendor_name": "VendorAlpha",
+        "vendor_relationship": "oem_authorizer"
+      },
+      "target_dir": "01_项目档案/2026/PRJ-2026-001_星云网络升级/03_厂商支持文件",
+      "rendered_filename": "PRJ-2026-001_原厂授权_核心交换机项目授权_VendorAlpha_20261119_signed.pdf",
+      "tags": ["role/vendor-auth", "status/signed", "year/2026", "vendor/vendoralpha", "scope/project"],
+      "devonthink_12_fields": {
+        "projectname": "星云数据中心网络升级项目",
+        "bidderentity": "示例集成有限公司",
+        "documentcategory": "03_厂商支持文件",
+        "documenttype": "原厂授权",
+        "issuer": "示例网络设备有限公司"
+      }
+    },
+    {
+      "case_id": "EX-04",
+      "scenario": "厂商报价 (Independent Vendor Quote)",
+      "input_path": "inbox_batch_01/渠道报价表.xlsx",
+      "business_metadata": {
+        "partition": "project_archive",
+        "project_id": "PRJ-2026-001",
+        "projectname": "星云数据中心网络升级项目",
+        "business_year": "2026",
+        "documentcategory": "05_报价与商务",
+        "documenttype": "厂商报价单",
+        "document_role": "vendor_quote",
+        "document_version": "v1.0",
+        "document_status": "final",
+        "document_business_date": "2026-11-20",
+        "issuer": "示例分销科技有限公司",
+        "vendor_name": "VendorAlpha",
+        "vendor_relationship": "quoting_supplier"
+      },
+      "target_dir": "01_项目档案/2026/PRJ-2026-001_星云网络升级/05_报价与商务",
+      "rendered_filename": "PRJ-2026-001_厂商报价_核心设备配置报价_VendorAlpha_20261120_v1.0_final.xlsx",
+      "tags": ["role/vendor-quote", "status/final", "year/2026", "vendor/vendoralpha", "scope/project"],
+      "devonthink_12_fields": {
+        "projectname": "星云数据中心网络升级项目",
+        "documentcategory": "05_报价与商务",
+        "documenttype": "厂商报价单",
+        "issuer": "示例分销科技有限公司"
+      }
+    },
+    {
+      "case_id": "EX-05",
+      "scenario": "内部资料 (Internal Shared Qualification)",
+      "input_path": "inbox_batch_01/ISO27001证书扫描.pdf",
+      "business_metadata": {
+        "partition": "shared_reference",
+        "project_id": null,
+        "projectname": null,
+        "business_year": "2026",
+        "documentcategory": "SR_公司共享资料",
+        "documenttype": "公司资质",
+        "document_role": "internal_qualification",
+        "document_version": null,
+        "document_status": "signed",
+        "document_business_date": "2026-03-01",
+        "issuer": "示例认证中心"
+      },
+      "target_dir": "03_公司共享资料/公司资质",
+      "rendered_filename": "共享_公司资质_ISO27001信息安全管理体系证书_20260301.pdf",
+      "tags": ["role/internal-shared", "status/signed", "year/2026", "scope/shared-reference"],
+      "devonthink_12_fields": {
+        "documentcategory": "SR_公司共享资料",
+        "documenttype": "公司资质",
+        "issuer": "示例认证中心"
+      }
+    },
+    {
+      "case_id": "EX-06",
+      "scenario": "通用产品资料 (Vendor Library Datasheet)",
+      "input_path": "inbox_batch_01/S9000_Datasheet_EN.pdf",
+      "business_metadata": {
+        "partition": "vendor_library",
+        "project_id": null,
+        "projectname": null,
+        "business_year": null,
+        "documentcategory": "VL_厂商通用资料",
+        "documenttype": "Datasheet",
+        "document_role": "vendor_datasheet",
+        "document_version": "v2.1",
+        "document_status": "final",
+        "document_business_date": "2026-08-15",
+        "issuer": "示例网络设备有限公司",
+        "vendor_name": "VendorAlpha",
+        "vendor_relationship": "product_publisher"
+      },
+      "target_dir": "02_厂商通用资料/VendorAlpha/Datasheet",
+      "rendered_filename": "VendorAlpha_规格书_S9000系列交换机规格书_20260815_v2.1.pdf",
+      "tags": ["role/technical-ref", "status/final", "year/2026", "vendor/vendoralpha", "scope/vendor-library"],
+      "devonthink_12_fields": {
+        "documentcategory": "VL_厂商通用资料",
+        "documenttype": "Datasheet",
+        "issuer": "示例网络设备有限公司"
+      }
+    },
+    {
+      "case_id": "EX-07",
+      "scenario": "修订版本 (Revised Bid Technical Proposal)",
+      "input_path": "inbox_batch_01/投标技术方案_修订二版.docx",
+      "business_metadata": {
+        "partition": "project_archive",
+        "project_id": "PRJ-2026-001",
+        "projectname": "星云数据中心网络升级项目",
+        "business_year": "2026",
+        "endcustomer": "星云科技有限公司",
+        "bidderentity": "示例集成有限公司",
+        "documentcategory": "02_投标文件",
+        "documenttype": "技术标",
+        "document_role": "bid_technical",
+        "document_version": "v2.0",
+        "document_status": "revised",
+        "document_business_date": "2026-11-25",
+        "issuer": "示例集成有限公司",
+        "version_group_id": "VG-PRJ2026001-TECH",
+        "supersedes_source_id": "src-ex-02-placeholder"
+      },
+      "target_dir": "01_项目档案/2026/PRJ-2026-001_星云网络升级/02_投标文件",
+      "rendered_filename": "PRJ-2026-001_技术标_核心交换机响应方案_20261125_v2.0_revised.docx",
+      "tags": ["role/bid", "status/revised", "year/2026", "scope/project"],
+      "devonthink_12_fields": {
+        "projectname": "星云数据中心网络升级项目",
+        "endcustomer": "星云科技有限公司",
+        "bidderentity": "示例集成有限公司",
+        "documentcategory": "02_投标文件",
+        "documenttype": "技术标",
+        "issuer": "示例集成有限公司"
+      }
+    },
+    {
+      "case_id": "EX-08",
+      "scenario": "无法归属的文档 (Unassigned / Ambiguous Triage)",
+      "input_path": "inbox_batch_01/未命名报价草稿.xlsx",
+      "business_metadata": {
+        "partition": "triage",
+        "project_id": null,
+        "projectname": null,
+        "business_year": null,
+        "documentcategory": "99_待分类",
+        "documenttype": null,
+        "document_role": "unclassified_review",
+        "document_version": null,
+        "document_status": "unknown",
+        "document_business_date": null,
+        "issuer": null
+      },
+      "target_dir": "99_待确认资料/unassigned_project",
+      "rendered_filename": "待确认_unassigned_project_未命名报价草稿.xlsx",
+      "tags": ["status/unknown", "scope/triage", "review/unassigned-project"],
+      "devonthink_12_fields": {
+        "documentcategory": "99_待分类"
+      }
+    }
+  ]
+}

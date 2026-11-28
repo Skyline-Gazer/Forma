@@ -12,11 +12,11 @@
 |---|---|---|---|
 | `main` | `38d455304bc4530b71e584c07de48fc06fd1f293` | Protected baseline (unchanged) | — |
 | `dev` | `0ac64c4d0dffa02d6f2785aad28bd8ea44ceaa59` | Legacy SwiftUI line (frozen, unchanged) | `#144`, `#148`, `#153` |
-| `workbuddy/dev` | `0ac64c4d0dffa02d6f2785aad28bd8ea44ceaa59` | New WorkBuddy Edition development trunk | `#217` |
-| `workbuddy/docs/implementation-plan` | `110a469208a944a485b4389779795174dad7bc5b` | Spec-to-Plan, Traceability, Risk & Issue Convergence | `#217` |
-| `workbuddy/feat/m1-feasibility-and-core` *(planned)* | Integrated `workbuddy/dev` HEAD (post-Docs PR) | `M1-A` Host Feasibility → `M1-B` Residual Tooling | `#218` *(Todo — gated on Docs PR)* |
-| `workbuddy/feat/m2-expert-package` *(planned)* | Integrated `workbuddy/dev` HEAD (post-M1 PR) | M2 Expert Package, Skills, Validator & Zip | `#219` *(Todo — blocked on `#218`)* |
-| `workbuddy/feat/m3-mac-alpha` *(planned)* | Integrated `workbuddy/dev` HEAD (post-M2 PR + package SHA256) | M3 Mac Installation & 29-Doc Alpha E2E + Owner UX | `#220` *(Todo — blocked on `#219`)*, `#213`–`#215` |
+| `workbuddy/dev` | `46ec2301b916aff191badfbc0eb678a83c72899b` | Active WorkBuddy Edition development trunk (PR #222, #224, #225 merged) | `#217` |
+| `workbuddy/feat/contract-consolidation-20261128` | PR #226 → `workbuddy/dev` | Final Canonical Spec closure, Organization Profile 1.0 candidate & governance alignment | `#217`, `#220`, `#215` |
+| `workbuddy/feat/m1-feasibility-and-core` *(completed/merged)* | PR #222 | `M1-A` Host Feasibility → `M1-B` Residual Tooling | `#218` *(Closed / Done)* |
+| `workbuddy/feat/m2-expert-package` *(completed/merged)* | PR #222 | M2 Expert Package, Skills, Validator & Zip | `#219` *(Closed / Done)* |
+| `workbuddy/feat/m3-mac-alpha` *(planned)* | Integrated `workbuddy/dev` HEAD (post-§10.8 P0 convergence & package rebuild) | M3 P0 safety convergence, Mac Installation & 29-Doc Alpha E2E + DEVONthink publication/readback + Owner UX | `#220` *(Todo)*, `#215` *(Blocked on #220)*, `#213`–`#214` |
 
 ---
 
@@ -25,12 +25,12 @@
 | # | Title | Classification | Rationale | Project #18 Disposition |
 |---|---|---|---|---|
 | `#217` | `[Program][P0] Forma WorkBuddy Edition — Expert alpha, reuse-first implementation` | **Active** | 新版实施主任务（Spec §8） | Add → `In Progress` (`P0`, `Track C`) |
-| `#218` | `[WorkBuddy][P0][M1] M1-A host feasibility & M1-B residual deterministic tooling` | **Active (Planned)** | 待批实施任务：`M1-A` 宿主机可行性前置 + `M1-B` 残余确定性工具（等待 Docs PR 合并） | Add → `Todo` (`P0`) |
-| `#219` | `[WorkBuddy][P0][M2] WorkBuddy Expert package, Skills, reproducible packaging & Linux CI verification` | **Active (Planned)** | 待批实施任务：Expert 打包、校验与指南（阻塞于 `#218` 合入 `workbuddy/dev`） | Add → `Todo` (`P0`) |
-| `#220` | `[WorkBuddy][P0][M3] Mac WorkBuddy client installation, 29-doc Alpha E2E & Owner UX acceptance` | **Active (Planned)** | 待批实施任务：Mac 客户端实装、29 文档回归与 Owner UX（阻塞于 `#219` 合入与包 SHA256） | Add → `Todo` (`P0`) |
-| `#213` | `[WorkBuddy][P0][#213] WorkBuddy semantic acceptance & 100–200 doc blind holdout` | **Active (Gated)** | 已移除 `Start now` 与主动 Sorty 指令（历史记录保留）；改为仅在 `#220` (`M3` Owner UX 批准) 后启动 WorkBuddy 盲测 | `In Progress` → `Blocked` (`P0`) |
-| `#214` | `[WorkBuddy][P0][#214] DEVONthink Index + OneDrive — physical storage and fresh-device recovery` | **Active (Gated)** | 归属对齐 `#217`，保留存储/恢复门禁与 `dae571dc` 证据；受真实 OneDrive/第二设备环境阻塞 | `In Progress` → `Blocked` (`P0`) |
-| `#215` | `[WorkBuddy][P0][#215] WorkBuddy -> DEVONthink optional metadata identity & integration` | **Active (Gated)** | 已移除 Sorty-first 指令（历史保留），对齐 WorkBuddy → DEVONthink 集成，受 `#218`–`#220` 阻塞 | `In Progress` → `Blocked` (`P0`) |
+| `#218` | `[WorkBuddy][P0][M1] M1-A host feasibility & M1-B residual deterministic tooling` | **Closed (Done)** | `M1-A` 与 `M1-B` 工程基线已合入 `workbuddy/dev`（PR #222）；残余 P0 安全收敛转由 `#220` / Spec §10.8 追踪 | `Done` (`P0`) |
+| `#219` | `[WorkBuddy][P0][M2] WorkBuddy Expert package, Skills, reproducible packaging & Linux CI verification` | **Closed (Done)** | M2 打包与 CI 已合入 `workbuddy/dev`（PR #222）；后续包重建随 `#220` 验收 | `Done` (`P0`) |
+| `#220` | `[WorkBuddy][P0][M3] Mac WorkBuddy client installation, 29-doc Alpha E2E & Owner UX acceptance` | **Active (Open)** | 追踪 Spec §10.8 确定性安全收敛、真实审批边界验证与 Mac 完整产品验收（含 DEVONthink 闭环）；27/2 预览仅作回归证据（Spec §10.11），须以合并后重建包复测 | `Todo` (`P0`) |
+| `#213` | `[WorkBuddy][P0][#213] WorkBuddy semantic acceptance & 100–200 doc blind holdout` | **Active (Gated)** | 已移除 `Start now` 与主动 Sorty 指令（历史记录保留）；保留独立盲测与增量更新门禁，仅在 `#220` (`M3` Owner UX 批准) 后启动 | `Blocked` (`P0`) |
+| `#214` | `[WorkBuddy][P0][#214] DEVONthink Index + OneDrive — physical storage and fresh-device recovery` | **Active (Gated)** | 归属对齐 `#217`，保留存储/恢复门禁与 `dae571dc` 证据；OneDrive 仍为 `NOT_VERIFIED`，受真实环境阻塞（不阻塞本地隔离交付） | `Blocked` (`P0`) |
+| `#215` | `[WorkBuddy][P0][#215] WorkBuddy -> DEVONthink metadata identity, publication & readback` | **Active (Current Product Delivery)** | 当前 DEVONthink 产品交付能力（非延期可选功能，Spec §10.13）：4.4.2 内置 MCP 优先、Index 原件、12 字段白名单 + Tags、强制独立回读与本地 MCP 安全边界 | `Blocked` (`P0`, gated on `#220` P0 convergence) |
 | `#216` | `[Adoption][P0][D] Reuse-first decision, cost comparison and ADS consumer evidence` | **Active** | 承接最终采用决策与成本对比 | Keep `Blocked` (`P0`, awaits M3/213-215) |
 | `#98` | `governance: ADS Learning Loop pilot (3–5 real deliveries)` | **Active** | 持续适用（按触发条件记录，不设新门禁） | Keep `In Progress` (`P1`) |
 | `#212` | `[Program][P0] Reuse-first adoption gate — Sorty / DEVONthink Index / OneDrive` | **Superseded** | 转为历史决策父节点，主动执行移交 `#217`（保留历史） | Move `In Progress` → `Backlog` (`P0`) |
@@ -116,3 +116,12 @@
 | `#220` | `Todo` | `P0` | `PVTI_lADOEwGMMc4BtHPlzhMWtD0` | `[M3]` Mac installation, 29-doc Alpha & Owner UX（Waiting for Owner approval） |
 
 - **Failures**: `0`（Project README 已同步更新）。
+
+## 5. 2026-11-28 follow-up dispositions
+
+| Item | Disposition |
+|---|---|
+| `#223` (Issue) | **CLOSED**（Project #18 状态 `Done`）：PR #224 (`c99d6910`) 修复两条可执行评审项（protection-fact 门、magic 探测 fail-closed）；其余 P0 确定性收敛项由 Spec §10.8 与 `#220` 独立追踪，不得报告为已随 #224 关闭。 |
+| `#224` (PR) | **MERGED** 2026-11-28 至 `workbuddy/dev`（`c99d6910`，CI 全绿；评审项以 `test_12`/`test_13` 回归覆盖）。 |
+| `#225` (PR) | **MERGED** 2026-11-28 至 `workbuddy/dev`（`46ec2301`）；保留统一 Roadmap，修正 `0.1.0-alpha.2` 基线归属表述。 |
+| `#226` (PR) | **OPEN**（最终定向修正）：交付 Canonical Spec 最终一致性修订、完整 Organization Profile 1.0 候选（MD + JSON）、P0↔验收用例对照矩阵及治理文档对齐；待 Owner 批准后合并并派生最小 Implementation Plan。 |
