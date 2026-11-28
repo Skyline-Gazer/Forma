@@ -41,3 +41,7 @@
 | **R-06** | DEVONthink 限制 | 4.4.2 AppleScript 不支持建 Smart Group、按自定义字段 key 搜索与 tag 名称回读 | Medium | High | 保持 DEVONthink 可选；优先 4.4+ 内置 MCP 或极简 `osascript` 仅做 Index + 字段/标签写入与 UUID/路径/计数回读 | `M3` / `#215` |
 | **R-07** | 许可与分支保护治理 | 仓库缺 `LICENSE`；`workbuddy/dev` 尚无 GitHub 分支保护 Ruleset | Medium | Medium | `M2` 前请 Owner 明确仓库/产物许可证；通过 PR 流程整合至 `workbuddy/dev`（可由 Owner 按需开启分支保护） | `M2` / Docs PR |
 | **R-08** | 盲测与省时未达标 | 盲测未达均值 90 / 最低 85 或真实省时 <80% | High | Medium | 独立盲测 Gold 冻结；失败仅一次定向低成本修复建议，无可靠路径则按 `#216` 止损 | `#213` / `#216` |
+| **R-09** | 确定性内核残余（#223 后续） | #224 仅收口两条评审项（protection-fact 门、magic 探测 fail-closed）；eligibility 不强制、SKIP_VERIFIED 不复核、null-hash fail-open、recover 无锁/无边界、`source_id=dev:inode` 等 Spec §10.8 项仍在主干 | High | 已确认 | §10.8 P0 独立收敛并补回归测试；收敛合入后重建包方可执行 M3 复测，不得视为已随 #224 关闭 | `M3` / Spec §10.8 |
+| **R-10** | 包溯源 | `0.1.0-alpha.2` zip 出自未合并的评审修复分支，zip↔源码核验未完成 | Medium | 已确认 | 从合并后 `workbuddy/dev` 重建 + SHA256，在隔离 Mac 环境完成 zip↔源核验 | `#220` |
+| **R-11** | DEVONthink metadata schema 污染 | 4.4.2 内置 MCP `set_record_custom_metadata` 对未知 key 自动创建数据库字段（实测） | High | 已确认 | Approved Profile key 白名单 + 字段 pre-read；未声明 key 拒写；readback 一致才记录 published | Spec §10.4/§10.9 |
+| **R-12** | M11 扫描原始完整性 | OneDrive 3,357 文件只读扫描无写痕，但缺 pre/post manifest，HISTORICAL_ORIGINAL_INTEGRITY = NOT_VERIFIABLE | Medium | 已确认 | 后续真实语料操作必须携带 pre/post manifest；COPY ONLY 测试协议（Spec §10.12）已固化该要求 | `#214` |

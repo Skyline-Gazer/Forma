@@ -27,10 +27,10 @@
 | `#217` | `[Program][P0] Forma WorkBuddy Edition — Expert alpha, reuse-first implementation` | **Active** | 新版实施主任务（Spec §8） | Add → `In Progress` (`P0`, `Track C`) |
 | `#218` | `[WorkBuddy][P0][M1] M1-A host feasibility & M1-B residual deterministic tooling` | **Active (Planned)** | 待批实施任务：`M1-A` 宿主机可行性前置 + `M1-B` 残余确定性工具（等待 Docs PR 合并） | Add → `Todo` (`P0`) |
 | `#219` | `[WorkBuddy][P0][M2] WorkBuddy Expert package, Skills, reproducible packaging & Linux CI verification` | **Active (Planned)** | 待批实施任务：Expert 打包、校验与指南（阻塞于 `#218` 合入 `workbuddy/dev`） | Add → `Todo` (`P0`) |
-| `#220` | `[WorkBuddy][P0][M3] Mac WorkBuddy client installation, 29-doc Alpha E2E & Owner UX acceptance` | **Active (Planned)** | 待批实施任务：Mac 客户端实装、29 文档回归与 Owner UX（阻塞于 `#219` 合入与包 SHA256） | Add → `Todo` (`P0`) |
+| `#220` | `[WorkBuddy][P0][M3] Mac WorkBuddy client installation, 29-doc Alpha E2E & Owner UX acceptance` | **Active (Planned)** | 待批实施任务：Mac 客户端实装、29 文档回归与 Owner UX（阻塞于 `#219` 合入与包 SHA256）；27/2 预览重定性为只读预览证据（Spec §10.11），端到端仍开放，须以 #224 合并后重建包复测 | Add → `Todo` (`P0`) |
 | `#213` | `[WorkBuddy][P0][#213] WorkBuddy semantic acceptance & 100–200 doc blind holdout` | **Active (Gated)** | 已移除 `Start now` 与主动 Sorty 指令（历史记录保留）；改为仅在 `#220` (`M3` Owner UX 批准) 后启动 WorkBuddy 盲测 | `In Progress` → `Blocked` (`P0`) |
 | `#214` | `[WorkBuddy][P0][#214] DEVONthink Index + OneDrive — physical storage and fresh-device recovery` | **Active (Gated)** | 归属对齐 `#217`，保留存储/恢复门禁与 `dae571dc` 证据；受真实 OneDrive/第二设备环境阻塞 | `In Progress` → `Blocked` (`P0`) |
-| `#215` | `[WorkBuddy][P0][#215] WorkBuddy -> DEVONthink optional metadata identity & integration` | **Active (Gated)** | 已移除 Sorty-first 指令（历史保留），对齐 WorkBuddy → DEVONthink 集成，受 `#218`–`#220` 阻塞 | `In Progress` → `Blocked` (`P0`) |
+| `#215` | `[WorkBuddy][P0][#215] WorkBuddy -> DEVONthink optional metadata identity & integration` | **Active (Gated)** | 已移除 Sorty-first 指令（历史保留），对齐 WorkBuddy → DEVONthink 集成，受 `#218`–`#220` 阻塞；重定位：确定性整理端到端交付属当前产品交付范围，非可选延后（Spec §10.13） | `In Progress` → `Blocked` (`P0`) |
 | `#216` | `[Adoption][P0][D] Reuse-first decision, cost comparison and ADS consumer evidence` | **Active** | 承接最终采用决策与成本对比 | Keep `Blocked` (`P0`, awaits M3/213-215) |
 | `#98` | `governance: ADS Learning Loop pilot (3–5 real deliveries)` | **Active** | 持续适用（按触发条件记录，不设新门禁） | Keep `In Progress` (`P1`) |
 | `#212` | `[Program][P0] Reuse-first adoption gate — Sorty / DEVONthink Index / OneDrive` | **Superseded** | 转为历史决策父节点，主动执行移交 `#217`（保留历史） | Move `In Progress` → `Backlog` (`P0`) |
@@ -116,3 +116,12 @@
 | `#220` | `Todo` | `P0` | `PVTI_lADOEwGMMc4BtHPlzhMWtD0` | `[M3]` Mac installation, 29-doc Alpha & Owner UX（Waiting for Owner approval） |
 
 - **Failures**: `0`（Project README 已同步更新）。
+
+## 5. 2026-11-28 follow-up dispositions
+
+| Item | Disposition |
+|---|---|
+| `#223` (Issue) | 缺陷经其自身实现/评审工作流收口：两条可执行评审项由 PR #224 修复（bf20192）；其余 P0 确定性收敛项由 Spec §10.8 单独追踪，不得报告为已随 #224 关闭。 |
+| `#224` (PR) | MERGED 2026-11-28 至 `workbuddy/dev`（CI 全绿；评审项以 test_12/test_13 回归覆盖并书面回应）。 |
+| `#225` (PR) | MERGED 2026-11-28；保留统一 Roadmap，修正 `0.1.0-alpha.2` 基线归属表述（该包出自当时未合并的评审修复分支；集成基线仍为 `ff7a4136`）。 |
+| Spec 整合 | 本 PR 交付 Spec §10 修正条款，待 Owner 批准后方可派生 Implementation Plan。 |

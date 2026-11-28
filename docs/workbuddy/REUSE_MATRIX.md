@@ -41,6 +41,7 @@
 ### 2.1 M1-A Closure & Runtime Choice
 - **M1-A 收口状态**：`CORE_HOST_FEASIBILITY_VERIFIED` · `NATIVE_SECURITY_ARCHITECTURE_DOCUMENTED` · `PRODUCT_SECURITY_ACCEPTANCE_PENDING`。
 - **实际运行环境选择**：`M1-A` 已在 Mac WorkBuddy 实测验证 Expert 本地安装、Skill 自动发现、自然语言驱动、脚本执行、包内资源路径、Python/Node.js/Swift 运行时及升级卸载均可用；因此残余确定性安全内核采用 **零第三方依赖的标准库 Python 3 (`forma_fs.py`)**，无需额外编译或 Connector 包装，也不强制预装 `docvortex`/`mac-ocr`。
+- **声明复用 ≠ 语义等价**：本矩阵的复用条目是来源声明，不证明运行时等价；#223 实测 alpha 内核与声明的 Sorty-style plan/eligibility 语义不一致，两条可执行评审项已由 PR #224 修复合入（bf20192），其余 P0 收敛项由 Spec §10.8 单独追踪；`0.1.0-alpha.2` 包先于修复构建，#220 必须以合并后重建包复测。
 
 ---
 
@@ -52,5 +53,5 @@
 | **mac-ocr** | `github.com/privatenumber/mac-ocr` | `1.2.1` (2026-10-17) | MIT | 活跃（2026-10） | 仅 macOS（Vision 框架，纯离线） | 扫描件 OCR 回退候选（或等价 30 行 Swift `VNRecognizeTextRequest`） |
 | **DEVONthink 4.4+ & 内置 MCP** | `devontechnologies.com` | `4.4.2` (2026-10-19) | 专有商业软件（Custom Metadata 需 Pro/Server） | 厂商维护 | 仅 macOS（内置 MCP 需 Sequoia+） | 宿主既有软件配置使用，不打包分发 |
 | **dvcrn/mcp-server-devonthink** | `github.com/dvcrn/mcp-server-devonthink` | `1.10.0` (2026-04-27) | **GPL-3.0**（`LICENSE` 为 GPLv3，`package.json` 误标 MIT） | 活跃（2026-09） | 仅 macOS（JXA） | 仅当内置 MCP 不可用时作用户侧可选参考，不混入包体 |
-| **Sorty** | `github.com/sorty-organizer/Sorty` | `v1.3.1` (2026-11-05) | GPL-3.0 | 活跃 | macOS 15+ | **不采用**：仅参考 `sorty-plan.json` v2 字段结构 |
+| **Sorty** | `github.com/sorty-organizer/Sorty` | `v1.3.1`（HEAD `9c5ad2ed`，零上游变更） | GPL-3.0 | 活跃 | macOS 15+ | **patterns-only**：吸收成熟设计与可合法复用能力（含 26 项平台无关 pytest 内核模式）；不引入第二文件操作内核、不分发 GPL 代码/二进制、不继承其宽松授权策略 |
 | **Forma 原仓库许可缺口** | `origin/dev` 根目录 | 无 `LICENSE` 文件 | 未声明（默认保留所有权利） | 内部仓库 | — | `M2` 打包前须由 Owner 明确仓库/产物许可证 |
