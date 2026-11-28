@@ -249,5 +249,114 @@ class FormaAlphaTests(unittest.TestCase):
                 forma_fs.execute_plan(plan, Path(td) / "state", execute=True, approve_plan_hash=plan["plan_hash"], approve_snapshot_hash=plan["snapshot_hash"])
 
 
+    def test_11_eligibility_policy_conditions_and_corpus_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "src"
+            for rel in [
+                "normal.txt",
+                "sub/normal.txt",
+                ".DS_Store",
+                "vendor/quote.txt",
+                "vendorish/normal.txt",
+                "build/out.txt",
+                "dist/app.bin",
+            ]:
+                p = src / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text("x", encoding="utf-8")
+            snap = forma_fs.inspect_directory(src)
+            by_rel = {e["rel_path"]: e for e in snap["entries"]}
+            self.assertEqual(by_rel["normal.txt"]["eligibility"], "INCLUDE")
+            self.assertEqual(by_rel["sub/normal.txt"]["eligibility"], "INCLUDE")
+            self.assertEqual(by_rel["vendorish/normal.txt"]["eligibility"], "INCLUDE")
+            self.assertEqual(by_rel[".DS_Store"]["eligibility"], "EXCLUDE")
+            self.assertEqual(by_rel["vendor/quote.txt"]["eligibility_reason"], "vendor_directory")
+            self.assertEqual(by_rel["build/out.txt"]["eligibility_reason"], "generated_directory")
+            self.assertEqual(by_rel["dist/app.bin"]["eligibility_reason"], "generated_directory")
+            self.assertEqual(snap["counts"]["probed_included"], 3)
+            self.assertEqual(snap["counts"]["probed_excluded"], 1)
+            self.assertEqual(snap["counts"]["probed_review"], 3)
+
+            policy = forma_fs._load_eligibility_rules(None)
+            self.assertEqual(
+                forma_fs._classify_entry(".DS_STORE", ".DS_STORE", policy),
+                ("EXCLUDE", "technical_noise_ds_store"),
+            )
+            self.assertEqual(
+                forma_fs._classify_entry("VENDOR/quote.txt", "quote.txt", policy),
+                ("REVIEW", "vendor_directory"),
+            )
+            self.assertEqual(
+                forma_fs._classify_entry("~$LOCK.docx", "~$LOCK.docx", policy),
+                ("EXCLUDE", "technical_noise_office_lock"),
+            )
+            self.assertEqual(
+                forma_fs._classify_entry("x.txt", "x.txt", policy),
+                ("INCLUDE", "default_mapping_candidate"),
+            )
+            self.assertEqual(
+                forma_fs._classify_entry("x.txt", "x.txt", policy, entry_state="unreadable"),
+                ("REVIEW", "unclassified_entry_state"),
+            )
+            self.assertEqual(
+                forma_fs._classify_entry("x.txt", "x.txt", policy, hydration_pending=True),
+                ("INCLUDE", "dataless_metadata_only"),
+            )
+            self.assertEqual(
+                forma_fs._classify_entry("x.txt", "x.txt", policy, facts={"businessEvidence": "confirmed"}),
+                ("INCLUDE", "confirmed_business_evidence"),
+            )
+            self.assertEqual(
+                forma_fs._classify_entry("x.txt", "x.txt", policy, facts={"businessEvidence": "unknown"}),
+                ("INCLUDE", "default_mapping_candidate"),
+            )
+            for rel in [
+                "下载/待处理/批次1/技术要求.xlsx",
+                "临时/厂商/启岳/附件/批次1/技术方案_最终.docx",
+                "项目/2026/新建/未确认/资料/批次1/技术方案.docx",
+                "历史/2024/已完成/参考/技术/技术方案.docx",
+            ]:
+                self.assertEqual(
+                    forma_fs._classify_entry(rel, Path(rel).name, policy),
+                    ("INCLUDE", "default_mapping_candidate"),
+                )
+
+
+    def test_12_protection_facts_gate_excludes_only_when_known(self) -> None:
+        policy = json.loads(
+            (REPO_ROOT / "workbuddy" / "forma-expert" / "skills" / "forma-organize" / "references" / "eligibility-policy.json").read_text(encoding="utf-8")
+        )
+        # A verified cache marker whose declared protection facts were never probed must not EXCLUDE.
+        self.assertEqual(
+            forma_fs._classify_entry("repo/.mypy_cache/x.json", "x.json", policy, facts={"cacheMarker": "verified"}),
+            ("REVIEW", "protection_fact_unknown"),
+        )
+        # Once gitTracked/nestedRepository are known, the EXCLUDE proceeds unchanged.
+        self.assertEqual(
+            forma_fs._classify_entry(
+                "repo/.mypy_cache/x.json", "x.json", policy,
+                facts={"cacheMarker": "verified", "gitTracked": False, "nestedRepository": False},
+            ),
+            ("EXCLUDE", "verified_cache_marker"),
+        )
+
+    def test_13_magic_probe_read_error_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "src"
+            src.mkdir()
+            (src / "doc.pdf").write_bytes(b"%PDF-1.7 body")
+            original = forma_fs._check_magic_mismatch
+            forma_fs._check_magic_mismatch = lambda path, ext: (False, "read_error:Errno 13 permission denied")
+            try:
+                snap = forma_fs.inspect_directory(src)
+            finally:
+                forma_fs._check_magic_mismatch = original
+            entry = snap["entries"][0]
+            self.assertEqual(entry["state"], "unreadable:magic_probe")
+            self.assertEqual((entry["eligibility"], entry["eligibility_reason"]), ("REVIEW", "unclassified_entry_state"))
+            self.assertEqual(snap["counts"]["probed_included"], 0)
+            self.assertEqual(snap["counts"]["probed_review"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -125,7 +125,30 @@ def _load_eligibility_rules(policy_path: Path | None) -> dict[str, Any]:
     return {"policy_id": "fallback", "rules": []}
 
 
-def _classify_entry(rel_path: str, name: str, policy: dict[str, Any] | None = None) -> tuple[str, str]:
+def _facts_match(actual: dict[str, Any] | None, expected: dict[str, Any]) -> bool:
+    if not actual:
+        return False
+    for key, want in expected.items():
+        got = actual.get(key)
+        if got is None:
+            return False
+        if isinstance(want, bool):
+            if bool(got) != want:
+                return False
+        elif str(got).casefold() != str(want).casefold():
+            return False
+    return True
+
+
+def _classify_entry(
+    rel_path: str,
+    name: str,
+    policy: dict[str, Any] | None = None,
+    *,
+    facts: dict[str, Any] | None = None,
+    entry_state: str = "present",
+    hydration_pending: bool = False,
+) -> tuple[str, str]:
     parts = Path(rel_path).parts
     if any(part == ".git" for part in parts):
         return "REVIEW", "git_tracked_content"
@@ -134,17 +157,51 @@ def _classify_entry(rel_path: str, name: str, policy: dict[str, Any] | None = No
         if not conds:
             continue
         matched = True
-        for c in conds:
-            if "basenames" in c and name not in c["basenames"]:
+        for cond in conds:
+            if not isinstance(cond, dict):
                 matched = False
-            elif "basename_prefixes" in c and not any(name.startswith(p) for p in c["basename_prefixes"]):
-                matched = False
-            elif "dirnames" in c and not any(part in c["dirnames"] for part in parts[:-1]):
-                matched = False
-            elif "facts" in c:
-                matched = False
+                break
+            for key, expected in cond.items():
+                if key == "basenames":
+                    if name.casefold() not in {str(item).casefold() for item in expected}:
+                        matched = False
+                elif key == "basename_prefixes":
+                    lowered = name.casefold()
+                    if not any(lowered.startswith(str(prefix).casefold()) for prefix in expected):
+                        matched = False
+                elif key == "dirnames":
+                    if not any(part in expected for part in parts[:-1]):
+                        matched = False
+                elif key == "path_components":
+                    wanted = {str(item).casefold() for item in expected}
+                    if not any(str(part).casefold() in wanted for part in parts):
+                        matched = False
+                elif key == "entry_states":
+                    if entry_state not in {str(item) for item in expected}:
+                        matched = False
+                elif key == "hydration_pending":
+                    if bool(expected) != hydration_pending:
+                        matched = False
+                elif key == "facts":
+                    if not _facts_match(facts, expected):
+                        matched = False
+                else:
+                    # Unknown condition keys must never match unconditionally.
+                    matched = False
+                if not matched:
+                    break
+            if not matched:
+                break
         if matched:
-            return rule["decision"], rule.get("explanation_code", rule["rule_id"])
+            decision = rule["decision"]
+            if decision == "EXCLUDE":
+                declared = rule.get("protection_facts") or []
+                if any((not facts) or facts.get(str(name)) is None for name in declared):
+                    # EXCLUDE must never rest on an unprobed protection fact (#223 review).
+                    return "REVIEW", "protection_fact_unknown"
+            return decision, rule.get("explanation_code", rule["rule_id"])
+    if entry_state != "present":
+        return "REVIEW", "unclassified_entry_state"
     return "INCLUDE", "eligible_business_candidate"
 
 
@@ -194,7 +251,6 @@ def inspect_directory(source: Path, max_entries: int = 5000, policy_path: Path |
             probed_count += 1
             st = os.lstat(fp)
             dataless = _is_dataless(st)
-            decision, reason = _classify_entry(rel, fn, policy)
             ext = fp.suffix.lower()
             sha256 = None
             mismatch = False
@@ -210,6 +266,17 @@ def inspect_directory(source: Path, max_entries: int = 5000, policy_path: Path |
                     hash_groups.setdefault(sha256, []).append(rel)
                 except OSError as exc:
                     state = f"unreadable:{exc.errno or exc}"
+                if mismatch_reason is not None and str(mismatch_reason).startswith("read_error"):
+                    # A signature-probe read failure leaves the file unreadable even when hashing succeeded.
+                    state = "unreadable:magic_probe"
+
+            # Advanced fact probes (gitTracked, nestedRepository, businessEvidence, ...)
+            # are not implemented in the Alpha fast path. Unknown facts never satisfy a
+            # policy rule; they fall through to the state-based default.
+            entry_state = "present" if state in ("ok", "dataless_cloud_placeholder") else "unreadable"
+            decision, reason = _classify_entry(
+                rel, fn, policy, entry_state=entry_state, hydration_pending=dataless
+            )
 
             ckey = _normalize_collision_key(rel)
             collision_map.setdefault(ckey, []).append(rel)
