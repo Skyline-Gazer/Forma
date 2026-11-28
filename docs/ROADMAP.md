@@ -1,101 +1,96 @@
-# Forma — Implementation Roadmap (Approved Planning Baseline)
+# Forma — Product Roadmap
 
-**状态：P0/P1/P2 已授权并完成工程实现；P3-A（离线评测基础设施）已授权进行中；I1 已收尾——整体结论为「Import Integration Verified（Limited Scope / 限定范围）」，见下方「I1 最终状态」；`import_file` 精确返回结构、`dropped_fields` 部分成功路径、响应前断连与写入中崩溃仍为 NOT_VERIFIED，Replicant 与生产迁移未验证/未授权；**R1 Batch 1 已完成工程实现（Engineering Verified）**；**R1 Batch 2A/2A.1/2A.2/2A.3 已在 macOS 现场执行**：打包产物通过资源可读、严格验签、CI 启动冒烟与真机 GUI 启动；安全作用域书签跨重启可恢复；GUI 键入已现场走通（含输入法切换与逐字段回读）；**缺陷 A（失败提交后合法输入仍显示旧错误）已修复（#103）并在新产物上现场复测 PASS（run `43714739978`）**；**Keychain 锁定态、外部卷/iCloud、macOS 14.x、签名/公证/发行仍为 NOT_VERIFIED 或 BLOCKED**；**M05 预算强制、跨实例 journal、离线 QA 与写入前安全审计已完成（#107/#110/#109/#112）；现场只读绑定因 `Forma_M05_Sandbox` 未准备而记 TARGET_NOT_PREPARED，T02/T03 发送边界不可观测 → NOT_VERIFIED，真实运行未授权、未执行**；**R1 Batch 2B 非写入工程已授权并完成；2B 应用功能开发未授权**；P3-B 真实模型评测、I2 均未授权。**  
-**基线：** [SPEC v0.1.2 FROZEN](SPEC.md) · [PLAN v0.2](PLAN.md) · [PLAN PR #1 merged](https://github.com/Skyline-Gazer/Forma/pull/1) · [P2 验收报告](P2-ACCEPTANCE.md) · [I1-A 离线验收](I1-A-ACCEPTANCE.md) · [I1-B1 能力发现](I1-B1-CAPABILITY-DISCOVERY.md) · [I1-B2 预检](I1-B2-PREFLIGHT.md) · [I1-B2 现场验收](I1-B2-ACCEPTANCE.md) · [R1 Readiness](R1-READINESS.md) · [R1 Batch 1 Handoff](R1-BATCH1-HANDOFF.md) · [R1 App Packaging](R1-APP-PACKAGING.md) · [R1 Batch 2A 报告](R1-BATCH2A-REPORT.md) · [R1 Batch 2A.1 修复报告](R1-BATCH2A1-REPORT.md) · [GUI 验证](R1-GUI-VERIFICATION.md) · [M05 预检](M05-PREFLIGHT.md) · [M05 写入授权申请](M05-AUTHORIZATION-PROPOSAL.md)
-**Batch 2B 文档：** [Preflight 报告](R1-BATCH2B-PREFLIGHT-REPORT.md) · [交接](R1-BATCH2B-HANDOFF.md)  
-**Batch 2B 硬化：** [最终报告](R1-BATCH2B-HARDENING-REPORT.md) · [M05 安全审计](M05-SAFETY-AUDIT.md) · [现场收口/M05 授权门](R1-MAC-FIELD-CLOSURE-REPORT.md)  
-**Owner 决策记录：** 2026-11-11（P0/P1 授权）· 2026-11-12（P2 收尾接受 + P3 拆分授权）· 2026-11-13（I1-A）· 2026-11-14（I1-B1、I1-B2、I1 收尾、R1 Batch 1、R1 Batch 2A 现场与无写入工程）· 2026-11-15（R1 Batch 2A.1 工程修复、R1 Batch 2B 非写入硬化）· 2026-11-16（Eligibility 契约 A–E 批准，SPEC v0.1.2/PLAN v0.2，切片 1–4 授权），详见下方「授权历史」
+**Updated:** 2026-11-28  
+**Active product line:** Forma WorkBuddy Edition · `workbuddy/dev`  
+**Tracking:** [GitHub Project #18](https://github.com/users/Skyline-Gazer/projects/18) · [Program #217](https://github.com/Skyline-Gazer/Forma/issues/217)  
+**Implementation authority:** [WorkBuddy Spec](specs/2026-11-27-workbuddy-edition.md) · [Implementation Plan](workbuddy/IMPLEMENTATION_PLAN.md) · [Reuse Matrix](workbuddy/REUSE_MATRIX.md)
 
-## 已批准的三项 Owner 决策
+This is the single product roadmap for Forma, not a second WorkBuddy-specific roadmap. It supersedes the legacy native-app roadmap as the active direction. Roadmap inclusion records product intent, not permission to implement, release, migrate production data or incur costs. The current approved Spec and acceptance gates remain authoritative.
 
-1. **AI Mapping 质量目标：候选值，非正式验收 Gate。** 初始参考 PLAN 提议的 precision_auto ≥95%、coverage ≥70%、field_precision ≥98%、high_confidence_error_rate ≤2%；应先做真实独立测量，结合 Profile、分层样本量、风险和置信区间，再由 Owner 批准最终 Gate。禁止将建议值写成已经获批通过。
-2. **目标与年份：** Vendor Library 使用**独立的 DEVONthink 数据库**（具体库 UUID 和目录结构留待 V6 现场绑定）；Project Archive **保持现有 Group 布局**；completionyear 必须来自**已核实的归档完成事实**，不能从投标截止年、封面日期或产品年份猜测；不明则 hold。
-3. **发行与生命周期：** **macOS 14+ 为当前开发基线**，P0/V7 核实兼容性；默认 GUI 退出时保存任务及未决操作状态，**下次启动先回查后恢复**。首版不做独立后台 Worker；签名/沙盒/分发策略以实测为准。
+## 1. Product direction
 
-## I1 最终状态（2026-11-14 收尾）
+Forma is an Agent-native file and knowledge management capability suite. Its primary product form is a WorkBuddy Expert with reusable Skills and the smallest necessary deterministic tooling. AI understands document content, business projects, parties, roles, versions and relationships; deterministic tools provide file identity, evidence, safe execution and recovery.
 
-`dev` @ `e1a1379`（PR #75 合并，CI run `43581724081` success）。四个切片分别验收，**不合并成一个“I1 全部通过”的结论**。
+- WorkBuddy provides the Agent host, conversation/UI, model routing, native tools and security mechanisms. Use Project, Memory, Automation, document tools and ecosystem integrations when their actual capabilities and boundaries fit.
+- Original files remain ordinary files in the user's chosen filesystem or OneDrive directory. DEVONthink is optional, preferably indexing originals rather than duplicating them. No mandatory proprietary document store.
+- No offline-first requirement, mandatory local model, custom general-purpose runtime, database, search engine, OCR engine, storage driver or standalone GUI. A verified residual gap may justify a narrow tool only after approval of the relevant Spec/Plan.
+- User intent, data integrity, security and actual workflow usefulness are the acceptance criteria; a particular algorithm or technology is not a feature by itself.
 
-| 切片 | PR | 结论 | 证据 |
+### Reuse-first decision order
+
+1. WorkBuddy native capabilities.
+2. Official Expert/Skill configuration and WorkBuddy ecosystem (including existing connectors/MCP).
+3. OS-native services and existing mature tools/open-source projects.
+4. Reuse narrow, suitable existing Forma components/contracts.
+5. Minimal residual implementation only when the preceding options cannot satisfy the demonstrated requirement.
+
+For each candidate, check official documentation, license, platform/version/plan availability, permission boundary, data egress, maintenance and actual workflow fit. Reuse a proven tool rather than clone its functionality. Documented capability and product-level runtime verification are distinct; do not claim a feature is integrated or accepted merely because the host documents it.
+
+## 2. Active roadmap — Alpha and adoption gates
+
+| Gate | Scope | Tracking | Status as of 2026-11-28 |
 | --- | --- | --- | --- |
-| I1-A 离线 Import 基础 | #62–#65 | **Offline Verified** | [I1-A-ACCEPTANCE](I1-A-ACCEPTANCE.md)、[ADR](ADR-I1-A-IMPORT-CONTRACT.md) |
-| I1-B0 执行边界硬化 | #66–#68 | **Offline Verified**（补写前核验目标、恢复前核验来源） | `Tests/FormaCoreTests/ImportB0BoundaryTests.swift` |
-| I1-B1 真实 MCP 能力发现 | #69–#70 | **MCP Discovery Verified**；只读集成 Partial | [I1-B1-CAPABILITY-DISCOVERY](I1-B1-CAPABILITY-DISCOVERY.md) |
-| I1-B2 隔离库真实 Import | #71–#75 | **Import Integration Verified（Limited Scope）** | [I1-B2-ACCEPTANCE](I1-B2-ACCEPTANCE.md) |
+| M1-A | WorkBuddy host feasibility, installation and script/runtime viability | [#218](https://github.com/Skyline-Gazer/Forma/issues/218) | Closed; host feasibility verified, product security acceptance pending |
+| M1-B | Minimal deterministic tooling: inventory, SHA-256, snapshot/plan integrity, exclusive no-replace moves, journal and recovery | [#218](https://github.com/Skyline-Gazer/Forma/issues/218) | Closed; engineering implementation integrated |
+| M2 | Expert/Skills, reproducible packaging and CI | [#219](https://github.com/Skyline-Gazer/Forma/issues/219), [PR #222](https://github.com/Skyline-Gazer/Forma/pull/222) | Closed; package integrated |
+| M3 | Actual Mac WorkBuddy install, 29-document regression, permission/safety, complete organize/verify/recover workflow and Owner UX approval | [#220](https://github.com/Skyline-Gazer/Forma/issues/220) | Open; not accepted; [#223](https://github.com/Skyline-Gazer/Forma/issues/223) is an open eligibility-classification blocker |
+| Phase 4 / Beta candidate | Independent 100–200 document holdout (target 150), three independent runs, incremental update slice | [#213](https://github.com/Skyline-Gazer/Forma/issues/213) | Gated on M3 Owner UX approval |
+| Phase 4 / storage | OneDrive File Provider, actual allocated space, selective hydration and fresh-device recovery | [#214](https://github.com/Skyline-Gazer/Forma/issues/214) | Environment/device-gated; not accepted |
+| Phase 4 / optional integration | DEVONthink Index, original identity, metadata write/readback and partial-failure handling | [#215](https://github.com/Skyline-Gazer/Forma/issues/215) | Gated on workflow readiness |
+| Adoption | Controlled pilot, cost comparison, >=80% human-time saving target and final adoption decision | [#216](https://github.com/Skyline-Gazer/Forma/issues/216) | Gated on #220 and #213–#215 |
 
-限定边界：隔离库 + 本轮创建的 2 个 Group + 4 条合成记录 + 8 个允许字段 + 3 个授权工具；生产库零写入；未删除任何沙盒对象。
+The integrated Alpha baseline before this roadmap revision is `ff7a4136f9f4a7ba06787012d783700c457b81de`. The table is a snapshot, not a substitute for live Issues or the implementation plan.
 
-仍未验证（不得升格为 PASS）：`import_file` 精确返回结构、`dropped_fields` 部分成功、请求发出后响应前断连、写入进行中的真实崩溃、异步可见性延迟场景、真实业务文件与 OneDrive 占位、生产库迁移、Replicant/多父组（属 I2）。
+Immediate focus: resolve #223 through its own implementation/review workflow, then rerun #220 against the exact fixed package. Examine missing source-hash handling and demonstrate fail-closed behavior for file-content verification and approved plans; a source review finding is not an already verified runtime defect. Do not proceed to costly holdout or wider development before the existing gates. Preserve the Spec's thresholds, privacy and storage boundaries. No production writes, public release or legacy migration is authorized by this roadmap.
 
-可复现性缺口：现场运行的装配驱动器未入库（仓库内 `ImportReadTransport` 仅有测试用 `FakeImportTransport`），因此该次运行无法从仓库一键复现，只有组件可复用。
+## 3. Long-term product evolution
 
-因此 **Issue #7（E5 Epic）不因本收尾而完成**，Import 也不宣称生产就绪。
+The following version labels are indicative capability horizons, not fixed releases, deadlines or development authorization. Existing Alpha/Beta gates take precedence; incremental update already has a Phase 4 acceptance slice and must not be deferred solely because its larger evolution is listed under v1.0.
 
-## 主链与可选分支
+| Horizon | Product outcome | Reuse-first strategy and remaining capability |
+| --- | --- | --- |
+| Alpha | Safe single-batch document organization | Existing WorkBuddy Expert + minimal deterministic filesystem core; exact duplicates and approval-bound SHA-256 verification |
+| Beta | Reliable real-world document organization | Existing independent holdout, incremental slice, OneDrive and optional DEVONthink validation, controlled user pilot |
+| v1.0 candidate — Continuous file management | Recognize unchanged/new/changed/moved files across runs; detect exact duplicates across authorized historical batches; persist file identity and fingerprints when justified | Reuse current SHA-256 core, OS metadata and existing fingerprint/index tools; evaluate minimal persistent hash cache only if required. WorkBuddy Project/Memory may supply context but are not an authoritative file identity ledger |
+| v1.1 candidate — Knowledge management | Full-text and metadata search, historical project association, version and document relationship discovery, evidence-backed retrieval | WorkBuddy Read/Grep/document tools, OS Spotlight where suitable, optional DEVONthink or mature search adapters; LLM/Skills for semantic relationships; structured durable metadata only where needed |
+| v1.2 candidate — Proactive management | Retain user preferences and approved project policies, periodically inspect selected folders and propose actions | WorkBuddy Memory, Project and Automation when supported by the actual client; read-only/proposal-first, no autonomous scheduled production writes; changes still require scoped approval |
+| Future — Advanced retrieval | Better semantic discovery, evidence recall and cross-document retrieval | Evaluate existing WorkBuddy knowledge-base/connector ecosystem and mature backends before custom Embedding or Hybrid Retrieval; preserve original-file ownership and privacy, compare coverage, cost and maintenance |
+| Research — Storage efficiency | Understand potential space savings across versions while preserving independent byte-exact recovery | Reuse existing versioning/backup capabilities; evaluate CDC/CAS/CDP only with evidence and explicit authorization |
 
-```mermaid
-flowchart LR
-    E0["E0 / P0\nContracts"] --> E1["E1 / P1\nSource facts"]
-    E1 --> E2["E2 / P2\nAI mapping"]
-    E2 --> E3["E3 / P2\nNative UI"]
-    E3 --> E4["E4 / P3\nEvaluation"]
-    E4 --> E5["E5 / I1\nImport"]
-    E5 --> E7["E7 / R1\nRelease"]
-    E5 --> E6["E6 / I2\nOptional sharing"]
-```
+### Capability contracts for future planning
 
-P2 的 E2/E3 可部分并行，但用户可操作的 Prototype 应形成完整 Mapping + UI 流程。I2 **不阻塞** I1 和 R1；V1–V4 优先为 Prototype 提供实际能力证据，V5 仅阻塞 Replicant 选项。
+- **Fingerprint and incremental identity:** differentiate content equality (SHA-256), file identity, document version and business association. Exact duplicate groups must not imply automatic deletion. Cache validity must account for file changes/replacement, moves, roots, cloud placeholders and interrupted scans; never substitute cached hashes for safety-critical verification without demonstrated correctness. Avoid unrequested hydration; unknown/unreadable remains explicit.
+- **Search and relationships:** distinguish native ad hoc search from a durable index. WorkBuddy LLM/Skills can interpret content and relationships but do not by themselves guarantee persistent, complete retrieval. Preserve source paths and evidence; semantic similarity is not proof of project ownership. Spotlight coverage, OCR, cloud placeholders, metadata, DEVONthink and external knowledge-base compatibility must be verified before adoption.
+- **Memory and automation:** store preferences/context in the host when appropriate; exact identity, approval and journal facts remain deterministic. Scheduled inspection is optional and scoped; no silent write, delete, overwrite or scope expansion.
+- **Optional integrations:** no mandatory DEVONthink, knowledge-base upload or OneDrive dependency for ordinary organization. Keep external storage/metadata states distinct; do not promise cross-system atomicity or recoverability without proof.
 
-## Epic / Feature 索引
+### Existing research backlog
 
-| Epic | 阶段 | Feature Issues | 验收出口 |
-|---|---|---|---|
-| [#2 E0 契约与只读能力](https://github.com/Skyline-Gazer/Forma/issues/2) | P0 | [#10 MCP/字段](https://github.com/Skyline-Gazer/Forma/issues/10), [#11 Providers/Extractors](https://github.com/Skyline-Gazer/Forma/issues/11) | V1–V4、真实只读探针；生产零写 |
-| [#3 E1 来源事实](https://github.com/Skyline-Gazer/Forma/issues/3) | P1 | [#12 source_id](https://github.com/Skyline-Gazer/Forma/issues/12), [#13 snapshot/evidence](https://github.com/Skyline-Gazer/Forma/issues/13) | 重扫、移动、替换、快照和只读证据 |
-| [#4 E2 AI Mapping](https://github.com/Skyline-Gazer/Forma/issues/4) | P2 | [#14 Context/Profile](https://github.com/Skyline-Gazer/Forma/issues/14), [#15 Providers/CasePack](https://github.com/Skyline-Gazer/Forma/issues/15), [#16 Validator](https://github.com/Skyline-Gazer/Forma/issues/16) | 双 Profile 真实 Manifest、可验证 Evidence |
-| [#5 E3 Native UI](https://github.com/Skyline-Gazer/Forma/issues/5) | P2 | [#17 Mapping UI](https://github.com/Skyline-Gazer/Forma/issues/17), [#18 Privacy/Correction](https://github.com/Skyline-Gazer/Forma/issues/18) | Workspace/Mapping/Exceptions/Settings、脱敏/纠错闭环 |
-| [#6 E4 质量评测](https://github.com/Skyline-Gazer/Forma/issues/6) | P3 | [#19 gold/metrics](https://github.com/Skyline-Gazer/Forma/issues/19), [#20 performance/cost](https://github.com/Skyline-Gazer/Forma/issues/20) | 已授权 P3-A：金标准规范与离线评测基础设施（可用合成数据与确定性替身）。暂未授权 P3-B：真实模型与样本报告。正式 Gate 待 Owner 实测后批准（授权见下方「授权历史」） |
-| [#7 E5 Import](https://github.com/Skyline-Gazer/Forma/issues/7) | I1 | [#21 Write/SHA](https://github.com/Skyline-Gazer/Forma/issues/21), [#22 Ledger/Recovery](https://github.com/Skyline-Gazer/Forma/issues/22) | 隔离记录读写回读、幂等、VERIFY_REQUIRED 已在限定范围内达成（`docs/I1-B2-ACCEPTANCE.md`）；未达成：`import_file` 返回结构、`dropped_fields` 部分成功、响应前断连、写入中崩溃、OneDrive hydration、生产迁移 —— **Epic 保持未完成** |
-| [#8 E6 Optional Sharing](https://github.com/Skyline-Gazer/Forma/issues/8) | I2 | [#23 Associations/Replicant](https://github.com/Skyline-Gazer/Forma/issues/23) | 元数据兼容才考虑 Replicant；不支持可关闭 |
-| [#9 E7 Release](https://github.com/Skyline-Gazer/Forma/issues/9) | R1 | [#24 Release/Lifecycle](https://github.com/Skyline-Gazer/Forma/issues/24) | **R1 Batch 1 已完成工程实现**（DevBox + macOS CI，`docs/R1-BATCH1-HANDOFF.md`）；**Batch 2A/2A.1/2A.2/2A.3 已在 macOS 现场执行**：打包产物通过资源可读、`codesign --strict`、CI 启动冒烟与真机 GUI 启动；书签撤销/重授权与跨重启身份校验 PASS；GUI 表单键入走通并完成只读回查（`docs/R1-BATCH2A3-REPORT.md`）；**缺陷 A 已修复（#103），待新产物复测**；**Batch 2B 非写入硬化已完成**（#107 预算/journal、#110 离线 QA、#109 文档）；**仍未验证**：Keychain 锁定态、外部卷/iCloud、macOS 14.x、签名/公证/发行；**M05 真实写入未授权；2B 应用功能开发未授权** |
+- [#133 — Multi-version incremental storage / CDC / CAS / CDP](https://github.com/Skyline-Gazer/Forma/issues/133): research only, not scheduled. Distinguish semantic version recognition, exact duplicates and actual physical space recovery.
+- [#162 — Embedding API / Hybrid Retrieval / lightweight decision models](https://github.com/Skyline-Gazer/Forma/issues/162): research only, not scheduled. Prefer host and mature-tool reuse before a custom index or model; no mandatory local inference. Original issues remain historical references and require explicit scope alignment before activation.
 
-## 实施与治理边界
+New horizons do not create new implementation Issues or activate existing research automatically. When authorized, map the specific product gap to an existing Issue or create only the necessary new Issue under Project #18, define evidence-based acceptance and derive an implementation plan from an approved Spec. Avoid duplicate tracking.
 
-- **授权历史**
-  - **2026-11-11（原文保留，不改动当时的时间记录）：** 实施 P0（技术契约与基础工程）与 P1（Scanner / Source Identity / Snapshot / Evidence / 最小 GUI），在 `dev` 以可独立审查的 PR 集成，并配置 GitHub Actions macOS 构建与单元测试。P2、P3、I1、I2、R1 未授权。
-  - **2026-11-12（Owner 决策；取代上一条中「P2、P3 未授权」的现状效力，上一条作为历史证据保留）：**
-    - P0 / P1：已授权并完成。
-    - P2：已授权，工程实现完成；外部现场验收仍有未关闭项——Provider 真实调用、隔离 DEVONthink 库对齐、授权 OneDrive 目录三项保持 `BLOCKED`，GUI 人工交互保持 `NOT_VERIFIED`，且不得因阶段收尾而关闭；CI 编译成功与合成数据测试通过不得表述为真实环境验证通过，P2 不宣称生产就绪。
-    - **P3-A：正式授权启动离线评测准备工作**（金标准数据集规范与评测基础设施，允许合成数据与确定性替身）。
-    - **P3-B：真实模型评测暂未授权执行**，等待四项外部前置条件：Provider 真实 API 凭据与批准的模型、外发数据范围与费用预算；经确认的独立测试库 UUID 与只读范围；Owner 授权的真实扫描目录与访问边界；≥150 条经独立核实与脱敏的金标准样本。凭据一律经本地 Keychain 或经批准的 Secret 管理，不提交仓库。
-    - I1 / I2 / R1：未授权。
-    - 质量阈值（precision_auto ≥95%、coverage ≥70%、field_precision ≥98%、high_confidence_error_rate ≤2%）仍为待批候选值；正式 Gate 须在真实测量、分层、区间与风险分析后由 Owner 再次批准，Agent 不得自行宣布其已成为验收标准。
-  - **2026-11-13（Owner 授权 I1-A：可靠 Import 的离线设计确认与基础实现）：** 允许在 DevBox + macOS CI 内开发 Preflight、SHA/快照校验、幂等操作键、版本化 SQLite Intent/Ledger、四态仲裁、单写者与重启恢复、Fake MCP Transport、故障注入与独立回读验证。幂等键为 `(source_id, snapshot_fingerprint, manifest_revision, target_association_id, operation_kind)`；写入前先持久化 Intent；不确定副作用进入 VERIFY_REQUIRED；不声明未经真实接口证明的 exactly-once。**明确禁止**：真实 DEVONthink 写工具调用、真实记录/Group 创建、生产库写入、真实文件 Import、真实 OneDrive hydration、真实 Provider 请求、修改冻结 SPEC、默认启用应用层 WriteClient、把 Fake Transport 成功当作现场验收。I1-B（隔离库真实写入、Metadata/UUID/SHA 回读、断连与重复运行）须 Owner 单独批准；在此之前 I1-A 只报 **Offline Verified**。
-  - **2026-11-14（Owner 授权 I1-B1：真实 MCP 能力发现与只读验证）：** 允许在 macOS 上用官方 DEVONthink MCP 执行 `initialize`/`tools/list`/分页与只读调用，记录版本、schema 摘要与能力矩阵；发现真实契约缺陷时允许在独立 PR 修复 `DEVONthinkReadOnlyClient` 并通过 macOS CI。仍**禁止**任何写工具调用、真实记录/Group 创建与生产库记录级查询；Owner 本轮未指定隔离测试库，因此库级验收记为 `BLOCKED`。结果见 `docs/I1-B1-CAPABILITY-DISCOVERY.md`；写入提案见 `docs/I1-B2-AUTHORIZATION-PROPOSAL.md`（**未获批准前不得执行**）。
-  - **2026-11-14（I1-B2 预检与隔离库绑定，未授权写入）：** 完成默认拒绝执行边界（`Sources/FormaCore/Import/ImportWriteBoundary.swift`）；Owner 创建 `Forma_I1B2_Sandbox` 后，通过只读 `get_databases` 完成绑定（名称精确、`is_inbox=false`、与生产库 UUID 不同、初始 0 条记录、根下 6 个子项 = 3 个系统组 + 3 个智能组），并复核 3 个写工具 schema digest、8 个 Metadata 字段与 4 个合成文件 SHA-256。预检报告见 `docs/I1-B2-PREFLIGHT.md`。**本轮仍为零写调用**；写入需 Owner 明确批准提案后才可执行。
-  - **2026-11-14（Owner 授权 I1-B2 真实写入，并在隔离库完成验收）：** 授权仅在 `Forma_I1B2_Sandbox` 与本轮 `Forma_I1B2/<run-id>` 内使用 `create_group_path`、`import_file`（`mode=import`）与 `set_record_custom_metadata`（`mode=merge`，8 个 identifier），预算 4 条记录 / 2 个 Group；禁止删除、移动、Replicant、字段定义变更与任何生产库写入。真实调用全部经 `GuardedImportWriteTransport`（实现见 PR #74）。结果：4 条合成记录全部导入，源/目标标准 SHA-256 逐字节一致，Metadata merge 后逐字段回读通过且未写入字段未被改动，重复执行 `SKIP_VERIFIED` 且不再调用 `import_file`，冲突拒绝覆盖，超时后以只读回查判定（写入实际已落库），断连无盲重试，重启恢复无重复记录，生产库零写入。报告见 `docs/I1-B2-ACCEPTANCE.md`。`import_file` 精确返回结构与 `dropped_fields` 部分成功路径仍为 **NOT_VERIFIED**。
-  - **2026-11-14（I1 收尾：只读取证复核、文档纠错与 Issue 收敛；未新增任何写入授权）：** 复核实基线 `dev` @ `e1a1379`（PR #75 合并，CI run `43581724081` success），PR #71–#75 全部 merged。收尾只做只读工作：未调用任何 DEVONthink 写工具，未刷新写预算，未触碰沙盒对象，未访问生产库，未同步 CNB，`main` 与 ADS pin 未改，SPEC v0.1.1 未改。文档修订：`docs/I1-B2-ACCEPTANCE.md` 把“写请求超时 / 发送前断连 / 发送后响应前断连”三种情况分开判定（第三种为 **NOT_VERIFIED**）、把 Metadata 表述修正为“6 非空 + 2 显式 null → missing + 4 未写入”、把 `import_file` 返回结构拆成“适配器层结论 VERIFIED / 字段结构 NOT_VERIFIED”。原始证据目录 `~/.forma/evidence/i1-b2/` 位于运行主机（macOS），本轮复核主机为 DevBox，**未重读**该目录，因此现场观察值保持原记录强度、未验证项不升格。R1 仅完成技术调查与实施方案（`docs/R1-READINESS.md`），**不构成开发授权**。
-  - **2026-11-14（Owner 授权 R1 Batch 1：生命周期、连接监督、运行入口、打包基础与诊断）：** 仅授权 R1-T01/T02/T03/T04/T07/T08，范围限于 DevBox 开发、合成测试、GitHub macOS CI 与无真实业务副作用的工程验证；**明确不授权**真实 DEVONthink 写入、生产导入、真实 Provider 请求、Developer ID 签名与公证、Batch 2。交付：生产只读适配器（#79）、MCP 连接监督层与写工具契约复核（#80）、显式授权运行入口（#83）、启动清扫/六态呈现/非阻塞退出（#84）、`.app` 打包与 ad-hoc 签名 CI（#81）、诊断与 stderr 有界缓冲（#82）。全程未调用任何 DEVONthink 写工具、未消耗写预算、未同步 CNB，`main`/ADS pin/SPEC 未改。真实 macOS 与发行验证仍为 **NOT_VERIFIED**。
-  - **2026-11-14（Owner 授权 R1 Batch 2A：真实 macOS 现场验证，仅只读）：** 允许使用官方 MCP、`Forma_I1B2_Sandbox` 四条现存合成记录的只读查询、新建合成来源目录、专用测试 Keychain service/account、以及本次自行启动的 MCP 子进程；**禁止**新的 `import_file`/`create_group_path`/`set_record_custom_metadata`、修改或删除 B2 记录、生产库记录级查询、迁移或删除现有 Keychain 凭据、真实 Provider 请求、强杀 DEVONthink 主进程、Developer ID 签名与公证。执行结果：**BLOCKED**——执行会话主机为 Linux（无 DEVONthink、无 Security/AppKit、无 `codesign`/`spctl`，两个已配置 SSH 主机认证失败），M01/M02/M03/M04/M06 全部无法执行；仅完成 §1 打包静态验收（Bundle ID、结构、`LC_CODE_SIGNATURE`、CI 的 `codesign --verify` 与 `adhoc,runtime` 标志）与 baseline 核对（`dev` @ `cab0936`，CI success，无 Batch 2A 工程 PR）。真实 DEVONthink 写调用 0 次（未执行，不是被拒绝）。报告见 `docs/R1-BATCH2A-REPORT.md`；Batch 2B 不具备申请条件。
-  - **2026-11-14（Owner 授权 R1 Batch 2A 无真实写入工程）：** 授权 R1-T05（书签失效恢复）、R1-T06（Keychain 生命周期与可访问性）、R1-T04 补齐（只读 Recovery 接线）与文档一致性修复；**禁止**真实 DEVONthink 写入、真实 Provider 调用、修改现有用户凭据、Developer ID 签名、公证、生产发布、修改 `main`/ADS pin/SPEC。结果：T05（#87）可用性七态、身份校验重授权与 GUI 引导；T06（#88）设备专用可访问性、删除/轮换、锁定态、只读 legacy 探测与可回滚迁移接口（**未改 service 名、未自动迁移**；CI 实测 login keychain 不回读该属性，真实回读列入 M02）；T04（#89）读范围确认 + 真实调用 Reviewer + 结果只更新界面（`create`/`writeMetadata` 计数为 0）；HANDOFF 的退出描述改为 `applicationWillTerminate` 同步非阻塞清理。真实 macOS 现场验证仍为 **BLOCKED**，Batch 2B 未授权。
-  - **2026-11-15（R1 Batch 2A 现场执行，仅只读）：** 在同一授权下于 macOS 27.0.1 执行；被测产物为 CI `Forma-app-adhoc`（`dev` @ `6642f16`，CI run `43612484825` success）。真实执行结果：M01 书签授权/扫描/撤销/重授权/身份校验 PASS，但删除根目录被分类为 `bookmark_stale` 而非 `missing`（security-scoped 书签解析失败为 `NSCocoaErrorDomain 259`）；M02 Keychain 生命周期 PASS，`accessibility(for:)` 在项存在时仍返回 `nil`（本机不再回读 `pdmn`），锁定态与 GUI 提示 NOT_VERIFIED（文件 keychain 不可被 `SecItem*` 访问，未制造出锁定态）；M03 MCP 全部 PASS（protocol `2025-06-18`、62 工具、schema digest 62/62 与 I1-B1 一致、关闭/重连/并发/子进程终止）；M04 GUI 启动、恢复横幅、未确认范围拒绝、退出/重启、不自动重试均 PASS（**在补丁产物上**），授权范围后的 GUI 回查因 AX 文本注入无法驱动 SwiftUI 绑定而 NOT_VERIFIED，同一路径的库级只读回查 PASS；截图 BLOCKED（无屏幕录制授权）；M06 BLOCKED（本机无 macOS 14.x，Parallels 仅 Windows 11）。**打包基线 FAIL**：CI 产物缺少 `Forma_FormaCore.bundle` 导致启动崩溃，补到 `.app` 根后又使 `codesign --strict` 报 `unsealed contents`。DEVONthink 写调用 0，未读取生产库，未修改现有 Keychain 凭据，未执行 M05/R01–R03，未宣布 Release Ready。
-  - **2026-11-15（R1 Batch 2A.1 工程修复）：** 仅授权工程修复、合成测试、macOS CI 与无业务副作用验证；不授权真实 DEVONthink 写入与正式发行。结果：#92 资源 bundle 打包与启动（自有 `FormaResourceBundle`、`Contents/Resources` 布局、脚本断言、artifact 改 tar、CI `launch-smoke` 下载同一 tar 后验签+资源检查+启动存活）、#93 书签失败分类（先探测文件系统，259 不再误报 stale）、#94 Keychain 三态契约与 `kSecUseDataProtectionKeychain` 实测、#95 GUI 校验逻辑与评估文档。CI 证据：发布 artifact 资源 `COMPLETE`、`codesign --verify --strict` 通过、启动后存活 5 s。仍未验证：修复后产物的真实 macOS 复测、GUI 真实键入（AX 注入已证伪）、Keychain 锁定态、外部卷/iCloud、macOS 14.x。
-  - **2026-11-15（R1 Batch 2A.2 / 2A.3 收尾，仅只读 + 工程修复）：** 同一只读授权下在真实 Mac 完成：新 workspace 启动、书签撤销/重授权与跨重启身份校验、GUI 表单键入与只读回查；现场记录 Learning Loop 观察 1/2（夹具超时假 FAIL、输入法干扰键入；观察 1 的处置标签已由 Issue #98 勘误）。发现缺陷 A（失败提交后合法输入仍显示旧错误），以 #103 修复（表单反馈只由草稿决定）；形成 M05 预检与真实写入授权申请（#104）。**真实 DEVONthink 写调用 0 次；2B / M05 未授权；不构成 Release Ready。**
-  - **2026-11-15（R1 Batch 2B 非写入硬化，Owner 已授权）：** 仅授权预算硬化、离线 QA 编排、故障注入安全验证、文档与 macOS CI；**不授权**真实 DEVONthink 写入、真实崩溃注入或发行。结果：#107 三类预算（metadata 总数/逐记录、imports、groups）在传输层前强制、Ledger v3 预算 journal 按授权 digest 跨实例恢复、plan/scope 一致性检查；#110 离线 QA 编排（三份固定合成文件、三键故障矩阵、重启清扫与只读复核、崩溃残留、稳定报告）；#109 预检与授权申请更新。真实写调用 0 次；M05 真实运行仍未授权。
-  - **2026-11-15（M05 写入前安全审计，Owner 已授权的只读/合成范围）：** 审计发现预算 journal 的 read-modify-save 在双实例下会丢更新（组创建与共享 writer 的 runtime 可达）；以事务内条件更新修复，新增 8 路并发确定性回归；生产与离线 QA 统一走 `ImportWriteSessionFactory`。真实写调用 0 次；T/D 发送后触发可观测性仍 NOT_VERIFIED；M05-T02/T03 可提交独立授权申请。
-  - **2026-11-15（R1 Mac 现场收口 + M05 授权门，Owner 已授权的只读范围）：** 用 run `43714739978` 原件复测缺陷 A：空表单/非法 UUID 报错、改为合法数据后错误立即消失、Confirm 更新范围、Cancel 不改、重开无旧错误、回查只读（1 verified、Ledger 保持 `verify_required`、attempts 0）——**F01 PASS**。M05-T01：`Forma_M05_Sandbox` 不存在，记 **TARGET_NOT_PREPARED**，未创建/复用任何库与组；62/62 工具 schema 与基线一致，三个写工具 digest 逐字核对；三份合成文件重算 SHA-256 与文档一致。T02/T03 的发送边界（prepared / bytes written / may-have-executed / response）在客户端不可留存，**NOT_VERIFIED**，未做真实故障注入；`docs/M05-PREFLIGHT.md` 已拆分探针预算与申请、新增 §14 可观测性复核，`M05-AUTHORIZATION-PROPOSAL.md` 拆分 A（T02/T03）与 B（T04）。预算 journal 事务化与 scope/digest 一致性只读复核 PASS；真实多进程争用仍未验证。**真实写调用 0 次；真实写入仍未授权；不构成 Release Ready。** 见 `docs/R1-MAC-FIELD-CLOSURE-REPORT.md`。
-  - **2026-11-16（Eligibility Contract Delta 正式批准 A–E，Owner）：** `docs/ELIGIBILITY-CONTRACT-DELTA.md` 全量批准。契约修订已随本轮落地：SPEC v0.1.1→**v0.1.2**（§6.1-1 输入双模式与摘要绑定、§6.3 Manifest 绑定可选资格块、§10.1-1 不变量加固、§10.1-5 已发现未映射单列、新增 §13 版本历史与迁移记录），PLAN v0.1→**v0.2**（§6.1、§7.1 `schema_version=1.1`、模块表、新增 §16）。**已授权**：Issue #51 切片 1–4（digest 绑定、Context/Mapping 过滤接线、Manifest/Validator 版本化扩展、Core 统计与解释性报告），每片独立 PR、macOS CI 全绿。**未授权**：切片 5（I1 Executor 写入前重判）、P3-B、DEVONthink 真实写入、真实 Provider 外发、R1 Batch 2B GUI，以及**生产默认过滤的正式启用**（须全链路完成 + macOS 真实目录验证 + Owner 再确认后才可切换默认）。硬条件：完整扫描/`source_id`/missing/coverage 语义不变；旧 Manifest 与 Context revision 可读、不原位改写；保留 `eligibilityEnabled=false` 兼容路径。
-  - **2026-11-16（Issue #51 切片 1–4 实施完成）：** #117 `inputDigest` 绑定策略 digest 与判定指纹（`nil` = v0.1.1 公式逐字节不变）、#118 Context/Mapping 过滤接线（`EligibilitySelection` 成对携带候选与绑定；未入 Mapping 的记录在 outcome 具名）、#119 Manifest 可选资格块 + `schema_version 1.1` + `ArtifactSchemaValidator.manifest(forSchemaVersion:)` 按声明版本校验（1.0 工件 JSON 不出现新键、旧工件照旧有效）、#120 运行级 `EligibilityReport` + 路径无关导出 `eligibility-report.json`。四片 PR 均 macOS CI 全绿；**默认过滤未启用**（条件 3 的三道前置仍待满足）；未触碰 `main`、ADS pin、冻结条款文本与既有 991 条记录。
-  - **2026-11-17（M11 macOS 合成执行 + 分类修正）：** Owner 在其 Mac（macOS 27.0.1 / arm64 / MacBookPro18,3 / APFS，Swift 6.4）于 `dev` @ `a4da6f5` 执行 `swift run FormaAcceptance m11`，**退出码 0，30 案例 PASS / 0 FAIL / 0 NOT_VERIFIED**；策略 `eligibility.v2`，policy digest `aa7796df…d2a57`（与仓库钉扎值一致，已独立核对），decisions digest `f5203037…3df7e`（主机相关，未跨机重算）。证据文件哈希为 **Owner 声明**，原始文件不在本会话可访问范围 → **独立完整性复核 PENDING**。偏差分开保留：**B3** 本地 `NOT_VERIFIED` / CI PASS（run `43859870793`），**A8b** 安全 PASS、运行时内存未测量（源码 + `oversizedMarker` 边界测试证明有界读取）。总体分类 **`MACOS_SYNTHETIC_PARTIAL`**；真实目录验收 `NOT_STARTED`，默认启用 `NOT_AUTHORIZED`，切片 5 未授权。早前"无证据 → UNKNOWN"的核对结论已被本记录取代。见 `docs/M11-SYNTHETIC-ACCEPTANCE-REPORT.md` §8。
-  - **2026-11-17（M11 原始证据独立复核 = `VERIFIED`，取代上一行的 PENDING）**：Owner 把 Mac 原件复制到 DevBox（`~/.forma/evidence/m11/{report.json,run.log}`），本会话只读复算：6,078 B / SHA-256 `339e2116…823586`、3,331 B / `bad4ce80…14af1ff`，与声明**逐字节一致**；`jq` 解析得 30 案例全 `PASS`、ID 唯一且与报告 §3 表一致，`policy_digest` 与仓库钉扎值逐字符一致，`decisions_digest` 与声明一致，日志与报告 `(status,id)` 序列逐行一致。原始文件**不入库**（日志末行一处主机主目录路径，已脱敏）。总体分类仍 **`MACOS_SYNTHETIC_PARTIAL`**（B3 本地 `NOT_VERIFIED` / CI PASS；A8b 内存行为未测量）；真实目录验收 `NOT_STARTED`，默认启用 `NOT_AUTHORIZED`。
-  - **2026-11-18（M11 第 4 级只读验收工具开发完成，真实目录验收未开始）**：新增 `FormaAcceptance m11-real`（`--source`/`--evidence-dir`/`--dry-run` 必填；拒绝相对路径、证据目录落在源目录内、互相包含、软链接越界与非 dry-run 模式），实现真实目录只读扫描 → 事实探测 → 四态决策 → 私人审核表 → 脱敏摘要，人工标签离线导入重算指标（无需重扫），覆盖不完整显式 `PARTIAL`，无标注时误排除 `N/A`；产物格式与用法见 `docs/M11-LEVEL4-RUNBOOK.md`。**第 4 级仍 `NOT_STARTED`**（尚无 Owner 授权目录与现场运行），第 3 级仍 `MACOS_SYNTHETIC_PARTIAL`，默认过滤未启用，切片 5 未授权。
-- 默认只读：除 I1-B2 已按 Owner 批准、在隔离库与本轮 Group 内完成的限定写入外，Forma 对 DEVONthink **默认禁止任何写入**；生产 Project_Archive 现有 991 条记录不可修改。任何新的真实写入（含 I1 剩余探针、崩溃注入、I2 Replicant、生产迁移）都需要 Owner 单独授权与新预算。
-- SPEC 产品契约有变化须先获 Owner 批准修订；一般实现细节以 PLAN 和对应 Issue 为准。
-- 公开仓库只允许脱敏/合成案例；真实资料留本地。
-- 不引入 Rust/Tauri、独立 RAG/Vector DB 或不必要服务。
-- 正常执行异常驱动复核；不为每批资料引入不必要审批。
-- 前一阶段授权（合并 PLAN、建立 Roadmap 与 Issues）已于 2026-11-11 执行完毕；进入 P0/P1 需要且已经取得 Owner 在本轮开发指令中的明确授权，后续阶段仍需另行授权。
+## 4. Future product forms and lineage
 
-## GitHub Project 看板状态
+WorkBuddy is the current canonical product line, not an expendable prototype or parallel experiment.
 
-仓库 Issues 和本文件已经建立可执行的 Roadmap；**GitHub Projects v2 看板尚未创建**。当前连接只暴露 GitHub Issues 与 PR 的创建/管理能力，没有 GitHub Projects 的创建/添加条目写入接口，因此不能假装看板已经存在。将来有 GitHub Projects 写权限工具时，可按上表建立单个 Forma Project 并批量导入这些 Issues；不应重复创建任务。
+If a standalone App is justified in the future, it must fork/evolve from the **then-current WorkBuddy-era Forma product baseline**, not restart from the legacy SwiftUI roadmap. Here “fork” means a deliberate derived development line (branch or repository only when justified and separately approved), not an instruction to create a fork now.
+
+- Share the product roadmap, domain contracts, reusable Skills/knowledge, file identity and metadata semantics, deterministic safety contracts/tools, test corpus, acceptance evidence and compatible state formats. Keep host-specific adapters separate where there is a demonstrated need; no speculative portability framework now.
+- Prefer an existing host or mature file-manager shell and evaluate WorkBuddy Expert/Buddy App or other platform options before a standalone UI/runtime. No assumption that a particular native app, framework or host must be used.
+- A standalone application requires evidence of an unmet product/host limitation, reuse and maintenance analysis, licensing review, a separately approved Spec/Plan, and its own product/security acceptance. Existing WorkBuddy gates and shared safety semantics must not be bypassed.
+- Legacy SwiftUI source, historical branches and evidence remain preserved as reference material and may yield individual reusable components; they are not the default future product baseline. No legacy PR resurrection, migration, deletion or release without separate approval.
+
+## 5. Governance and evidence
+
+- Canonical active development trunk: `workbuddy/dev`; legacy `dev` and `main` remain frozen under current governance. Follow [AGENTS.md](../AGENTS.md) and the active Spec/Plan; use scoped reviewed changes and existing CI.
+- Maintain one product roadmap here. Use existing Project #18 and Issues for actual execution status, blockers and evidence. Do not create a parallel project or duplicate roadmap.
+- Record PASS/FAIL/BLOCKED/NOT_VERIFIED honestly. Distinguish code/CI, Mac runtime and Owner product acceptance. No sensitive production material, credentials or private paths in repository evidence; no production writes without authorization.
+- Report cross-project ADS lessons when the current WorkBuddy adoption gates yield substantive evidence (particularly #220/#216): capability reuse, host security behavior, measurable workflow outcome, limitations and reproducible evidence. A product-only roadmap update is not itself an ADS issue or a gate requiring ADS feedback. Do not block Forma on ADS for ordinary project-specific work.
+
+## 6. Historical baseline and evidence
+
+The prior roadmap is preserved verbatim in Git history: [Legacy ROADMAP at ff7a4136](https://github.com/Skyline-Gazer/Forma/blob/ff7a4136f9f4a7ba06787012d783700c457b81de/docs/ROADMAP.md). Its E0–E7, P0–P3, I1/I2, R1 and dated authorization history remain evidence, not active instructions for the WorkBuddy product line. Historical engineering/field verification does not imply WorkBuddy product acceptance.
+
+Related references: [Legacy SPEC](SPEC.md), [Legacy PLAN](PLAN.md), [Transition #212](https://github.com/Skyline-Gazer/Forma/issues/212), [Current program #217](https://github.com/Skyline-Gazer/Forma/issues/217). Existing legacy source, documents, issues and branches are intentionally not altered by this roadmap revision.
