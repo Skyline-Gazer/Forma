@@ -322,5 +322,41 @@ class FormaAlphaTests(unittest.TestCase):
                 )
 
 
+    def test_12_protection_facts_gate_excludes_only_when_known(self) -> None:
+        policy = json.loads(
+            (REPO_ROOT / "workbuddy" / "forma-expert" / "skills" / "forma-organize" / "references" / "eligibility-policy.json").read_text(encoding="utf-8")
+        )
+        # A verified cache marker whose declared protection facts were never probed must not EXCLUDE.
+        self.assertEqual(
+            forma_fs._classify_entry("repo/.mypy_cache/x.json", "x.json", policy, facts={"cacheMarker": "verified"}),
+            ("REVIEW", "protection_fact_unknown"),
+        )
+        # Once gitTracked/nestedRepository are known, the EXCLUDE proceeds unchanged.
+        self.assertEqual(
+            forma_fs._classify_entry(
+                "repo/.mypy_cache/x.json", "x.json", policy,
+                facts={"cacheMarker": "verified", "gitTracked": False, "nestedRepository": False},
+            ),
+            ("EXCLUDE", "verified_cache_marker"),
+        )
+
+    def test_13_magic_probe_read_error_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "src"
+            src.mkdir()
+            (src / "doc.pdf").write_bytes(b"%PDF-1.7 body")
+            original = forma_fs._check_magic_mismatch
+            forma_fs._check_magic_mismatch = lambda path, ext: (False, "read_error:Errno 13 permission denied")
+            try:
+                snap = forma_fs.inspect_directory(src)
+            finally:
+                forma_fs._check_magic_mismatch = original
+            entry = snap["entries"][0]
+            self.assertEqual(entry["state"], "unreadable:magic_probe")
+            self.assertEqual((entry["eligibility"], entry["eligibility_reason"]), ("REVIEW", "unclassified_entry_state"))
+            self.assertEqual(snap["counts"]["probed_included"], 0)
+            self.assertEqual(snap["counts"]["probed_review"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
